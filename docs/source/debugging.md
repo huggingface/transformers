@@ -92,7 +92,7 @@ Then comes the fully qualified entry from the `state_dict`, e.g.: `encoder.block
 
 The second to last entry show the name of the class the `forward` belongs to, and whether the report is for an input or an output and its index if either is a tuple. Only tensor variables are reported.
 
-Another shortcut in the first columns is`>` is for input variable, `<` is for output.
+Another shortcut in the first columns `>` is for input variable, `<` is for output.
 
 Let's look at:
 

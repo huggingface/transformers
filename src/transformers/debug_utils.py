@@ -45,9 +45,9 @@ class DebugActivationOverflow:
 
     Args:
         model (:obj:`nn.Module`):
-            the model that fails to train due to ``nan``s or ``inf``s
-        max_frames_to_save (:obj:`int`, `optional`):
-            how many variables and their frames to record back - a few dozens is a good number, defaults to 40):
+            The model to debug.
+        max_frames_to_save (:obj:`int`, `optional`, defaults to 40):
+            How many variables and their frames to record back - a few dozens is a good number.
     """
 
     def __init__(self, model, max_frames_to_save=40):
