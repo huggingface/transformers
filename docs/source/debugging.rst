@@ -22,9 +22,9 @@ Activations Overflow
 
    This feature is currently available for PyTorch-only.
 
-If you start getting ``loss=NaN`` or the model inhibits some other abnormal behavior due to ``inf`` or ``nan`` one
-needs to discover where the first overflow happens and what led to it. Luckily you can accomplish that easily by
-activating a special module that will do the detection automatically.
+If you start getting ``loss=NaN`` or the model inhibits some other abnormal behavior due to ``inf`` or ``nan`` in
+activations one needs to discover where the first overflow happens and what led to it. Luckily you can accomplish that
+easily by activating a special module that will do the detection automatically.
 
 If you're using :class:`~transformers.Trainer`, you just need to add:
 
@@ -35,15 +35,16 @@ If you're using :class:`~transformers.Trainer`, you just need to add:
 to the normal command line arguments, or pass ``debug="activation_overflow"`` when creating the
 :class:`~transformers.Trainer` object.
 
-If you're using your own trainer you can just do:
+If you're using your own trainer you can accomplish the same with:
 
 .. code-block:: python
 
     from .debug_utils import DebugActivationOverflow
     debug_overflow = DebugActivationOverflow(model)
 
-``DebugActivationOverflow`` inserts hooks into the model that will test each input and output and as soon as ``inf`` or
-``nan`` is detected in at least one element, the program will assert and print a report like this:
+:class:`~transformers.debug_utils.DebugActivationOverflow` inserts hooks into the model that will test each input and
+output and as soon as ``inf`` or ``nan`` is detected in at least one element of the activations, the program will
+assert and print a report like this:
 
 .. code-block::
 
@@ -92,21 +93,21 @@ If you're using your own trainer you can just do:
     abs_max= 1.80e+04 > [0] encoder.block.2.layer.1.DenseReluDense.wo: Linear: input[0]
     abs_max=      inf < [0] encoder.block.2.layer.1.DenseReluDense.wo: Linear: output
 
-The left column shows the value of the absolute largest element, so if you have a closer look the last few frames, the
-inputs and outputs were in the range of 10000. So when this training was done under mixed precision the very last step
-overflowed (since under ``fp16`` the largest number before ``inf`` is ``64e3``). To avoid overflows under ``fp16`` the
-activations must remain way below ``1e4``, because ``1e4*1e4 = 1e8`` so any matrix multiply with large activations is
-going to lead to overflow.
+The left column shows the value of the absolute largest element, so if you have a closer look at the last few frames,
+the inputs and outputs were in the range of ``1e4``. So when this training was done under mixed precision the very last
+step overflowed (since under ``fp16`` the largest number before ``inf`` is ``64e3``). To avoid overflows under ``fp16``
+the activations must remain way below ``1e4``, because ``1e4 * 1e4 = 1e8`` so any matrix multiplication with large
+activations is going to lead to a numerical overflow condition.
 
 The trace then prints the batch number (here ``[0]`` means the problem occurred on the first batch).
 
 Then comes the fully qualified entry from the ``state_dict``, e.g.: ``encoder.block.2.layer.0.layer_norm``, so you can
 easily see where the problem happens and what was happening just before it.
 
-The second to last entry show the name of the class the ``forward`` belongs to, and whether the report is for an input
-or an output and its index if either is a tuple. Only tensor variables are reported.
+The second to last entry shows the name of the class the ``forward`` belongs to, and also whether the report is for an
+input or an output and its index if either is a tuple. Only tensor variables are reported.
 
-Another shortcut in the first columns ``>`` is for input variable, ``<`` is for output.
+Another shortcut in the first columns: ``>`` designates an input variable, and ``<`` for output.
 
 Let's look at:
 
@@ -125,8 +126,8 @@ started to go up and most likely switch to the ``fp32`` mode here, so that the n
 or summed up. Of course, there might be other solutions.
 
 Since the automatic detector only reports inputs and outputs, once you know where to look, you may want to analyse the
-intermediary stages of ``forward`` as well. In such a case you can use the helper function to inject the detector where
-you want it, for example:
+intermediary stages of ``forward`` as well. In such a case you can use the ``detect_overflow`` helper function to
+inject the detector where you want it, for example:
 
 .. code-block::
 
