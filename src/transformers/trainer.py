@@ -1967,13 +1967,13 @@ class Trainer:
 
         model.eval()
 
+        self.callback_handler.eval_dataloader = dataloader
+
         if is_torch_tpu_available():
             dataloader = pl.ParallelLoader(dataloader, [self.args.device]).per_device_loader(self.args.device)
 
         if self.args.past_index >= 0:
             self._past = None
-
-        self.callback_handler.eval_dataloader = dataloader
 
         # Initialize containers
         # losses/preds/labels on GPU/TPU (accumulated for eval_accumulation_steps)
