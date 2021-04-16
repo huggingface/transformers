@@ -104,3 +104,20 @@ abs_max= 1.80e+04 < [0] encoder.block.2.layer.1.DenseReluDense.dropout: Dropout:
 This is a report for `Dropout.forward` function with the first entry for the only input and the second for the only output. You can see that it was called from an attribute `dropout` inside `DenseReluDense` class. We can see that it happened during the first layer, of the 2nd block, during the very first batch. Finally the absolute largest input elements was `1.62e+04` and same for the output was `1.80e+04`.
 
 Going back to the full report, to act on it and to fix the problem, we need to go a few frames up where the numbers started to go up and most likely switch to the `fp32` mode here, so that the numbers don't overflow when multiplied or summed up. Of course, there might be other solutions.
+
+Since the automatic detector only reports inputs and outputs, once you know where to look, you may want to analyse the intermediary stages of `forward` as well. In such a case you can use the helper function to inject the detector where you want it, for example:
+
+```
+from debug_utils import detect_overflow
+
+class T5LayerFF(nn.Module):
+    [...]
+    def forward(self, hidden_states):
+        forwarded_states = self.layer_norm(hidden_states)
+        detect_overflow(forwarded_states, "after layer_norm")
+        forwarded_states = self.DenseReluDense(forwarded_states)
+        detect_overflow(forwarded_states, "after DenseReluDense")
+        return hidden_states + self.dropout(forwarded_states)
+```
+
+You can see that we added 2 of these and now we can know the absolute largest numbers for `forwarded_states` at 2 different stages.
