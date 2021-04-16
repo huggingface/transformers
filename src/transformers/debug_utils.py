@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 
 class DebugActivationOverflow:
     """
-    This debug class helps detect and understand where the model starts getting ``nan``s or ``inf``s in activation
+    This debug class helps detect and understand where the model starts getting ``nan`` or ``inf`` in activation
     elements.
 
     To activate, initialize the object with the model ::
