@@ -361,6 +361,9 @@ if is_torch_available():
 else:
     torch_device = None
 
+if is_tf_available():
+    import tensorflow as tf
+
 
 def require_torch_gpu(test_case):
     """Decorator marking a test that requires CUDA and PyTorch. """
@@ -1174,3 +1177,26 @@ def execute_subprocess_async(cmd, env=None, stdin=None, timeout=180, quiet=False
         raise RuntimeError(f"'{cmd_str}' produced no output.")
 
     return result
+
+
+def nested_simplify(obj, decimals=3):
+    """
+    Simplifies an object by rounding float numbers, and downcasting tensors/numpy arrays to get simple equality test
+    within tests.
+    """
+    from transformers.tokenization_utils import BatchEncoding
+
+    if isinstance(obj, list):
+        return [nested_simplify(item, decimals) for item in obj]
+    elif isinstance(obj, (dict, BatchEncoding)):
+        return {nested_simplify(k, decimals): nested_simplify(v, decimals) for k, v in obj.items()}
+    elif isinstance(obj, (str, int)):
+        return obj
+    elif is_torch_available() and isinstance(obj, torch.Tensor):
+        return nested_simplify(obj.tolist())
+    elif is_tf_available() and tf.is_tensor(obj):
+        return nested_simplify(obj.numpy().tolist())
+    elif isinstance(obj, float):
+        return round(obj, decimals)
+    else:
+        raise Exception(f"Not supported: {type(obj)}")
