@@ -145,8 +145,8 @@ For training, the :class:`~transformers.ReformerModelWithLMHead` should be used 
 
 .. code-block::
 
-  input_ids = tokenizer.encode('This is a sentence from the training data', return_tensors='pt')
-  loss = model(input_ids, labels=input_ids)[0]
+    input_ids = tokenizer.encode('This is a sentence from the training data', return_tensors='pt')
+    loss = model(input_ids, labels=input_ids)[0]
 
 
 ReformerConfig
