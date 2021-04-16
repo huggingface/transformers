@@ -19,6 +19,7 @@ from collections import OrderedDict
 
 from ...configuration_utils import PretrainedConfig
 from ..albert.configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+from ..linformer.configuration_linformer import LINFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LinformerConfig
 from ..bart.configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig
 from ..bert.configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from ..bert_generation.configuration_bert_generation import BertGenerationConfig
@@ -91,6 +92,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         VIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LINFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -142,6 +144,7 @@ CONFIG_MAPPING = OrderedDict(
         ("big_bird", BigBirdConfig),
         ("speech_to_text", Speech2TextConfig),
         ("vit", ViTConfig),
+        ("linformer", LinformerConfig),
         ("wav2vec2", Wav2Vec2Config),
         ("m2m_100", M2M100Config),
         ("convbert", ConvBertConfig),
@@ -200,6 +203,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("big_bird", "BigBird"),
         ("speech_to_text", "Speech2Text"),
         ("vit", "ViT"),
+        ("linformer", "Linformer"),
         ("wav2vec2", "Wav2Vec2"),
         ("m2m_100", "M2M100"),
         ("convbert", "ConvBERT"),

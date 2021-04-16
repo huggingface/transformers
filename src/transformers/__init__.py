@@ -188,6 +188,7 @@ _import_structure = {
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
+    "models.linformer": ["LINFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LinformerConfig", "LinformerTokenizer"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
     "models.lxmert": ["LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LxmertConfig", "LxmertTokenizer"],
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config"],
@@ -308,12 +309,12 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
-    _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
     _import_structure["models.bert"].append("BertTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
+    _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.distilbert"].append("DistilBertTokenizerFast")
     _import_structure["models.dpr"].extend(
         ["DPRContextEncoderTokenizerFast", "DPRQuestionEncoderTokenizerFast", "DPRReaderTokenizerFast"]
@@ -324,6 +325,7 @@ if is_tokenizers_available():
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
     _import_structure["models.led"].append("LEDTokenizerFast")
+    _import_structure["models.linformer"].append("LinformerTokenizerFast")
     _import_structure["models.longformer"].append("LongformerTokenizerFast")
     _import_structure["models.lxmert"].append("LxmertTokenizerFast")
     _import_structure["models.mbart"].append("MBartTokenizerFast")
@@ -443,7 +445,6 @@ if is_torch_available():
     _import_structure["generation_utils"] = ["top_k_top_p_filtering"]
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
     # PyTorch models structure
-
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -458,7 +459,6 @@ if is_torch_available():
             "load_tf_weights_in_albert",
         ]
     )
-
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_CAUSAL_LM_MAPPING",
@@ -737,6 +737,20 @@ if is_torch_available():
             "LEDForQuestionAnswering",
             "LEDForSequenceClassification",
             "LEDModel",
+        ]
+    )
+    _import_structure["models.linformer"].extend(
+        [
+            "LINFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LinformerForMaskedLM",
+            "LinformerForMultipleChoice",
+            "LinformerForQuestionAnswering",
+            "LinformerForSequenceClassification",
+            "LinformerForTokenClassification",
+            "LinformerLayer",
+            "LinformerModel",
+            "LinformerPreTrainedModel",
+            "load_tf_weights_in_linformer",
         ]
     )
     _import_structure["models.longformer"].extend(
@@ -1204,6 +1218,19 @@ if is_tf_available():
         ]
     )
     _import_structure["models.led"].extend(["TFLEDForConditionalGeneration", "TFLEDModel", "TFLEDPreTrainedModel"])
+    _import_structure["models.linformer"].extend(
+        [
+            "TF_LINFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFLinformerForMaskedLM",
+            "TFLinformerForMultipleChoice",
+            "TFLinformerForQuestionAnswering",
+            "TFLinformerForSequenceClassification",
+            "TFLinformerForTokenClassification",
+            "TFLinformerLayer",
+            "TFLinformerModel",
+            "TFLinformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.longformer"].extend(
         [
             "TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1539,6 +1566,7 @@ if TYPE_CHECKING:
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
     from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
+    from .models.linformer import LINFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LinformerConfig, LinformerTokenizer
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
     from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, LxmertTokenizer
     from .models.m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
@@ -1667,6 +1695,7 @@ if TYPE_CHECKING:
         from .models.herbert import HerbertTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
         from .models.led import LEDTokenizerFast
+        from .models.linformer import LinformerTokenizerFast
         from .models.longformer import LongformerTokenizerFast
         from .models.lxmert import LxmertTokenizerFast
         from .models.mbart import MBart50TokenizerFast, MBartTokenizerFast
@@ -1712,7 +1741,6 @@ if TYPE_CHECKING:
 
     # Modeling
     if is_torch_available():
-
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -2010,6 +2038,18 @@ if TYPE_CHECKING:
             LEDForSequenceClassification,
             LEDModel,
         )
+        from .models.linformer import (
+            LINFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LinformerForMaskedLM,
+            LinformerForMultipleChoice,
+            LinformerForQuestionAnswering,
+            LinformerForSequenceClassification,
+            LinformerForTokenClassification,
+            LinformerLayer,
+            LinformerModel,
+            LinformerPreTrainedModel,
+            load_tf_weights_in_linformer,
+        )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             LongformerForMaskedLM,
@@ -2235,7 +2275,6 @@ if TYPE_CHECKING:
 
     # TensorFlow
     if is_tf_available():
-
         from .benchmark.benchmark_args_tf import TensorFlowBenchmarkArguments
 
         # Benchmarks
@@ -2394,6 +2433,17 @@ if TYPE_CHECKING:
             TFGPT2PreTrainedModel,
         )
         from .models.led import TFLEDForConditionalGeneration, TFLEDModel, TFLEDPreTrainedModel
+        from .models.linformer import (
+            TF_LINFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFLinformerForMaskedLM,
+            TFLinformerForMultipleChoice,
+            TFLinformerForQuestionAnswering,
+            TFLinformerForSequenceClassification,
+            TFLinformerForTokenClassification,
+            TFLinformerLayer,
+            TFLinformerModel,
+            TFLinformerPreTrainedModel,
+        )
         from .models.longformer import (
             TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFLongformerForMaskedLM,

@@ -21,6 +21,14 @@ from collections import OrderedDict
 from ...utils import logging
 
 # Add modeling imports here
+from ..linformer.modeling_linformer import (
+    LinformerForMaskedLM,
+    LinformerForMultipleChoice,
+    LinformerForQuestionAnswering,
+    LinformerForSequenceClassification,
+    LinformerForTokenClassification,
+    LinformerModel,
+)
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -158,6 +166,14 @@ from ..led.modeling_led import (
     LEDForSequenceClassification,
     LEDModel,
 )
+from ..linformer.modeling_linformer import (
+    LinformerForMaskedLM,
+    LinformerForMultipleChoice,
+    LinformerForQuestionAnswering,
+    LinformerForSequenceClassification,
+    LinformerForTokenClassification,
+    LinformerModel,
+)
 from ..longformer.modeling_longformer import (
     LongformerForMaskedLM,
     LongformerForMultipleChoice,
@@ -282,6 +298,7 @@ from ..xlnet.modeling_xlnet import (
 )
 from .auto_factory import auto_class_factory
 from .configuration_auto import (
+    LinformerConfig,
     AlbertConfig,
     BartConfig,
     BertConfig,
@@ -347,6 +364,7 @@ MODEL_MAPPING = OrderedDict(
         (BigBirdConfig, BigBirdModel),
         (Speech2TextConfig, Speech2TextModel),
         (ViTConfig, ViTModel),
+        (LinformerConfig, LinformerModel),
         (Wav2Vec2Config, Wav2Vec2Model),
         (M2M100Config, M2M100Model),
         (ConvBertConfig, ConvBertModel),
@@ -439,6 +457,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (GPTNeoConfig, GPTNeoForCausalLM),
         (BigBirdConfig, BigBirdForMaskedLM),
         (Speech2TextConfig, Speech2TextForConditionalGeneration),
+        (LinformerConfig, LinformerForMaskedLM),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
         (M2M100Config, M2M100ForConditionalGeneration),
         (ConvBertConfig, ConvBertForMaskedLM),
@@ -523,6 +542,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
         (BigBirdConfig, BigBirdForMaskedLM),
+        (LinformerConfig, LinformerForMaskedLM),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
         (ConvBertConfig, ConvBertForMaskedLM),
         (LayoutLMConfig, LayoutLMForMaskedLM),
@@ -575,6 +595,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
         (BigBirdConfig, BigBirdForSequenceClassification),
+        (LinformerConfig, LinformerForSequenceClassification),
         (ConvBertConfig, ConvBertForSequenceClassification),
         (LEDConfig, LEDForSequenceClassification),
         (DistilBertConfig, DistilBertForSequenceClassification),
@@ -612,6 +633,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
         (BigBirdConfig, BigBirdForQuestionAnswering),
+        (LinformerConfig, LinformerForQuestionAnswering),
         (ConvBertConfig, ConvBertForQuestionAnswering),
         (LEDConfig, LEDForQuestionAnswering),
         (DistilBertConfig, DistilBertForQuestionAnswering),
@@ -651,6 +673,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
         (BigBirdConfig, BigBirdForTokenClassification),
+        (LinformerConfig, LinformerForTokenClassification),
         (ConvBertConfig, ConvBertForTokenClassification),
         (LayoutLMConfig, LayoutLMForTokenClassification),
         (DistilBertConfig, DistilBertForTokenClassification),
@@ -680,6 +703,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
         (BigBirdConfig, BigBirdForMultipleChoice),
+        (LinformerConfig, LinformerForMultipleChoice),
         (ConvBertConfig, ConvBertForMultipleChoice),
         (CamembertConfig, CamembertForMultipleChoice),
         (ElectraConfig, ElectraForMultipleChoice),

@@ -17,6 +17,7 @@
 # limitations under the License.
 
 from . import (
+    linformer,
     albert,
     auto,
     bart,
