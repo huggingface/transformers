@@ -101,9 +101,4 @@ class QuestionAnsweringTrainer(Trainer):
         eval_preds = self.post_process_function(test_examples, test_dataset, output.predictions, "test")
         metrics = self.compute_metrics(eval_preds)
 
-        return PredictionOutput(
-            predictions=eval_preds.predictions,
-            label_ids=eval_preds.label_ids,
-            metrics=metrics,
-            num_samples=output.num_samples,
-        )
+        return PredictionOutput(predictions=eval_preds.predictions, label_ids=eval_preds.label_ids, metrics=metrics)

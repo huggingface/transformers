@@ -100,6 +100,7 @@ from .trainer_pt_utils import (
 from .trainer_utils import (
     PREFIX_CHECKPOINT_DIR,
     BestRun,
+    EvalLoopOutput,
     EvalPrediction,
     HPSearchBackend,
     PredictionOutput,
@@ -1914,7 +1915,7 @@ class Trainer:
 
         self._memory_tracker.stop_and_update_metrics(output.metrics)
 
-        return output
+        return PredictionOutput(predictions=output.predictions, label_ids=output.label_ids, metrics=output.metrics)
 
     def evaluation_loop(
         self,
@@ -1923,7 +1924,7 @@ class Trainer:
         prediction_loss_only: Optional[bool] = None,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
-    ) -> PredictionOutput:
+    ) -> EvalLoopOutput:
         """
         Prediction/evaluation loop, shared by :obj:`Trainer.evaluate()` and :obj:`Trainer.predict()`.
 
@@ -2076,7 +2077,7 @@ class Trainer:
             if not key.startswith(f"{metric_key_prefix}_"):
                 metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
 
-        return PredictionOutput(predictions=all_preds, label_ids=all_labels, metrics=metrics, num_samples=num_samples)
+        return EvalLoopOutput(predictions=all_preds, label_ids=all_labels, metrics=metrics, num_samples=num_samples)
 
     def _nested_gather(self, tensors, name=None):
         """
