@@ -254,10 +254,10 @@ FSMT_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
 
         cross_attn_head_mask (:obj:`torch.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
-                Mask to nullify selected heads of the cross-attention modules. Mask values selected in ``[0, 1]``:
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in ``[0, 1]``:
 
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
 
         encoder_outputs (:obj:`Tuple(torch.FloatTensor)`, `optional`):
             Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
