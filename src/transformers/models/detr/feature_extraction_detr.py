@@ -298,7 +298,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 # so we revert the tuple
                 return get_size_with_aspect_ratio(image_size, size, max_size)[::-1]
 
-        size = get_size(image.size, size, max_size)
+        size = get_size(image.size, size, max_size) 
         rescaled_image = self.resize(image, size=size)
 
         if target is None:
@@ -318,7 +318,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             scaled_area = area * (ratio_width * ratio_height)
             target["area"] = scaled_area
 
-        h, w = size
+        w, h = size
         target["size"] = as_tensor([h, w])
 
         if "masks" in target:
@@ -483,12 +483,12 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             if annotations is not None:
                 for idx, (image, target) in enumerate(zip(images, annotations)):
                     image, target = self._normalize(image=image, mean=self.image_mean, std=self.image_std, 
-                                                        tensor_type=tensor_type, target=target)
+                                                        tensor_type=return_tensors, target=target)
                     images[idx] = image
                     annotations[idx] = target
             else:
-                images = [self._normalize(image=image, mean=self.image_mean, std=self.image_std, tensor_type=tensor_type) for image in images]
-
+                images = [self._normalize(image=image, mean=self.image_mean, std=self.image_std, tensor_type=return_tensors)[0] for image in images]
+        
         # create pixel_mask
         max_size = self._max_by_axis([list(image.shape) for image in images])
         batch_shape = [len(images)] + max_size
