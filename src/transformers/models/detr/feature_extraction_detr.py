@@ -31,7 +31,7 @@ logger = logging.get_logger(__name__)
 
 def get_as_tensor(tensor_type):
     if not tensor_type:
-        return np.asarray
+        return np.asarray, TensorType.NUMPY
 
     # Convert to TensorType
     if not isinstance(tensor_type, TensorType):
