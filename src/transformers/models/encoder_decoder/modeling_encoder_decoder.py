@@ -458,6 +458,33 @@ class EncoderDecoderModel(PreTrainedModel):
         }
         return input_dict
 
+    def resize_token_embeddings(
+        self,
+        new_num_tokens_encoder: Optional[int] = None,
+        new_num_tokens_decoder: Optional[int] = None
+    ) -> Tuple[torch.nn.Embedding, torch.nn.Embedding]:
+        """
+        Resizes token embeddings matrices of the model if :obj:`new_num_tokens_encoder != config.encoder.vocab_size` or :obj:`new_num_tokens_decoder != config.decoder.vocab_size`.
+        Takes care of tying weights embeddings afterwards if the model class has a :obj:`tie_weights()` method.
+        Arguments:
+            new_num_tokens_encoder (:obj:`int`, `optional`):
+                The number of new tokens in the encoder embedding matrix. Increasing the size will add newly initialized
+                vectors at the end. Reducing the size will remove vectors from the end. If not provided or :obj:`None`,
+                just returns a pointer to the input tokens :obj:`torch.nn.Embedding` module of the model without doing
+                anything.
+            new_num_tokens_decoder (:obj:`int`, `optional`):
+                The number of new tokens in the decoder embedding matrix. Increasing the size will add newly initialized
+                vectors at the end. Reducing the size will remove vectors from the end. If not provided or :obj:`None`,
+                just returns a pointer to the input tokens :obj:`torch.nn.Embedding` module of the model without doing
+                anything.
+        Return:
+            :obj: `Tuple[torch.nn.Embedding, torch.nn.Embedding]`: Tuple with pointers to the encoder and decoder tokens Embeddings Modules of the model.
+        """
+        model_embeds_encoder = self.encoder.resize_token_embeddings(new_num_tokens_encoder)
+        model_embeds_decoder = self.decoder.resize_token_embeddings(new_num_tokens_decoder)
+        
+        return model_embeds_encoder, model_embeds_decoder
+
     def _reorder_cache(self, past, beam_idx):
         # apply decoder cache reordering here
         return self.decoder._reorder_cache(past, beam_idx)
