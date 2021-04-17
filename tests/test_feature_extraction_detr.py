@@ -234,10 +234,15 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         feature_extractor = DetrFeatureExtractor()
         encoding = feature_extractor(images=image, annotations=target, return_tensors="pt")
 
+        expected_shape = torch.Size([1, 3, 800, 1066])
+        self.assertEqual(encoding['pixel_values'].shape, expected_shape)
+        
         # verify area
         expected_area = torch.tensor([5887.9600, 11250.2061, 489353.8438, 837122.7500, 147967.5156, 165732.3438])
         assert torch.allclose(encoding['target'][0]['area'], expected_area)
         # verify boxes
+        expected_boxes_shape = torch.Size([6, 4])
+        self.assertEqual(encoding['target'][0]['boxes'].shape, expected_boxes_shape)
         expected_boxes_slice = torch.tensor([0.5503, 0.2765, 0.0604, 0.2215])
         assert torch.allclose(encoding['target'][0]['boxes'][0], expected_boxes_slice, atol=1e-3)
         # verify image_id
@@ -255,8 +260,4 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         # verify size
         expected_size = torch.tensor([ 800, 1066])
         assert torch.allclose(encoding['target'][0]['size'], expected_size)
-    
-
-
-
     
