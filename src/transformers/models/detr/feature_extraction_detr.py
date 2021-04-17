@@ -326,7 +326,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return rescaled_image, target
 
-    def _normalize(image, mean, std, tensor_type, target=None):
+    def _normalize(self, image, mean, std, tensor_type, target=None):
         """
         Normalize the image with a certain mean and std. 
         
