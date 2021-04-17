@@ -81,22 +81,21 @@ def infer_framework_from_model(
             "To install PyTorch, read the instructions at https://pytorch.org/."
         )
     if isinstance(model, str):
-        model_kwargs["_from_pipeline"] = task
-        if is_torch_available() and not is_tf_available():
-            model_class = model_classes.get("pt", AutoModel)
-            model = model_class.from_pretrained(model, **model_kwargs)
-        elif is_tf_available() and not is_torch_available():
-            model_class = model_classes.get("tf", TFAutoModel)
-            model = model_class.from_pretrained(model, **model_kwargs)
+        if is_torch_available():
+            framework, autoclass = "pt", AutoModel
         else:
-            try:
-                model_class = model_classes.get("pt", AutoModel)
-                model = model_class.from_pretrained(model, **model_kwargs)
-            except OSError:
-                model_class = model_classes.get("tf", TFAutoModel)
+            framework, autoclass = "tf", TFAutoModel
+        
+        try:
+            model_class = model_classes.get(framework, autoclass)
+            model = model_class.from_pretrained(model, **model_kwargs)
+        except OSError:
+            pt_failed_tf_avail = framework == "pt" and is_tf_available()
+            if pt_failed_tf_avail:
+                framework, autoclass = "tf", TFAutoModel
+                model_class = model_classes.get(framework, autoclass)
                 model = model_class.from_pretrained(model, **model_kwargs)
 
-    framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
     return framework, model
 
 
