@@ -482,11 +482,12 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if self.do_normalize:
             if annotations is not None:
                 for idx, (image, target) in enumerate(zip(images, annotations)):
-                    image, target = self._normalize(image=image, target=target, mean=self.image_mean, std=self.image_std)
+                    image, target = self._normalize(image=image, mean=self.image_mean, std=self.image_std, 
+                                                        tensor_type=tensor_type, target=target)
                     images[idx] = image
                     annotations[idx] = target
             else:
-                images = [self._normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
+                images = [self._normalize(image=image, mean=self.image_mean, std=self.image_std, tensor_type=tensor_type) for image in images]
 
         # create pixel_mask
         max_size = self._max_by_axis([list(image.shape) for image in images])
