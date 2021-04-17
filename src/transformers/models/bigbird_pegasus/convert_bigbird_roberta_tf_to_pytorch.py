@@ -45,8 +45,8 @@ def rename_state_dict_key(k):
 
 def convert_bigbird_roberta(tf_weights: dict) -> EncoderDecoderModel:
 
-    encoder_config = BigBirdConfig()
-    decoder_config = BigBirdConfig(attention_type="original_full")
+    encoder_config = BigBirdConfig(type_vocab_size=1)
+    decoder_config = BigBirdConfig(attention_type="original_full", type_vocab_size=1)
     config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
     torch_model = EncoderDecoderModel(config=config)
     sd = torch_model.state_dict()
@@ -80,12 +80,14 @@ def convert_bigbird_roberta(tf_weights: dict) -> EncoderDecoderModel:
 
     # make sure embedding.padding_idx is respected
     # mapping["shared.weight"][cfg.pad_token_id] = torch.zeros_like(mapping["shared.weight"][cfg.pad_token_id + 1])
+    mapping["encoder.embeddings.token_type_embeddings.weight"] = torch.zeros(1, 768, dtype=torch.long)
+    mapping["decoder.bert.embeddings.token_type_embeddings.weight"] = torch.zeros(1, 768, dtype=torch.long)
     missing, extra = torch_model.load_state_dict(mapping, strict=False)
     unexpected_missing = [
         k
         for k in missing
         if k
-        not in ['encoder.embeddings.position_ids', 'encoder.embeddings.token_type_embeddings.weight', 'encoder.pooler.weight', 'encoder.pooler.bias', 'decoder.bert.embeddings.position_ids', 'decoder.bert.embeddings.token_type_embeddings.weight', 'decoder.bert.pooler.weight', 'decoder.bert.pooler.bias', 'decoder.cls.predictions.bias', 'decoder.cls.predictions.transform.dense.weight', 'decoder.cls.predictions.transform.dense.bias', 'decoder.cls.predictions.transform.LayerNorm.weight', 'decoder.cls.predictions.transform.LayerNorm.bias', 'decoder.cls.predictions.decoder.weight', 'decoder.cls.predictions.decoder.bias']
+        not in ['encoder.embeddings.position_ids', 'encoder.pooler.weight', 'encoder.pooler.bias', 'decoder.bert.embeddings.position_ids', 'decoder.bert.pooler.weight', 'decoder.bert.pooler.bias', 'decoder.cls.predictions.bias', 'decoder.cls.predictions.transform.dense.weight', 'decoder.cls.predictions.transform.dense.bias', 'decoder.cls.predictions.transform.LayerNorm.weight', 'decoder.cls.predictions.transform.LayerNorm.bias', 'decoder.cls.predictions.decoder.weight', 'decoder.cls.predictions.decoder.bias']
     ]
     assert unexpected_missing == [], f"no matches found for the following torch keys {unexpected_missing}"
     assert extra == [], f"no matches found for the following tf keys {extra}"

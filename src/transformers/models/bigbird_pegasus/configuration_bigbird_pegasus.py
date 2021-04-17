@@ -135,9 +135,9 @@ class BigBirdPegasusConfig(PretrainedConfig):
         classifier_dropout=0.0,
         scale_embedding=False,
         gradient_checkpointing=False,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
+        pad_token_id=0,
+        bos_token_id=2,
+        eos_token_id=1,
         attention_type="block_sparse",  # only for encoder
         block_size=64,
         num_random_blocks=3,
