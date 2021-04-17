@@ -107,7 +107,8 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         Returns:
             :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
 
-            - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height, width).
+            - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
+              width).
         """
         # Input type checking for clearer error
         valid_images = False
