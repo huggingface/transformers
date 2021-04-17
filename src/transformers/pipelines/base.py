@@ -85,17 +85,15 @@ def infer_framework_from_model(
             framework, autoclass = "pt", AutoModel
         else:
             framework, autoclass = "tf", TFAutoModel
-        
         try:
             model_class = model_classes.get(framework, autoclass)
             model = model_class.from_pretrained(model, **model_kwargs)
         except OSError:
-            pt_failed_tf_avail = framework == "pt" and is_tf_available()
-            if pt_failed_tf_avail:
-                framework, autoclass = "tf", TFAutoModel
-                model_class = model_classes.get(framework, autoclass)
+            if framework == "pt" and is_tf_available():
+                model_class = model_classes.get("tf", TFAutoModel)
                 model = model_class.from_pretrained(model, **model_kwargs)
 
+    framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
     return framework, model
 
 
