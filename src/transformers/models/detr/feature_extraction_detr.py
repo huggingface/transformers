@@ -23,7 +23,7 @@ from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...file_utils import TensorType, is_flax_available, is_tf_available, is_torch_available
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import logging
-from .modeling_detr import box_cxcywh_to_xyxy
+from .modeling_detr import box_cxcywh_to_xyxy, box_xyxy_to_cxcywh
 
 
 logger = logging.get_logger(__name__)
@@ -157,6 +157,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     # inspired by https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/datasets/coco.py#L50
     # with added support for several TensorTypes
     def convertCocoToDetrFormat(self, image, target, tensor_type, return_masks=False):
+        """
+        Convert the target in COCO format into the format expected by DETR. 
+        """
+        
         as_tensor, tensor_type = get_as_tensor(tensor_type)
 
         w, h = image.size
@@ -253,10 +257,15 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 maxes[index] = max(maxes[index], item)
         return maxes
 
-    def _resize(self, image, target, size, tensor_type, max_size=None):
+    def _resize(self, image, size, tensor_type, target=None, max_size=None):
+        """
+        Resize the image to the given size. Size can be min_size (scalar) or (w, h) tuple. If size is an int, smaller edge 
+        of the image will be matched to this number. 
+        
+        If given, also resize the target accordingly. 
+        """
+        
         as_tensor, _ = get_as_tensor(tensor_type)
-
-        # size can be min_size (scalar) or (w, h) tuple
 
         if not isinstance(image, Image.Image):
             image = self.to_pil_image(image)
@@ -317,6 +326,38 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return rescaled_image, target
 
+    def _normalize(image, mean, std, tensor_type, target=None):
+        """
+        Normalize the image with a certain mean and std. 
+        
+        If given, also normalize the target based on the size of the image.
+        """
+        
+        image = self.normalize(image, mean=mean, std=std)
+        if target is None:
+            return image, None
+        
+        target = target.copy()
+        h, w = image.shape[-2:]
+        
+        if "boxes" in target:
+            as_tensor, tensor_type = get_as_tensor(tensor_type)
+            
+            boxes = target["boxes"]
+            boxes = box_xyxy_to_cxcywh(boxes)
+            if tensor_type == TensorType.TENSORFLOW:
+                boxes = boxes / as_tensor([w, h, w, h], dtype=tf.float32)
+            elif tensor_type == TensorType.PYTORCH:
+                boxes = boxes / as_tensor([w, h, w, h], dtype=torch.float32)
+            elif tensor_type == TensorType.JAX:
+                boxes = boxes / as_tensor([w, h, w, h], dtype=jnp.float32)
+            else:
+                boxes = boxes / as_tensor([w, h, w, h], dtype=np.float32)
+            
+            target["boxes"] = boxes
+        
+        return image, target
+    
     def __call__(
         self,
         images: Union[
@@ -439,7 +480,13 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                     )[0]
 
         if self.do_normalize:
-            images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
+            if annotations is not None:
+                for idx, (image, target) in enumerate(zip(images, annotations)):
+                    image, target = self._normalize(image=image, target=target, mean=self.image_mean, std=self.image_std)
+                    images[idx] = image
+                    annotations[idx] = target
+            else:
+                images = [self._normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
 
         # create pixel_mask
         max_size = self._max_by_axis([list(image.shape) for image in images])
