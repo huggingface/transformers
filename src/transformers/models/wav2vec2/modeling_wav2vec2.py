@@ -25,7 +25,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput, MaskedLMOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithWavFeatures, CausalLMOutput, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_wav2vec2 import Wav2Vec2Config
@@ -258,12 +258,10 @@ class Wav2Vec2FeatureExtractor(nn.Module):
 class Wav2Vec2FeatureProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
         self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
         self.dropout = nn.Dropout(config.feat_proj_dropout)
 
     def forward(self, hidden_states):
-        hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.projection(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
@@ -664,6 +662,256 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
         )
 
 
+class GumbelVectorQuantizer(nn.Module):
+    def __init__(
+        self,
+        dim,
+        num_vars,
+        temp,
+        groups,
+        combine_groups,
+        vq_dim,
+        time_first,
+        activation=nn.GELU(),
+        weight_proj_depth=1,
+        weight_proj_factor=1,
+    ):
+        """
+        Vector quantization using gumbel softmax
+
+        Args:
+            dim: input dimension (channels)
+            num_vars: number of quantized vectors per group
+            temp: temperature for training. this should be a tuple of 3 elements: (start, stop, decay factor)
+            groups: number of groups for vector quantization
+            combine_groups: whether to use the vectors for all groups
+            vq_dim: dimensionality of the resulting quantized vector
+            time_first: if true, expect input in BxTxC format, otherwise in BxCxT
+            activation: what activation to use (should be a module). this is only used if weight_proj_depth is > 1
+            weight_proj_depth: number of layers (with activation in between) to project input before computing logits
+            weight_proj_factor: this is used only if weight_proj_depth is > 1. scales the inner dimensionality of
+                                projections by this factor
+        """
+        super().__init__()
+
+        self.groups = groups
+        self.combine_groups = combine_groups
+        self.input_dim = dim
+        self.num_vars = num_vars
+        self.time_first = time_first
+
+        assert vq_dim % groups == 0, f"dim {vq_dim} must be divisible by groups {groups} for concatenation"
+
+        var_dim = vq_dim // groups
+        num_groups = groups if not combine_groups else 1
+
+        self.vars = nn.Parameter(torch.FloatTensor(1, num_groups * num_vars, var_dim))
+        nn.init.uniform_(self.vars)
+
+        if weight_proj_depth > 1:
+
+            def block(input_dim, output_dim):
+                return nn.Sequential(nn.Linear(input_dim, output_dim), activation)
+
+            inner_dim = self.input_dim * weight_proj_factor
+            self.weight_proj = nn.Sequential(
+                *[block(self.input_dim if i == 0 else inner_dim, inner_dim) for i in range(weight_proj_depth - 1)],
+                nn.Linear(inner_dim, groups * num_vars),
+            )
+        else:
+            self.weight_proj = nn.Linear(self.input_dim, groups * num_vars)
+            nn.init.normal_(self.weight_proj.weight, mean=0, std=1)
+            nn.init.zeros_(self.weight_proj.bias)
+
+        if isinstance(temp, str):
+            import ast
+
+            temp = ast.literal_eval(temp)
+        assert len(temp) == 3, f"{temp}, {len(temp)}"
+
+        self.max_temp, self.min_temp, self.temp_decay = temp
+        self.curr_temp = self.max_temp
+        self.codebook_indices = None
+
+    def set_num_updates(self, num_updates):
+        self.curr_temp = max(self.max_temp * self.temp_decay ** num_updates, self.min_temp)
+
+    def get_codebook_indices(self):
+        if self.codebook_indices is None:
+            from itertools import product
+
+            p = [range(self.num_vars)] * self.groups
+            inds = list(product(*p))
+            self.codebook_indices = torch.tensor(inds, dtype=torch.long, device=self.vars.device).flatten()
+
+            if not self.combine_groups:
+                self.codebook_indices = self.codebook_indices.view(self.num_vars ** self.groups, -1)
+                for b in range(1, self.groups):
+                    self.codebook_indices[:, b] += self.num_vars * b
+                self.codebook_indices = self.codebook_indices.flatten()
+        return self.codebook_indices
+
+    def codebook(self):
+        indices = self.get_codebook_indices()
+        return self.vars.squeeze(0).index_select(0, indices).view(self.num_vars ** self.groups, -1)
+
+    def sample_from_codebook(self, b, n):
+        indices = self.get_codebook_indices()
+        indices = indices.view(-1, self.groups)
+        cb_size = indices.size(0)
+        assert n < cb_size, f"sample size {n} is greater than size of codebook {cb_size}"
+        sample_idx = torch.randint(low=0, high=cb_size, size=(b * n,))
+        indices = indices[sample_idx]
+
+        z = self.vars.squeeze(0).index_select(0, indices.flatten()).view(b, n, -1)
+        return z
+
+    def to_codebook_index(self, indices):
+        res = indices.new_full(indices.shape[:-1], 0)
+        for i in range(self.groups):
+            exponent = self.groups - i - 1
+            res += indices[..., i] * (self.num_vars ** exponent)
+        return res
+
+    def forward_idx(self, x):
+        res = self.forward(x, produce_targets=True)
+        return res["x"], res["targets"]
+
+    def forward(self, x, produce_targets=False):
+
+        num_vars = self.num_vars * self.groups
+
+        if not self.time_first:
+            x = x.transpose(1, 2)
+
+        bsz, tsz, fsz = x.shape
+        x = x.reshape(-1, fsz)
+        x = self.weight_proj(x)
+        x = x.view(bsz * tsz * self.groups, -1)
+
+        _, k = x.max(-1)
+        hard_x = x.new_zeros(*x.shape).scatter_(-1, k.view(-1, 1), 1.0).view(bsz * tsz, self.groups, -1)
+        hard_probs = torch.mean(hard_x.float(), dim=0)
+        code_perplexity = torch.exp(-torch.sum(hard_probs * torch.log(hard_probs + 1e-7), dim=-1)).sum()
+        print(f"Code perplexity: {code_perplexity}")
+
+        avg_probs = torch.softmax(x.view(bsz * tsz, self.groups, -1).float(), dim=-1).mean(dim=0)
+        prob_perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs + 1e-7), dim=-1)).sum()
+        print(f"Prob perplexity: {prob_perplexity}")
+
+        temp = self.curr_temp
+        print(f"Current temp: {temp}")
+
+        if self.training:
+            x = F.gumbel_softmax(x.float(), tau=self.curr_temp, hard=True).type_as(x)
+        else:
+            x = hard_x
+
+        x = x.view(bsz * tsz, -1)
+
+        vars = self.vars
+        if self.combine_groups:
+            vars = vars.repeat(1, self.groups, 1)
+
+        if produce_targets:
+            targets = x.view(bsz * tsz * self.groups, -1).argmax(dim=-1).view(bsz, tsz, self.groups).detach()
+            print(f"VQ targets shape: {targets.shape}")
+
+        x = x.unsqueeze(-1) * vars
+        x = x.view(bsz * tsz, self.groups, self.num_vars, -1)
+        x = x.sum(-2)
+        x = x.view(bsz, tsz, -1)
+
+        if not self.time_first:
+            x = x.transpose(1, 2)  # BTC -> BCT
+
+        return x, num_vars, prob_perplexity
+
+
+class Wav2Vec2Quantizer(nn.Module):
+    def __init__(self, config: Wav2Vec2Config):
+        super().__init__()
+        self.config = config
+
+        final_dim = config.final_dim if config.final_dim > 0 else config.conv_dim[-1]
+        vq_dim = config.latent_dim if config.latent_dim > 0 else final_dim
+        self.quantizer = GumbelVectorQuantizer(
+            dim=config.conv_dim[-1],
+            num_vars=config.num_latent_vars,
+            temp=config.latent_temp,
+            groups=config.num_latent_groups,
+            combine_groups=False,
+            vq_dim=vq_dim,
+            time_first=True,
+        )
+        self.project_q = nn.Linear(vq_dim, final_dim)
+        self.final_proj = nn.Linear(config.hidden_size, final_dim)
+
+        self.num_negatives = config.num_negatives
+        self.cross_sample_negatives = config.cross_sample_negatives
+
+    def forward(self, extractor_hidden_states, transformer_hidden_states, mask_time_indices=None):
+        if mask_time_indices is not None:
+            # quantize only hidden states in places of masks
+            extractor_hidden_states = extractor_hidden_states[mask_time_indices].view(
+                extractor_hidden_states.size(0), -1, extractor_hidden_states.size(-1)
+            )
+
+        quantized_states, num_vars, prob_perplexity = self.quantizer(extractor_hidden_states, produce_targets=False)
+        quantized_states = self.project_q(quantized_states)
+
+        negatives, _ = self.sample_negatives(quantized_states, quantized_states.size(1))
+        negatives = self.project_q(negatives)
+        transformer_hidden_states = self.final_proj(transformer_hidden_states)
+
+        return transformer_hidden_states, quantized_states, negatives, num_vars, prob_perplexity
+
+    def sample_negatives(self, y, num, padding_count=None):
+
+        if self.num_negatives == 0 and self.cross_sample_negatives == 0:
+            return y.new(0)
+
+        bsz, tsz, fsz = y.shape
+        y = y.view(-1, fsz)  # BTC => (BxT)C
+
+        # FIXME: what happens if padding_count is specified?
+        cross_high = tsz * bsz
+        high = tsz - (padding_count or 0)
+        with torch.no_grad():
+            assert high > 1, f"{bsz, tsz, fsz}"
+
+            if self.num_negatives > 0:
+                tszs = torch.arange(num).unsqueeze(-1).expand(-1, self.num_negatives).flatten()
+
+                neg_idxs = torch.randint(low=0, high=high - 1, size=(bsz, self.num_negatives * num))
+                neg_idxs[neg_idxs >= tszs] += 1
+
+            if self.cross_sample_negatives > 0:
+                tszs = torch.arange(num).unsqueeze(-1).expand(-1, self.cross_sample_negatives).flatten()
+
+                cross_neg_idxs = torch.randint(
+                    low=0,
+                    high=cross_high - 1,
+                    size=(bsz, self.cross_sample_negatives * num),
+                )
+                cross_neg_idxs[cross_neg_idxs >= tszs] += 1
+
+        if self.num_negatives > 0:
+            for i in range(1, bsz):
+                neg_idxs[i] += i * high
+        else:
+            neg_idxs = cross_neg_idxs
+
+        if self.cross_sample_negatives > 0 and self.num_negatives > 0:
+            neg_idxs = torch.cat([neg_idxs, cross_neg_idxs], dim=1)
+
+        negs = y[neg_idxs.view(-1)]
+        negs = negs.view(bsz, num, self.num_negatives + self.cross_sample_negatives, fsz).permute(
+            2, 0, 1, 3
+        )  # to NxBxTxC
+        return negs, neg_idxs
+
+
 class Wav2Vec2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -765,10 +1013,11 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
     WAV_2_VEC_2_START_DOCSTRING,
 )
 class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2Config):
         super().__init__(config)
         self.config = config
         self.feature_extractor = Wav2Vec2FeatureExtractor(config)
+        self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
         self.feature_projection = Wav2Vec2FeatureProjection(config)
 
         self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
@@ -821,7 +1070,10 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = self.feature_extractor(input_values)
+        features_pen = hidden_states.float().pow(2).mean()
         hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = self.layer_norm(hidden_states)
+        unmasked_features = hidden_states.clone()
 
         if attention_mask is not None:
             # compute real output lengths according to convolution formula
@@ -840,6 +1092,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         hidden_states = self.feature_projection(hidden_states)
 
+        mask_time_indices = None
         if self.config.apply_spec_augment and self.training:
             batch_size, sequence_length, hidden_size = hidden_states.size()
 
@@ -852,7 +1105,8 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                     attention_mask=attention_mask,
                     min_masks=2,
                 )
-                hidden_states[torch.from_numpy(mask_time_indices)] = self.masked_spec_embed.to(hidden_states.dtype)
+                mask_time_indices = torch.from_numpy(mask_time_indices).to(hidden_states.device)
+                hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
 
             # apply SpecAugment along feature axis
             if self.config.mask_feature_prob > 0:
@@ -877,8 +1131,99 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         if not return_dict:
             return (hidden_states,) + encoder_outputs[1:]
 
-        return BaseModelOutput(
+        return BaseModelOutputWithWavFeatures(
             last_hidden_state=hidden_states,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+            mask_time_indices=mask_time_indices,
+            wav_features=unmasked_features,
+            features_pen=features_pen,
+        )
+
+
+@add_start_docstrings("""Wav2Vec2 Model with a `VQ` head on top. """, WAV_2_VEC_2_START_DOCSTRING)
+class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.wav2vec2 = Wav2Vec2Model(config)
+        self.dropout_features = nn.Dropout(config.feat_quantizer_dropout)
+
+        self.quantizer = Wav2Vec2Quantizer(config)
+
+        self.logit_temp = config.logit_temp
+
+        self.init_weights()
+
+    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_values,
+        attention_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        labels=None,
+    ):
+        r"""
+        TODO: docs
+
+        Returns:
+
+        Example::
+
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        encoder_outputs = self.wav2vec2(
+            input_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        extractor_features = encoder_outputs.wav_features
+        extractor_features = self.dropout_features(extractor_features)
+        transformer_features = encoder_outputs.last_hidden_state
+
+        quantized_extractor_states, transformer_states, negatives, num_vars, prob_perplexity = self.quantizer(
+            extractor_features, transformer_features, encoder_outputs.mask_time_indices
+        )
+
+        # contrastive target
+        neg_is_pos = (quantized_extractor_states == negatives).all(-1)
+        quantized_extractor_states = quantized_extractor_states.unsqueeze(0)
+        target_states = torch.cat([quantized_extractor_states, negatives], dim=0)
+        logits = torch.cosine_similarity(transformer_states.float(), target_states.float(), dim=-1).type_as(
+            target_states
+        )
+        logits = logits / self.logit_temp
+        if neg_is_pos.any():
+            logits[1:][neg_is_pos] = float("-inf")
+
+        preds = logits.transpose(0, 2)
+        preds = preds.reshape(-1, preds.size(-1))
+        # the goal is to maximize cosine similarities at index `0` (the positives),
+        # the other indices 1..num_negatives+1 are for the sampled negative vectors
+        target = logits.new_zeros(logits.size(1) * logits.size(2), dtype=torch.long)
+        loss = F.cross_entropy(
+            preds.float(),
+            target,
+            reduction="sum",
+        )
+        # reduce soft code perplexity
+        loss += self.config.additional_losses_weights[0] * ((num_vars - prob_perplexity) / num_vars)
+        # TODO: find out if this penalty is needed
+        loss += self.config.additional_losses_weights[1] * encoder_outputs.features_pen
+
+        if not return_dict:
+            output = (logits,) + encoder_outputs[1:]
+            return output
+
+        # TODO: change to smth like VectorQuantizationOutput
+        return CausalLMOutput(
+            loss=loss,
+            logits=logits,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )

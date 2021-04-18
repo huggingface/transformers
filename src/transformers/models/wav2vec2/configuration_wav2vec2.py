@@ -145,6 +145,7 @@ class Wav2Vec2Config(PretrainedConfig):
         activation_dropout=0.1,
         attention_dropout=0.1,
         feat_proj_dropout=0.1,
+        feat_quantizer_dropout=0.0,
         final_dropout=0.1,
         layerdrop=0.1,
         initializer_range=0.02,
@@ -163,6 +164,16 @@ class Wav2Vec2Config(PretrainedConfig):
         mask_time_length=10,
         mask_feature_prob=0.0,
         mask_feature_length=10,
+        quantize_targets=False,
+        num_latent_vars=320,
+        num_latent_groups=2,
+        latent_temp=(2.0, 0.5, 0.999995),
+        logit_temp=0.1,
+        num_negatives=100,
+        cross_sample_negatives=0,
+        additional_losses_weights=(0.1, 10),
+        latent_dim=0,
+        final_dim=256,
         ctc_loss_reduction="sum",
         ctc_zero_infinity=False,
         gradient_checkpointing=False,
@@ -216,6 +227,19 @@ class Wav2Vec2Config(PretrainedConfig):
         self.mask_time_length = mask_time_length
         self.mask_feature_prob = mask_feature_prob
         self.mask_feature_length = mask_feature_length
+
+        # parameters for pretraining with vector quantized (VQ) representations
+        self.quantize_targets = quantize_targets
+        self.num_latent_vars = num_latent_vars
+        self.num_latent_groups = num_latent_groups
+        self.latent_temp = latent_temp
+        self.logit_temp = logit_temp
+        self.feat_quantizer_dropout = feat_quantizer_dropout
+        self.num_negatives = num_negatives
+        self.cross_sample_negatives = cross_sample_negatives
+        self.latent_dim = latent_dim
+        self.final_dim = final_dim
+        self.additional_losses_weights = additional_losses_weights
 
         # ctc loss
         self.ctc_loss_reduction = ctc_loss_reduction
