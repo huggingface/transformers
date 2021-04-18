@@ -350,11 +350,9 @@ class AutoConfig:
 
         List options
 
-
         Args:
             pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
                 Can be either:
-
 
                     - A string, the `model id` of a pretrained model configuration hosted inside a model repo on
                       huggingface.co. Valid model ids can be located at the root-level, like ``bert-base-uncased``, or
@@ -390,7 +388,6 @@ class AutoConfig:
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
                 by the ``return_unused_kwargs`` keyword parameter.
-
 
         Examples::
 

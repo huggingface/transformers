@@ -45,7 +45,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
     tokenizer.add_special_tokens(dict(additional_special_tokens=[entity_token_1, entity_token_2]))
     config.vocab_size += 2
 
-    print("Saving tokenizer to {}".format(pytorch_dump_folder_path))
+    print(f"Saving tokenizer to {pytorch_dump_folder_path}")
     tokenizer.save_pretrained(pytorch_dump_folder_path)
     with open(os.path.join(pytorch_dump_folder_path, LukeTokenizer.vocab_files_names["entity_vocab_file"]), "w") as f:
         json.dump(entity_vocab, f)
@@ -61,7 +61,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
     # Initialize the query layers of the entity-aware self-attention mechanism
     for layer_index in range(config.num_hidden_layers):
         for matrix_name in ["query.weight", "query.bias"]:
-            prefix = "encoder.layer." + str(layer_index) + ".attention.self."
+            prefix = f"encoder.layer.{layer_index}.attention.self."
             state_dict[prefix + "w2e_" + matrix_name] = state_dict[prefix + matrix_name]
             state_dict[prefix + "e2w_" + matrix_name] = state_dict[prefix + matrix_name]
             state_dict[prefix + "e2e_" + matrix_name] = state_dict[prefix + matrix_name]

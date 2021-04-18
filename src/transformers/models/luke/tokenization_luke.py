@@ -42,6 +42,11 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
+EntitySpan = Tuple[int, int]
+EntitySpanInput = List[EntitySpan]
+Entity = str
+EntityInput = List[Entity]
+
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
     "merges_file": "merges.txt",
@@ -157,19 +162,19 @@ class LukeTokenizer(RobertaTokenizer):
         entity_vocab_file (:obj:`str`):
             Path to the entity vocabulary file.
         task (:obj:`str`, `optional`):
-            Task for which you want to prepare sequences. One of "entity_classification" or
-            "entity_pair_classification". If you specify this argument, the entity sequence is automatically created
-            based on the given entity spans.
+            Task for which you want to prepare sequences. One of obj:`"entity_classification"` or
+            obj:`"entity_pair_classification"`. If you specify this argument, the entity sequence is automatically
+            created based on the given entity spans.
         max_entity_length (:obj:`int`, `optional`, defaults to 32):
             The maximum length of :obj:`entity_ids`.
         max_mention_length (:obj:`int`, `optional`, defaults to 30):
             The maximum number of tokens inside an entity span.
         entity_token_1 (:obj:`str`, `optional`, defaults to :obj:`<ent>`):
             The special token representing an entity span. This token is only used when ``task`` is set to
-            "entity_classification" or "entity_pair_classification".
+            obj:`"entity_classification"` or obj:`"entity_pair_classification"`.
         entity_token_2 (:obj:`str`, `optional`, defaults to :obj:`<ent2>`):
             The special token representing an entity span. This token is only used when ``task`` is set to
-            "entity_pair_classification".
+            obj:`"entity_pair_classification"`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -200,7 +205,9 @@ class LukeTokenizer(RobertaTokenizer):
             if isinstance(entity_token_2, str)
             else entity_token_2
         )
-        kwargs["additional_special_tokens"] = [entity_token_1, entity_token_2] + kwargs.get("additional_special_tokens", [])
+        kwargs["additional_special_tokens"] = [entity_token_1, entity_token_2] + kwargs.get(
+            "additional_special_tokens", []
+        )
 
         super().__init__(
             vocab_file=vocab_file,
@@ -224,7 +231,9 @@ class LukeTokenizer(RobertaTokenizer):
         elif task == "entity_pair_classification":
             self.max_entity_length = 2
         else:
-            raise ValueError(f"Task {task} not supported. Select task from ['entity_classification', 'entity_pair_classification'] only.")
+            raise ValueError(
+                f"Task {task} not supported. Select task from ['entity_classification', 'entity_pair_classification'] only."
+            )
 
         self.max_mention_length = max_mention_length
 
@@ -233,10 +242,10 @@ class LukeTokenizer(RobertaTokenizer):
         self,
         text: Union[TextInput, List[TextInput]],
         text_pair: Optional[Union[TextInput, List[TextInput]]] = None,
-        entity_spans: Optional[Union[List[Tuple[int, int]], List[List[Tuple[int, int]]]]] = None,
-        entity_spans_pair: Optional[Union[List[Tuple[int, int]], List[List[Tuple[int, int]]]]] = None,
-        entities: Optional[Union[List[str], List[List[str]]]] = None,
-        entities_pair: Optional[Union[List[str], List[List[str]]]] = None,
+        entity_spans: Optional[Union[EntitySpanInput, List[EntitySpanInput]]] = None,
+        entity_spans_pair: Optional[Union[EntitySpanInput, List[EntitySpanInput]]] = None,
+        entities: Optional[Union[EntityInput, List[EntityInput]]] = None,
+        entities_pair: Optional[Union[EntityInput, List[EntityInput]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -266,43 +275,47 @@ class LukeTokenizer(RobertaTokenizer):
             text_pair (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence must be a string. Note that this
                 tokenizer does not support tokenization based on pretokenized strings.
-            entity_spans (:obj:`List[Tuple]`, :obj:`List[List[Tuple]]`, `optional`):
+            entity_spans (:obj:`List[Tuple[int, int]]`, :obj:`List[List[Tuple[int, int]]]`, `optional`):
                 The sequence or batch of sequences of entity spans to be encoded. Each sequence consists of tuples each
-                with two integers denoting start and end positions of entities. If you specify "entity_classification"
-                or "entity_pair_classification" as the `task` argument in the constructor, the length of each sequence
-                must be 1 or 2, respectively. If you specify `entities`, the length of each sequence must be equal to
-                the length of each sequence of `entities`.
-            entity_spans_pair (:obj:`List[Tuple]`, :obj:`List[List[Tuple]]`, `optional`):
+                with two integers denoting start and end positions of entities. If you specify
+                obj:`"entity_classification"` or obj:`"entity_pair_classification"` as the ``task`` argument in the
+                constructor, the length of each sequence must be 1 or 2, respectively. If you specify ``entities``, the
+                length of each sequence must be equal to the length of each sequence of ``entities``.
+            entity_spans_pair (:obj:`List[Tuple[int, int]]`, :obj:`List[List[Tuple[int, int]]]`, `optional`):
                 The sequence or batch of sequences of entity spans to be encoded. Each sequence consists of tuples each
-                with two integers denoting start and end positions of entities. If you specify the `task` argument in
-                the constructor, this argument is ignored. If you specify `entities_pair`, the length of each sequence
-                must be equal to the length of each sequence of `entities_pair`.
+                with two integers denoting start and end positions of entities. If you specify the ``task`` argument in
+                the constructor, this argument is ignored. If you specify ``entities_pair``, the length of each
+                sequence must be equal to the length of each sequence of ``entities_pair``.
             entities (:obj:`List[str]`, :obj:`List[List[str]]`, `optional`):
                 The sequence or batch of sequences of entities to be encoded. Each sequence consists of strings
                 representing entities, i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., New
-                York). This argument is ignored if you specify the `task` argument in the constructor. The length of
-                each sequence must be equal to the length of each sequence of `entity_spans`. If you specify
-                `entity_spans` without specifying this argument, the entity sequence or the batch of entity sequences
+                York). This argument is ignored if you specify the ``task`` argument in the constructor. The length of
+                each sequence must be equal to the length of each sequence of ``entity_spans``. If you specify
+                ``entity_spans`` without specifying this argument, the entity sequence or the batch of entity sequences
                 is automatically constructed by filling it with the [MASK] special entities.
             entities_pair (:obj:`List[str]`, :obj:`List[List[str]]`, `optional`):
                 The sequence or batch of sequences of entities to be encoded. Each sequence consists of strings
                 representing entities, i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., New
-                York). This argument is ignored if you specify the `task` argument in the constructor. The length of
-                each sequence must be equal to the length of each sequence of `entity_spans_pair`. If you specify
-                `entity_spans_pair` without specifying this argument, the entity sequence or the batch of entity
+                York). This argument is ignored if you specify the ``task`` argument in the constructor. The length of
+                each sequence must be equal to the length of each sequence of ``entity_spans_pair``. If you specify
+                ``entity_spans_pair`` without specifying this argument, the entity sequence or the batch of entity
                 sequences is automatically constructed by filling it with the [MASK] special entities.
             max_entity_length (:obj:`int`, `optional`):
                 The maximum length of :obj:`entity_ids`.
         """
         # Input type checking for clearer error
-        assert isinstance(text, str) or (
-            isinstance(text, (list, tuple)) and (len(text) == 0 or (isinstance(text[0], str)))
+        is_valid_single_text = isinstance(text, str)
+        is_valid_batch_text = isinstance(text, (list, tuple)) and (len(text) == 0 or (isinstance(text[0], str)))
+        assert (
+            is_valid_single_text or is_valid_batch_text
         ), "text input must be of type `str` (single example) or `List[str]` (batch)."
 
+        is_valid_single_text_pair = isinstance(text_pair, str)
+        is_valid_batch_text_pair = isinstance(text_pair, (list, tuple)) and (
+            len(text_pair) == 0 or isinstance(text_pair[0], str)
+        )
         assert (
-            text_pair is None
-            or isinstance(text_pair, str)
-            or (isinstance(text_pair, (list, tuple)) and (len(text_pair) == 0 or isinstance(text_pair[0], str)))
+            text_pair is None or is_valid_single_text_pair or is_valid_batch_text_pair
         ), "text_pair input must be of type `str` (single example) or `List[str]` (batch)."
 
         is_batched = bool(isinstance(text, (list, tuple)))
@@ -377,10 +390,10 @@ class LukeTokenizer(RobertaTokenizer):
         self,
         text: Union[TextInput],
         text_pair: Optional[Union[TextInput]] = None,
-        entity_spans: Optional[List[Tuple[int, int]]] = None,
-        entity_spans_pair: Optional[List[Tuple[int, int]]] = None,
-        entities: Optional[List[str]] = None,
-        entities_pair: Optional[List[str]] = None,
+        entity_spans: Optional[EntitySpanInput] = None,
+        entity_spans_pair: Optional[EntitySpanInput] = None,
+        entities: Optional[EntityInput] = None,
+        entities_pair: Optional[EntityInput] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -400,8 +413,8 @@ class LukeTokenizer(RobertaTokenizer):
         **kwargs
     ) -> BatchEncoding:
         """
-        Tokenize and prepare for the model a sequence or a pair of sequences. 
-        
+        Tokenize and prepare for the model a sequence or a pair of sequences.
+
         .. warning:: This method is deprecated, ``__call__`` should be used instead.
 
         Args:
@@ -409,29 +422,30 @@ class LukeTokenizer(RobertaTokenizer):
                 The first sequence to be encoded. Each sequence must be a string.
             text_pair (:obj:`str`):
                 The second sequence to be encoded. Each sequence must be a string.
-            entity_spans (:obj:`List[Tuple]`, obj:`List[List[Tuple]]`, `optional`)::
+            entity_spans (:obj:`List[Tuple[int, int]]`, obj:`List[List[Tuple[int, int]]]`, `optional`)::
                 The first sequence of entity spans to be encoded. The sequence consists of tuples each with two
-                integers denoting start and end positions of entities. If you specify "entity_classification" or
-                "entity_pair_classification" as the `task` argument in the constructor, the length of each sequence
-                must be 1 or 2, respectively. If you specify `entities`, the length of the sequence must be equal to
-                the length of `entities`.
-            entity_spans_pair (:obj:`List[Tuple]`, obj:`List[List[Tuple]]`, `optional`)::
+                integers denoting start and end positions of entities. If you specify obj:`"entity_classification"` or
+                obj:`"entity_pair_classification"` as the ``task`` argument in the constructor, the length of each
+                sequence must be 1 or 2, respectively. If you specify ``entities``, the length of the sequence must be
+                equal to the length of ``entities``.
+            entity_spans_pair (:obj:`List[Tuple[int, int]]`, obj:`List[List[Tuple[int, int]]]`, `optional`)::
                 The second sequence of entity spans to be encoded. The sequence consists of tuples each with two
-                integers denoting start and end positions of entities. If you specify the `task` argument in the
-                constructor, this argument is ignored. If you specify `entities_pair`, the length of the sequence must
-                be equal to the length of `entities_pair`.
+                integers denoting start and end positions of entities. If you specify the ``task`` argument in the
+                constructor, this argument is ignored. If you specify ``entities_pair``, the length of the sequence
+                must be equal to the length of ``entities_pair``.
             entities (:obj:`List[str]` `optional`)::
                 The first sequence of entities to be encoded. The sequence consists of strings representing entities,
                 i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., New York). This argument is
-                ignored if you specify the `task` argument in the constructor. The length of the sequence must be equal
-                to the length of `entity_spans`. If you specify `entity_spans` without specifying this argument, the
-                entity sequence is automatically constructed by filling it with the [MASK] special entities.
+                ignored if you specify the ``task`` argument in the constructor. The length of the sequence must be
+                equal to the length of ``entity_spans``. If you specify ``entity_spans`` without specifying this
+                argument, the entity sequence is automatically constructed by filling it with the [MASK] special
+                entities.
             entities_pair (:obj:`List[str]`, obj:`List[List[str]]`, `optional`)::
                 The second sequence of entities to be encoded. The sequence consists of strings representing entities,
                 i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., New York). This argument is
-                ignored if you specify the `task` argument in the constructor. The length of the sequence must be equal
-                to the length of `entity_spans_pair`. If you specify `entity_spans_pair` without specifying this
-                argument, the entity sequence is automatically constructed by filling it with the [MASK] special
+                ignored if you specify the ``task`` argument in the constructor. The length of the sequence must be
+                equal to the length of ``entity_spans_pair``. If you specify ``entity_spans_pair`` without specifying
+                this argument, the entity sequence is automatically constructed by filling it with the [MASK] special
                 entities.
             max_entity_length (:obj:`int`, `optional`):
                 The maximum length of the entity sequence.
@@ -476,10 +490,10 @@ class LukeTokenizer(RobertaTokenizer):
         self,
         text: Union[TextInput],
         text_pair: Optional[Union[TextInput]] = None,
-        entity_spans: Optional[List[Tuple[int, int]]] = None,
-        entity_spans_pair: Optional[List[Tuple[int, int]]] = None,
-        entities: Optional[List[str]] = None,
-        entities_pair: Optional[List[str]] = None,
+        entity_spans: Optional[EntitySpanInput] = None,
+        entity_spans_pair: Optional[EntitySpanInput] = None,
+        entities: Optional[EntityInput] = None,
+        entities_pair: Optional[EntityInput] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -558,9 +572,11 @@ class LukeTokenizer(RobertaTokenizer):
         self,
         batch_text_or_text_pairs: Union[List[TextInput], List[TextInputPair]],
         batch_entity_spans_or_entity_spans_pairs: Optional[
-            Union[List[List[Tuple[int, int]]], List[Tuple[List[Tuple[int, int]], List[Tuple[int, int]]]]]
+            Union[List[EntitySpanInput], List[Tuple[EntitySpanInput, EntitySpanInput]]]
         ] = None,
-        batch_entities_or_entities_pairs: Optional[Union[List[List[str]], List[Tuple[List[str], List[str]]]]] = None,
+        batch_entities_or_entities_pairs: Optional[
+            Union[List[EntityInput], List[Tuple[EntityInput, EntityInput]]]
+        ] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -638,9 +654,11 @@ class LukeTokenizer(RobertaTokenizer):
         self,
         batch_text_or_text_pairs: Union[List[TextInput], List[TextInputPair]],
         batch_entity_spans_or_entity_spans_pairs: Optional[
-            Union[List[List[Tuple[int, int]]], List[Tuple[List[Tuple[int, int]], List[Tuple[int, int]]]]]
+            Union[List[EntitySpanInput], List[Tuple[EntitySpanInput, EntitySpanInput]]]
         ] = None,
-        batch_entities_or_entities_pairs: Optional[Union[List[List[str]], List[Tuple[List[str], List[str]]]]] = None,
+        batch_entities_or_entities_pairs: Optional[
+            Union[List[EntityInput], List[Tuple[EntityInput, EntityInput]]]
+        ] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -743,10 +761,10 @@ class LukeTokenizer(RobertaTokenizer):
         self,
         text: Union[TextInput],
         text_pair: Optional[Union[TextInput]] = None,
-        entities: Optional[List[str]] = None,
-        entities_pair: Optional[List[str]] = None,
-        entity_spans: Optional[List[Tuple[int, int]]] = None,
-        entity_spans_pair: Optional[List[Tuple[int, int]]] = None,
+        entities: Optional[EntityInput] = None,
+        entities_pair: Optional[EntityInput] = None,
+        entity_spans: Optional[EntitySpanInput] = None,
+        entity_spans_pair: Optional[EntitySpanInput] = None,
         **kwargs
     ) -> Tuple[list, list, list, list, list, list]:
         def get_input_ids(text):
@@ -1124,8 +1142,7 @@ class LukeTokenizer(RobertaTokenizer):
 
             if num_invalid_entities != 0:
                 logger.warning(
-                    "%d entities are ignored because their entity spans are invalid due to the truncation of input tokens",
-                    num_invalid_entities,
+                    f"{num_invalid_entities} entities are ignored because their entity spans are invalid due to the truncation of input tokens"
                 )
 
             if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and total_entity_len > max_entity_length:

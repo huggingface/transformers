@@ -279,7 +279,7 @@ class LukeEmbeddings(nn.Module):
 
 class LukeEntityEmbeddings(nn.Module):
     def __init__(self, config: LukeConfig):
-        super(LukeEntityEmbeddings, self).__init__()
+        super().__init__()
         self.config = config
 
         self.entity_embeddings = nn.Embedding(config.entity_vocab_size, config.entity_emb_size, padding_idx=0)
@@ -830,7 +830,7 @@ class LukeModel(LukePreTrainedModel):
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError("LUKE does not support the pruning of attention heads")
 
-    @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=BaseLukeModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -924,7 +924,7 @@ class LukeModel(LukePreTrainedModel):
         )
 
         # Second, compute extended attention mask
-        extended_attention_mask = self._compute_extended_attention_mask(attention_mask, entity_attention_mask)
+        extended_attention_mask = self.get_extended_attention_mask(attention_mask, entity_attention_mask)
 
         # Third, compute entity embeddings and concatenate with word embeddings
         if entity_ids is None:
@@ -950,10 +950,7 @@ class LukeModel(LukePreTrainedModel):
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (
-                sequence_output,
-                pooled_output,
-            ) + encoder_outputs[1:]
+            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseLukeModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -986,7 +983,7 @@ class LukeModel(LukePreTrainedModel):
         elif attention_mask.dim() == 2:
             extended_attention_mask = attention_mask[:, None, None, :]
         else:
-            raise ValueError("Wrong shape for attention_mask (shape {})".format(attention_mask.shape))
+            raise ValueError(f"Wrong shape for attention_mask (shape {attention_mask.shape})")
 
         extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
@@ -1094,6 +1091,8 @@ class LukeForEntityClassification(LukePreTrainedModel):
 
         loss = None
         if labels is not None:
+            # When the number of dimension of `labels` is 1, cross entropy is used as the loss function. The binary
+            # cross entropy is used otherwise.
             if labels.ndim == 1:
                 loss = F.cross_entropy(logits, labels)
             else:
@@ -1201,6 +1200,8 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
 
         loss = None
         if labels is not None:
+            # When the number of dimension of `labels` is 1, cross entropy is used as the loss function. The binary
+            # cross entropy is used otherwise.
             if labels.ndim == 1:
                 loss = F.cross_entropy(logits, labels)
             else:
@@ -1265,10 +1266,10 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
         return_dict=None,
     ):
         r"""
-        entity_start_positions:
+        entity_start_positions (:obj:`torch.LongTensor`):
             The start positions of entities in the word token sequence.
 
-        entity_end_positions:
+        entity_end_positions (:obj:`torch.LongTensor`):
             The end positions of entities in the word token sequence.
 
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, entity_length)` or :obj:`(batch_size, entity_length, num_labels), `optional`):
@@ -1323,6 +1324,8 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
 
         loss = None
         if labels is not None:
+            # When the number of dimension of `labels` is 2, cross entropy is used as the loss function. The binary
+            # cross entropy is used otherwise.
             if labels.ndim == 2:
                 loss = F.cross_entropy(logits.view(-1, self.num_labels), labels.view(-1))
             else:
