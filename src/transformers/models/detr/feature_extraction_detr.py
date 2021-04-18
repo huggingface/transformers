@@ -502,6 +502,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if pad_and_return_pixel_mask: 
             # pad images up to largest image in batch and create pixel_mask
             max_size = self._max_by_axis([list(image.shape) for image in images])
+            print("Max size:", max_size)
             c, h, w = max_size
             padded_images = []
             pixel_mask = []
