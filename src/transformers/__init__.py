@@ -201,6 +201,7 @@ _import_structure = {
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
     "models.pegasus": ["PegasusConfig"],
     "models.phobert": ["PhobertTokenizer"],
+    "models.pit": ["PIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "PiTConfig"],
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.reformer": ["REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ReformerConfig"],
@@ -382,6 +383,7 @@ else:
 if is_vision_available():
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
+    _import_structure["models.pit"].append("PiTFeatureExtractor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
 else:
     from .utils import dummy_vision_objects
@@ -488,6 +490,7 @@ if is_torch_available():
             "AutoModelWithLMHead",
         ]
     )
+
     _import_structure["models.bart"].extend(
         [
             "BART_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -837,6 +840,14 @@ if is_torch_available():
     )
     _import_structure["models.pegasus"].extend(
         ["PegasusForCausalLM", "PegasusForConditionalGeneration", "PegasusModel"]
+    )
+    _import_structure["models.pit"].extend(
+        [
+            "PIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PiTForImageClassification",
+            "PiTModel",
+            "PiTPreTrainedModel",
+        ]
     )
     _import_structure["models.prophetnet"].extend(
         [
@@ -1552,6 +1563,7 @@ if TYPE_CHECKING:
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.pegasus import PegasusConfig
     from .models.phobert import PhobertTokenizer
+    from .models.pit import PIT_PRETRAINED_CONFIG_ARCHIVE_MAP, PiTConfig
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
@@ -1706,6 +1718,7 @@ if TYPE_CHECKING:
     if is_vision_available():
         from .image_utils import ImageFeatureExtractionMixin
         from .models.deit import DeiTFeatureExtractor
+        from .models.pit import PiTFeatureExtractor
         from .models.vit import ViTFeatureExtractor
     else:
         from .utils.dummy_vision_objects import *
@@ -2087,6 +2100,12 @@ if TYPE_CHECKING:
             load_tf_weights_in_openai_gpt,
         )
         from .models.pegasus import PegasusForCausalLM, PegasusForConditionalGeneration, PegasusModel
+        from .models.pit import (
+            PIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PiTForImageClassification,
+            PiTModel,
+            PiTPreTrainedModel,
+        )
         from .models.prophetnet import (
             PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             ProphetNetDecoder,

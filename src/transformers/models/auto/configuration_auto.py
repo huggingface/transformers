@@ -57,6 +57,7 @@ from ..mpnet.configuration_mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPN
 from ..mt5.configuration_mt5 import MT5Config
 from ..openai.configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from ..pegasus.configuration_pegasus import PegasusConfig
+from ..pit.configuration_pit import PIT_PRETRAINED_CONFIG_ARCHIVE_MAP, PiTConfig
 from ..prophetnet.configuration_prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig
 from ..rag.configuration_rag import RagConfig
 from ..reformer.configuration_reformer import ReformerConfig
@@ -85,6 +86,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     (key, value)
     for pretrained_map in [
         # Add archive maps here
+        PIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -137,6 +139,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
+        ("pit", PiTConfig),
         ("deit", DeiTConfig),
         ("gpt_neo", GPTNeoConfig),
         ("big_bird", BigBirdConfig),
@@ -195,6 +198,7 @@ CONFIG_MAPPING = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("pit", "PiT"),
         ("deit", "DeiT"),
         ("gpt_neo", "GPT Neo"),
         ("big_bird", "BigBird"),
