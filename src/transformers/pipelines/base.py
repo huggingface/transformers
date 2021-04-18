@@ -81,6 +81,7 @@ def infer_framework_from_model(
             "To install PyTorch, read the instructions at https://pytorch.org/."
         )
     if isinstance(model, str):
+        model_kwargs["_from_pipeline"] = task
         if is_torch_available():
             framework, autoclass = "pt", AutoModel
         else:
