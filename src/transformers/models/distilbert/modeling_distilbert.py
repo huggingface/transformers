@@ -350,9 +350,6 @@ class TransformerBlock(nn.Module):
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
             cross_attn_past_key_value = past_key_values[-2:] if past_key_values is not None else None
             cross_attention_outputs = self.crossattention(
-                # query=x,
-                # key=x,
-                # value=x,
                 hidden_states=sa_output,
                 mask=attn_mask,
                 head_mask=head_mask,
