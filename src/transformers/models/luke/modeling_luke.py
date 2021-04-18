@@ -865,7 +865,7 @@ class LukeModel(LukePreTrainedModel):
 
             >>> encoding = tokenizer(text, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
             >>> outputs = model(**encoding)
-            >>> word_last_hidden_state = outputs.word_last_hidden_state
+            >>> word_last_hidden_state = outputs.last_hidden_state
             >>> entity_last_hidden_state = outputs.entity_last_hidden_state
 
             # Input Wikipedia entities to obtain enriched contextualized representations.
@@ -875,7 +875,7 @@ class LukeModel(LukePreTrainedModel):
 
             >>> encoding = tokenizer(text, entities=entities, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
             >>> outputs = model(**encoding)
-            >>> word_last_hidden_state = outputs.word_last_hidden_state
+            >>> word_last_hidden_state = outputs.last_hidden_state
             >>> entity_last_hidden_state = outputs.entity_last_hidden_state
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

@@ -1,4 +1,4 @@
-.. 
+..
     Copyright 2021 The HuggingFace Team. All rights reserved.
 
     Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -38,13 +38,39 @@ answering).*
 
 Tips:
 
-
 - This implementation is the same as :class:`~transformers.RobertaModel` with the addition of entity embeddings as well
-  as an entity- aware self-attention mechanism, which improves performance on tasks involving reasoning about entities.
+  as an entity-aware self-attention mechanism, which improves performance on tasks involving reasoning about entities.
 - LUKE adds :obj:`entity_ids`, :obj:`entity_attention_mask`, :obj:`entity_token_type_ids` and
-  :obj:`entity_position_ids` as extra input to the model. You can obtain those using :class:`LukeTokenizer`.
+  :obj:`entity_position_ids` as extra input to the model. Input entities can be special entities (e.g., [MASK]) or
+  Wikipedia entities (e.g., New York City). You can obtain those using :class:`~transformers.LukeTokenizer`.
 
-The original code can be found `here <https://github.com/studio-ousia/luke>`_.
+Example:
+
+.. code-block::
+
+    >>> from transformers import LukeTokenizer, LukeModel
+
+    >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base")
+    >>> model = LukeModel.from_pretrained("studio-ousia/luke-base")
+
+    # Compute the contextualized entity representation corresponding to the entity mention "Beyoncé"
+    >>> text = "Beyoncé lives in New York."
+    >>> entity_spans = [(0, 7)]  # character-based entity span corresponding to "Beyoncé"
+    >>> encoding = tokenizer(text, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
+    >>> outputs = model(**encoding)
+    >>> word_last_hidden_state = outputs.last_hidden_state
+    >>> entity_last_hidden_state = outputs.entity_last_hidden_state
+
+    # Input Wikipedia entities to obtain enriched contextualized representations.
+    >>> text = "Beyoncé lives in New York."
+    >>> entities = ["Beyoncé", "New York City"]  # Wikipedia entity titles corresponding to the entity mentions "Beyoncé" and "New York"
+    >>> entity_spans = [(0, 7), (17, 25)]  # character-based entity spans corresponding to "Beyoncé" and "New York"
+    >>> encoding = tokenizer(text, entities=entities, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
+    >>> outputs = model(**encoding)
+    >>> word_last_hidden_state = outputs.last_hidden_state
+    >>> entity_last_hidden_state = outputs.entity_last_hidden_state
+
+The original code can be found `here <https://github.com/studio-ousia/luke>`__.
 
 
 LukeConfig
