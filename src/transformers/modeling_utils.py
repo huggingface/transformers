@@ -1137,10 +1137,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 state_dict[new_key] = state_dict.pop(old_key)
 
             # copy state_dict so _load_from_state_dict can modify it
-            metadata = getattr(state_dict, "_metadata", None)
-            state_dict = state_dict.copy()
-            if metadata is not None:
-                state_dict._metadata = metadata
+            #metadata = getattr(state_dict, "_metadata", None)
+            #state_dict = state_dict.copy()
+            #if metadata is not None:
+            #    state_dict._metadata = metadata
 
             # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
             # so we need to apply the function recursively.
