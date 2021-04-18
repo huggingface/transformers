@@ -810,3 +810,17 @@ class Seq2SeqQuestionAnsweringModelOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class BaseModelOutputWithWavFeatures(ModelOutput):
+    """
+    TODO: docs
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    mask_time_indices: torch.LongTensor = None
+    wav_features: torch.FloatTensor = None
+    features_pen: torch.FloatTensor = None

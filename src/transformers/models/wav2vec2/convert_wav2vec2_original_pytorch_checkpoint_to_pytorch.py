@@ -49,10 +49,21 @@ MAPPING = {
     "fc2": "encoder.layers.*.feed_forward.output_dense",
     "final_layer_norm": "encoder.layers.*.final_layer_norm",
     "encoder.layer_norm": "encoder.layer_norm",
-    "w2v_model.layer_norm": "feature_projection.layer_norm",
+    "w2v_model.layer_norm": "layer_norm",
+    "quantizer.weight_proj": "quantizer.quantizer.weight_proj",
+    "quantizer.vars": "quantizer.quantizer.vars",
+    "project_q": "quantizer.project_q",
+    "final_proj": "quantizer.final_proj",
     "w2v_encoder.proj": "lm_head",
     "mask_emb": "masked_spec_embed",
 }
+TOP_LEVEL_KEYS = [
+    "lm_head",
+    "quantizer.quantizer.weight_proj",
+    "quantizer.quantizer.vars",
+    "quantizer.project_q",
+    "quantizer.final_proj",
+]
 
 
 def set_recursively(hf_pointer, key, value, full_name, weight_type):
@@ -82,11 +93,11 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
     logger.info(f"{key + '.' + weight_type if weight_type is not None else ''} was initialized from {full_name}.")
 
 
-def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
+def recursively_load_weights(fairseq_model, hf_model, is_headless):
     unused_weights = []
     fairseq_dict = fairseq_model.state_dict()
 
-    feature_extractor = hf_model.wav2vec2.feature_extractor if is_finetuned else hf_model.feature_extractor
+    feature_extractor = hf_model.wav2vec2.feature_extractor if not is_headless else hf_model.feature_extractor
 
     for name, value in fairseq_dict.items():
         is_used = False
@@ -101,9 +112,11 @@ def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
             is_used = True
         else:
             for key, mapped_key in MAPPING.items():
-                mapped_key = "wav2vec2." + mapped_key if (is_finetuned and mapped_key != "lm_head") else mapped_key
+                mapped_key = (
+                    "wav2vec2." + mapped_key if not is_headless and mapped_key not in TOP_LEVEL_KEYS else mapped_key
+                )
 
-                if key in name or (key.split("w2v_model.")[-1] == name.split(".")[0] and not is_finetuned):
+                if key in name or (key.split("w2v_model.")[-1] == name.split(".")[0] and not is_headless):
                     is_used = True
                     if "*" in mapped_key:
                         layer_index = name.split(key)[0].split(".")[-2]
@@ -112,10 +125,11 @@ def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
                         weight_type = "weight_g"
                     elif "weight_v" in name:
                         weight_type = "weight_v"
-                    elif "weight" in name:
-                        weight_type = "weight"
                     elif "bias" in name:
                         weight_type = "bias"
+                    elif "weight" in name:
+                        # TODO: don't match quantizer.weight_proj
+                        weight_type = "weight"
                     else:
                         weight_type = None
                     set_recursively(hf_model, mapped_key, value, name, weight_type)
@@ -224,7 +238,7 @@ def convert_wav2vec2_checkpoint(
 
     model = model[0].eval()
 
-    recursively_load_weights(model, hf_wav2vec, is_finetuned)
+    recursively_load_weights(model, hf_wav2vec, not is_finetuned)
 
     hf_wav2vec.save_pretrained(pytorch_dump_folder_path)
 
