@@ -1,3 +1,11 @@
+# Patches
+
+This branch has the following patches:
+
+* gpt-neo model is loaded directly on GPU to save system memory
+* repetition_penalty has range and slope settings, so it doesn't penalize all tokens in the context window
+* no copy of the state dict is made while loading a pretrained model
+
 <!---
 Copyright 2020 The HuggingFace Team. All rights reserved.
 
