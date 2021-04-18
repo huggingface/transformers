@@ -131,22 +131,6 @@ _import_structure = {
     ],
     # Models
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig", "VisualBertTokenizer"],
-    "models.wav2vec2": [
-        "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Wav2Vec2Config",
-        "Wav2Vec2CTCTokenizer",
-        "Wav2Vec2Tokenizer",
-        "Wav2Vec2FeatureExtractor",
-        "Wav2Vec2Processor",
-    ],
-    "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config", "M2M100Tokenizer"],
-    "models.speech_to_text": [
-        "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Speech2TextConfig",
-        "Speech2TextFeatureExtractor",
-    ],
-    "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
-    "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -461,61 +445,6 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
     # PyTorch models structure
 
-    _import_structure["models.visual_bert"].extend(
-        [
-            "VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "VisualBertForMaskedLM",
-            "VisualBertForCausalLM",
-            "VisualBertForMultipleChoice",
-            "VisualBertForQuestionAnswering",
-            "VisualBertForSequenceClassification",
-            "VisualBertForTokenClassification",
-            "VisualBertLayer",
-            "VisualBertModel",
-            "VisualBertPreTrainedModel",
-            "load_tf_weights_in_visual_bert",
-        ]
-    )
-
-    _import_structure["models.speech_to_text"].extend(
-        [
-            "SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "Speech2TextForConditionalGeneration",
-            "Speech2TextModel",
-        ]
-    )
-
-    _import_structure["models.wav2vec2"].extend(
-        [
-            "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "Wav2Vec2ForCTC",
-            "Wav2Vec2ForMaskedLM",
-            "Wav2Vec2Model",
-            "Wav2Vec2PreTrainedModel",
-        ]
-    )
-    _import_structure["models.m2m_100"].extend(
-        [
-            "M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "M2M100ForConditionalGeneration",
-            "M2M100Model",
-        ]
-    )
-
-    _import_structure["models.convbert"].extend(
-        [
-            "CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ConvBertForMaskedLM",
-            "ConvBertForMultipleChoice",
-            "ConvBertForQuestionAnswering",
-            "ConvBertForSequenceClassification",
-            "ConvBertForTokenClassification",
-            "ConvBertLayer",
-            "ConvBertModel",
-            "ConvBertPreTrainedModel",
-            "load_tf_weights_in_convbert",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -947,6 +876,21 @@ if is_torch_available():
             "RobertaForSequenceClassification",
             "RobertaForTokenClassification",
             "RobertaModel",
+        ]
+    )
+    _import_structure["models.visual_bert"].extend(
+        [
+            "VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VisualBertForMaskedLM",
+            "VisualBertForCausalLM",
+            "VisualBertForMultipleChoice",
+            "VisualBertForQuestionAnswering",
+            "VisualBertForSequenceClassification",
+            "VisualBertForTokenClassification",
+            "VisualBertLayer",
+            "VisualBertModel",
+            "VisualBertPreTrainedModel",
+            "load_tf_weights_in_visual_bert",
         ]
     )
     _import_structure["models.speech_to_text"].extend(
@@ -2318,10 +2262,10 @@ if TYPE_CHECKING:
         from .trainer_pt_utils import torch_distributed_zero_first
         from .trainer_seq2seq import Seq2SeqTrainer
     else:
-        from .utils.dummy_pt_objects import
+        from .utils.dummy_pt_objects import *
 
-     # TensorFlow
-    * if is_tf_available():
+    # TensorFlow
+    if is_tf_available():
 
         from .benchmark.benchmark_args_tf import TensorFlowBenchmarkArguments
 
@@ -2605,9 +2549,9 @@ if TYPE_CHECKING:
     else:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.
-        from .utils.dummy_tf_objects import
+        from .utils.dummy_tf_objects import *
 
-* if is_flax_available():
+    if is_flax_available():
         from .modeling_flax_utils import FlaxPreTrainedModel
         from .models.auto import (
             FLAX_MODEL_FOR_MASKED_LM_MAPPING,
@@ -2642,9 +2586,9 @@ if TYPE_CHECKING:
     else:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.
-        from .utils.dummy_flax_objects import
+        from .utils.dummy_flax_objects import *
 
-* else:
+else:
     import importlib
     import os
     import sys
@@ -2654,8 +2598,8 @@ if TYPE_CHECKING:
         Module class that surfaces all objects but only performs associated imports when the objects are requested.
         """
 
-        __file__=globals()["__file__"]
-        __path__=[os.path.dirname(__file__)]
+        __file__ = globals()["__file__"]
+        __path__ = [os.path.dirname(__file__)]
 
         def _get_module(self, module_name: str):
             return importlib.import_module("." + module_name, self.__name__)
@@ -2666,7 +2610,7 @@ if TYPE_CHECKING:
                 return __version__
             return super().__getattr__(name)
 
-    sys.modules[__name__]=_LazyModule(__name__, _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, _import_structure)
 
 
 if not is_tf_available() and not is_torch_available() and not is_flax_available():

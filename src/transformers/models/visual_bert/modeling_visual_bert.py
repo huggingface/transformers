@@ -1973,9 +1973,17 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 # vqa setting
 
 
+@add_start_docstrings(
+    """
+    VisualBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and
+    a softmax) e.g. for VCR tasks.
+    """,
+    VISUAL_BERT_START_DOCSTRING,
+)
 class VisualBertForVQA(nn.Module):
     def __init__(self, config):
         super().__init__(config)
@@ -2051,7 +2059,7 @@ class VisualBertForVQA(nn.Module):
             reshaped_logits = log_softmax(reshaped_logits)
             loss = loss_fct(reshaped_logits, labels.contiguous())
         if not return_dict:
-            output = (reshaped_logits, ) + outputs[1:]
+            output = (reshaped_logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return QuestionAnsweringModelOutput(  # TO-DO: Need to replace this with VQA Model Output, maybe
@@ -2061,9 +2069,17 @@ class VisualBertForVQA(nn.Module):
             attentions=outputs.attentions,
         )
 
+
 # vqa_advanced setting
 
 
+@add_start_docstrings(
+    """
+    VisualBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and
+    a softmax) e.g. for VCR tasks.
+    """,
+    VISUAL_BERT_START_DOCSTRING,
+)
 class VisualBertForVQAAdvanced(nn.Module):
     def __init__(self, config):
         super().__init__(config)
@@ -2136,7 +2152,7 @@ class VisualBertForVQAAdvanced(nn.Module):
             loss = masked_lm_loss
 
         if not return_dict:
-            output = (prediction_scores, ) + outputs[1:]
+            output = (prediction_scores,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return QuestionAnsweringModelOutput(
@@ -2146,9 +2162,17 @@ class VisualBertForVQAAdvanced(nn.Module):
             attentions=outputs.attentions,
         )
 
+
 # nlvr setting
 
 
+@add_start_docstrings(
+    """
+    VisualBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and
+    a softmax) e.g. for VCR tasks.
+    """,
+    VISUAL_BERT_START_DOCSTRING,
+)
 class VisualBertForNLVR(nn.Module):
     def __init__(self, config):
         super().__init__(config)
@@ -2224,7 +2248,7 @@ class VisualBertForNLVR(nn.Module):
             loss = masked_lm_loss
 
         if not return_dict:
-            output = (logits, ) + outputs[1:]
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return QuestionAnsweringModelOutput(  # TO-DO: Need to replace this with VQA Model Output, maybe
@@ -2235,6 +2259,13 @@ class VisualBertForNLVR(nn.Module):
         )
 
 
+@add_start_docstrings(
+    """
+    VisualBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and
+    a softmax) e.g. for VCR tasks.
+    """,
+    VISUAL_BERT_START_DOCSTRING,
+)
 class VisualBertForNLVR(nn.Module):
     def __init__(self, config):
         super().__init__(config)
@@ -2310,7 +2341,7 @@ class VisualBertForNLVR(nn.Module):
             loss = masked_lm_loss
 
         if not return_dict:
-            output = (logits, ) + outputs[1:]
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return QuestionAnsweringModelOutput(  # TO-DO: Need to replace this with VQA Model Output, maybe
@@ -2319,6 +2350,7 @@ class VisualBertForNLVR(nn.Module):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
 
 # Directly Copied
 
@@ -2329,7 +2361,8 @@ class FlickrAttention(nn.Module):
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
                 "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads))
+                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+            )
         self.num_attention_heads = 1  # config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
@@ -2353,11 +2386,11 @@ class FlickrAttention(nn.Module):
         mixed_query_layer = self.query(query)
         mixed_key_layer = self.key(key)
         # We don't need value layers
-        #mixed_value_layer = self.value(hidden_states)
+        # mixed_value_layer = self.value(hidden_states)
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
         key_layer = self.transpose_for_scores(mixed_key_layer)
-        #value_layer = self.transpose_for_scores(mixed_value_layer)
+        # value_layer = self.transpose_for_scores(mixed_value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -2370,6 +2403,13 @@ class FlickrAttention(nn.Module):
         return attention_scores
 
 
+@add_start_docstrings(
+    """
+    VisualBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and
+    a softmax) e.g. for VCR tasks.
+    """,
+    VISUAL_BERT_START_DOCSTRING,
+)
 class VisualBertForFlickr(nn.Module):
     def __init__(self, config):
         super().__init__(config)
@@ -2434,7 +2474,7 @@ class VisualBertForFlickr(nn.Module):
 
         sequence_output = outputs[0]
         pooled_output = outputs[1]
-        assert(flickr_position is not None, "`flickr_position` should not be None when using Flickr Model")
+        assert (flickr_position is not None, "`flickr_position` should not be None when using Flickr Model")
         entities_num = (flickr_position != -1).long().view(-1).sum(-1)
         flickr_position_mask = (flickr_position != -1).long()
 
@@ -2442,12 +2482,16 @@ class VisualBertForFlickr(nn.Module):
         flickr_position = flickr_position * flickr_position_mask
 
         # Selected_positions = batch x selected position x dim
-        expanded_flickr_positions = flickr_position.unsqueeze(2).expand(flickr_position.size(0), flickr_position.size(1), sequence_output.size(2))
+        expanded_flickr_positions = flickr_position.unsqueeze(2).expand(
+            flickr_position.size(0), flickr_position.size(1), sequence_output.size(2)
+        )
         selected_positions = sequence_output.gather(1, expanded_flickr_positions)
 
         # Visual Features = batch x visual_feature_length x dim
-        visual_features = sequence_output[:, flat_input_mask.size(1): , :]  # This will need separate image and visual masks.
-        assert(visual_features.size(1) == flat_image_mask.size(1))
+        visual_features = sequence_output[
+            :, flat_input_mask.size(1) :, :
+        ]  # This will need separate image and visual masks.
+        assert visual_features.size(1) == flat_image_mask.size(1)
 
         logits = self.flickr_attention(selected_positions, visual_features, flat_image_mask)
 
@@ -2464,7 +2508,7 @@ class VisualBertForFlickr(nn.Module):
             loss = loss_fct(scores, labels)
 
         if not return_dict:
-            output = (logits, ) + outputs[1:]
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return QuestionAnsweringModelOutput(  # TO-DO: Need to replace this with VQA Model Output, maybe
