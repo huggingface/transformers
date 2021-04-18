@@ -959,9 +959,19 @@ class LukeModel(LukePreTrainedModel):
             entity_hidden_states=encoder_outputs.entity_hidden_states,
         )
 
-    def _compute_extended_attention_mask(
-        self, word_attention_mask: torch.LongTensor, entity_attention_mask: Optional[torch.LongTensor]
-    ):
+    def get_extended_attention_mask(self, word_attention_mask: torch.LongTensor, entity_attention_mask: Optional[torch.LongTensor]):
+        """
+        Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
+
+        Arguments:
+            word_attention_mask (:obj:`torch.LongTensor`):
+                Attention mask for word tokens with ones indicating tokens to attend to, zeros for tokens to ignore.
+            entity_attention_mask (:obj:`torch.LongTensor`, `optional`):
+                Attention mask for entity tokens with ones indicating tokens to attend to, zeros for tokens to ignore.
+
+        Returns:
+            :obj:`torch.Tensor` The extended attention mask, with a the same dtype as :obj:`attention_mask.dtype`.
+        """
         attention_mask = word_attention_mask
         if entity_attention_mask is not None:
             attention_mask = torch.cat([attention_mask, entity_attention_mask], dim=-1)
