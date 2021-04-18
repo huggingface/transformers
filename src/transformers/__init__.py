@@ -2244,6 +2244,7 @@ if TYPE_CHECKING:
             VisualBertModel,
             VisualBertPreTrainedModel,
             load_tf_weights_in_visual_bert,
+        )
         from .models.vit import (
             VIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViTForImageClassification,
