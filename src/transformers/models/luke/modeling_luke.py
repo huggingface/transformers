@@ -366,21 +366,26 @@ class LukeSelfAttention(nn.Module):
         value_layer = self.transpose_for_scores(self.value(concat_hidden_states))
 
         if self.use_entity_aware_attention and entity_hidden_states is not None:
+            # compute query vectors using word-word (w2w), word-entity (w2e), entity-word (e2w), entity-entity (e2e)
+            # query layers
             w2w_query_layer = self.transpose_for_scores(self.query(word_hidden_states))
             w2e_query_layer = self.transpose_for_scores(self.w2e_query(word_hidden_states))
             e2w_query_layer = self.transpose_for_scores(self.e2w_query(entity_hidden_states))
             e2e_query_layer = self.transpose_for_scores(self.e2e_query(entity_hidden_states))
 
+            # compute w2w, w2e, e2w, and e2e key vectors used with the query vectors computed above
             w2w_key_layer = key_layer[:, :, :word_size, :]
             e2w_key_layer = key_layer[:, :, :word_size, :]
             w2e_key_layer = key_layer[:, :, word_size:, :]
             e2e_key_layer = key_layer[:, :, word_size:, :]
 
+            # compute attention scores based on the dot product between the query and key vectors
             w2w_attention_scores = torch.matmul(w2w_query_layer, w2w_key_layer.transpose(-1, -2))
             w2e_attention_scores = torch.matmul(w2e_query_layer, w2e_key_layer.transpose(-1, -2))
             e2w_attention_scores = torch.matmul(e2w_query_layer, e2w_key_layer.transpose(-1, -2))
             e2e_attention_scores = torch.matmul(e2e_query_layer, e2e_key_layer.transpose(-1, -2))
 
+            # combine attention scores to create the final attention score matrix
             word_attention_scores = torch.cat([w2w_attention_scores, w2e_attention_scores], dim=3)
             entity_attention_scores = torch.cat([e2w_attention_scores, e2e_attention_scores], dim=3)
             attention_scores = torch.cat([word_attention_scores, entity_attention_scores], dim=2)
