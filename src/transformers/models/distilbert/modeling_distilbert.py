@@ -93,10 +93,6 @@ class Embeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.dim, eps=1e-12)
         self.dropout = nn.Dropout(config.dropout)
 
-        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-
     def forward(self, input_ids, position_ids=None, past_key_values_length=0):
         """
         Parameters:
@@ -106,10 +102,9 @@ class Embeddings(nn.Module):
         embeddings)
         """
         seq_length = input_ids.size(1)
-        # position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)  # (max_seq_length)
-        # position_ids = position_ids.unsqueeze(0).expand_as(input_ids)  # (bs, max_seq_length)
-        if position_ids is None:
-            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
+        position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)  # (max_seq_length)
+        position_ids = position_ids.unsqueeze(0).expand_as(input_ids)  # (bs, max_seq_length)
+        position_ids = position_ids[:, past_key_values_length : seq_length + past_key_values_length]
 
         word_embeddings = self.word_embeddings(input_ids)  # (bs, max_seq_length, dim)
         position_embeddings = self.position_embeddings(position_ids)  # (bs, max_seq_length, dim)
@@ -156,9 +151,7 @@ class MultiHeadSelfAttention(nn.Module):
 
     def forward(
         self,
-        query,
-        key,
-        value,
+        hidden_states,
         mask,
         attention_mask=None,
         head_mask=None,
@@ -178,10 +171,10 @@ class MultiHeadSelfAttention(nn.Module):
             weights: torch.tensor(bs, n_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
-        bs, q_length, dim = query.size()
-        k_length = key.size(1)
+        bs, q_length, dim = hidden_states.size()
+        k_length = hidden_states.size(1)
         # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'
-        # assert key.size() == value.size()
+        # assert hidden_states.size() == value.size()
 
         dim_per_head = self.dim // self.n_heads
 
@@ -195,32 +188,28 @@ class MultiHeadSelfAttention(nn.Module):
             """ group heads """
             return x.transpose(1, 2).contiguous().view(bs, -1, self.n_heads * dim_per_head)
 
-        # q = shape(self.q_lin(query))  # (bs, n_heads, q_length, dim_per_head)
-        # k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
-        # v = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
-
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
         is_cross_attention = encoder_hidden_states is not None
 
         if is_cross_attention and past_key_values is not None:
-            # reuse k,v, cross_attentions
-            k = past_key_values[0]
-            v = past_key_values[1]
+            # reuse key,value, cross_attentions
+            key = past_key_values[0]
+            value = past_key_values[1]
             attention_mask = encoder_attention_mask
         elif is_cross_attention:
-            k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
-            v = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
+            key = shape(self.k_lin(encoder_hidden_states))  # (bs, n_heads, k_length, dim_per_head)
+            value = shape(self.v_lin(encoder_hidden_states))  # (bs, n_heads, k_length, dim_per_head)
             attention_mask = encoder_attention_mask
         elif past_key_values is not None:
-            k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
-            v = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
-            k = torch.cat([past_key_values[0], k], dim=2)
-            v = torch.cat([past_key_values[1], v], dim=2)
+            key = shape(self.k_lin(hidden_states))  # (bs, n_heads, k_length, dim_per_head)
+            value = shape(self.v_lin(hidden_states))  # (bs, n_heads, k_length, dim_per_head)
+            key = torch.cat([past_key_values[0], key], dim=2)
+            value = torch.cat([past_key_values[1], value], dim=2)
         else:
-            k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
-            v = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
+            key = shape(self.k_lin(hidden_states))  # (bs, n_heads, k_length, dim_per_head)
+            value = shape(self.v_lin(hidden_states))  # (bs, n_heads, k_length, dim_per_head)
 
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
@@ -230,12 +219,12 @@ class MultiHeadSelfAttention(nn.Module):
             # all previous decoder key/value_states. Further calls to uni-directional self-attention
             # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
             # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_values = (k, v)
+            past_key_values = (key, value)
 
-        q = shape(self.q_lin(query))  # (bs, n_heads, q_length, dim_per_head)
+        query = shape(self.q_lin(hidden_states))  # (bs, n_heads, q_length, dim_per_head)
 
-        q = q / math.sqrt(dim_per_head)  # (bs, n_heads, q_length, dim_per_head)
-        scores = torch.matmul(q, k.transpose(2, 3))  # (bs, n_heads, q_length, k_length)
+        query = query / math.sqrt(dim_per_head)  # (bs, n_heads, q_length, dim_per_head)
+        scores = torch.matmul(query, key.transpose(2, 3))  # (bs, n_heads, q_length, k_length)
         mask = (mask == 0).view(mask_reshp).expand_as(scores)  # (bs, n_heads, q_length, k_length)
         scores.masked_fill_(mask, -float("inf"))  # (bs, n_heads, q_length, k_length)
 
@@ -250,7 +239,7 @@ class MultiHeadSelfAttention(nn.Module):
         if head_mask is not None:
             weights = weights * head_mask
 
-        context = torch.matmul(weights, v)  # (bs, n_heads, q_length, dim_per_head)
+        context = torch.matmul(weights, value)  # (bs, n_heads, q_length, dim_per_head)
         context = unshape(context)  # (bs, q_length, dim)
         context = self.out_lin(context)  # (bs, q_length, dim)
 
@@ -306,7 +295,7 @@ class TransformerBlock(nn.Module):
 
     def forward(
         self,
-        x,
+        hidden_states,
         attn_mask=None,
         head_mask=None,
         encoder_hidden_states=None,
@@ -328,9 +317,7 @@ class TransformerBlock(nn.Module):
         self_attn_past_key_value = past_key_values[:2] if past_key_values is not None else None
         # Self-Attention
         self_attention_outputs = self.attention(
-            query=x,
-            key=x,
-            value=x,
+            hidden_states=hidden_states,
             mask=attn_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
@@ -338,10 +325,11 @@ class TransformerBlock(nn.Module):
         )
 
         if output_attentions:
+            # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
             (
                 sa_output,
                 sa_weights,
-            ) = self_attention_outputs  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
+            ) = self_attention_outputs
         else:  # To handle these `output_attentions` or `output_hidden_states` cases returning tuples
             assert type(self_attention_outputs) == tuple
             sa_output = self_attention_outputs[0]
@@ -362,9 +350,10 @@ class TransformerBlock(nn.Module):
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
             cross_attn_past_key_value = past_key_values[-2:] if past_key_values is not None else None
             cross_attention_outputs = self.crossattention(
-                query=x,
-                key=x,
-                value=x,
+                # query=x,
+                # key=x,
+                # value=x,
+                hidden_states=sa_output,
                 mask=attn_mask,
                 head_mask=head_mask,
                 encoder_hidden_states=encoder_hidden_states,
@@ -379,7 +368,7 @@ class TransformerBlock(nn.Module):
             cross_attn_present_key_value = cross_attention_outputs[-1]
             present_key_value = present_key_value + cross_attn_present_key_value
 
-        sa_output = self.sa_layer_norm(sa_output + x)  # (bs, seq_length, dim)
+        sa_output = self.sa_layer_norm(sa_output + hidden_states)  # (bs, seq_length, dim)
 
         # Feed Forward Network
         ffn_output = self.ffn(sa_output)  # (bs, seq_length, dim)
@@ -402,7 +391,7 @@ class Transformer(nn.Module):
 
     def forward(
         self,
-        x,
+        hidden_states,
         attn_mask=None,
         head_mask=None,
         position_ids=None,
@@ -431,13 +420,13 @@ class Transformer(nn.Module):
         all_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
-        hidden_state = x
+        hidden_state = hidden_states
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_state,)
 
             layer_outputs = layer_module(
-                x=hidden_state,
+                hidden_states=hidden_state,
                 attn_mask=attn_mask,
                 head_mask=head_mask[i],
                 encoder_hidden_states=encoder_hidden_states,
@@ -707,9 +696,8 @@ class DistilBertModel(DistilBertPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)  # (bs, seq_length, dim)
         return self.transformer(
-            x=inputs_embeds,
+            hidden_states=inputs_embeds,
             attn_mask=attention_mask,
-            position_ids=position_ids,
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             past_key_values=past_key_values,
@@ -1250,7 +1238,7 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
             >>> labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
 
             >>> encoding = tokenizer([[prompt, choice0], [prompt, choice1]], return_tensors='pt', padding=True)
-            >>> outputs = model(**{k: v.unsqueeze(0) for k,v in encoding.items()}, labels=labels) # batch size is 1
+            >>> outputs = model(**{key: value.unsqueeze(0) for key,value in encoding.items()}, labels=labels) # batch size is 1
 
             >>> # the linear classifier still needs to be trained
             >>> loss = outputs.loss
