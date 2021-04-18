@@ -145,7 +145,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
     @property
     def word_delimiter_token(self) -> str:
         """
-        :obj:`str`: Padding token. Log an error if used while not having been set.
+        :obj:`str`: Word delimiter token. Log an error if used while not having been set.
         """
         if self._word_delimiter_token is None and self.verbose:
             logger.error("Using word_delimiter_token, but it is not set yet.")
@@ -260,7 +260,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
-            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
@@ -514,7 +514,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
-            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]

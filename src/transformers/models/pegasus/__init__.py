@@ -39,10 +39,10 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_pegasus"] = [
         "PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "PegasusForCausalLM",
         "PegasusForConditionalGeneration",
         "PegasusModel",
         "PegasusPreTrainedModel",
-        "PegasusForCausalLM",
     ]
 
 if is_tf_available():

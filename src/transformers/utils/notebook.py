@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections
 import time
 from typing import Optional
 
@@ -33,15 +34,6 @@ def html_progress_bar(value, total, prefix, label, width=300):
     # docstyle-ignore
     return f"""
     <div>
-        <style>
-            /* Turns off some styling */
-            progress {{
-                /* gets rid of default border in Firefox and Opera. */
-                border: none;
-                /* Needs to be in here for Safari polyfill so background images work as expected. */
-                background-size: auto;
-            }}
-        </style>
       {prefix}
       <progress value='{value}' max='{total}' style='width:{width}px; height:20px; vertical-align: middle;'></progress>
       {label}
@@ -295,6 +287,8 @@ class NotebookProgressCallback(TrainerCallback):
         self._force_next_update = False
 
     def on_prediction_step(self, args, state, control, eval_dataloader=None, **kwargs):
+        if not isinstance(eval_dataloader.dataset, collections.abc.Sized):
+            return
         if self.prediction_bar is None:
             if self.training_tracker is not None:
                 self.prediction_bar = self.training_tracker.add_child(len(eval_dataloader))
@@ -327,6 +321,8 @@ class NotebookProgressCallback(TrainerCallback):
             values["Validation Loss"] = metrics["eval_loss"]
             _ = metrics.pop("total_flos", None)
             _ = metrics.pop("epoch", None)
+            _ = metrics.pop("eval_runtime", None)
+            _ = metrics.pop("eval_samples_per_second", None)
             for k, v in metrics.items():
                 if k == "eval_loss":
                     values["Validation Loss"] = v

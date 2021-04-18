@@ -30,10 +30,10 @@ logging.set_verbosity_info()
 
 def set_param(torch_layer, weight, bias=None):
     # set parameter of one layer
-    assert torch_layer.weight.shape == weight.shape, "{} layer.weight does not match".format(torch_layer)
+    assert torch_layer.weight.shape == weight.shape, f"{torch_layer} layer.weight does not match"
     torch_layer.weight = torch.nn.Parameter(weight)
     if bias is not None:
-        assert torch_layer.bias.shape == bias.shape, "{} layer.bias does not match".format(torch_layer)
+        assert torch_layer.bias.shape == bias.shape, f"{torch_layer} layer.bias does not match"
         torch_layer.bias = torch.nn.Parameter(bias)
 
 
@@ -150,9 +150,9 @@ def set_model_weights_in_torch(weights, torch_model, hidden_size):
         position_embeddings = torch_model_reformer.embeddings.position_embeddings
         for emb_idx in range(len(position_embeddings.weights)):
             emb_weights = np.asarray(weights[3][emb_idx][0])
-            assert position_embeddings.weights[emb_idx].shape == emb_weights.shape, "{} emb does not match".format(
-                position_embeddings[emb_idx]
-            )
+            assert (
+                position_embeddings.weights[emb_idx].shape == emb_weights.shape
+            ), f"{position_embeddings[emb_idx]} emb does not match"
             position_embeddings.weights[emb_idx] = torch.nn.Parameter(torch.tensor(emb_weights))
 
     trax_layer_weights = weights[5]
@@ -185,7 +185,7 @@ def set_model_weights_in_torch(weights, torch_model, hidden_size):
 def convert_trax_checkpoint_to_pytorch(trax_model_pkl_path, config_file, pytorch_dump_path):
     # Initialise PyTorch model
     config = ReformerConfig.from_json_file(config_file)
-    print("Building PyTorch model from configuration: {}".format(str(config)))
+    print(f"Building PyTorch model from configuration: {config}")
     model = ReformerModelWithLMHead(config)
 
     with open(trax_model_pkl_path, "rb") as f:
@@ -194,7 +194,7 @@ def convert_trax_checkpoint_to_pytorch(trax_model_pkl_path, config_file, pytorch
     set_model_weights_in_torch(model_weights, model, config.hidden_size)
 
     # Save pytorch-model
-    print("Save PyTorch model to {}".format(pytorch_dump_path))
+    print(f"Save PyTorch model to {pytorch_dump_path}")
     torch.save(model.state_dict(), pytorch_dump_path)
 
 
