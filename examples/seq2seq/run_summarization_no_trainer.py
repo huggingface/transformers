@@ -21,6 +21,7 @@ Fine-tuning a 🤗 Transformers model on text_summarization.
 import argparse
 import logging
 import math
+import os
 import random
 
 import datasets
@@ -249,18 +250,18 @@ def parse_args():
     args = parser.parse_args()
 
     # Sanity checks
-    # if  args.dataset_name and args.train_file is None and args.validation_file is None:
-    #     raise ValueError("Need either a task name or a training/validation file.")
-    # else:
-    #     if args.train_file is not None:
-    #         extension = args.train_file.split(".")[-1]
-    #         assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
-    #     if args.validation_file is not None:
-    #         extension = args.validation_file.split(".")[-1]
-    #         assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
-    #
-    # if args.output_dir is not None:
-    #     os.makedirs(args.output_dir, exist_ok=True)
+    if args.dataset_name is None and args.train_file is None and args.validation_file is None:
+        raise ValueError("Need either a dataset name or a training/validation file.")
+    else:
+        if args.train_file is not None:
+            extension = args.train_file.split(".")[-1]
+            assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+        if args.validation_file is not None:
+            extension = args.validation_file.split(".")[-1]
+            assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+
+    if args.output_dir is not None:
+        os.makedirs(args.output_dir, exist_ok=True)
 
     return args
 
