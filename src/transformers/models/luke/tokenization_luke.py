@@ -25,7 +25,6 @@ from ... import RobertaTokenizer
 from ...file_utils import add_end_docstrings, is_tf_available, is_torch_available
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
-    ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
     AddedToken,
     BatchEncoding,
     EncodedInput,
@@ -68,6 +67,76 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "studio-ousia/luke-base": 512,
     "studio-ousia/luke-large": 512,
 }
+
+ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
+            return_token_type_ids (:obj:`bool`, `optional`):
+                Whether to return token type IDs. If left to the default, will return the token type IDs according to
+                the specific tokenizer's default, defined by the :obj:`return_outputs` attribute.
+
+                `What are token type IDs? <../glossary.html#token-type-ids>`__
+            return_attention_mask (:obj:`bool`, `optional`):
+                Whether to return the attention mask. If left to the default, will return the attention mask according
+                to the specific tokenizer's default, defined by the :obj:`return_outputs` attribute.
+
+                `What are attention masks? <../glossary.html#attention-mask>`__
+            return_overflowing_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to return overflowing token sequences.
+            return_special_tokens_mask (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to return special tokens mask information.
+            return_offsets_mapping (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to return :obj:`(char_start, char_end)` for each token.
+
+                This is only available on fast tokenizers inheriting from
+                :class:`~transformers.PreTrainedTokenizerFast`, if using Python's tokenizer, this method will raise
+                :obj:`NotImplementedError`.
+            return_length  (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to return the lengths of the encoded inputs.
+            verbose (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not to print more information and warnings.
+            **kwargs: passed to the :obj:`self.tokenize()` method
+
+        Return:
+            :class:`~transformers.BatchEncoding`: A :class:`~transformers.BatchEncoding` with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model.
+
+              `What are input IDs? <../glossary.html#input-ids>`__
+
+            - **token_type_ids** -- List of token type ids to be fed to a model (when :obj:`return_token_type_ids=True`
+              or if `"token_type_ids"` is in :obj:`self.model_input_names`).
+
+              `What are token type IDs? <../glossary.html#token-type-ids>`__
+
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              :obj:`return_attention_mask=True` or if `"attention_mask"` is in :obj:`self.model_input_names`).
+
+              `What are attention masks? <../glossary.html#attention-mask>`__
+
+            - **entity_ids** -- List of entity ids to be fed to a model.
+
+              `What are input IDs? <../glossary.html#input-ids>`__
+
+            - **entity_position_ids** -- List of entity positions in the input sequence to be fed to a model.
+
+            - **entity_token_type_ids** -- List of entity token type ids to be fed to a model (when
+            :obj:`return_token_type_ids=True` or if `"entity_token_type_ids"` is in :obj:`self.model_input_names`).
+
+              `What are token type IDs? <../glossary.html#token-type-ids>`__
+
+            - **entity_attention_mask** -- List of indices specifying which entities should be attended to by the model
+            (when :obj:`return_attention_mask=True` or if `"entity_attention_mask"` is in
+            :obj:`self.model_input_names`).
+
+              `What are attention masks? <../glossary.html#attention-mask>`__
+
+            - **overflowing_tokens** -- List of overflowing tokens sequences (when a :obj:`max_length` is specified and
+              :obj:`return_overflowing_tokens=True`).
+            - **num_truncated_tokens** -- Number of tokens truncated (when a :obj:`max_length` is specified and
+              :obj:`return_overflowing_tokens=True`).
+            - **special_tokens_mask** -- List of 0s and 1s, with 1 specifying added special tokens and 0 specifying
+              regular sequence tokens (when :obj:`add_special_tokens=True` and :obj:`return_special_tokens_mask=True`).
+            - **length** -- The length of the inputs (when :obj:`return_length=True`)
+"""
 
 
 class LukeTokenizer(RobertaTokenizer):
