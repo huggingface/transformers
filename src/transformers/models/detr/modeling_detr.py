@@ -832,7 +832,7 @@ DETR_INPUTS_DOCSTRING = r"""
             Pixel values can be obtained using :class:`~transformers.DetrTokenizer`. See
             :meth:`transformers.DetrTokenizer.__call__` for details.
 
-        pixel_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        pixel_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, height, width)`, `optional`):
             Mask to avoid performing attention on padding pixel values. Mask values selected in ``[0, 1]``:
 
             - 1 for pixels that are real (i.e. **not masked**),

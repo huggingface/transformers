@@ -299,6 +299,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 return get_size_with_aspect_ratio(image_size, size, max_size)[::-1]
 
         size = get_size(image.size, size, max_size) 
+        print("Size:", size)
         rescaled_image = self.resize(image, size=size)
 
         if target is None:
@@ -365,17 +366,18 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         ],
         annotations: Union[List[Dict], List[List[Dict]]] = None,
         return_masks: bool = False,
+        pad_and_return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchFeature:
         """
-        Main method to prepare for the model one or several image(s) and optional annotations.
+        Main method to prepare for the model one or several image(s) and optional annotations. Images are by default padded up 
+        to the largest image in a batch, and a pixel mask is returned that indicates which pixels are read/which are padding. 
 
         .. warning::
 
            NumPy arrays and PyTorch tensors are converted to PIL images when resizing, so the most efficient is to pass
            PIL images.
-
 
         Args:
             images (:obj:`PIL.Image.Image`, :obj:`np.ndarray`, :obj:`torch.Tensor`, :obj:`List[PIL.Image.Image]`, :obj:`List[np.ndarray]`, :obj:`List[torch.Tensor]`):
@@ -391,6 +393,14 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             return_masks (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether to return segmentation masks. Should only be set to `True` if the annotations include a "segmentation" key. 
 
+            pad_and_return_pixel_mask (:obj:`bool`, `optional`):
+                Whether to pad the images up to the largest image in a batch and create a pixel attention mask. 
+                
+                If left to the default, will return a pixel mask that is:
+
+                - 1 for pixels that are real (i.e. **not masked**),
+                - 0 for pixels that are padding (i.e. **masked**).
+            
             return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -489,18 +499,27 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             else:
                 images = [self._normalize(image=image, mean=self.image_mean, std=self.image_std, tensor_type=return_tensors)[0] for image in images]
         
-        # create pixel_mask
-        max_size = self._max_by_axis([list(image.shape) for image in images])
-        batch_shape = [len(images)] + max_size
-        b, c, h, w = batch_shape
-        tensor = np.zeros(batch_shape)
-        mask = np.zeros((b, h, w))
-        for img, pad_img, m in zip(images, tensor, mask):
-            pad_img[: img.shape[0], : img.shape[1], : img.shape[2]] = np.copy(img)
-            mask[: img.shape[1], : img.shape[2]] = True
+        if pad_and_return_pixel_mask: 
+            # pad images up to largest image in batch and create pixel_mask
+            max_size = self._max_by_axis([list(image.shape) for image in images])
+            c, h, w = max_size
+            padded_images = []
+            pixel_mask = []
+            for image in images:
+                # create padded image
+                padded_image = np.zeros((c,h,w), dtype=np.float32)
+                padded_image[:image.shape[0], :image.shape[1], :image.shape[2]] = np.copy(image)
+                padded_images.append(padded_image)
+                # create pixel mask
+                mask = np.zeros((h,w), dtype=np.int64)
+                mask[:image.shape[1], :image.shape[2]] = True
+                pixel_mask.append(mask)
 
         # return as BatchFeature
-        data = {"pixel_values": images, "pixel_mask": mask}
+        if pad_and_return_pixel_mask:
+            data = {"pixel_values": padded_images, "pixel_mask": pixel_mask}
+        else:
+            data = {"pixel_values": images}
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         if annotations is not None:
