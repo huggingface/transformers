@@ -106,6 +106,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
         unk_token="<unk>",
         mask_token="<mask_2>",
         mask_token_sent="<mask_1>",
+        remove_space=True,
         additional_special_tokens=None,
         **kwargs
     ):
@@ -142,9 +143,11 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
             mask_token=mask_token,
             mask_token_sent=mask_token_sent,
             additional_special_tokens=additional_special_tokens,
+            remove_space=remove_space,
             **kwargs,
         )
 
+        self.remove_space = remove_space
         self.vocab_file = vocab_file
 
     def _special_token_mask(self, seq):
