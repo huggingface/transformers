@@ -2274,6 +2274,54 @@ class Trainer:
         else:
             return 0
 
+    def upload_model_to_hub(
+        self,
+        save_directory: Optional[str] = None,
+        model_id: Optional[str] = None,
+        repo_url: Optional[str] = None,
+        commit_message: Optional[str] = "add model",
+        organization: Optional[str] = None,
+        private: bool = None,
+    ):
+        """
+        Upload `self.model` to the 🤗 model hub.
+
+        Parameters:
+            save_directory (:obj:`Union[str, os.PathLike]`):
+                Folder containing the model weights & config. Will default to :obj:`self.args.output_dir`.
+            model_id (:obj:`str`, `optional`, defaults to :obj:`save_directory`):
+                Repository name for your model in the hub. If not specified, repo name will be same as
+                :obj:`save_directory`
+            repo_url (:obj:`str`, `optional`):
+                Specify this in case you want to push to existing repo in hub. If unspecified, a new repository will be
+                created in your namespace (unless you specify an :obj:`organization`) with :obj:`model_id`.
+            organization (:obj:`str`, `optional`):
+                Organization in which you want to push your model (you must be a member of this organization).
+            private (:obj:`bool`, `optional`):
+                Whether or not the model repo should be private (requires a paying subscription).
+            commit_message (:obj:`str`, `optional`, defaults to :obj:`"add model"`):
+                Message to commit while pushing
+
+        Returns:
+            The url of the commit of your model in the given repository.
+        """
+        if not isinstance(unwrap_model(self.model), ModelHubMixin):
+            raise ValueError(
+                "The `upload_model_to_hub` method only works for models that inherit from `ModelhubMixin` models. See "
+                "https://github.com/huggingface/huggingface_hub for more details!"
+            )
+        if save_directory is None:
+            save_directory = self.args.output_dir
+
+        unwrap_model(self.model).push_to_hub(
+            save_directory=save_directory,
+            model_id=model_id,
+            repo_url=repo_url,
+            commit_message=commit_message,
+            organization=organization,
+            private=private,
+        )
+
     #
     # Deprecated code
     #

@@ -26,6 +26,8 @@ from torch import Tensor, device, dtype, nn
 from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
 
+from huggingface_hub import ModelHubMixin
+
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
@@ -384,7 +386,7 @@ class ModuleUtilsMixin:
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
 
-class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
+class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, ModelHubMixin):
     r"""
     Base class for all models.
 
