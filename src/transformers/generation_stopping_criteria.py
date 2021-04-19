@@ -53,7 +53,7 @@ class MaxLengthCriteria(StoppingCriteria):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
-        return input_ids.shape[-1] > self.max_length
+        return input_ids.shape[-1] >= self.max_length
 
 
 class MaxTimeCriteria(StoppingCriteria):
@@ -83,15 +83,16 @@ class StoppingCriteriaList(list):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
         return any(criteria(input_ids, scores) for criteria in self)
 
+    @property
+    def max_length(self) -> Optional[int]:
+        for stopping_criterium in self:
+            if isinstance(stopping_criterium, MaxLengthCriteria):
+                return stopping_criterium.max_length
+
 
 def validate_stopping_criteria(stopping_criteria: StoppingCriteriaList, max_length: int):
-    found = False
-    for stopping_criterium in stopping_criteria:
-        if isinstance(stopping_criterium, MaxLengthCriteria):
-            found = True
-            if stopping_criterium.max_length != max_length:
-                warnings.warn(
-                    "You set different `max_length` for stopping criteria and `max_length` parameter", UserWarning
-                )
-    if not found:
+    smax_length = stopping_criteria.max_length
+    if smax_length is not None and smax_length != max_length:
+        warnings.warn("You set different `max_length` for stopping criteria and `max_length` parameter", UserWarning)
+    elif smax_length is None:
         stopping_criteria.append(MaxLengthCriteria(max_length=max_length))
