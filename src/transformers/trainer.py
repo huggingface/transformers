@@ -336,7 +336,7 @@ class Trainer:
         self.place_model_on_device = args.place_model_on_device
         if (
             self.is_model_parallel
-            or (args.deepspeed and args.do_train)
+            or args.deepspeed
             or (args.fp16_full_eval and not args.do_train)
             or (self.sharded_ddp in [ShardedDDPOption.ZERO_DP_2, ShardedDDPOption.ZERO_DP_3])
         ):
