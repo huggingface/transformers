@@ -60,6 +60,9 @@ class HerbertTokenizer(XLMTokenizer):
 
     def __init__(
         self,
+        vocab_file,
+        merges_file,
+        tokenizer_file=None,
         cls_token="<s>",
         unk_token="<unk>",
         pad_token="<pad>",
@@ -70,13 +73,16 @@ class HerbertTokenizer(XLMTokenizer):
     ):
 
         super().__init__(
-            **kwargs,
+            vocab_file,
+            merges_file,
+            tokenizer_file=None,
             cls_token=cls_token,
             unk_token=unk_token,
             pad_token=pad_token,
             mask_token=mask_token,
             sep_token=sep_token,
             do_lowercase_and_remove_accent=do_lowercase_and_remove_accent,
+            **kwargs,
         )
         self.bert_pre_tokenizer = BasicTokenizer(
             do_lower_case=False,
