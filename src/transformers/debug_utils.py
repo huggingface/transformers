@@ -46,32 +46,38 @@ class DebugActivationOverflow:
     Args:
         model (:obj:`nn.Module`):
             The model to debug.
-        max_frames_to_save (:obj:`int`, `optional`, defaults to 40):
-            How many variables and their frames to record back - a few dozens is a good number.
+        max_frames_to_save (:obj:`int`, `optional`, defaults to 21):
+            How many frames back to record - a few dozens is a good number.
     """
 
-    def __init__(self, model, max_frames_to_save=40):
+    def __init__(self, model, max_frames_to_save=21):
         self.model = model
 
         # keep a LIFO buffer of frames to dump as soon as inf/nan is encountered to give context to the problem emergence
         self.frames = collections.deque([], max_frames_to_save)
-        self.save_frames = True
-        self.step = 0
+        self.frame = []
+        self.batch_number = 0
+        self.detected_overflow = False
 
         self.analyse_model()
 
         self.register_forward_hook()
 
-    def save_frame(self, frame):
-        self.frames.append(frame)
+    def save_frame(self, frame=None):
+        if frame is not None:
+            self.expand_frame(frame)
+        self.frames.append("\n".join(self.frame))
+        self.frame = []  # start a new frame
 
-    def dump_saved_frames_once(self):
-        # dump the previous frames only once (to help debug)
-        if self.save_frames:
-            print(f"\n\nlast {len(self.frames)} frames:")
-            print("\n".join(self.frames))
-            print("\n\n")
-            self.save_frames = False
+    def expand_frame(self, line):
+        self.frame.append(line)
+
+    def dump_saved_frames(self):
+        print(f"\n\nDetected inf/nan during batch_number={self.batch_number}")
+        print(f"last {len(self.frames)} frames:")
+        print(f"{'abs min':8} {'abs max':8} metadata")
+        print("\n".join(self.frames))
+        print("\n\n")
 
     def analyse_model(self):
         # extract the fully qualified module names, to be able to report at run time. e.g.:
@@ -79,20 +85,13 @@ class DebugActivationOverflow:
         #
         # for shared weights only the first shared module name will be registered
         self.module_names = {m: name for name, m in self.model.named_modules()}
+        self.longest_module_name = max(len(v) for v in self.module_names.values())
 
     def analyse_variable(self, var, ctx):
         if torch.is_tensor(var):
-            if self.save_frames:
-                self.save_frame(get_abs_max(var, ctx))
-
+            self.expand_frame(get_abs_min_max(var, ctx))
             if detect_overflow(var, ctx):
-                self.dump_saved_frames_once()
-
-                # now we can die, as it's pointless to continue running
-                raise ValueError(
-                    "DebugActivationOverflow: inf/nan detected, aborting as there is no point running further. "
-                    "Please scroll up above this traceback to see the activation values prior to this event."
-                )
+                self.detected_overflow = True
 
     def register_forward_hook(self):
         self.model.apply(self._register_forward_hook)
@@ -104,34 +103,53 @@ class DebugActivationOverflow:
         # - input is a tuple of packed inputs (could be non-Tensors)
         # - output could be a Tensor or a tuple of Tensors and non-Tensors
 
-        # count at which step we are (batch number)
+        prefix = "                 "
+
+        # count batch numbers
         if module == self.model:
-            self.step += 1
+            self.batch_number += 1
+            self.expand_frame(f"{prefix} Start batch_number={self.batch_number}")
 
-        ctx = f"[{self.step}] {self.module_names[module]}: {module.__class__.__name__}"
+        self.expand_frame(f"{prefix} {self.module_names[module]} {module.__class__.__name__}")
 
-        for i, x in enumerate(input):
-            self.analyse_variable(x, f"> {ctx}: input[{i}]")
+        # params
+        for name, p in module.named_parameters(recurse=False):
+            self.analyse_variable(p, name)
 
+        # inputs
+        if len(input) > 1:
+            for i, x in enumerate(input):
+                self.analyse_variable(x, f"input[{i}]")
+        else:
+            self.analyse_variable(input[0], "input")
+
+        # outputs
         if isinstance(output, tuple):
             for i, x in enumerate(output):
                 # possibly a tuple of tuples
                 if isinstance(x, tuple):
                     for j, y in enumerate(x):
-                        self.analyse_variable(y, f"< {ctx}: output[{i}][{j}]")
+                        self.analyse_variable(y, f"output[{i}][{j}]")
                 else:
-                    self.analyse_variable(x, f"< {ctx}: output[{i}]")
+                    self.analyse_variable(x, f"output[{i}]")
         else:
-            self.analyse_variable(output, f"< {ctx}: output")
+            self.analyse_variable(output, "output")
+
+        self.save_frame()
+
+        if self.detected_overflow:
+            self.dump_saved_frames()
+
+            # now we can die, as it's pointless to continue running
+            raise ValueError(
+                "DebugActivationOverflow: inf/nan detected, aborting as there is no point running further. "
+                "Please scroll up above this traceback to see the activation values prior to this event."
+            )
 
 
-def get_abs_max(var, ctx):
-    abs_max = max(abs(var.min()), abs(var.max()))
-    return f"abs_max={abs_max:9.2e} {ctx}"
-
-
-def get_min_max(var, ctx):
-    return f"min={var.min():9.2e} max={var.max():9.2e} {ctx}"
+def get_abs_min_max(var, ctx):
+    abs_var = var.abs()
+    return f"{abs_var.min():8.2e} {abs_var.max():8.2e} {ctx}"
 
 
 def detect_overflow(var, ctx):
