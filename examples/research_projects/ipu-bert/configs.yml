@@ -1,0 +1,255 @@
+# Copyright (c) 2021 Graphcore Ltd. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+#----------------------------------------------------------------------------------
+defaults: &defaults
+  random_seed: 42
+  vocab_size: 30400
+  dataloader_workers: 64
+  async_dataloader: True
+  file_buffer_size: 100
+  ipus_per_replica: 4
+  custom_ops: True
+  synthetic_data: False
+  profile: False
+  profile_dir: profile
+  optimizer: AdamW
+  weight_decay: 0.0
+  pred_head_transform: True
+  embedding_serialization_factor: 1
+  recompute_checkpoint_every_layer: False
+  enable_half_partials: True
+  layer_norm_eps: 0.001
+  attention_probs_dropout_prob: 0.0
+  mask_tokens: 20
+  dataset: pretraining
+  sequence_length: 128
+#----------------------------------------------------------------------------------
+
+#----------------------------------------------------------------------------------
+demo_tiny_128:
+  <<: *defaults
+
+  # Execution
+  batch_size: 1
+  training_steps: 150
+  batches_per_step: 1
+  replication_factor: 1
+  gradient_accumulation: 16
+  dataloader_workers: 1
+
+  # Model
+  hidden_size: 64
+  num_hidden_layers: 3
+  num_attention_heads: 8
+  sequence_length: 128
+  mask_tokens: 20
+  layers_per_ipu: [0, 1, 1, 1]
+  matmul_proportion: 0.6
+
+  # Optimizer
+  lr_warmup: 0.0
+  lr_schedule: constant
+  learning_rate: 0.001
+  loss_scaling: 16.0
+  weight_decay: 0.0
+
+  # Dataset
+  input_files: ["data/*.tfrecord"]
+#----------------------------------------------------------------------------------
+
+#----------------------------------------------------------------------------------
+pretrain_base_128: &pretrain_base_128
+  <<: *defaults
+
+  # Execution
+  batch_size: 32
+  training_steps: 7038
+  batches_per_step: 1
+  replication_factor: 4
+  gradient_accumulation: 512
+
+  # Model
+  hidden_size: 768
+  num_hidden_layers: 12
+  num_attention_heads: 12
+  sequence_length: 128
+  mask_tokens: 20
+  layers_per_ipu: [0, 4, 4, 4]
+  matmul_proportion: 0.25
+  recompute_checkpoint_every_layer: True
+
+  # Optimizer
+  optimizer: LAMBNoBiasCorrection
+  lr_warmup: 0.28
+  lr_schedule: linear
+  learning_rate: 0.006
+  loss_scaling: 16384.0
+  weight_decay: 0.01
+
+  # Dataset
+  input_files: ["data/wikipedia/128/*.tfrecord"]
+#----------------------------------------------------------------------------------
+
+#----------------------------------------------------------------------------------
+pretrain_base_384:
+  <<: *pretrain_base_128
+
+  # Execution
+  batch_size: 8
+  training_steps: 2137
+  gradient_accumulation: 512
+
+  # Model
+  sequence_length: 384
+  mask_tokens: 56
+
+  # Optimizer
+  lr_warmup: 0.128
+  learning_rate: 0.002828
+  loss_scaling: 128.0
+
+  # Dataset
+  input_files: ["data/wikipedia/384/*.tfrecord"]
+#----------------------------------------------------------------------------------
+
+#----------------------------------------------------------------------------------
+pretrain_large_128: &pretrain_large_128
+  <<: *defaults
+
+  # Execution
+  batch_size: 8
+  training_steps: 7038
+  batches_per_step: 1
+  replication_factor: 4
+  gradient_accumulation: 2048
+
+  # Model
+  hidden_size: 1024
+  num_hidden_layers: 24
+  num_attention_heads: 16
+  sequence_length: 128
+  mask_tokens: 20
+  layers_per_ipu: [3, 7, 7, 7]
+  matmul_proportion: [0.15, 0.25, 0.25, 0.25]
+  embedding_serialization_factor: 2
+  recompute_checkpoint_every_layer: True
+
+  # Optimizer
+  optimizer: LAMB
+  lr_warmup: 0.28
+  lr_schedule: linear
+  learning_rate: 0.006
+  loss_scaling: 8192.0
+  weight_decay: 0.01
+
+  # Dataset
+  input_files: ["data/wikipedia/128/*.tfrecord"]
+#----------------------------------------------------------------------------------
+
+#----------------------------------------------------------------------------------
+pretrain_large_128_POD64:
+  <<: *pretrain_large_128
+
+  # Execution
+  replication_factor: 16
+  gradient_accumulation: 512
+
+  # Optimizer
+  loss_scaling: 16384.0
+
+#----------------------------------------------------------------------------------
+
+#----------------------------------------------------------------------------------
+pretrain_large_384: &pretrain_large_384
+  <<: *pretrain_large_128
+
+  # Execution
+  batch_size: 2
+  training_steps: 2137
+  gradient_accumulation: 2048
+
+  # Model
+  sequence_length: 384
+  mask_tokens: 56
+
+  # Optimizer
+  lr_warmup: 0.128
+  learning_rate: 0.002828
+  loss_scaling: 64.0
+
+  # Dataset
+  input_files: ["data/wikipedia/384/*.tfrecord"]
+#----------------------------------------------------------------------------------
+
+#----------------------------------------------------------------------------------
+pretrain_large_384_POD64:
+  <<: *pretrain_large_384
+
+  # Execution
+  replication_factor: 16
+  gradient_accumulation: 512
+
+  # Optimizer
+  loss_scaling: 1024.0
+#----------------------------------------------------------------------------------
+
+#----------------------------------------------------------------------------------
+unit_test:
+  <<: *defaults
+  vocab_size: 1000
+  hidden_size: 32
+  num_hidden_layers: 3
+  num_attention_heads: 8
+  sequence_length: 128
+  layers_per_ipu: [0, 1, 1, 1]
+  gradient_accumulation: 16
+  replication_factor: 1
+  batch_size: 1
+  batches_per_step: 10
+  training_steps: 10
+  learning_rate: 0.01
+  matmul_proportion: 0.6
+#----------------------------------------------------------------------------------
+
+#----------------------------------------------------------------------------------
+pretrain_base_3L_128_single:
+  <<: *defaults
+
+  # Execution
+  batch_size: 8
+  training_steps: 150
+  batches_per_step: 64
+  replication_factor: 1
+  gradient_accumulation: 128
+  dataloader_workers: 1
+
+  # Model
+  hidden_size: 768
+  num_hidden_layers: 3
+  num_attention_heads: 12
+  sequence_length: 128
+  layers_per_ipu: [0, 1, 1, 1]
+  matmul_proportion: 0.28
+
+  # Optimizer
+  lr_warmup: 0.01
+  lr_schedule: linear
+  learning_rate: 0.0001
+  loss_scaling: 16.0
+  weight_decay: 0.01
+
+  # Dataset
+  input_files: ["data/wikipedia/128/wiki_042.tfrecord"] # single file
+#----------------------------------------------------------------------------------

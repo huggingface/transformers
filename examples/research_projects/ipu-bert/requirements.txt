@@ -1,0 +1,8 @@
+transformers
+datasets
+tokenizers
+pyyaml
+wandb==0.9.7 # Sync Issue with more recent versions
+pytest
+pytest-pythonpath
+tfrecord
