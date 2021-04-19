@@ -1340,7 +1340,7 @@ class DetrModel(DetrPreTrainedModel):
         feature_map, mask, position_embeddings = self.backbone(pixel_values, pixel_mask)
 
         print("Feature map:")
-        print(feature_map[0,:3,:3,:3])
+        print(feature_map.sum())
 
         assert mask is not None
 

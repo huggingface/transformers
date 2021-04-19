@@ -282,8 +282,12 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         feature_extractor = DetrFeatureExtractor()
         encoding = feature_extractor(images=image, annotations=target, return_tensors="pt")
 
+        # verify pixel values
         expected_shape = torch.Size([1, 3, 800, 1066])
         self.assertEqual(encoding['pixel_values'].shape, expected_shape)
+        
+        expected_slice = torch.tensor([0.2796, 0.3138, 0.3481])
+        assert torch.allclose(encoding['pixel_values'][0,0,0,:3], expected_slice, atol=1e-4)
         
         # verify area
         expected_area = torch.tensor([5887.9600, 11250.2061, 489353.8438, 837122.7500, 147967.5156, 165732.3438])
