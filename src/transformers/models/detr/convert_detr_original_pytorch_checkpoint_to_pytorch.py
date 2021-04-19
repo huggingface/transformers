@@ -172,14 +172,7 @@ def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
 
-    # standard PyTorch mean-std input image normalization
-    transform = T.Compose([T.Resize(800), T.ToTensor(), T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
-
-    # mean-std normalize the input image (batch-size: 1)
-    img = transform(im).unsqueeze(0)
-
-    return img
-
+    return im
 
 @torch.no_grad()
 def convert_detr_checkpoint(task, backbone, dilation, pytorch_dump_folder_path):
@@ -187,8 +180,13 @@ def convert_detr_checkpoint(task, backbone, dilation, pytorch_dump_folder_path):
     Copy/paste/tweak model's weights to our DETR structure.
     """
 
+    # load default config, feature extractor
     config = DetrConfig()
+    feature_extractor = DetrFeatureExtractor()
     img = prepare_img()
+    encoding = feature_extractor(images=img, return_tensors="pt")
+    pixel_values = encoding["pixel_values"]
+    pixel_mask = encoding["pixel_mask"]
 
     logger.info(f"Converting model for task {task}, with a {backbone} backbone, dilation set to {dilation}...")
 
@@ -207,7 +205,7 @@ def convert_detr_checkpoint(task, backbone, dilation, pytorch_dump_folder_path):
         model = DetrModel(config).eval()
         model.load_state_dict(state_dict)
         # verify our conversion on the image
-        outputs = model(img)
+        outputs = model(pixel_values, pixel_mask)
         assert outputs.last_hidden_state.shape == (1, config.num_queries, config.d_model)
         expected_slice = torch.tensor(
             [[0.0616, -0.5146, -0.4032], [-0.7629, -0.4934, -1.7153], [-0.4768, -0.6403, -0.7826]]
@@ -253,9 +251,9 @@ def convert_detr_checkpoint(task, backbone, dilation, pytorch_dump_folder_path):
         model = DetrForObjectDetection(config).eval()
         model.load_state_dict(state_dict)
         # verify our conversion
-        original_outputs = detr(img)
-        outputs = model(img)
-        assert torch.allclose(outputs.pred_logits, original_outputs["pred_logits"], atol=1e-4)
+        original_outputs = detr(pixel_values)
+        outputs = model(pixel_values)
+        assert torch.allclose(outputs.logits, original_outputs["pred_logits"], atol=1e-4)
         assert torch.allclose(outputs.pred_boxes, original_outputs["pred_boxes"], atol=1e-4)
 
     elif task == "panoptic_segmentation":

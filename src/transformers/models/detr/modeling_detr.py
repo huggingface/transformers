@@ -1339,6 +1339,9 @@ class DetrModel(DetrPreTrainedModel):
         # pixel_mask should be of shape (batch_size, height, width)
         feature_map, mask, position_embeddings = self.backbone(pixel_values, pixel_mask)
 
+        print("Feature map:")
+        print(feature_map[0,:3,:3,:3])
+
         assert mask is not None
 
         # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
