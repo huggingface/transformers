@@ -79,9 +79,6 @@ class PegasusTokenizer(PreTrainedTokenizer):
             that uses the tokens 2 - 104 only for pretraining
     """
     vocab_files_names = VOCAB_FILES_NAMES
-
-    offset = 103  # entries 2 - 104 are only used for pretraining
-    vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
@@ -95,8 +92,11 @@ class PegasusTokenizer(PreTrainedTokenizer):
         mask_token="<mask_2>",
         mask_token_sent="<mask_1>",
         additional_special_tokens=None,
+        offset=103,
         **kwargs
     ):
+        self.offset = offset  # entries 2 - 104 are only used for pretraining by default
+
         if additional_special_tokens is not None:
             assert isinstance(
                 additional_special_tokens, list
@@ -128,6 +128,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             mask_token_sent=mask_token_sent,
             additional_special_tokens=additional_special_tokens,
+            offset=self.offset,
             **kwargs,
         )
         self.vocab_file = vocab_file
