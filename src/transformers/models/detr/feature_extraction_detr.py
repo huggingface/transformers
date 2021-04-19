@@ -458,7 +458,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 annotation should be in COCO format.
                 """
             )
-
+        
         if not is_batched:
             images = [images]
             if annotations is not None:
@@ -500,6 +500,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 images = [self._normalize(image=image, mean=self.image_mean, std=self.image_std, tensor_type=return_tensors)[0] for image in images]
         
         if padding: 
+            assert padding == return_pixel_mask, "If images are padded, a pixel mask should be created"
             # pad images up to largest image in batch and create pixel_mask
             max_size = self._max_by_axis([list(image.shape) for image in images])
             c, h, w = max_size
@@ -517,10 +518,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             images = padded_images
 
         # return as BatchFeature
+        data = {}
+        data["pixel_values"] = images
         if return_pixel_mask:
-            data = {"pixel_values": images, "pixel_mask": pixel_mask}
-        else:
-            data = {"pixel_values": images}
+            data["pixel_mask"] = pixel_mask
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         if annotations is not None:

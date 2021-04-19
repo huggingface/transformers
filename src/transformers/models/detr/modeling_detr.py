@@ -333,26 +333,6 @@ class Joiner(nn.Sequential):
 
         return feature_map, pixel_mask, pos
 
-    # def forward(self, tensor_list: NestedTensor):
-    #     xs = self[0](tensor_list)
-    #     print("The backbone outputs a NestedTensor with a Tensor and a Mask.")
-    #     print("Shape of backbone tensor:")
-    #     print(xs["0"].tensors.shape)
-    #     print("Shape of backbone mask:")
-    #     print(xs["0"].mask.shape)
-    #     out: List[NestedTensor] = []
-    #     pos = []
-    #     for name, x in xs.items():
-    #         out.append(x)
-    #         # position encoding
-    #         pos.append(self[1](x).to(x.tensors.dtype))
-
-    #     print(len(pos))
-    #     print("Shape of position embeddings:")
-    #     print(pos[0].shape)
-
-    #     return out, pos
-
 
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
@@ -1339,9 +1319,6 @@ class DetrModel(DetrPreTrainedModel):
         # pixel_mask should be of shape (batch_size, height, width)
         feature_map, mask, position_embeddings = self.backbone(pixel_values, pixel_mask)
 
-        print("Feature map:")
-        print(feature_map.sum())
-
         assert mask is not None
 
         # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
@@ -1518,7 +1495,6 @@ class DetrForObjectDetection(DetrPreTrainedModel):
             outputs_loss = {}
             outputs_loss["logits"] = logits
             outputs_loss["pred_boxes"] = pred_boxes
-            # TODO check whether this works
             if self.config.auxiliary_loss:
                 intermediate = outputs.intermediate_hidden_states if return_dict else outputs[6]
                 outputs_class = self.class_labels_classifier(intermediate)
