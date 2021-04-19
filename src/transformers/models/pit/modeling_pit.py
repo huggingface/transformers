@@ -18,16 +18,22 @@
 import collections.abc
 import math
 from collections import namedtuple
+from dataclasses import dataclass
+from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
-from numpy.core.shape_base import block
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput
+from ...file_utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
+from ...modeling_outputs import BaseModelOutputWithPooling, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_pit import PiTConfig
@@ -53,19 +59,49 @@ def to_2tuple(x):
 
 
 PiTEncoderBlockOutput = namedtuple(
-    "PiTEncoderBlockOutput", field_names=["last_hidden_state", "cls_tokens", "hidden_states", "attentions"]
+    "PiTEncoderBlockOutput", field_names=["last_hidden_states", "cls_tokens", "hidden_states", "attentions"]
 )
-PiTModelOutput = namedtuple(
-    "PiTModelOutput",
-    field_names=[
-        "last_cls_token_states",
-        "last_hidden_state",
-        "hidden_states",
-        "pooled_states",
-        "cls_token_states",
-        "attentions",
-    ],
-)
+
+
+@dataclass
+class PiTModelOutput(ModelOutput):
+    last_cls_token_states: torch.FloatTensor = None
+    last_hidden_states: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    pooled_states: Optional[Tuple[torch.FloatTensor]] = None
+    cls_token_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class PiTSequenceClassifierOutput(ModelOutput):
+    """
+    Base class for outputs of sentence classification models.
+
+    Args:
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
+            Classification (or regression if config.num_labels==1) loss.
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    pooled_states: Optional[Tuple[torch.FloatTensor]] = None
+    cls_token_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
 
 # Based on timm implementation, which can be found here:
@@ -121,6 +157,31 @@ class PatchEmbeddings(nn.Module):
         return x
 
 
+class PiTConvHeadPooling(nn.Module):
+    def __init__(self, config, block_id=0):
+        super(PiTConvHeadPooling, self).__init__()
+        current_hidden_dim = config.base_dims[block_id] * config.heads[block_id]
+        next_hidden_size = config.base_dims[block_id + 1] * config.heads[block_id + 1]
+
+        stride = config.conv_pooling_stride
+        self.conv = nn.Conv2d(
+            current_hidden_dim,
+            next_hidden_size,
+            kernel_size=stride + 1,
+            padding=stride // 2,
+            stride=stride,
+            groups=current_hidden_dim,
+        )
+        self.fc = nn.Linear(current_hidden_dim, next_hidden_size)
+
+    def forward(self, hidden_states, cls_token):
+
+        hidden_states = self.conv(hidden_states)
+        cls_token = self.fc(cls_token)
+
+        return hidden_states, cls_token
+
+
 class PiTSelfAttention(nn.Module):
     def __init__(self, config, hidden_size, num_attention_heads):
         super().__init__()
@@ -144,7 +205,6 @@ class PiTSelfAttention(nn.Module):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
-
 
     # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention.forward
     def forward(self, hidden_states, head_mask=None, output_attentions=False):
@@ -181,7 +241,6 @@ class PiTSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->PiT
 class PiTSelfOutput(nn.Module):
     """
     The residual connection is defined in PiTLayer instead of here (as is the case with other models), due to the
@@ -193,13 +252,13 @@ class PiTSelfOutput(nn.Module):
         self.dense = nn.Linear(hidden_size, hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states):
+    # Copied from transformers.models.vit.modeling_vit.ViTSelfOutput.forward
+    def forward(self, hidden_states, input_tensor):
 
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
         return hidden_states
-
 
 
 class PiTAttention(nn.Module):
@@ -232,7 +291,7 @@ class PiTAttention(nn.Module):
     def forward(self, hidden_states, head_mask=None, output_attentions=False):
         self_outputs = self.attention(hidden_states, head_mask, output_attentions)
 
-        attention_output = self.output(self_outputs[0])
+        attention_output = self.output(self_outputs[0], hidden_states)
 
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -256,7 +315,6 @@ class PiTIntermediate(nn.Module):
         return hidden_states
 
 
-
 class PiTOutput(nn.Module):
     def __init__(self, config, hidden_size, intermediate_size):
         super().__init__()
@@ -271,7 +329,6 @@ class PiTOutput(nn.Module):
         hidden_states = hidden_states + input_tensor
 
         return hidden_states
-
 
 
 class PiTLayer(nn.Module):
@@ -329,7 +386,6 @@ class PiTLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->PiT
 class PiTEncoderBlock(nn.Module):
     def __init__(self, config, pool=None, block_id=0):
         super().__init__()
@@ -383,6 +439,9 @@ class PiTEncoderBlock(nn.Module):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
         cls_tokens = hidden_states[:, :tokens_length]
         hidden_states = hidden_states[:, tokens_length:]
         hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, channels, height, width)
@@ -391,45 +450,17 @@ class PiTEncoderBlock(nn.Module):
         if self.pool is not None:
             hidden_states, cls_tokens = self.pool(hidden_states, cls_tokens)
 
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
         if not return_dict:
             return tuple(
                 v for v in [hidden_states, cls_tokens, all_hidden_states, all_self_attentions] if v is not None
             )
 
         return PiTEncoderBlockOutput(
-            last_hidden_state=hidden_states,
+            last_hidden_states=hidden_states,
             cls_tokens=cls_tokens,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
-
-
-class PiTConvHeadPooling(nn.Module):
-    def __init__(self, config, block_id=0):
-        super(PiTConvHeadPooling, self).__init__()
-        current_hidden_dim = config.base_dims[block_id] * config.heads[block_id]
-        next_hidden_size = config.base_dims[block_id + 1] * config.heads[block_id + 1]
-
-        stride = config.conv_pooling_stride
-        self.conv = nn.Conv2d(
-            current_hidden_dim,
-            next_hidden_size,
-            kernel_size=stride + 1,
-            padding=stride // 2,
-            stride=stride,
-            groups=current_hidden_dim,
-        )
-        self.fc = nn.Linear(current_hidden_dim, next_hidden_size)
-
-    def forward(self, hidden_states, cls_token):
-
-        hidden_states = self.conv(hidden_states)
-        cls_token = self.fc(cls_token)
-
-        return hidden_states, cls_token
 
 
 class PiTEncoder(nn.Module):
@@ -488,10 +519,22 @@ class PiTEncoder(nn.Module):
                 all_self_attentions = all_self_attentions + (outputs[3],)
 
         if not return_dict:
-            return (cls_tokens,)
+            return tuple(
+                v
+                for v in [
+                    cls_tokens,
+                    hidden_states,
+                    all_hidden_states,
+                    all_pooled_states,
+                    all_cls_token_states,
+                    all_self_attentions,
+                ]
+                if v is not None
+            )
+
         return PiTModelOutput(
             last_cls_token_states=cls_tokens,
-            last_hidden_state=hidden_states,
+            last_hidden_states=hidden_states,
             hidden_states=all_hidden_states,
             pooled_states=all_pooled_states,
             cls_token_states=all_cls_token_states,
@@ -677,11 +720,13 @@ class PiTModel(PiTPreTrainedModel):
         sequence_output = self.layernorm(sequence_output)
 
         if not return_dict:
-            return (sequence_output,) + encoder_outputs[1:]
+            return (sequence_output,) + encoder_outputs[2:]
 
-        return BaseModelOutput(
-            last_hidden_state=sequence_output,
+        return PiTModelOutput(
+            last_cls_token_states=sequence_output,
             hidden_states=encoder_outputs.hidden_states,
+            pooled_states=encoder_outputs.pooled_states,
+            cls_token_states=encoder_outputs.cls_token_states,
             attentions=encoder_outputs.attentions,
         )
 
@@ -774,9 +819,11 @@ class PiTForImageClassification(PiTPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(
+        return PiTSequenceClassifierOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
+            pooled_states=outputs.pooled_states,
+            cls_token_states=outputs.cls_token_states,
             attentions=outputs.attentions,
         )

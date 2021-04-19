@@ -2220,6 +2220,32 @@ class PegasusModel:
         requires_backends(self, ["torch"])
 
 
+PIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class PiTForImageClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PiTModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PiTPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
