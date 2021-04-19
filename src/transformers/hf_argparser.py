@@ -19,7 +19,7 @@ import sys
 from argparse import ArgumentParser, ArgumentTypeError
 from enum import Enum
 from pathlib import Path
-from typing import Any, Iterable, List, NewType, Optional, Tuple, Union
+from typing import Any, Iterable, List, Dict, NewType, Optional, Tuple, Union
 
 
 DataClass = NewType("DataClass", Any)
@@ -211,7 +211,7 @@ class HfArgumentParser(ArgumentParser):
             outputs.append(obj)
         return (*outputs,)
 
-    def parse_dict(self, args: dict) -> Tuple[DataClass, ...]:
+    def parse_dict(self, args: Dict) -> Tuple[DataClass, ...]:
         """
         Alternative helper method that does not use `argparse` at all, instead uses a dict and populating the dataclass
         types.
