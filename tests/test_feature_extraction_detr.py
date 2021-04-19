@@ -102,8 +102,16 @@ class DetrFeatureExtractionTester(unittest.TestCase):
         return image_inputs
 
     def get_expected_values(self, image_inputs, batched=False):
+        """ 
+        This function computes the expected height and width when providing images to DetrFeatureExtractor,
+        assuming do_resize is set to True with a scalar size.
+        """
         if not batched:
-            w, h = image_inputs[0].size
+            image = image_inputs[0]
+            if isinstance(image, Image.Image):
+                w, h = image.size
+            else:
+                h, w = image.shape[1], image.shape[2]
             if w < h:
                 expected_height = int(self.size * h / w)
                 expected_width = self.size
@@ -113,10 +121,14 @@ class DetrFeatureExtractionTester(unittest.TestCase):
             else:
                 expected_height = self.size
                 expected_width = self.size
+            
         else:
-            #TODO
-            expected_height = None
-            expected_width = None
+            expected_values = []
+            for image in image_inputs:
+                expected_height, expected_width = self.get_expected_values([image])
+                expected_values.append((expected_height, expected_width))
+            expected_height = max(expected_values, key=lambda item: item[0])[0]
+            expected_width = max(expected_values, key=lambda item: item[1])[1]
 
         return expected_height, expected_width
 
@@ -169,18 +181,18 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         )
 
         # Test batched
-        # for image in image_inputs:
-        #     print(image.size)
-        # encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
-        # self.assertEqual(
-        #     encoded_images.shape,
-        #     (
-        #         self.feature_extract_tester.batch_size,
-        #         self.feature_extract_tester.num_channels,
-        #         self.feature_extract_tester.size,
-        #         self.feature_extract_tester.size,
-        #     ),
-        # )
+        expected_height, expected_width = self.feature_extract_tester.get_expected_values(image_inputs, batched=True)
+
+        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
+        self.assertEqual(
+            encoded_images.shape,
+            (
+                self.feature_extract_tester.batch_size,
+                self.feature_extract_tester.num_channels,
+                expected_height,
+                expected_width,
+            ),
+        )
 
     def test_call_numpy(self):
         # Initialize feature_extractor
@@ -192,25 +204,31 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
 
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
+
+        expected_height, expected_width = self.feature_extract_tester.get_expected_values(image_inputs)
+
         self.assertEqual(
             encoded_images.shape,
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                expected_height,
+                expected_width,
             ),
         )
 
         # Test batched
         encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
+
+        expected_height, expected_width = self.feature_extract_tester.get_expected_values(image_inputs, batched=True)
+
         self.assertEqual(
             encoded_images.shape,
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                expected_height,
+                expected_width,
             ),
         )
 
@@ -224,25 +242,31 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
 
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
+        
+        expected_height, expected_width = self.feature_extract_tester.get_expected_values(image_inputs)
+
         self.assertEqual(
             encoded_images.shape,
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                expected_height,
+                expected_width,
             ),
         )
 
         # Test batched
         encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
+
+        expected_height, expected_width = self.feature_extract_tester.get_expected_values(image_inputs, batched=True)
+
         self.assertEqual(
             encoded_images.shape,
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                expected_height,
+                expected_width,
             ),
         )
 

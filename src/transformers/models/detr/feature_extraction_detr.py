@@ -156,7 +156,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     # inspired by https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/datasets/coco.py#L50
     # with added support for several TensorTypes
-    def convertCocoToDetrFormat(self, image, target, tensor_type, return_masks=False):
+    def convertCocoToDetrFormat(self, image, target, tensor_type, return_segmentation_masks=False):
         """
         Convert the target in COCO format into the format expected by DETR. 
         """
@@ -203,7 +203,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         classes = [obj["category_id"] for obj in anno]
         classes = as_tensor(classes, dtype=dtype_int)
 
-        if return_masks:
+        if return_segmentation_masks:
             segmentations = [obj["segmentation"] for obj in anno]
             masks = convert_coco_poly_to_mask(segmentations, h, w, tensor_type, as_tensor)
 
@@ -224,7 +224,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         keep = (boxes[:, 3] > boxes[:, 1]) & (boxes[:, 2] > boxes[:, 0])
         boxes = boxes[keep]
         classes = classes[keep]
-        if return_masks:
+        if return_segmentation_masks:
             masks = masks[keep]
         if keypoints is not None:
             keypoints = keypoints[keep]
@@ -232,7 +232,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         target = {}
         target["boxes"] = boxes
         target["class_labels"] = classes
-        if return_masks:
+        if return_segmentation_masks:
             target["masks"] = masks
         target["image_id"] = image_id
         if keypoints is not None:
@@ -299,7 +299,6 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 return get_size_with_aspect_ratio(image_size, size, max_size)[::-1]
 
         size = get_size(image.size, size, max_size) 
-        print("Size:", size)
         rescaled_image = self.resize(image, size=size)
 
         if target is None:
@@ -365,8 +364,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
         ],
         annotations: Union[List[Dict], List[List[Dict]]] = None,
-        return_masks: bool = False,
-        pad_and_return_pixel_mask: bool = True,
+        return_segmentation_masks: bool = False,
+        padding: bool = True,
+        return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchFeature:
@@ -390,20 +390,20 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 annotation is a Python dictionary, with the following keys: segmentation, area, iscrowd, image_id,
                 bbox, category_id, id.
 
-            return_masks (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            return_segmentation_masks (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether to return segmentation masks. Should only be set to `True` if the annotations include a "segmentation" key. 
 
-            pad_and_return_pixel_mask (:obj:`bool`, `optional`):
-                Whether to pad the images up to the largest image in a batch and create a pixel attention mask. 
-                
-                If left to the default, will return a pixel mask that is:
+            padding (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether to pad the images up to the largest image in a batch. 
+            
+            return_pixel_mask (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not to return the pixel mask. If left to the default, will return a pixel mask that is:
 
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
             
             return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
-
 
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
                 * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
@@ -470,7 +470,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 if not isinstance(image, Image.Image):
                     image = self.to_pil_image(image)
                 target = {"image_id": anno[0]["image_id"], "annotations": anno}
-                image, target = self.convertCocoToDetrFormat(image, target, tensor_type=return_tensors, return_masks=return_masks)
+                image, target = self.convertCocoToDetrFormat(image, target, tensor_type=return_tensors, return_segmentation_masks=return_segmentation_masks)
                 images[idx] = image
                 annotations[idx] = target
 
@@ -499,10 +499,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             else:
                 images = [self._normalize(image=image, mean=self.image_mean, std=self.image_std, tensor_type=return_tensors)[0] for image in images]
         
-        if pad_and_return_pixel_mask: 
+        if padding: 
             # pad images up to largest image in batch and create pixel_mask
             max_size = self._max_by_axis([list(image.shape) for image in images])
-            print("Max size:", max_size)
             c, h, w = max_size
             padded_images = []
             pixel_mask = []
@@ -515,10 +514,11 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 mask = np.zeros((h,w), dtype=np.int64)
                 mask[:image.shape[1], :image.shape[2]] = True
                 pixel_mask.append(mask)
+            images = padded_images
 
         # return as BatchFeature
-        if pad_and_return_pixel_mask:
-            data = {"pixel_values": padded_images, "pixel_mask": pixel_mask}
+        if return_pixel_mask:
+            data = {"pixel_values": images, "pixel_mask": pixel_mask}
         else:
             data = {"pixel_values": images}
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
