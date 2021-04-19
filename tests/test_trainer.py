@@ -44,9 +44,7 @@ if is_torch_available():
     from torch.utils.data import IterableDataset
 
     from transformers import (
-        AutoModelForMaskedLM,
         AutoModelForSequenceClassification,
-        DataCollatorForLanguageModeling,
         EarlyStoppingCallback,
         GlueDataset,
         GlueDataTrainingArguments,
@@ -54,7 +52,6 @@ if is_torch_available():
         GPT2LMHeadModel,
         LineByLineTextDataset,
         PreTrainedModel,
-        TextDataset,
         Trainer,
         TrainerState,
     )
@@ -138,16 +135,12 @@ class RegressionModelConfig(PretrainedConfig):
 if is_torch_available():
 
     class SampleIterableDataset(IterableDataset):
-        """
-        Criteria is not whether it is IterableDataset or not, criteria is whether __len__ is implemented
-        """
-
-        def __init__(self, file_path, tokenizer):
-            self.ds = TextDataset(file_path=file_path, tokenizer=tokenizer, block_size=64)
+        def __init__(self, a=2, b=3, length=64, seed=42, label_names=None):
+            self.dataset = RegressionDataset(a=a, b=b, length=length, seed=seed, label_names=label_names)
 
         def __iter__(self):
-            for i in range(len(self.ds)):
-                yield self.ds[i]
+            for i in range(len(self.dataset)):
+                yield self.dataset[i]
 
     class RegressionModel(torch.nn.Module):
         def __init__(self, a=0, b=0, double_output=False):
@@ -826,52 +819,64 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         self.assertEqual(len(dataset), 31)
 
-    def test_trainer_iterable_dataset(self):
-        # Simulate Language Modeling with an IterableDataset, with no __len__ method
-        # Pick-up a tiny model, so it works on CPU
-        # See Issue #5990: https://github.com/huggingface/transformers/issues/5990
-        MODEL_ID = "sshleifer/tiny-distilbert-base-cased"
-        model = AutoModelForMaskedLM.from_pretrained(MODEL_ID)
-        tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-        train_dataset = SampleIterableDataset(file_path=PATH_SAMPLE_TEXT, tokenizer=tokenizer)
-        training_args = TrainingArguments(output_dir="./examples", no_cuda=True, max_steps=2)
-        data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=True, mlm_probability=0.15)
+    def test_training_iterable_dataset(self):
+        config = RegressionModelConfig()
+        model = RegressionPreTrainedModel(config)
+        train_dataset = SampleIterableDataset()
 
-        training_args = TrainingArguments(output_dir="./examples", no_cuda=True, max_steps=2)
-        trainer = Trainer(model=model, args=training_args, train_dataset=train_dataset, data_collator=data_collator)
+        args = RegressionTrainingArguments(output_dir="./examples", max_steps=4)
+        trainer = Trainer(model=model, args=args, train_dataset=train_dataset)
         trainer.train()
+        self.assertEqual(trainer.state.global_step, 4)
 
         loader = trainer.get_train_dataloader()
         self.assertIsInstance(loader, torch.utils.data.DataLoader)
         self.assertIsInstance(loader.sampler, torch.utils.data.dataloader._InfiniteConstantSampler)
 
-        # Exception if giving iterable dataset and no max_steps
-        with self.assertRaises(ValueError):
-            training_args = TrainingArguments(output_dir="./examples", no_cuda=True)
-            _ = Trainer(model=model, args=training_args, train_dataset=train_dataset, data_collator=data_collator)
+    def test_evaluation_iterable_dataset(self):
+        config = RegressionModelConfig(a=1.5, b=2.5)
+        model = RegressionPreTrainedModel(config)
+        eval_dataset = SampleIterableDataset()
 
-        # Exception if eval_dataset is iterable in __init__
-        with self.assertRaises(ValueError):
-            training_args = TrainingArguments(output_dir="./examples", no_cuda=True, max_steps=2)
-            _ = Trainer(
-                model=model,
-                args=training_args,
-                train_dataset=train_dataset,
-                eval_dataset=train_dataset,
-                data_collator=data_collator,
-            )
+        args = RegressionTrainingArguments(output_dir="./examples")
+        trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset, compute_metrics=AlmostAccuracy())
+        results = trainer.evaluate()
 
-        # Exception if predicting with iterable dataset
-        with self.assertRaises(ValueError):
-            training_args = TrainingArguments(output_dir="./examples", no_cuda=True)
-            trainer = Trainer(model=model, args=training_args, data_collator=data_collator)
-            trainer.predict(train_dataset)
+        x, y = trainer.eval_dataset.dataset.x, trainer.eval_dataset.dataset.ys[0]
+        pred = 1.5 * x + 2.5
+        expected_loss = ((pred - y) ** 2).mean()
+        self.assertAlmostEqual(results["eval_loss"], expected_loss)
+        expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
+        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
-        # Exception if evaluating with iterable dataset
-        with self.assertRaises(ValueError):
-            training_args = TrainingArguments(output_dir="./examples", no_cuda=True)
-            trainer = Trainer(model=model, args=training_args, data_collator=data_collator)
-            trainer.evaluate(train_dataset)
+        # With a number of elements not a round multiple of the batch size
+        eval_dataset = SampleIterableDataset(length=66)
+        results = trainer.evaluate(eval_dataset)
+
+        x, y = eval_dataset.dataset.x, eval_dataset.dataset.ys[0]
+        pred = 1.5 * x + 2.5
+        expected_loss = ((pred - y) ** 2).mean()
+        self.assertAlmostEqual(results["eval_loss"], expected_loss)
+        expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
+        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
+
+    def test_predict_iterable_dataset(self):
+        config = RegressionModelConfig(a=1.5, b=2.5)
+        model = RegressionPreTrainedModel(config)
+        eval_dataset = SampleIterableDataset()
+
+        args = RegressionTrainingArguments(output_dir="./examples")
+        trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset, compute_metrics=AlmostAccuracy())
+
+        preds = trainer.predict(trainer.eval_dataset).predictions
+        x = eval_dataset.dataset.x
+        self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
+
+        # With a number of elements not a round multiple of the batch size
+        test_dataset = SampleIterableDataset(length=66)
+        preds = trainer.predict(test_dataset).predictions
+        x = test_dataset.dataset.x
+        self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
 
     def test_num_train_epochs_in_training(self):
         # len(train_dl) < gradient_accumulation_steps shouldn't give ``ZeroDivisionError`` when ``max_steps`` is given.

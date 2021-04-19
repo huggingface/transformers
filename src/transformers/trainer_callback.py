@@ -15,7 +15,7 @@
 """
 Callbacks to use with the Trainer class and customize the training loop.
 """
-
+import collections
 import dataclasses
 import json
 from dataclasses import dataclass
@@ -469,7 +469,7 @@ class ProgressCallback(TrainerCallback):
             self.current_step = state.global_step
 
     def on_prediction_step(self, args, state, control, eval_dataloader=None, **kwargs):
-        if state.is_local_process_zero:
+        if state.is_local_process_zero and isinstance(eval_dataloader.dataset, collections.abc.Sized):
             if self.prediction_bar is None:
                 self.prediction_bar = tqdm(total=len(eval_dataloader), leave=self.training_bar is None)
             self.prediction_bar.update(1)

@@ -220,6 +220,13 @@ jobs:
         if: ${{ always() }}
         run: cat reports/tests_torch_cuda_extensions_gpu_failures_short.txt
 
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_tests_torch_cuda_extensions_gpu_test_reports
+          path: reports
+
   run_tests_torch_cuda_extensions_multi_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
     container:
@@ -252,6 +259,13 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_torch_cuda_extensions_multi_gpu_failures_short.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_tests_torch_cuda_extensions_multi_gpu_test_reports
+          path: reports
 
 
   send_results:

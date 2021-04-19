@@ -354,7 +354,6 @@ class TextDatasetForNextSentencePrediction(Dataset):
         )
         assert os.path.isfile(file_path), f"Input file path {file_path} not found"
 
-        self.block_size = block_size - tokenizer.num_special_tokens_to_add(pair=True)
         self.short_seq_probability = short_seq_probability
         self.nsp_probability = nsp_probability
 
@@ -413,7 +412,7 @@ class TextDatasetForNextSentencePrediction(Dataset):
                 logger.info(f"Creating examples from {len(self.documents)} documents.")
                 self.examples = []
                 for doc_index, document in enumerate(self.documents):
-                    self.create_examples_from_document(document, doc_index)
+                    self.create_examples_from_document(document, doc_index, block_size)
 
                 start = time.time()
                 with open(cached_features_file, "wb") as handle:
@@ -422,10 +421,10 @@ class TextDatasetForNextSentencePrediction(Dataset):
                     f"Saving features into cached file {cached_features_file} [took {time.time() - start:.3f} s]"
                 )
 
-    def create_examples_from_document(self, document: List[List[int]], doc_index: int):
+    def create_examples_from_document(self, document: List[List[int]], doc_index: int, block_size: int):
         """Creates examples for a single document."""
 
-        max_num_tokens = self.block_size - self.tokenizer.num_special_tokens_to_add(pair=True)
+        max_num_tokens = block_size - self.tokenizer.num_special_tokens_to_add(pair=True)
 
         # We *usually* want to fill up the entire sequence since we are padding
         # to `block_size` anyways, so short sequences are generally wasted
