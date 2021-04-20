@@ -271,7 +271,7 @@ class PretrainedConfig(object):
         self._name_or_path = str(kwargs.pop("name_or_path", ""))
 
         # Drop the transformers version info
-        kwargs.pop("transformers_version", None)
+        self.transformers_version = kwargs.pop("transformers_version", None)
 
         # Additional attributes without default values
         for key, value in kwargs.items():
