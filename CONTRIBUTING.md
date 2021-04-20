@@ -41,7 +41,7 @@ Issue](https://github.com/huggingface/transformers/contribute) listing. Tt will 
 open Issues that are open to anybody to work on. Just comment in the issue that you'd like to work
 on it. In that same listing you will also find some Issues with `Good Second Issue` label. These are
 typically slightly more complicated than the Issues with just `Good First Issue` label. But if you
-feel you know what you're doing go for it.
+feel you know what you're doing, go for it.
 
 *All are equally valuable to the community.*
 
@@ -53,7 +53,7 @@ feedback.
 
 ### Did you find a bug?
 
-The `transformers` are robust and reliable thanks to the users who notify us of
+The 🤗 Transformers library is robust and reliable thanks to the users who notify us of
 the problems they encounter. So thank you for reporting an issue.
 
 First, we would really appreciate it if you could **make sure the bug was not
