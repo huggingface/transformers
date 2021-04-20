@@ -16,12 +16,9 @@
 A subclass of `Trainer` specific to Question-Answering tasks
 """
 
-from transformers import Trainer, is_datasets_available, is_torch_tpu_available
+from transformers import Trainer, is_torch_tpu_available
 from transformers.trainer_utils import PredictionOutput
 
-
-if is_datasets_available():
-    import datasets
 
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
@@ -53,10 +50,6 @@ class QuestionAnsweringTrainer(Trainer):
             )
         finally:
             self.compute_metrics = compute_metrics
-
-        # We might have removed columns from the dataset so we put them back.
-        if isinstance(eval_dataset, datasets.Dataset):
-            eval_dataset.set_format(type=eval_dataset.format["type"], columns=list(eval_dataset.features.keys()))
 
         if self.post_process_function is not None and self.compute_metrics is not None:
             eval_preds = self.post_process_function(eval_examples, eval_dataset, output.predictions)
@@ -93,10 +86,6 @@ class QuestionAnsweringTrainer(Trainer):
 
         if self.post_process_function is None or self.compute_metrics is None:
             return output
-
-        # We might have removed columns from the dataset so we put them back.
-        if isinstance(test_dataset, datasets.Dataset):
-            test_dataset.set_format(type=test_dataset.format["type"], columns=list(test_dataset.features.keys()))
 
         eval_preds = self.post_process_function(test_examples, test_dataset, output.predictions, "test")
         metrics = self.compute_metrics(eval_preds)
