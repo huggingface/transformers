@@ -1116,7 +1116,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
         if self.token is None:
             return
         with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(double_output=tmp_dir)
+            trainer = get_regression_trainer(output_dir=tmp_dir)
             trainer.save_model()
             url = trainer.push_to_hub(model_id="test-model")
 
@@ -1134,7 +1134,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
         if self.token is None:
             return
         with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(double_output=tmp_dir)
+            trainer = get_regression_trainer(output_dir=tmp_dir)
             trainer.save_model()
             url = trainer.push_to_hub(model_id="test-model-org", organization="huggingfacetest")
 
