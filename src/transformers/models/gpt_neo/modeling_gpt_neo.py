@@ -193,7 +193,7 @@ class GPTNeoAttentionMixin:
         return padded_tensor
 
     @staticmethod
-    def _split_seq_length_dim_to(tensors, dim_factor_1, dim_factor_2, hidden_size):
+    def _split_seq_length_dim_to(tensors, dim_factor_1, dim_factor_2):
         """
         Splits sequence length dim of tensors into `dim_factor_1` and `dim_factor_2` dims
         """
@@ -201,7 +201,7 @@ class GPTNeoAttentionMixin:
         split_dim_shape = (batch_size, dim_factor_1, dim_factor_2)
 
         if len(tensors.shape) == 3:
-            return torch.reshape(tensors, split_dim_shape + (hidden_size,))
+            return torch.reshape(tensors, split_dim_shape + (-1,))
         elif len(tensors.shape) == 2:
             return torch.reshape(tensors, split_dim_shape)
         else:
@@ -212,7 +212,7 @@ class GPTNeoAttentionMixin:
         block_length, num_blocks = GPTNeoAttentionMixin._get_block_length_and_num_blocks(seq_length, window_size)
         indices = torch.arange(seq_length, dtype=torch.long, device=device).repeat(batch_size, 1)
 
-        query_indices = GPTNeoAttentionMixin._split_seq_length_dim_to(indices, num_blocks, block_length, None)
+        query_indices = GPTNeoAttentionMixin._split_seq_length_dim_to(indices, num_blocks, block_length)
         key_indices = GPTNeoAttentionMixin._look_back(indices, block_length, window_size, is_key_value=False)
 
         # create mask tensor such that each block contains a causal_mask for that block
@@ -394,40 +394,6 @@ class GPTNeoLocalSelfAttention(nn.Module, GPTNeoAttentionMixin):
 
         self.window_size = config.window_size
 
-    def _create_attention_mask(self, batch_size, seq_length, num_blocks, block_length, device, attention_mask=None):
-        indices = torch.arange(seq_length, dtype=torch.long, device=device).repeat(batch_size, 1)
-
-        query_indices = self._split_seq_length_dim_to(indices, num_blocks, block_length, self.embed_dim)
-        key_indices = self._look_back(indices, block_length, self.window_size, is_key_value=False)
-
-        # create mask tensor such that each block contains a causal_mask for that block
-        causal_mask = torch.ge(query_indices.unsqueeze(-1), key_indices.unsqueeze(-2))
-
-        if attention_mask is None:
-            attention_mask = torch.ones(batch_size, seq_length, dtype=torch.long, device=device)
-
-        # A block can also be padded becuase of the _look_back operation
-        # look back into the attention_block such that it will also get padded the same way
-        # and have 0s in the padded position
-        attention_mask = self._look_back(attention_mask, block_length, self.window_size, is_key_value=False)
-        attention_mask = attention_mask.unsqueeze(-2)  # Add an extra dimension to account for hidden_dim
-
-        # Multiply the causal_mask with attention_mask so the padded positions (by _look_back operation)
-        # will contain 0s.
-        # This also makes sure that other positions ignored by the attention_mask will also be ignored
-        # in the causal_mask.
-        causal_mask = causal_mask * attention_mask
-
-        # In GPT Neo's local attention each window can attend to at most window_size tokens
-        # rest of the tokens should be ignored.
-        relative_position = key_indices.unsqueeze(-2) - query_indices.unsqueeze(-1)
-        visible = torch.gt(relative_position, -self.window_size)
-
-        causal_mask = causal_mask * visible
-        causal_mask = causal_mask.unsqueeze(-3).bool()  # Add an extra dimension to account for num_heads
-
-        return causal_mask
-
     def forward(
         self,
         hidden_states,
@@ -458,9 +424,9 @@ class GPTNeoLocalSelfAttention(nn.Module, GPTNeoAttentionMixin):
         # create buckets
         if layer_past is not None:
             # we just need 1 block with block_length 1 when caching is enabled
-            query = self._split_seq_length_dim_to(query, 1, 1, self.embed_dim)
+            query = self._split_seq_length_dim_to(query, 1, 1)
         else:
-            query = self._split_seq_length_dim_to(query, num_blocks, block_length, self.embed_dim)
+            query = self._split_seq_length_dim_to(query, num_blocks, block_length)
 
         key = self._look_back(key, block_length, self.window_size)
         value = self._look_back(value, block_length, self.window_size)
