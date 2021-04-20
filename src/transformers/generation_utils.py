@@ -488,25 +488,9 @@ class GenerationMixin:
         input_ids: torch.LongTensor, max_length: int
     ) -> Tuple[torch.Tensor, torch.Tensor, int]:
         unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
-        sequence_lengths = input_ids.new(input_ids.shape[0]).fill_(max_length)
 
         cur_len = input_ids.shape[-1]
-        return sequence_lengths, unfinished_sequences, cur_len
-
-    @staticmethod
-    def _update_seq_length_for_generation(
-        sequence_lengths: torch.LongTensor,
-        unfinished_sequences: torch.LongTensor,
-        cur_len: int,
-        is_eos_in_next_token: torch.BoolTensor,
-    ) -> Tuple[torch.LongTensor, torch.LongTensor]:
-        # check if sentence is not finished yet
-        is_sent_unfinished = unfinished_sequences.mul(is_eos_in_next_token.long()).bool()
-
-        # update sentence length
-        sequence_lengths = sequence_lengths.masked_fill(is_sent_unfinished, cur_len)
-        unfinished_sequences = unfinished_sequences.mul((~is_eos_in_next_token).long())
-        return sequence_lengths, unfinished_sequences
+        return unfinished_sequences, cur_len
 
     @staticmethod
     def _update_model_kwargs_for_generation(
@@ -1272,9 +1256,7 @@ class GenerationMixin:
             )
 
         # init sequence length tensors
-        sequence_lengths, unfinished_sequences, cur_len = self._init_sequence_length_for_generation(
-            input_ids, max_length
-        )
+        unfinished_sequences, cur_len = self._init_sequence_length_for_generation(input_ids, max_length)
 
         this_peer_finished = False  # used by synced_gpus only
         while cur_len < max_length:
@@ -1340,9 +1322,7 @@ class GenerationMixin:
 
             # update sequence length
             if eos_token_id is not None:
-                sequence_lengths, unfinished_sequences = self._update_seq_length_for_generation(
-                    sequence_lengths, unfinished_sequences, cur_len, next_tokens == eos_token_id
-                )
+                unfinished_sequences = unfinished_sequences.mul((~next_tokens == eos_token_id).long())
 
             # update model kwargs
             model_kwargs = self._update_model_kwargs_for_generation(
@@ -1512,9 +1492,7 @@ class GenerationMixin:
             )
 
         # init sequence length tensors
-        sequence_lengths, unfinished_sequences, cur_len = self._init_sequence_length_for_generation(
-            input_ids, max_length
-        )
+        unfinished_sequences, cur_len = self._init_sequence_length_for_generation(input_ids, max_length)
 
         this_peer_finished = False  # used by synced_gpus only
         # auto-regressive generation
@@ -1584,9 +1562,7 @@ class GenerationMixin:
 
             # update sequence length
             if eos_token_id is not None:
-                sequence_lengths, unfinished_sequences = self._update_seq_length_for_generation(
-                    sequence_lengths, unfinished_sequences, cur_len, next_tokens == eos_token_id
-                )
+                unfinished_sequences = unfinished_sequences.mul((~next_tokens == eos_token_id).long())
 
             # update model kwargs
             model_kwargs = self._update_model_kwargs_for_generation(
