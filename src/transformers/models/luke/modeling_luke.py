@@ -1070,7 +1070,7 @@ class LukeForEntityClassification(LukePreTrainedModel):
 
             >>> text = "Beyoncé lives in New York."
             >>> entity_spans = [(0, 7)]  # character-based entity span corresponding to "Beyoncé"
-            >>> inputs = tokenizer(text, entity_spans=entity_spans, task="entity_classification", return_tensors="pt")
+            >>> inputs = tokenizer(text, entity_spans=entity_spans, return_tensors="pt")
             >>> outputs = model(**inputs)
             >>> logits = outputs.logits
         """
@@ -1175,9 +1175,12 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
 
             >>> from transformers import LukeTokenizer, LukeForEntityPairClassification
 
+            >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base", task="entity_pair_classification")
+            >>> model = LukeForEntityPairClassification.from_pretrained("studio-ousia/luke-base")
+            
             >>> text = "Beyoncé lives in New York."
             >>> entity_spans = [(0, 7), (17, 25)]  # character-based entity spans corresponding to "Beyoncé" and "New York"
-            >>> inputs = tokenizer(text, entity_spans=entity_spans, task="entity_pair_classification", return_tensors="pt")
+            >>> inputs = tokenizer(text, entity_spans=entity_spans, return_tensors="pt")
             >>> outputs = model(**inputs)
             >>> logits = outputs.logits
         """

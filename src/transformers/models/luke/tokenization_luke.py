@@ -124,13 +124,12 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             - **entity_position_ids** -- List of entity positions in the input sequence to be fed to a model.
 
             - **entity_token_type_ids** -- List of entity token type ids to be fed to a model (when
-            :obj:`return_token_type_ids=True` or if `"entity_token_type_ids"` is in :obj:`self.model_input_names`).
+              :obj:`return_token_type_ids=True` or if `"entity_token_type_ids"` is in :obj:`self.model_input_names`).
 
               `What are token type IDs? <../glossary.html#token-type-ids>`__
 
             - **entity_attention_mask** -- List of indices specifying which entities should be attended to by the model
-            (when :obj:`return_attention_mask=True` or if `"entity_attention_mask"` is in
-            :obj:`self.model_input_names`).
+              (when :obj:`return_attention_mask=True` or if `"entity_attention_mask"` is in :obj:`self.model_input_names`).
 
               `What are attention masks? <../glossary.html#attention-mask>`__
 
@@ -141,6 +140,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             - **special_tokens_mask** -- List of 0s and 1s, with 1 specifying added special tokens and 0 specifying
               regular sequence tokens (when :obj:`add_special_tokens=True` and :obj:`return_special_tokens_mask=True`).
             - **length** -- The length of the inputs (when :obj:`return_length=True`)
+
 """
 
 

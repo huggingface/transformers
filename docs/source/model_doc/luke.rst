@@ -43,6 +43,14 @@ Tips:
 - LUKE adds :obj:`entity_ids`, :obj:`entity_attention_mask`, :obj:`entity_token_type_ids` and
   :obj:`entity_position_ids` as extra input to the model. Input entities can be special entities (e.g., [MASK]) or
   Wikipedia entities (e.g., New York City). You can obtain those using :class:`~transformers.LukeTokenizer`.
+- There are 3 head models defined:
+  - :class:`~transformers.LukeForEntityClassification`, for tasks such as entity typing (given an entity in a sentence, classify it), 
+  e.g. the `Open Entity dataset <https://www.cs.utexas.edu/~eunsol/html_pages/open_entity.html>__`. Here, one places a linear head
+  on top of the special <ent> token. 
+  - :class:`~transformers.LukeForEntityPairClassification`, for tasks such as relation classification (classifying the relationship 
+  between two entities), e.g. the `TACRED dataset <https://nlp.stanford.edu/projects/tacred/>__`
+  - :class:`~transformers.LukeForEntitySpanClassification`, for tasks such as named-entity recognition (NER). Here, one provides all 
+  possible entity spans to the model. Each span is then classified appropriately. 
 
 Example:
 
@@ -70,6 +78,7 @@ Example:
     >>> word_last_hidden_state = outputs.last_hidden_state
     >>> entity_last_hidden_state = outputs.entity_last_hidden_state
 
+This model was contributed by `ikuyamada <https://huggingface.co/ikuyamada>`__ and `nielsr <https://huggingface.co/nielsr>`__.
 The original code can be found `here <https://github.com/studio-ousia/luke>`__.
 
 
