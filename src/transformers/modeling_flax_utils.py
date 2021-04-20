@@ -25,6 +25,7 @@ import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.serialization import from_bytes, to_bytes
 from flax.traverse_util import flatten_dict, unflatten_dict
+from huggingface_hub import ModelHubMixin
 from jax.random import PRNGKey
 
 from .configuration_utils import PretrainedConfig
@@ -54,7 +55,7 @@ ACT2FN = {
 }
 
 
-class FlaxPreTrainedModel(ABC):
+class FlaxPreTrainedModel(ABC, ModelHubMixin):
     r"""
     Base class for all models.
 
