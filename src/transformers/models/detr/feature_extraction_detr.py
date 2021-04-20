@@ -249,14 +249,6 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return image, target
 
-    def _max_by_axis(self, the_list):
-        # type: (List[List[int]]) -> List[int]
-        maxes = the_list[0]
-        for sublist in the_list[1:]:
-            for index, item in enumerate(sublist):
-                maxes[index] = max(maxes[index], item)
-        return maxes
-
     def _resize(self, image, size, tensor_type, target=None, max_size=None):
         """
         Resize the image to the given size. Size can be min_size (scalar) or (w, h) tuple. If size is an int, smaller edge 
@@ -358,6 +350,14 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         
         return image, target
     
+    def _max_by_axis(self, the_list):
+        # type: (List[List[int]]) -> List[int]
+        maxes = the_list[0]
+        for sublist in the_list[1:]:
+            for index, item in enumerate(sublist):
+                maxes[index] = max(maxes[index], item)
+        return maxes
+    
     def __call__(
         self,
         images: Union[
@@ -365,8 +365,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         ],
         annotations: Union[List[Dict], List[List[Dict]]] = None,
         return_segmentation_masks: bool = False,
-        padding: bool = True,
-        return_pixel_mask: bool = True,
+        pad_and_return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchFeature:
@@ -392,12 +391,11 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
             return_segmentation_masks (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether to return segmentation masks. Should only be set to `True` if the annotations include a "segmentation" key. 
-
-            padding (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether to pad the images up to the largest image in a batch. 
             
-            return_pixel_mask (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether or not to return the pixel mask. If left to the default, will return a pixel mask that is:
+            pad_and_return_pixel_mask (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not to pad images up to the largest image in a batch and create a pixel mask. 
+                
+                If left to the default, will return a pixel mask that is:
 
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
@@ -499,8 +497,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             else:
                 images = [self._normalize(image=image, mean=self.image_mean, std=self.image_std, tensor_type=return_tensors)[0] for image in images]
         
-        if padding: 
-            assert padding == return_pixel_mask, "If images are padded, a pixel mask should be created"
+        if pad_and_return_pixel_mask: 
             # pad images up to largest image in batch and create pixel_mask
             max_size = self._max_by_axis([list(image.shape) for image in images])
             c, h, w = max_size
@@ -520,7 +517,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         # return as BatchFeature
         data = {}
         data["pixel_values"] = images
-        if return_pixel_mask:
+        if pad_and_return_pixel_mask:
             data["pixel_mask"] = pixel_mask
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
@@ -529,6 +526,28 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return encoded_inputs
 
+    def pad_and_create_pixel_mask(tensor_list):
+        """ Pad images up to the largest image in a batch and create a corresponding pixel_mask.
+
+        Only supports PyTorch. 
+        
+        Args:
+            tensor_list (:obj:`List[torch.Tensor]`):
+                List of images to be padded. Each image should be a PyTorch tensor of shape (C, H, W).
+        """
+        max_size = self._max_by_axis([list(image.shape) for image in tensor_list])
+        batch_shape = [len(tensor_list)] + max_size
+        b, c, h, w = batch_shape
+        dtype = tensor_list[0].dtype
+        device = tensor_list[0].device
+        tensor = torch.zeros(batch_shape, dtype=dtype, device=device)
+        mask = torch.zeros((b, h, w), dtype=torch.bool, device=device)
+        for img, pad_img, m in zip(tensor_list, tensor, mask):
+            pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
+            m[: img.shape[1], :img.shape[2]] = True
+        
+        return tensor, mask
+    
     # taken from https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/models/detr.py#L258
     def post_process(self, outputs, target_sizes):
         """ Converts the output of :class:`~transformers.DetrForObjectDetection` into the format expected by the COCO api.

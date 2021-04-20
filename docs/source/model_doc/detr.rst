@@ -84,6 +84,10 @@ Tips:
   the model output the correct number of objects of each class. If you set the parameter :obj:`auxiliary_loss` of
   :class:`~transformers.DetrConfig` to :obj:`True`, then prediction feedforward neural networks and Hungarian losses
   are added after each decoder layer (with the FFNs sharing parameters).
+- If you want to train the model in a distributed environment across multiple nodes, then one should update the `num_boxes` 
+  variable in the `SetCriterion` class of `modeling_detr.py`. When training on multiple nodes, this should be set to the 
+  average number of target boxes across all nodes, as can be seen in the original implementation
+  `here <https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/models/detr.py#L227-L232>__`. 
 
 DetrConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
