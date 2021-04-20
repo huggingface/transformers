@@ -358,9 +358,9 @@ class CallbackHandler(TrainerCallback):
     def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
         return self.call_event("on_step_end", args, state, control)
 
-    def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, metrics, **kwargs):
+    def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, metrics):
         control.should_evaluate = False
-        return self.call_event("on_evaluate", args, state, control, metrics=metrics, **kwargs)
+        return self.call_event("on_evaluate", args, state, control, metrics=metrics)
 
     def on_save(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
         control.should_save = False
