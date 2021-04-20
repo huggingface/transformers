@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import os
-from abc import ABC
 from functools import partial
 from pickle import UnpicklingError
 from typing import Dict, Set, Tuple, Union
@@ -55,7 +54,7 @@ ACT2FN = {
 }
 
 
-class FlaxPreTrainedModel(ABC, ModelHubMixin):
+class FlaxPreTrainedModel(ModelHubMixin):
     r"""
     Base class for all models.
 
