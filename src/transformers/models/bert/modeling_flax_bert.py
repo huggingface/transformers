@@ -26,7 +26,7 @@ from jax import lax
 from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel
+from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, overwrite_call_docstring
 from ...utils import logging
 from .configuration_bert import BertConfig
 
@@ -731,9 +731,9 @@ class FlaxBertForMultipleChoice(FlaxBertPreTrainedModel):
 
 
 # adapt docstring slightly for FlaxBertForMultipleChoice
-FlaxBertForMultipleChoice.__call__ = add_start_docstrings_to_model_forward(
-    BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
-)(FlaxBertForMultipleChoice.__call__)
+overwrite_call_docstring(
+    FlaxBertForMultipleChoice, BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+)
 
 
 class FlaxBertForTokenClassificationModule(nn.Module):
