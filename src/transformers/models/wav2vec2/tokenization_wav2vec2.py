@@ -142,6 +142,12 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}
 
+        # make sure that tokens made of several
+        # characters are not split at tokenization
+        for token in self.encoder.keys():
+            if len(token) > 1:
+                self.unique_no_split_tokens.append(token)
+
     @property
     def word_delimiter_token(self) -> str:
         """
@@ -184,7 +190,9 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         if self.do_lower_case:
             text = text.upper()
 
-        return list(text.replace(" ", self.word_delimiter_token))
+        text.replace(" ", self.word_delimiter_token)
+
+        return list(text)
 
     def _convert_token_to_id(self, token: str) -> int:
         """Converts a token (str) in an index (integer) using the vocab."""
@@ -366,6 +374,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
+
         self.decoder = {v: k for k, v in self.encoder.items()}
 
     @property
