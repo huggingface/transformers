@@ -1584,6 +1584,7 @@ if TYPE_CHECKING:
 
     # Pipelines
     from .pipelines import (
+        AutomaticSpeechRecognitionPipeline,
         Conversation,
         ConversationalPipeline,
         CsvPipelineDataFormat,
