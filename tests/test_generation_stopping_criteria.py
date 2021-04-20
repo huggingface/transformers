@@ -73,7 +73,6 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         with self.assertWarns(UserWarning):
             validate_stopping_criteria(StoppingCriteriaList([MaxLengthCriteria(10)]), 11)
 
-        stopping_criteria = StoppingCriteriaList()
-        validate_stopping_criteria(stopping_criteria, 11)
+        stopping_criteria = validate_stopping_criteria(StoppingCriteriaList(), 11)
 
         self.assertEqual(len(stopping_criteria), 1)
