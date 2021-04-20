@@ -91,7 +91,7 @@ class FlaxPreTrainedModel(ABC):
         self._required_params = set(flatten_dict(unfreeze(random_params)).keys())
         self.params = random_params
 
-    def init(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> Dict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> Dict:
         raise NotImplementedError(f"init method has to be implemented for {self}")
 
     @property

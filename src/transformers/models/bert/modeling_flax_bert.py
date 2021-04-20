@@ -684,7 +684,7 @@ class FlaxBertForSequenceClassificationModule(nn.Module):
     BERT_START_DOCSTRING,
 )
 class FlaxBertForSequenceClassification(FlaxBertPreTrainedModel):
-    module_class = FlaxBertForNextSentencePredictionModule
+    module_class = FlaxBertForSequenceClassificationModule
 
 
 class FlaxBertForMultipleChoiceModule(nn.Module):
