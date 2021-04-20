@@ -36,6 +36,7 @@ from transformers import (
     TFAutoModelForSequenceClassification,
     TrainingArguments,
     set_seed,
+    PretrainedConfig
 )
 from transformers.file_utils import CONFIG_NAME, TF2_WEIGHTS_NAME
 from transformers.trainer_utils import is_main_process
@@ -133,9 +134,12 @@ class DataTrainingArguments:
     the command line.
     """
 
-    train_file: Optional[str] = field(metadata={"help": "A csv or a json file containing the training data."})
-    validation_file: Optional[str] = field(metadata={"help": "A csv or a json file containing the validation data."})
-    test_file: Optional[str] = field(default=None, metadata={"help": "A csv or a json file containing the test data."})
+    train_file: Optional[str] = field(default=None,
+                                      metadata={"help": "A csv or a json file containing the training data."})
+    validation_file: Optional[str] = field(default=None,
+                                           metadata={"help": "A csv or a json file containing the validation data."})
+    test_file: Optional[str] = field(default=None,
+                                     metadata={"help": "A csv or a json file containing the test data."})
 
     max_seq_length: int = field(
         default=128,
@@ -238,6 +242,10 @@ def main():
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
     output_dir = Path(training_args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    assert (data_args.train_file is not None
+            or data_args.validation_file is not None
+            or data_args.test_file is not None), \
+        "Need to supply at least one of --train_file, --validation_file or --test_file!"
     # endregion
 
     # region Checkpoints
@@ -266,11 +274,6 @@ def main():
     )
     logger.setLevel(logging.INFO)
 
-    # Log a short summary for each process:
-    logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
-    )
     # Set the verbosity to info of the Transformers logger (on main process only):
     if is_main_process(training_args.local_rank):
         transformers.utils.logging.set_verbosity_info()
@@ -309,19 +312,24 @@ def main():
     # endregion
 
     # region Label preprocessing
-    # By default we assume that if your label column looks like a float then you're doing regression,
-    # and if not then you're doing classification. This is something you may want to change!
-    is_regression = datasets["train"].features["label"].dtype in ["float32", "float64"]
-    if is_regression:
-        num_labels = 1
+    # If you've passed us a training set, we try to infer your labels from it
+    if 'train' in datasets:
+        # By default we assume that if your label column looks like a float then you're doing regression,
+        # and if not then you're doing classification. This is something you may want to change!
+        is_regression = datasets["train"].features["label"].dtype in ["float32", "float64"]
+        if is_regression:
+            num_labels = 1
+        else:
+            # A useful fast method:
+            # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.unique
+            label_list = datasets["train"].unique("label")
+            label_list.sort()  # Let's sort it for determinism
+            num_labels = len(label_list)
+    # If you haven't passed a training set, we read label info from the saved model (this happens later)
     else:
-        # A useful fast method:
-        # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.unique
-        label_list = datasets["train"].unique("label")
-        label_list.sort()  # Let's sort it for determinism
-        num_labels = len(label_list)
-        label_to_id = {v: i for i, v in enumerate(label_list)}
-        id_to_label = {i: v for v, i in label_to_id.items()}
+        num_labels = None
+        label_list = None
+        is_regression = None
     # endregion
 
     # region Load pretrained model and tokenizer
@@ -330,13 +338,18 @@ def main():
     #
     # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
+    if checkpoint is not None:
+        config_path = training_args.output_dir
+    elif model_args.config_name:
+        config_path = model_args.config_name
+    else:
+        config_path = model_args.model_name_or_path
     config = AutoConfig.from_pretrained(
-        model_args.config_name if model_args.config_name else model_args.model_name_or_path,
+        config_path,
         num_labels=num_labels,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
-        id2label=id_to_label
+        use_auth_token=True if model_args.use_auth_token else None
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
@@ -366,6 +379,7 @@ def main():
         clipnorm=training_args.max_grad_norm,
     )
     if is_regression:
+        # TODO Make sure we handle saving/loading regression models properly
         loss = tf.keras.losses.MeanSquaredError()
     else:
         loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
@@ -399,6 +413,39 @@ def main():
         )
     max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
+    # Ensure that our labels match the model's, if it has some pre-specified
+    if 'train' in datasets:
+        if (
+                not is_regression
+                and model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id
+        ):
+            breakpoint()
+            # Some have all caps in their config, some don't.
+            label_name_to_id = {k.lower(): v for k, v in model.config.label2id.items()}
+            if list(sorted(label_name_to_id.keys())) == list(sorted(label_list)):
+                label_to_id = label_name_to_id  # Use the model's labels
+            else:
+                logger.warning(
+                    "Your model seems to have been trained with labels, but they don't match the dataset: ",
+                    f"model labels: {list(sorted(label_name_to_id.keys()))}, dataset labels: {list(sorted(label_list))}."
+                    "\nIgnoring the model labels as a result.",
+                )
+                label_to_id = {v: i for i, v in enumerate(label_list)}
+        elif not is_regression:
+            label_to_id = {v: i for i, v in enumerate(label_list)}
+        else:
+            label_to_id = None
+        model.config.label2id = label_to_id
+        if model.config.label2id is not None:
+            model.config.id2label = {id: label for label, id in label_to_id.items()}
+        else:
+            model.config.id2label = None
+
+    if 'validation' in datasets and model.config.label2id is not None:
+        validation_label_list = datasets["validation"].unique("label")
+        for val_label in validation_label_list:
+            assert val_label in label_to_id, f"Label {val_label} is in the validation set but not the training set!"
+
     def preprocess_function(examples):
         # Tokenize the texts
         args = (
@@ -406,9 +453,9 @@ def main():
         )
         result = tokenizer(*args, padding=padding, max_length=max_seq_length, truncation=True)
 
-        # Map labels to IDs (not necessary for GLUE tasks)
-        if label_to_id is not None and "label" in examples:
-            result["label"] = [(label_to_id[l] if l != -1 else -1) for l in examples["label"]]
+        # Map labels to IDs
+        if model.config.label2id is not None and "label" in examples:
+            result["label"] = [(model.config.label2id[l] if l != -1 else -1) for l in examples["label"]]
         return result
 
     datasets = datasets.map(preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache)
