@@ -220,6 +220,10 @@ class LukeEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
+        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
+        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+
         # End copy
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
@@ -486,7 +490,9 @@ class LukeAttention(nn.Module):
         else:
             entity_attention_output = attention_output[:, word_size:, :]
 
-        outputs = (word_attention_output, entity_attention_output) + self_outputs[2:] # add attentions if we output them
+        outputs = (word_attention_output, entity_attention_output) + self_outputs[
+            2:
+        ]  # add attentions if we output them
 
         return outputs
 
@@ -807,7 +813,6 @@ class LukeModel(LukePreTrainedModel):
         self.config = config
 
         self.embeddings = LukeEmbeddings(config)
-        self.embeddings.token_type_embeddings.requires_grad = False
         self.entity_embeddings = LukeEntityEmbeddings(config)
         self.encoder = LukeEncoder(config)
 
@@ -961,7 +966,9 @@ class LukeModel(LukePreTrainedModel):
             entity_hidden_states=encoder_outputs.entity_hidden_states,
         )
 
-    def get_extended_attention_mask(self, word_attention_mask: torch.LongTensor, entity_attention_mask: Optional[torch.LongTensor]):
+    def get_extended_attention_mask(
+        self, word_attention_mask: torch.LongTensor, entity_attention_mask: Optional[torch.LongTensor]
+    ):
         """
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
 

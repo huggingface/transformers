@@ -14,8 +14,8 @@
 # limitations under the License.
 """ LUKE configuration """
 
-from ...utils import logging
 from ...configuration_utils import PretrainedConfig
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -31,7 +31,8 @@ class LukeConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a :class:`~transformers.LukeModel`. It is used to
     instantiate a LUKE model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
 
     Args:
