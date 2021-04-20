@@ -1318,7 +1318,7 @@ class GenerationMixin:
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id is not None:
-                unfinished_sequences = unfinished_sequences.mul((~next_tokens == eos_token_id).long())
+                unfinished_sequences = unfinished_sequences.mul((next_tokens != eos_token_id).long())
 
             # stop when each sentence is finished, or if we exceed the maximum length
             if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
@@ -1554,7 +1554,7 @@ class GenerationMixin:
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id is not None:
-                unfinished_sequences = unfinished_sequences.mul((~next_tokens == eos_token_id).long())
+                unfinished_sequences = unfinished_sequences.mul((next_tokens != eos_token_id).long())
 
             # stop when each sentence is finished, or if we exceed the maximum length
             if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
