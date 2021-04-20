@@ -320,7 +320,7 @@ class NotebookProgressCallback(TrainerCallback):
             else:
                 values["Step"] = state.global_step
             if f"{metric_key_prefix}_loss" in metrics:
-                values["Validation Loss"] = metrics["eval_loss"]
+                values["Validation Loss"] = metrics[f"{metric_key_prefix}_loss"]
             _ = metrics.pop("total_flos", None)
             _ = metrics.pop("epoch", None)
             _ = metrics.pop(f"{metric_key_prefix}_runtime", None)
