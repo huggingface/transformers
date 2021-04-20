@@ -138,6 +138,7 @@ jobs:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get install git-lfs
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,speech,vision]
