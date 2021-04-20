@@ -484,15 +484,6 @@ class GenerationMixin:
         return input_ids, model_kwargs
 
     @staticmethod
-    def _init_sequence_length_for_generation(
-        input_ids: torch.LongTensor, max_length: int
-    ) -> Tuple[torch.Tensor, torch.Tensor, int]:
-        unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
-
-        cur_len = input_ids.shape[-1]
-        return unfinished_sequences, cur_len
-
-    @staticmethod
     def _update_model_kwargs_for_generation(
         outputs: ModelOutput, model_kwargs: Dict[str, Any], is_encoder_decoder: bool = False
     ) -> Dict[str, Any]:
@@ -1255,8 +1246,9 @@ class GenerationMixin:
                 model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
             )
 
-        # init sequence length tensors
-        unfinished_sequences, cur_len = self._init_sequence_length_for_generation(input_ids, max_length)
+        # keep track of which sequences are already finished
+        unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
+        cur_len = input_ids.shape[-1]
 
         this_peer_finished = False  # used by synced_gpus only
         while cur_len < max_length:
@@ -1491,8 +1483,9 @@ class GenerationMixin:
                 model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
             )
 
-        # init sequence length tensors
-        unfinished_sequences, cur_len = self._init_sequence_length_for_generation(input_ids, max_length)
+        # keep track of which sequences are already finished
+        unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
+        cur_len = input_ids.shape[-1]
 
         this_peer_finished = False  # used by synced_gpus only
         # auto-regressive generation
