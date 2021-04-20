@@ -394,11 +394,6 @@ class Trainer:
             raise ValueError("train_dataset does not implement __len__, max_steps has to be specified")
 
         self._signature_columns = None
-        if is_datasets_available():
-            if isinstance(train_dataset, datasets.Dataset):
-                self._remove_unused_columns(self.train_dataset, description="training")
-            if isinstance(eval_dataset, datasets.Dataset):
-                self._remove_unused_columns(self.eval_dataset, description="evaluation")
 
         # Mixed precision setup
         self.use_apex = False
@@ -503,7 +498,13 @@ class Trainer:
                 f"`{self.model.__class__.__name__}.forward` and have been ignored: {', '.join(ignored_columns)}."
             )
 
-        dataset.set_format(type=dataset.format["type"], columns=columns, format_kwargs=dataset.format["format_kwargs"])
+        if version.parse(datasets.__version__) < version.parse("1.4.0"):
+            dataset.set_format(
+                type=dataset.format["type"], columns=columns, format_kwargs=dataset.format["format_kwargs"]
+            )
+            return dataset
+        else:
+            return dataset.remove_columns(ignored_columns)
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
         if not isinstance(self.train_dataset, collections.abc.Sized):
@@ -565,17 +566,20 @@ class Trainer:
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
 
-        if isinstance(self.train_dataset, torch.utils.data.dataset.IterableDataset):
+        train_dataset = self.train_dataset
+        if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
+            train_dataset = self._remove_unused_columns(train_dataset, description="training")
+
+        if isinstance(train_dataset, torch.utils.data.dataset.IterableDataset):
             if self.args.world_size > 1:
                 train_dataset = IterableDatasetShard(
-                    self.train_dataset,
+                    train_dataset,
                     batch_size=self.args.train_batch_size,
                     drop_last=self.args.dataloader_drop_last,
                     num_processes=self.args.world_size,
                     process_index=self.args.process_index,
                 )
-            else:
-                train_dataset = self.train_dataset
+
             return DataLoader(
                 train_dataset,
                 batch_size=self.args.train_batch_size,
@@ -587,7 +591,7 @@ class Trainer:
         train_sampler = self._get_train_sampler()
 
         return DataLoader(
-            self.train_dataset,
+            train_dataset,
             batch_size=self.args.train_batch_size,
             sampler=train_sampler,
             collate_fn=self.data_collator,
@@ -638,9 +642,10 @@ class Trainer:
         """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
-        elif is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
-            self._remove_unused_columns(eval_dataset, description="evaluation")
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
+
+        if is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
+            eval_dataset = self._remove_unused_columns(eval_dataset, description="evaluation")
 
         if isinstance(eval_dataset, torch.utils.data.dataset.IterableDataset):
             if self.args.world_size > 1:
@@ -683,7 +688,7 @@ class Trainer:
                 ``model.forward()`` method are automatically removed. It must implement :obj:`__len__`.
         """
         if is_datasets_available() and isinstance(test_dataset, datasets.Dataset):
-            self._remove_unused_columns(test_dataset, description="test")
+            test_dataset = self._remove_unused_columns(test_dataset, description="test")
 
         if isinstance(test_dataset, torch.utils.data.dataset.IterableDataset):
             if self.args.world_size > 1:
