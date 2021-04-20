@@ -1304,27 +1304,23 @@ class GenerationMixin:
             # argmax
             next_tokens = torch.argmax(next_tokens_scores, dim=-1)
 
-            # add code that transforms next_tokens to tokens_to_add
+            # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
                 assert pad_token_id is not None, "If eos_token_id is defined, make sure that pad_token_id is defined."
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
-            # add token and increase length by one
+            # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
-
-            # update sequence length
-            if eos_token_id is not None:
-                unfinished_sequences = unfinished_sequences.mul((~next_tokens == eos_token_id).long())
-
-            # update model kwargs
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
-
-            # increase cur_len
             cur_len = cur_len + 1
 
-            # stop when there is a </s> in each sentence, or if we exceed the maximum length
+            # if eos_token was found in one sentence, set sentence to finished
+            if eos_token_id is not None:
+                unfinished_sequences = unfinished_sequences.mul((~next_tokens == eos_token_id).long())
+
+            # stop when each sentence is finished, or if we exceed the maximum length
             if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
                 if not synced_gpus:
                     break
@@ -1542,30 +1538,25 @@ class GenerationMixin:
 
             # sample
             probs = F.softmax(next_token_scores, dim=-1)
-
             next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
 
-            # add code that transforms next_tokens to tokens_to_add
+            # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
                 assert pad_token_id is not None, "If eos_token_id is defined, make sure that pad_token_id is defined."
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
-            # add token and increase length by one
+            # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
-
-            # update sequence length
-            if eos_token_id is not None:
-                unfinished_sequences = unfinished_sequences.mul((~next_tokens == eos_token_id).long())
-
-            # update model kwargs
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
-
-            # increase cur_len
             cur_len = cur_len + 1
 
-            # stop when there is a </s> in each sentence, or if we exceed the maximum length
+            # if eos_token was found in one sentence, set sentence to finished
+            if eos_token_id is not None:
+                unfinished_sequences = unfinished_sequences.mul((~next_tokens == eos_token_id).long())
+
+            # stop when each sentence is finished, or if we exceed the maximum length
             if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
                 if not synced_gpus:
                     break
