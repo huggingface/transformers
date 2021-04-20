@@ -128,6 +128,7 @@ jobs:
             - image: circleci/python:3.7
         environment:
             OMP_NUM_THREADS: 1
+            RUN_MODEL_HUB_INTEGRATION: yes
             TRANSFORMERS_IS_CI: yes
         resource_class: xlarge
         parallelism: 1
