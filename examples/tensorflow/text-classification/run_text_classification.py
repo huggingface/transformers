@@ -222,8 +222,6 @@ class ModelArguments:
             "with private models)."
         },
     )
-
-
 # endregion
 
 
@@ -344,13 +342,21 @@ def main():
         config_path = model_args.config_name
     else:
         config_path = model_args.model_name_or_path
-    config = AutoConfig.from_pretrained(
-        config_path,
-        num_labels=num_labels,
-        cache_dir=model_args.cache_dir,
-        revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None
-    )
+    if num_labels is not None:
+        config = AutoConfig.from_pretrained(
+            config_path,
+            num_labels=num_labels,
+            cache_dir=model_args.cache_dir,
+            revision=model_args.model_revision,
+            use_auth_token=True if model_args.use_auth_token else None
+        )
+    else:
+        config = AutoConfig.from_pretrained(
+            config_path,
+            cache_dir=model_args.cache_dir,
+            revision=model_args.model_revision,
+            use_auth_token=True if model_args.use_auth_token else None
+        )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
@@ -388,7 +394,8 @@ def main():
 
     # region Dataset preprocessing
     # Again, we try to have some nice defaults but don't hesitate to tweak to your use case.
-    non_label_column_names = [name for name in datasets["train"].column_names if name != "label"]
+    column_names = {col for cols in datasets.column_names.values() for col in cols}
+    non_label_column_names = [name for name in column_names if name != "label"]
     if "sentence1" in non_label_column_names and "sentence2" in non_label_column_names:
         sentence1_key, sentence2_key = "sentence1", "sentence2"
     elif "sentence1" in non_label_column_names:
@@ -419,9 +426,7 @@ def main():
                 not is_regression
                 and model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id
         ):
-            breakpoint()
-            # Some have all caps in their config, some don't.
-            label_name_to_id = {k.lower(): v for k, v in model.config.label2id.items()}
+            label_name_to_id = model.config.label2id
             if list(sorted(label_name_to_id.keys())) == list(sorted(label_list)):
                 label_to_id = label_name_to_id  # Use the model's labels
             else:
@@ -435,11 +440,14 @@ def main():
             label_to_id = {v: i for i, v in enumerate(label_list)}
         else:
             label_to_id = None
+        # Now we've established our label2id, let's overwrite the model config with it.
         model.config.label2id = label_to_id
         if model.config.label2id is not None:
             model.config.id2label = {id: label for label, id in label_to_id.items()}
         else:
             model.config.id2label = None
+    else:
+        label_to_id = model.config.label2id  # Just load the data from the model
 
     if 'validation' in datasets and model.config.label2id is not None:
         validation_label_list = datasets["validation"].unique("label")
@@ -494,6 +502,13 @@ def main():
 
         callbacks = [SavePretrainedCallback(output_dir=training_args.output_dir)]
         model.fit(training_dataset, validation_data=eval_dataset, epochs=10, callbacks=callbacks)
+    elif "validation" in datasets:
+        # If there's a validation dataset but no training set, just evaluate the metrics
+        eval_dataset = DataSequence(
+            eval_dataset, non_label_column_names, batch_size=training_args.per_device_eval_batch_size, labels=True
+        )
+        print("Computing loss on validation data...")
+        model.evaluate(eval_dataset)
     # endregion
 
     # region Prediction
@@ -505,7 +520,6 @@ def main():
         )
         predictions = model.predict(test_dataset)["logits"]
         predictions = np.squeeze(predictions) if is_regression else np.argmax(predictions, axis=1)
-
         output_test_file = os.path.join(training_args.output_dir, "test_results.txt")
         with open(output_test_file, "w") as writer:
             writer.write("index\tprediction\n")
@@ -513,7 +527,7 @@ def main():
                 if is_regression:
                     writer.write(f"{index}\t{item:3.3f}\n")
                 else:
-                    item = label_list[item]
+                    item = model.config.id2label[item]
                     writer.write(f"{index}\t{item}\n")
         logger.info(f"Wrote predictions to {output_test_file}!")
     # endregion
