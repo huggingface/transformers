@@ -299,7 +299,7 @@ class TrainingArguments:
             Whether you want to pin memory in data loaders or not. Will default to :obj:`True`.
         skip_memory_metrics (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to skip adding of memory profiler reports to metrics. Defaults to :obj:`False`.
-        upload_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to upload the trained model to the hub after training. This argument is not directly used by
             :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
             the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
@@ -531,7 +531,7 @@ class TrainingArguments:
     use_legacy_prediction_loop: bool = field(
         default=False, metadata={"help": "Whether or not to use the legacy prediction_loop in the Trainer."}
     )
-    upload_to_hub: bool = field(
+    push_to_hub: bool = field(
         default=False, metadata={"help": "Whether or not to upload the trained model to the model hub after training."}
     )
     _n_gpu: int = field(init=False, repr=False, default=-1)

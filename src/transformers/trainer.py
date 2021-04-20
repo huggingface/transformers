@@ -23,6 +23,7 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 import time
 import warnings
 from logging import StreamHandler
@@ -2274,7 +2275,7 @@ class Trainer:
         else:
             return 0
 
-    def upload_model_to_hub(
+    def push_model_to_hub(
         self,
         save_directory: Optional[str] = None,
         model_id: Optional[str] = None,
@@ -2305,6 +2306,9 @@ class Trainer:
         Returns:
             The url of the commit of your model in the given repository.
         """
+        if not self.is_world_process_zero():
+            return
+
         if not isinstance(unwrap_model(self.model), ModelHubMixin):
             raise ValueError(
                 "The `upload_model_to_hub` method only works for models that inherit from `ModelhubMixin` models. See "
@@ -2312,15 +2316,25 @@ class Trainer:
             )
         if save_directory is None:
             save_directory = self.args.output_dir
+        if model_id is None:
+            splits = [s for s in save_directory.split(os.path.sep) if len(s) > 0]
+            model_id = splits[-1]
 
-        unwrap_model(self.model).push_to_hub(
-            save_directory=save_directory,
-            model_id=model_id,
-            repo_url=repo_url,
-            commit_message=commit_message,
-            organization=organization,
-            private=private,
-        )
+        # To avoid pushing all checkpoints, we just copy all the files in save_directory in a tmp dir.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            for f in os.listdir(save_directory):
+                fname = os.path.join(save_directory, f)
+                if os.path.isfile(fname):
+                    shutil.copy(fname, os.path.join(tmp_dir, f))
+
+            unwrap_model(self.model).push_to_hub(
+                save_directory=tmp_dir,
+                model_id=model_id,
+                repo_url=repo_url,
+                commit_message=commit_message,
+                organization=organization,
+                private=private,
+            )
 
     #
     # Deprecated code
