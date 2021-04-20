@@ -979,7 +979,7 @@ class GenerationMixin:
                 "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
                 UserWarning,
             )
-            validate_stopping_criteria(stopping_criteria, max_length)
+            stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
 
         if is_greedy_gen_mode:
             if num_return_sequences > 1:
@@ -1247,7 +1247,7 @@ class GenerationMixin:
                 "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
                 UserWarning,
             )
-            validate_stopping_criteria(stopping_criteria, max_length)
+            stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
         output_scores = output_scores if output_scores is not None else self.config.output_scores
@@ -1484,7 +1484,7 @@ class GenerationMixin:
                 "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
                 UserWarning,
             )
-            validate_stopping_criteria(stopping_criteria, max_length)
+            stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
@@ -1737,7 +1737,7 @@ class GenerationMixin:
                 "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
                 UserWarning,
             )
-            validate_stopping_criteria(stopping_criteria, max_length)
+            stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         if len(stopping_criteria) == 0:
             warnings.warn("You don't have defined any stopping_criteria, this will likely loop forever", UserWarning)
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
@@ -2038,7 +2038,7 @@ class GenerationMixin:
                 "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
                 UserWarning,
             )
-            validate_stopping_criteria(stopping_criteria, max_length)
+            stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
         output_scores = output_scores if output_scores is not None else self.config.output_scores
@@ -2329,7 +2329,7 @@ class GenerationMixin:
                 "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
                 UserWarning,
             )
-            validate_stopping_criteria(stopping_criteria, max_length)
+            stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
         output_scores = output_scores if output_scores is not None else self.config.output_scores

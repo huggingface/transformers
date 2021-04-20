@@ -88,11 +88,14 @@ class StoppingCriteriaList(list):
         for stopping_criterium in self:
             if isinstance(stopping_criterium, MaxLengthCriteria):
                 return stopping_criterium.max_length
+        return None
 
 
-def validate_stopping_criteria(stopping_criteria: StoppingCriteriaList, max_length: int):
-    smax_length = stopping_criteria.max_length
-    if smax_length is not None and smax_length != max_length:
+def validate_stopping_criteria(stopping_criteria: StoppingCriteriaList, max_length: int) -> StoppingCriteriaList:
+    stopping_max_length = stopping_criteria.max_length
+    new_stopping_criteria = StoppingCriteriaList(*stopping_criteria)
+    if stopping_max_length is not None and stopping_max_length != max_length:
         warnings.warn("You set different `max_length` for stopping criteria and `max_length` parameter", UserWarning)
-    elif smax_length is None:
-        stopping_criteria.append(MaxLengthCriteria(max_length=max_length))
+    elif stopping_max_length is None:
+        new_stopping_criteria.append(MaxLengthCriteria(max_length=max_length))
+    return new_stopping_criteria
