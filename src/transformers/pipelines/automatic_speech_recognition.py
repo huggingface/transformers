@@ -66,17 +66,17 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
     """
     Pipeline that aims at extracting spoken text contained within some audio.
 
-    The input can be either a raw waveform or a audio file. In case of the audio file, ffmpeg should
-    be installed for the read function requires it (to support many formats).
+    The input can be either a raw waveform or a audio file. In case of the audio file, ffmpeg should be installed for
+    the read function requires it (to support many formats).
     """
 
     def __init__(self, feature_extractor: "SequenceFeatureExtractor", *args, **kwargs):
         """
         Arguments:
             model (:obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`):
-                The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-                :class:`~transformers.PreTrainedModel` for PyTorch and :class:`~transformers.TFPreTrainedModel` for
-                TensorFlow.
+                The model that will be used by the pipeline to make predictions. This needs to be a model inheriting
+                from :class:`~transformers.PreTrainedModel` for PyTorch and :class:`~transformers.TFPreTrainedModel`
+                for TensorFlow.
             tokenizer (:obj:`~transformers.PreTrainedTokenizer`):
                 The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
                 :class:`~transformers.PreTrainedTokenizer`.
@@ -85,15 +85,15 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
             modelcard (:obj:`str` or :class:`~transformers.ModelCard`, `optional`):
                 Model card attributed to the model for this pipeline.
             framework (:obj:`str`, `optional`):
-                The framework to use, either :obj:`"pt"` for PyTorch or :obj:`"tf"` for TensorFlow. The specified framework
-                must be installed.
+                The framework to use, either :obj:`"pt"` for PyTorch or :obj:`"tf"` for TensorFlow. The specified
+                framework must be installed.
 
-                If no framework is specified, will default to the one currently installed. If no framework is specified and
-                both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if no model
-                is provided.
+                If no framework is specified, will default to the one currently installed. If no framework is specified
+                and both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if
+                no model is provided.
             device (:obj:`int`, `optional`, defaults to -1):
-                Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-                the associated CUDA device id.
+                Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the
+                model on the associated CUDA device id.
         """
         super().__init__(*args, **kwargs)
         self.feature_extractor = feature_extractor
@@ -112,9 +112,10 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
 
         Args:
             inputs (:obj:`np.ndarray` or :obj:`bytes` or :obj:`str`):
-                The inputs is either a raw waveform (:obj:`np.ndarray`) at the correct sampling rate (no further check will be done) or a :obj:`str` that is
-                the filename of the audio file, the file will be read at the correct sampling rate to get the waveform using `ffmpeg`.
-                This requires `ffmpeg` to be installed on the system. If `inputs` is :obj:`bytes` it is supposed to be the content of an audio file and is
+                The inputs is either a raw waveform (:obj:`np.ndarray`) at the correct sampling rate (no further check
+                will be done) or a :obj:`str` that is the filename of the audio file, the file will be read at the
+                correct sampling rate to get the waveform using `ffmpeg`. This requires `ffmpeg` to be installed on the
+                system. If `inputs` is :obj:`bytes` it is supposed to be the content of an audio file and is
                 interpreted by `ffmpeg` in the same way.
 
         Return:
