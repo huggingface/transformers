@@ -112,11 +112,11 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
 
         Args:
             inputs (:obj:`np.ndarray` or :obj:`bytes` or :obj:`str`):
-                The inputs is either a raw waveform (:obj:`np.ndarray`) at the correct sampling rate (no further check
-                will be done) or a :obj:`str` that is the filename of the audio file, the file will be read at the
-                correct sampling rate to get the waveform using `ffmpeg`. This requires `ffmpeg` to be installed on the
-                system. If `inputs` is :obj:`bytes` it is supposed to be the content of an audio file and is
-                interpreted by `ffmpeg` in the same way.
+                The inputs is either a raw waveform (:obj:`np.ndarray` of shape (n, ) of type :obj:`np.float32` or
+                :obj:`np.float64`) at the correct sampling rate (no further check will be done) or a :obj:`str` that is
+                the filename of the audio file, the file will be read at the correct sampling rate to get the waveform
+                using `ffmpeg`. This requires `ffmpeg` to be installed on the system. If `inputs` is :obj:`bytes` it is
+                supposed to be the content of an audio file and is interpreted by `ffmpeg` in the same way.
 
         Return:
             A :obj:`dict` with the following keys:
