@@ -190,9 +190,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         if self.do_lower_case:
             text = text.upper()
 
-        text.replace(" ", self.word_delimiter_token)
-
-        return list(text)
+        return list(text.replace(" ", self.word_delimiter_token))
 
     def _convert_token_to_id(self, token: str) -> int:
         """Converts a token (str) in an index (integer) using the vocab."""
