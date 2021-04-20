@@ -518,7 +518,7 @@ def main():
                             writer.write(f"{index}\t{item}\n")
 
     if training_args.push_to_hub:
-        trainer.push_model_to_hub()
+        trainer.push_to_hub()
 
 
 def _mp_fn(index):

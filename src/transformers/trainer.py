@@ -2275,7 +2275,7 @@ class Trainer:
         else:
             return 0
 
-    def push_model_to_hub(
+    def push_to_hub(
         self,
         save_directory: Optional[str] = None,
         model_id: Optional[str] = None,

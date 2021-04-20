@@ -580,7 +580,7 @@ def main():
                     writer.write("\n".join(test_preds))
 
     if training_args.push_to_hub:
-        trainer.push_model_to_hub()
+        trainer.push_to_hub()
 
     return results
 
