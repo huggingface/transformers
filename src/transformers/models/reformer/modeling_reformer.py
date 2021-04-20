@@ -1512,6 +1512,10 @@ class ReformerLayer(nn.Module):
         # Implementation of RevNet (see Fig. 6 in https://towardsdatascience.com/illustrating-the-reformer-393575ac6ba0)
         # This code is heavily inspired by https://github.com/lucidrains/reformer-pytorch/blob/master/reformer_pytorch/reversible.py
 
+        assert (
+            self.training
+        ), "If you want to train `ReformerModel` and its variations, make sure to use `model.train()` to put the model into training mode."
+
         with torch.enable_grad():
             next_attn_output.requires_grad = True
 
