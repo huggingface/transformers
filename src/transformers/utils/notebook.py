@@ -308,7 +308,7 @@ class NotebookProgressCallback(TrainerCallback):
 
     def on_evaluate(self, args, state, control, metrics=None, **kwargs):
         if self.training_tracker is not None:
-            metric_key_prefix = kwargs["metric_key_prefix"]
+            metric_key_prefix = kwargs.get("metric_key_prefix", "eval")
             values = {"Training Loss": "No log", "Validation Loss": "No Log"}
             for log in reversed(state.log_history):
                 if "loss" in log:
