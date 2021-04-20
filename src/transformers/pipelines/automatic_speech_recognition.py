@@ -1,3 +1,16 @@
+# Copyright 2021 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import subprocess
 from typing import TYPE_CHECKING, Union
 
@@ -8,7 +21,7 @@ from .base import Pipeline
 
 
 if TYPE_CHECKING:
-    from ..models.auto import AutoFeatureExtractor
+    from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 
 logger = logging.get_logger(__name__)
 
@@ -36,7 +49,10 @@ def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
         "pipe:1",
     ]
 
-    ffmpeg_process = subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    try:
+        ffmpeg_process = subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    except FileNotFoundError:
+        raise ValueError("ffmpeg was not found but is required to load audio files from filename")
     output_stream = ffmpeg_process.communicate(bpayload)
     out_bytes = output_stream[0]
 
@@ -54,7 +70,7 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
     be installed for the read function requires it (to support many formats).
     """
 
-    def __init__(self, feature_extractor: "AutoFeatureExtractor", *args, **kwargs):
+    def __init__(self, feature_extractor: "SequenceFeatureExtractor", *args, **kwargs):
         """
         Arguments:
             model (:obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`):
@@ -64,7 +80,7 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
             tokenizer (:obj:`~transformers.PreTrainedTokenizer`):
                 The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
                 :class:`~transformers.PreTrainedTokenizer`.
-            feature_extractor (:obj:`~transformers.AutoFeatureExtractor`):
+            feature_extractor (:obj:`~transformers.SequenceFeatureExtractor`):
                 The feature extractor that will be used by the pipeline to encode waveform for the model.
             modelcard (:obj:`str` or :class:`~transformers.ModelCard`, `optional`):
                 Model card attributed to the model for this pipeline.
@@ -81,6 +97,9 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         """
         super().__init__(*args, **kwargs)
         self.feature_extractor = feature_extractor
+
+        if self.framework == "tf":
+            raise ValueError("The AutomaticSpeechRecognitionPipeline is only available in PyTorch.")
 
     def __call__(
         self,
