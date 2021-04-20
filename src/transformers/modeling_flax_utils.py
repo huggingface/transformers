@@ -85,7 +85,7 @@ class FlaxPreTrainedModel(ABC):
         self.dtype = dtype
 
         # randomely initialized parameters
-        random_params = self.init(self.key, input_shape)
+        random_params = self.init_weights(self.key, input_shape)
 
         # save required_params as set
         self._required_params = set(flatten_dict(unfreeze(random_params)).keys())

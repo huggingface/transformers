@@ -441,7 +441,7 @@ class FlaxRobertaPreTrainedModel(FlaxPreTrainedModel):
     config_class = RobertaConfig
     base_model_prefix = "roberta"
 
-    def init(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
             jnp.zeros(input_shape, dtype="i4"), None, None, None
         )
