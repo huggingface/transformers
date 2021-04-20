@@ -14,9 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning a 🤗 Transformers model on text_summarization.
+Fine-tuning a 🤗 Transformers model on summarization.
 """
-# You can also adapt this script on your own text_summarization task. Pointers for this are left as comments.
+# You can also adapt this script on your own summarization task. Pointers for this are left as comments.
 
 import argparse
 import logging
