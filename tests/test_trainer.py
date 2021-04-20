@@ -16,16 +16,20 @@
 import dataclasses
 import gc
 import os
+import re
 import tempfile
 import unittest
 
 import numpy as np
 
+from huggingface_hub import HfApi, HfFolder
+from requests.exceptions import HTTPError
 from transformers import AutoTokenizer, IntervalStrategy, PretrainedConfig, TrainingArguments, is_torch_available
 from transformers.file_utils import WEIGHTS_NAME
 from transformers.testing_utils import (
     TestCasePlus,
     get_tests_dir,
+    model_hub_integration,
     require_datasets,
     require_optuna,
     require_ray,
@@ -1079,6 +1083,70 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         no_wd_params = [p for n, p in model.named_parameters() if n not in wd_names]
         self.assertListEqual(trainer.optimizer.param_groups[0]["params"], wd_params)
         self.assertListEqual(trainer.optimizer.param_groups[1]["params"], no_wd_params)
+
+
+@model_hub_integration
+@require_torch
+class TrainerIntegrationWithHubTester(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        token = os.environ.get("HUGGINGFACE_TOKEN", None)
+        if token is None:
+            cls.token = HfFolder.get_token()
+            cls.old_token = None
+        else:
+            cls.token = token
+            cls.old_token = HfFolder.get_token()
+            HfFolder.save_token(token)
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.old_token is not None:
+            HfFolder.save_token(cls.old_token)
+        try:
+            HfApi().delete_repo(token=cls.token, name="test-model")
+        except HTTPError:
+            pass
+        try:
+            HfApi().delete_repo(token=cls.token, name="test-model-org", organization="huggingfacetest")
+        except HTTPError:
+            pass
+
+    def test_push_to_hub(self):
+        if self.token is None:
+            return
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(double_output=tmp_dir)
+            trainer.save_model()
+            url = trainer.push_to_hub(model_id="test-model")
+
+            # Extract repo_name from the url
+            re_search = re.search(r"https://huggingface\.co/([^/]+/[^/]+)/", url)
+            self.assertTrue(re_search is not None)
+            repo_name = re_search.groups()[0]
+            self.assertTrue(repo_name.endswith("test-model"))
+
+            model = RegressionPreTrainedModel.from_pretrained(repo_name)
+            self.assertEqual(model.a.item(), trainer.model.a.item())
+            self.assertEqual(model.b.item(), trainer.model.b.item())
+
+    def test_push_to_hub_in_organization(self):
+        if self.token is None:
+            return
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(double_output=tmp_dir)
+            trainer.save_model()
+            url = trainer.push_to_hub(model_id="test-model-org", organization="huggingfacetest")
+
+            # Extract repo_name from the url
+            re_search = re.search(r"https://huggingface\.co/([^/]+/[^/]+)/", url)
+            self.assertTrue(re_search is not None)
+            repo_name = re_search.groups()[0]
+            self.assertEqual(repo_name, "huggingfacetest/test-model-org")
+
+            model = RegressionPreTrainedModel.from_pretrained("huggingfacetest/test-model-org")
+            self.assertEqual(model.a.item(), trainer.model.a.item())
+            self.assertEqual(model.b.item(), trainer.model.b.item())
 
 
 @require_torch
