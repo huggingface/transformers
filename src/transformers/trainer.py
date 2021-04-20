@@ -1884,7 +1884,9 @@ class Trainer:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
             xm.master_print(met.metrics_report())
 
-        self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
+        self.control = self.callback_handler.on_evaluate(
+            self.args, self.state, self.control, output.metrics, metric_key_prefix=metric_key_prefix
+        )
 
         self._memory_tracker.stop_and_update_metrics(output.metrics)
 
