@@ -560,13 +560,12 @@ class GenerationMixin:
         num_beam_groups: int,
         diversity_penalty: float,
         remove_invalid_values: bool,
-        logits_processor: Optional[LogitsProcessorList] = None,
     ) -> LogitsProcessorList:
         """
         This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
         :obj:`~transformers.LogitsProcessor` instances used to modify the scores of the language model head.
         """
-        processors = LogitsProcessorList() if logits_processor is None else logits_processor
+        processors = LogitsProcessorList()
 
         # init warp parameters
         repetition_penalty = repetition_penalty if repetition_penalty is not None else self.config.repetition_penalty
@@ -630,11 +629,8 @@ class GenerationMixin:
         self,
         max_length: Optional[int],
         max_time: Optional[float],
-        stopping_criteria: Optional[StoppingCriteriaList] = None,
     ) -> StoppingCriteriaList:
-
-        if stopping_criteria is None:
-            stopping_criteria = StoppingCriteriaList()
+        stopping_criteria = StoppingCriteriaList()
         if max_length is not None:
             stopping_criteria.append(MaxLengthCriteria(max_length=max_length))
         if max_time is not None:
@@ -668,8 +664,6 @@ class GenerationMixin:
         num_beam_groups: Optional[int] = None,
         diversity_penalty: Optional[float] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
-        logits_processor: Optional[LogitsProcessorList] = None,
-        stopping_criteria: Optional[StoppingCriteriaList] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -740,12 +734,6 @@ class GenerationMixin:
             max_time(:obj:`float`, `optional`, defaults to None):
                 The maximum amount of time you allow the computation to run for in seconds. generation will still
                 finish the current pass after allocated time has been passed.
-            logits_processor(:obj:`LogitsProcessorList`, `optional`, defaults to None):
-                The initial logits_processor list if you want to define logits_processors outside the `generate`
-                function.
-            stopping_criteria(:obj:`StoppingCriteriaList`, `optional`, defaults to None):
-                The initial stopping_criteria list if you want to define stopping_criteria outside the `generate`
-                function.
             attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 Mask to avoid performing attention on padding token indices. Mask values are in ``[0, 1]``, 1 for
                 tokens that are not masked, and 0 for masked tokens. If not provided, will default to a tensor the same
@@ -968,12 +956,9 @@ class GenerationMixin:
             num_beam_groups=num_beam_groups,
             diversity_penalty=diversity_penalty,
             remove_invalid_values=remove_invalid_values,
-            logits_processor=logits_processor,
         )
 
-        stopping_criteria = self._get_stopping_criteria(
-            max_length=max_length, max_time=max_time, stopping_criteria=stopping_criteria
-        )
+        stopping_criteria = self._get_stopping_criteria(max_length=max_length, max_time=max_time)
         if max_length is not None:
             warnings.warn(
                 "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
