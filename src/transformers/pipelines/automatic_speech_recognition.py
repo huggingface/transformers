@@ -130,6 +130,9 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         if isinstance(inputs, bytes):
             inputs = ffmpeg_read(inputs, self.feature_extractor.sampling_rate)
 
+        assert isinstance(inputs, np.ndarray), "We expect a numpy ndarray as input"
+        assert len(inputs.shape) == 1, "We expect a single channel audio input for AutomaticSpeechRecognitionPipeline"
+
         processed = self.feature_extractor(
             inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
         )
