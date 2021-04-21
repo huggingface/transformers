@@ -26,8 +26,6 @@ from torch import Tensor, device, dtype, nn
 from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
 
-from huggingface_hub import ModelHubMixin
-
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
@@ -36,6 +34,7 @@ from .file_utils import (
     TF_WEIGHTS_NAME,
     WEIGHTS_NAME,
     ModelOutput,
+    PushToHubMixin,
     cached_path,
     hf_bucket_url,
     is_offline_mode,
@@ -386,7 +385,7 @@ class ModuleUtilsMixin:
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
 
-class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, ModelHubMixin):
+class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin):
     r"""
     Base class for all models.
 
@@ -800,6 +799,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, ModelHubMixi
         save_config: bool = True,
         state_dict: Optional[dict] = None,
         save_function: Callable = torch.save,
+        push_to_hub: bool = False,
+        **kwargs,
     ):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
@@ -819,6 +820,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, ModelHubMixi
             save_function (:obj:`Callable`):
                 The function to use to save the state dictionary. Useful on distributed training like TPUs when one
                 need to replace :obj:`torch.save` by another method.
+            push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to push your model to the Hugging Face model hub after saving it.
+            kwargs:
+                Additional key word arguments passed along to the
+                :meth:`~transformers.file_utils.PushToHubMixin.push_to_hub` method.
         """
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -848,6 +854,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, ModelHubMixi
         save_function(state_dict, output_model_file)
 
         logger.info(f"Model weights saved in {output_model_file}")
+
+        if push_to_hub:
+            url = self.push_to_hub(save_directory, **kwargs)
+            logger.info(f"Model pushed to the hub in this commit: {url}")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):

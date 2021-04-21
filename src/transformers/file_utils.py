@@ -47,10 +47,10 @@ from tqdm.auto import tqdm
 
 import requests
 from filelock import FileLock
+from huggingface_hub import HfApi, HfFolder, Repository
 from transformers.utils.versions import importlib_metadata
 
 from . import __version__
-from .hf_api import HfFolder
 from .utils import logging
 
 
@@ -1684,3 +1684,83 @@ def copy_func(f):
     g = functools.update_wrapper(g, f)
     g.__kwdefaults__ = f.__kwdefaults__
     return g
+
+
+class PushToHubMixin:
+    """
+    A Mixin containing the functionality to push a model or tokenizer to the hub.
+    """
+
+    @staticmethod
+    def push_to_hub(
+        save_directory: Optional[str],
+        repo_name: Optional[str] = None,
+        repo_url: Optional[str] = None,
+        commit_message: Optional[str] = None,
+        organization: Optional[str] = None,
+        private: bool = None,
+        use_auth_token: Optional[Union[bool, str]] = None,
+    ) -> str:
+        """
+        Upload `save_directory` to the 🤗 model hub.
+
+        Parameters:
+            save_directory (:obj:`str` or :obj:`os.PathLike`):
+                Folder containing the objects to push to the hub.
+            repo_name (:obj:`str`, `optional`):
+                Repository name for your model or tokenizer in the hub. If not specified, the repository name will be
+                the stem of :obj:`save_directory`.
+            repo_url (:obj:`str`, `optional`):
+                Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
+                repository will be created in your namespace (unless you specify an :obj:`organization`) with
+                :obj:`repo_name`.
+            commit_message (:obj:`str`, `optional`, defaults to :obj:`"add model"`):
+                Message to commit while pushing.
+            organization (:obj:`str`, `optional`):
+                Organization in which you want to push your model or tokenizer (you must be a member of this
+                organization).
+            private (:obj:`bool`, `optional`):
+                Whether or not the repository created should be private (requires a paying subscription).
+            use_auth_token (:obj:`bool` or :obj:`str`, `optional`):
+                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`). Will default to
+                :obj:`True` if :obj:`repo_url` is not specified.
+
+
+        Returns:
+            The url of the commit of your model in the given repository.
+        """
+        if repo_name is None:
+            repo_name = Path(save_directory).stem
+        if use_auth_token is None and repo_url is None:
+            use_auth_token = True
+
+        if isinstance(use_auth_token, str):
+            token = use_auth_token
+        elif use_auth_token:
+            token = HfFolder.get_token()
+            if token is None:
+                raise ValueError(
+                    "You must login to the Hugging Face hub on this computer by typing `transformers-cli login` and "
+                    "entering your credentials to use `use_auth_token=True`. Alternatively, you can pass you own "
+                    "token the `use_auth_token` argument."
+                )
+        else:
+            token = None
+
+        if repo_url is None:
+            repo_url = HfApi().create_repo(
+                token,
+                repo_name,
+                organization=organization,
+                private=private,
+                repo_type=None,
+                exist_ok=True,
+            )
+
+        repo = Repository(save_directory, clone_from=repo_url, use_auth_token=use_auth_token)
+
+        if commit_message is None:
+            commit_message = "add model"
+
+        return repo.push_to_hub(commit_message=commit_message)

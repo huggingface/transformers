@@ -24,13 +24,13 @@ import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.serialization import from_bytes, to_bytes
 from flax.traverse_util import flatten_dict, unflatten_dict
-from huggingface_hub import ModelHubMixin
 from jax.random import PRNGKey
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
     FLAX_WEIGHTS_NAME,
     WEIGHTS_NAME,
+    PushToHubMixin,
     add_start_docstrings_to_model_forward,
     cached_path,
     copy_func,
@@ -54,7 +54,7 @@ ACT2FN = {
 }
 
 
-class FlaxPreTrainedModel(ModelHubMixin):
+class FlaxPreTrainedModel(PushToHubMixin):
     r"""
     Base class for all models.
 
