@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google Flax Team Authors and The HuggingFace Inc. team.
+# Copyright 2021 The Google Flax Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -131,9 +131,8 @@ class FlaxBertEmbeddings(nn.Module):
         token_type_embeddings = self.token_type_embeddings(token_type_ids.astype("i4").flatten()[None, :])
 
         # Sum all embeddings
-        hidden_states = inputs_embeds + token_type_embeddings
+        hidden_states = inputs_embeds + token_type_embeddings + position_embeds
         hidden_states = hidden_states.reshape((batch_size, sequence_length, -1))
-        hidden_states += jnp.broadcast_to(position_embeds, hidden_states.shape)
 
         # Layer Norm
         hidden_states = self.LayerNorm(hidden_states)
@@ -437,7 +436,7 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         token_type_ids = jnp.ones_like(input_ids)
-        position_ids = jnp.arange(jnp.atleast_2d(input_ids).shape[-1])
+        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape)
         attention_mask = jnp.ones_like(input_ids)
 
         params_rng, dropout_rng = jax.random.split(rng)
@@ -466,7 +465,7 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
             token_type_ids = jnp.ones_like(input_ids)
 
         if position_ids is None:
-            position_ids = jnp.arange(jnp.atleast_2d(input_ids).shape[-1])
+            position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
 
         if attention_mask is None:
             attention_mask = jnp.ones_like(input_ids)
