@@ -16,7 +16,7 @@ limitations under the License.
 
 # Text classification examples
 
-This folder contains some scripts showing examples of *text classification* with the Transformers library.
+This folder contains some scripts showing examples of *text classification* with the 🤗 Transformers library.
 For straightforward use-cases you may be able to use these scripts without modification, although we have also
 included comments in the code to indicate areas that you may need to adapt to your own projects.
 
