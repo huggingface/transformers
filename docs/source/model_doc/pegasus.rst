@@ -53,7 +53,8 @@ Examples
 _______________________________________________________________________________________________________________________
 
 - :prefix_link:`Script <examples/research_projects/seq2seq-distillation/finetune_pegasus_xsum.sh>` to fine-tune pegasus
-  on the XSUM dataset. Data download instructions at :prefix_link:`examples/seq2seq/ <examples/seq2seq/README.md>`.
+  on the XSUM dataset. Data download instructions at :prefix_link:`examples/pytorch/summarization/
+  <examples/pytorch/summarization/README.md>`.
 - FP16 is not supported (help/ideas on this appreciated!).
 - The adafactor optimizer is recommended for pegasus fine-tuning.
 

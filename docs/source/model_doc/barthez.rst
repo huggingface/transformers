@@ -43,7 +43,7 @@ Examples
 _______________________________________________________________________________________________________________________
 
 - BARThez can be fine-tuned on sequence-to-sequence tasks in a similar way as BART, check:
-  :prefix_link:`examples/seq2seq/ <examples/seq2seq/README.md>`.
+  :prefix_link:`examples/pytorch/summarization/ <examples/pytorch/summarization/README.md>`.
 
 
 BarthezTokenizer
