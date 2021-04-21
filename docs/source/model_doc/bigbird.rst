@@ -50,7 +50,8 @@ Tips:
 - Current implementation supports only **ITC**.
 - Current implementation doesn't support **num_random_blocks = 0**
 
-The original code can be found `here <https://github.com/google-research/bigbird>`__.
+This model was contributed by `vasudevgupta <https://huggingface.co/vasudevgupta>`__. The original code can be found
+`here <https://github.com/google-research/bigbird>`__.
 
 BigBirdConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

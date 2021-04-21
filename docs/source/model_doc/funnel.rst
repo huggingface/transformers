@@ -49,7 +49,8 @@ Tips:
   :class:`~transformers.FunnelBaseModel`, :class:`~transformers.FunnelForSequenceClassification` and
   :class:`~transformers.FunnelForMultipleChoice`.
 
-The original code can be found `here <https://github.com/laiguokun/Funnel-Transformer>`__.
+This model was contributed by `sgugger <https://huggingface.co/sgugger>`__. The original code can be found `here
+<https://github.com/laiguokun/Funnel-Transformer>`__.
 
 
 FunnelConfig

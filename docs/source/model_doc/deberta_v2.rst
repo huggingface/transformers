@@ -58,7 +58,8 @@ New in v2:
 - **900M model & 1.5B model** Two additional model sizes are available: 900M and 1.5B, which significantly improves the
   performance of downstream tasks.
 
-The original code can be found `here <https://github.com/microsoft/DeBERTa>`__.
+This model was contributed by `DeBERTa <https://huggingface.co/DeBERTa>`__. The original code can be found `here
+<https://github.com/microsoft/DeBERTa>`__.
 
 
 DebertaV2Config

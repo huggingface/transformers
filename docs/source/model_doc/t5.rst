@@ -48,7 +48,8 @@ Tips:
   layers to the decoder and auto-regressively generates the decoder output. - T5 uses relative scalar embeddings.
   Encoder input padding can be done on the left and on the right.
 
-The original code can be found `here <https://github.com/google-research/text-to-text-transfer-transformer>`__.
+This model was contributed by `thomwolf <https://huggingface.co/thomwolf>`__. The original code can be found `here
+<https://github.com/google-research/text-to-text-transfer-transformer>`__.
 
 Training
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -43,4 +43,5 @@ Tips:
   that is sadly not open-sourced yet. It would be very useful for the community, if someone tries to implement the
   algorithm to make BORT fine-tuning work.
 
-The original code can be found `here <https://github.com/alexa/bort/>`__.
+This model was contributed by `stefan-it <https://huggingface.co/stefan-it>`__. The original code can be found `here
+<https://github.com/alexa/bort/>`__.

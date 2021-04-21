@@ -37,6 +37,7 @@ Implementation Notes
     - the model starts generating with :obj:`pad_token_id` (which has 0 as a token_embedding) as the prefix (Bart uses
       :obj:`<s/>`),
 - Code to bulk convert models can be found in ``convert_marian_to_pytorch.py``.
+- This model was contributed by `sshleifer <https://huggingface.co/sshleifer>`__.
 
 Naming
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

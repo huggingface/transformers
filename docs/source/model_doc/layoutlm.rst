@@ -80,7 +80,8 @@ occurs. Those can be obtained using the Python Image Library (PIL) library for e
   <https://github.com/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Fine_tuning_LayoutLMForTokenClassification_on_FUNSD.ipynb>`__.
   It includes an inference part, which shows how to use Google's Tesseract on a new document.
 
-The original code can be found `here <https://github.com/microsoft/unilm/tree/master/layoutlm>`_.
+This model was contributed by `liminghao1630 <https://huggingface.co/liminghao1630>`__. The original code can be found
+`here <https://github.com/microsoft/unilm/tree/master/layoutlm>`_.
 
 
 LayoutLMConfig

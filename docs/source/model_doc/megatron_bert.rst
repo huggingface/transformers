@@ -77,9 +77,10 @@ The following commands allow you to do the conversion. We assume that the folder
 
     python3 $PATH_TO_TRANSFORMERS/models/megatron_bert/convert_megatron_bert_checkpoint.py megatron_bert_345m_v0_1_cased.zip
 
-The original code can be found `here <https://github.com/NVIDIA/Megatron-LM>`__. That repository contains a multi-GPU
-and multi-node implementation of the Megatron Language models. In particular, it contains a hybrid model parallel
-approach using "tensor parallel" and "pipeline parallel" techniques.
+This model was contributed by `jdemouth <https://huggingface.co/jdemouth>`__. The original code can be found `here
+<https://github.com/NVIDIA/Megatron-LM>`__. That repository contains a multi-GPU and multi-node implementation of the
+Megatron Language models. In particular, it contains a hybrid model parallel approach using "tensor parallel" and
+"pipeline parallel" techniques.
 
 MegatronBertConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

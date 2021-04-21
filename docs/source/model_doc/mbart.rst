@@ -29,7 +29,8 @@ corpora in many languages using the BART objective. mBART is one of the first me
 sequence-to-sequence model by denoising full texts in multiple languages, while previous approaches have focused only
 on the encoder, decoder, or reconstructing parts of the text.
 
-The Authors' code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/mbart>`__
+This model was contributed by `valhalla <https://huggingface.co/valhalla>`__. The Authors' code can be found `here
+<https://github.com/pytorch/fairseq/tree/master/examples/mbart>`__
 
 Training of MBart
 _______________________________________________________________________________________________________________________

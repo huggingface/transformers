@@ -25,7 +25,8 @@ transcripts/translations autoregressively. Speech2Text has been fine-tuned on se
 `LibriSpeech <http://www.openslr.org/12>`__, `CoVoST 2 <https://github.com/facebookresearch/covost>`__, `MuST-C
 <https://ict.fbk.eu/must-c/>`__.
 
-The original code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/speech_to_text>`__.
+This model was contributed by `valhalla <https://huggingface.co/valhalla>`__. The original code can be found `here
+<https://github.com/pytorch/fairseq/tree/master/examples/speech_to_text>`__.
 
 
 Inference

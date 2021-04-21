@@ -40,7 +40,8 @@ Tips:
   token belongs to which segment. Just separate your segments with the separation token :obj:`tokenizer.sep_token` (or
   :obj:`</s>`).
 
-The Authors' code can be found `here <https://github.com/allenai/longformer>`__.
+This model was contributed by `beltagy <https://huggingface.co/beltagy>`__. The Authors' code can be found `here
+<https://github.com/allenai/longformer>`__.
 
 Longformer Self Attention
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

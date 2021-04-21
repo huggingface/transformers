@@ -41,7 +41,8 @@ Tips:
   original implementation trains on SQuAD with padding on the left, therefore the padding defaults are set to left.
 - Transformer-XL is one of the few models that has no sequence length limit.
 
-The original code can be found `here <https://github.com/kimiyoung/transformer-xl>`__.
+This model was contributed by `thomwolf <https://huggingface.co/thomwolf>`__. The original code can be found `here
+<https://github.com/kimiyoung/transformer-xl>`__.
 
 
 TransfoXLConfig

@@ -44,7 +44,8 @@ Tips:
   separate your segments with the separation token :obj:`tokenizer.sep_token` (or :obj:`</s>`)
 - :doc:`CamemBERT <camembert>` is a wrapper around RoBERTa. Refer to this page for usage examples.
 
-The original code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/roberta>`_.
+This model was contributed by `julien-c <https://huggingface.co/julien-c>`__. The original code can be found `here
+<https://github.com/pytorch/fairseq/tree/master/examples/roberta>`_.
 
 
 RobertaConfig

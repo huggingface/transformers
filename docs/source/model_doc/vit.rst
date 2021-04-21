@@ -67,7 +67,8 @@ Tips:
   improvement of 2% to training from scratch, but still 4% behind supervised pre-training.
 
 
-The original code (written in JAX) can be found `here <https://github.com/google-research/vision_transformer>`__.
+This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code (written in JAX) can be
+found `here <https://github.com/google-research/vision_transformer>`__.
 
 Note that we converted the weights from Ross Wightman's `timm library
 <https://github.com/rwightman/pytorch-image-models>`__, who already converted the weights from JAX to PyTorch. Credits
