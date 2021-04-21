@@ -183,7 +183,9 @@ class DataTrainingArguments:
 
     def __post_init__(self):
         train_extension = self.train_file.split(".")[-1].lower() if self.train_file is not None else None
-        validation_extension = self.validation_file.split(".")[-1].lower() if self.validation_file is not None else None
+        validation_extension = (
+            self.validation_file.split(".")[-1].lower() if self.validation_file is not None else None
+        )
         test_extension = self.test_file.split(".")[-1].lower() if self.test_file is not None else None
         extensions = {train_extension, validation_extension, test_extension}
         extensions.discard(None)
@@ -384,7 +386,7 @@ def main():
         metrics = []
     else:
         loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        metrics = ['accuracy']
+        metrics = ["accuracy"]
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
     # endregion
 
