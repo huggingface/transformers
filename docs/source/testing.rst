@@ -726,7 +726,7 @@ If you don't need to manipulate paths via ``pathlib`` or you just need a path as
     from transformers.testing_utils import TestCasePlus
     class PathExampleTest(TestCasePlus):
         def test_something_involving_stringified_locations(self):
-            example_dir = self.examples_dir_str
+            examples_dir = self.examples_dir_str
 
 
 
