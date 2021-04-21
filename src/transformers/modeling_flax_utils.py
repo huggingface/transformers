@@ -28,7 +28,16 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 from jax.random import PRNGKey
 
 from .configuration_utils import PretrainedConfig
-from .file_utils import FLAX_WEIGHTS_NAME, WEIGHTS_NAME, cached_path, hf_bucket_url, is_offline_mode, is_remote_url
+from .file_utils import (
+    FLAX_WEIGHTS_NAME,
+    WEIGHTS_NAME,
+    add_start_docstrings_to_model_forward,
+    cached_path,
+    copy_func,
+    hf_bucket_url,
+    is_offline_mode,
+    is_remote_url,
+)
 from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
 from .utils import logging
 
@@ -85,13 +94,13 @@ class FlaxPreTrainedModel(ABC):
         self.dtype = dtype
 
         # randomely initialized parameters
-        random_params = self.init(self.key, input_shape)
+        random_params = self.init_weights(self.key, input_shape)
 
         # save required_params as set
         self._required_params = set(flatten_dict(unfreeze(random_params)).keys())
         self.params = random_params
 
-    def init(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> Dict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> Dict:
         raise NotImplementedError(f"init method has to be implemented for {self}")
 
     @property
@@ -394,3 +403,12 @@ class FlaxPreTrainedModel(ABC):
         with open(os.path.join(save_directory, FLAX_WEIGHTS_NAME), "wb") as f:
             model_bytes = to_bytes(self.params)
             f.write(model_bytes)
+
+
+def overwrite_call_docstring(model_class, docstring):
+    # copy __call__ function to be sure docstring is changed only for this function
+    model_class.__call__ = copy_func(model_class.__call__)
+    # delete existing docstring
+    model_class.__call__.__doc__ = None
+    # set correct docstring
+    model_class.__call__ = add_start_docstrings_to_model_forward(docstring)(model_class.__call__)
