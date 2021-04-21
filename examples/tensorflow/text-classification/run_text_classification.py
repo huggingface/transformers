@@ -497,7 +497,7 @@ def main():
         eval_dataset = DataSequence(
             eval_dataset, non_label_column_names, batch_size=training_args.per_device_eval_batch_size, labels=True
         )
-        logger.info("Computing metrics  on validation data...")
+        logger.info("Computing metrics on validation data...")
         if is_regression:
             loss = model.evaluate(eval_dataset)
             logger.info(f"Loss: {loss:.5f}")
