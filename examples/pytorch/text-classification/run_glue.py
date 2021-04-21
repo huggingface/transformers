@@ -504,7 +504,7 @@ def main():
         for predict_dataset, task in zip(predict_datasets, tasks):
             # Removing the `label` columns because it contains -1 and Trainer won't like that.
             predict_dataset.remove_columns_("label")
-            predictions = trainer.predict(test_dataset=predict_dataset).predictions
+            predictions = trainer.predict(predict_dataset=predict_dataset).predictions
             predictions = np.squeeze(predictions) if is_regression else np.argmax(predictions, axis=1)
 
             output_predict_file = os.path.join(training_args.output_dir, f"predict_results_{task}.txt")
