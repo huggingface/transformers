@@ -39,4 +39,3 @@ Coming soon!
 | **`text-generation`** | n/a | - | n/a | -
 | **`token-classification`** | CoNLL NER | - | - | - 
 | **`translation`** | WMT | -  | - | -
-

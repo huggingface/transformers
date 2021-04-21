@@ -1,5 +1,5 @@
 <!---
-Copyright 2020 The HuggingFace Team. All rights reserved.
+Copyright 2021 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,52 +16,50 @@ limitations under the License.
 
 # Text classification examples
 
-## GLUE tasks
+This folder contains some scripts showing examples of *text classification* with the 🤗 Transformers library.
+For straightforward use-cases you may be able to use these scripts without modification, although we have also
+included comments in the code to indicate areas that you may need to adapt to your own projects.
 
-Based on the script [`run_tf_glue.py`](https://github.com/huggingface/transformers/blob/master/examples/tensorflow/text-classification/run_tf_glue.py).
+## run_text_classification.py
 
-Fine-tuning the library TensorFlow 2.0 Bert model for sequence classification on the MRPC task of the GLUE benchmark: [General Language Understanding Evaluation](https://gluebenchmark.com/).
+This script handles perhaps the single most common use-case for this entire library: Training an NLP classifier
+on your own training data. This can be whatever you want - you could classify text as abusive/hateful or 
+allowable, or forum posts as spam or not-spam, or classify the genre of a headline as politics, sports or any 
+number of other categories. Any task that involves classifying natural language into two or more different categories 
+can work with this! You can even do regression, such as predicting the score on a 1-10 scale that a user gave,
+given the text of their review.
 
-This script has an option for mixed precision (Automatic Mixed Precision / AMP) to run models on Tensor Cores (NVIDIA Volta/Turing GPUs) and future hardware and an option for XLA, which uses the XLA compiler to reduce model runtime.
-Options are toggled using `USE_XLA` or `USE_AMP` variables in the script.
-These options and the below benchmark are provided by @tlkh.
-
-Quick benchmarks from the script (no other modifications):
-
-| GPU    | Mode | Time (2nd epoch) | Val Acc (3 runs) |
-| --------- | -------- | ----------------------- | ----------------------|
-| Titan V | FP32 | 41s | 0.8438/0.8281/0.8333 |
-| Titan V | AMP | 26s | 0.8281/0.8568/0.8411 |
-| V100    | FP32 | 35s | 0.8646/0.8359/0.8464 |
-| V100    | AMP | 22s | 0.8646/0.8385/0.8411 |
-| 1080 Ti | FP32 | 55s | - |
-
-Mixed precision (AMP) reduces the training time considerably for the same hardware and hyper-parameters (same batch size was used).
-
-
-## Run generic text classification script in TensorFlow
-
-The script [run_tf_text_classification.py](https://github.com/huggingface/transformers/blob/master/examples/tensorflow/text-classification/run_tf_text_classification.py) allows users to run a text classification on their own CSV files. For now there are few restrictions, the CSV files must have a header corresponding to the column names and not more than three columns: one column for the id, one column for the text and another column for a second piece of text in case of an entailment classification for example.
-
-To use the script, one as to run the following command line:
-```bash
-python run_tf_text_classification.py \
-  --train_file train.csv \ ### training dataset file location (mandatory if running with --do_train option)
-  --dev_file dev.csv \ ### development dataset file location (mandatory if running with --do_eval option)
-  --test_file test.csv \ ### test dataset file location (mandatory if running with --do_predict option)
-  --label_column_id 0 \ ### which column corresponds to the labels
-  --model_name_or_path bert-base-multilingual-uncased \
-  --output_dir model \
-  --num_train_epochs 4 \
-  --per_device_train_batch_size 16 \
-  --per_device_eval_batch_size 32 \
-  --do_train \
-  --do_eval \
-  --do_predict \
-  --logging_steps 10 \
-  --evaluation_strategy steps \
-  --save_steps 10 \
-  --overwrite_output_dir \
-  --max_seq_length 128
+The preferred input format is either a CSV or newline-delimited JSON file that contains a `sentence1` and 
+`label` field, and optionally a `sentence2` field, if your task involves comparing two texts (for example, if your classifier
+is deciding whether two sentences are paraphrases of each other, or were written by the same author). If
+you do not have a `sentence1` field, the script will assume the non-label fields are the input text, which
+may not always be what you want, especially if you have more than two fields! For example, here is a snippet
+of a valid input JSON file, though note that your texts can be much longer than these, and are not constrained
+(despite the field name) to being single grammatical sentences:
+```
+{"sentence1": "COVID-19 vaccine updates: How is the rollout proceeding?", "label": "news"}
+{"sentence1": "Manchester United celebrates Europa League success", "label": "sports"}
 ```
 
+### Usage notes
+If your inputs are long (more than ~60-70 words), you may wish to increase the `--max_seq_length` argument
+beyond the default value of 128. The maximum supported value for most models is 512 (about 200-300 words), 
+and some can handle even longer. This will come at a cost in runtime and memory use, however.
+
+We assume that your labels represent *categories*, even if they are integers, since text classification
+is a much more common task than text regression. If your labels are floats, however, the script will assume
+you want to do regression. This is something you can edit yourself if your use-case requires it!
+
+After training, the model will be saved to `--output_dir`. Once your model is trained, you can get predictions
+by calling the script without a `--train_file` or `--validation_file`; simply pass it the output_dir containing
+the trained model and a `--test_file` and it will write its predictions to a text file for you.
+
+### Example command
+```
+python run_text_classification.py \
+--model_name_or_path distilbert-base-cased \
+--train_file training_data.json \
+--validation_file validation_data.json \
+--output_dir output/ \
+--test_file data_to_predict.json
+```
