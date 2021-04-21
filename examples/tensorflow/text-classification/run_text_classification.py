@@ -33,10 +33,10 @@ from transformers import (
     AutoConfig,
     AutoTokenizer,
     HfArgumentParser,
+    PretrainedConfig,
     TFAutoModelForSequenceClassification,
     TrainingArguments,
     set_seed,
-    PretrainedConfig
 )
 from transformers.file_utils import CONFIG_NAME, TF2_WEIGHTS_NAME
 from transformers.trainer_utils import is_main_process
@@ -134,12 +134,13 @@ class DataTrainingArguments:
     the command line.
     """
 
-    train_file: Optional[str] = field(default=None,
-                                      metadata={"help": "A csv or a json file containing the training data."})
-    validation_file: Optional[str] = field(default=None,
-                                           metadata={"help": "A csv or a json file containing the validation data."})
-    test_file: Optional[str] = field(default=None,
-                                     metadata={"help": "A csv or a json file containing the test data."})
+    train_file: Optional[str] = field(
+        default=None, metadata={"help": "A csv or a json file containing the training data."}
+    )
+    validation_file: Optional[str] = field(
+        default=None, metadata={"help": "A csv or a json file containing the validation data."}
+    )
+    test_file: Optional[str] = field(default=None, metadata={"help": "A csv or a json file containing the test data."})
 
     max_seq_length: int = field(
         default=128,
@@ -182,13 +183,15 @@ class DataTrainingArguments:
 
     def __post_init__(self):
         train_extension = self.train_file.split(".")[-1].lower() if self.train_file is not None else None
-        validation_extension = self.validation_file.split(".")[-1].lower() if self.validation_file is not None else None
+        validation_extension = (
+            self.validation_file.split(".")[-1].lower() if self.validation_file is not None else None
+        )
         test_extension = self.test_file.split(".")[-1].lower() if self.test_file is not None else None
         extensions = {train_extension, validation_extension, test_extension}
         extensions.discard(None)
         assert len(extensions) != 0, "Need to supply either a --train_file or a --test_file!"
         assert len(extensions) == 1, "All input files should have the same file extension, either csv or json!"
-        assert 'csv' in extensions or 'json' in extensions, "Input files should have either .csv or .json extensions!"
+        assert "csv" in extensions or "json" in extensions, "Input files should have either .csv or .json extensions!"
         self.input_file_extension = extensions.pop()
 
 
@@ -222,6 +225,8 @@ class ModelArguments:
             "with private models)."
         },
     )
+
+
 # endregion
 
 
@@ -240,10 +245,9 @@ def main():
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
     output_dir = Path(training_args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    assert (data_args.train_file is not None
-            or data_args.validation_file is not None
-            or data_args.test_file is not None), \
-        "Need to supply at least one of --train_file, --validation_file or --test_file!"
+    assert (
+        data_args.train_file is not None or data_args.validation_file is not None or data_args.test_file is not None
+    ), "Need to supply at least one of --train_file, --validation_file or --test_file!"
     # endregion
 
     # region Checkpoints
@@ -291,9 +295,7 @@ def main():
     #
     # In distributed training, the load_dataset function guarantee that only one local process can concurrently
     # download the dataset.
-    data_files = {"train": data_args.train_file,
-                  "validation": data_args.validation_file,
-                  "test": data_args.test_file}
+    data_files = {"train": data_args.train_file, "validation": data_args.validation_file, "test": data_args.test_file}
     data_files = {key: file for key, file in data_files.items() if file is not None}
 
     for key in data_files.keys():
@@ -311,7 +313,7 @@ def main():
 
     # region Label preprocessing
     # If you've passed us a training set, we try to infer your labels from it
-    if 'train' in datasets:
+    if "train" in datasets:
         # By default we assume that if your label column looks like a float then you're doing regression,
         # and if not then you're doing classification. This is something you may want to change!
         is_regression = datasets["train"].features["label"].dtype in ["float32", "float64"]
@@ -348,14 +350,14 @@ def main():
             num_labels=num_labels,
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
         config = AutoConfig.from_pretrained(
             config_path,
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
@@ -421,11 +423,8 @@ def main():
     max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
     # Ensure that our labels match the model's, if it has some pre-specified
-    if 'train' in datasets:
-        if (
-                not is_regression
-                and model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id
-        ):
+    if "train" in datasets:
+        if not is_regression and model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id:
             label_name_to_id = model.config.label2id
             if list(sorted(label_name_to_id.keys())) == list(sorted(label_list)):
                 label_to_id = label_name_to_id  # Use the model's labels
@@ -449,7 +448,7 @@ def main():
     else:
         label_to_id = model.config.label2id  # Just load the data from the model
 
-    if 'validation' in datasets and model.config.label2id is not None:
+    if "validation" in datasets and model.config.label2id is not None:
         validation_label_list = datasets["validation"].unique("label")
         for val_label in validation_label_list:
             assert val_label in label_to_id, f"Label {val_label} is in the validation set but not the training set!"
