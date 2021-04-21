@@ -21,7 +21,7 @@ Question Answering <https://yjernite.github.io/lfqa.html>`__. RetriBERT is a sma
 pair of BERT encoders with lower-dimension projection for dense semantic indexing of text.
 
 This model was contributed by `yjernite <https://huggingface.co/yjernite>`__. Code to train and use the model can be
-found `here <https://github.com/huggingface/transformers/tree/master/examples/distillation>`__.
+found :prefix_link:`here <examples/research-projects/distillation>`.
 
 
 RetriBertConfig

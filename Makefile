@@ -73,7 +73,7 @@ test:
 # Run tests for examples
 
 test-examples:
-	python -m pytest -n auto --dist=loadfile -s -v ./examples/
+	python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/
 
 # Run tests for SageMaker DLC release
 

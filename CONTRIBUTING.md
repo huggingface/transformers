@@ -285,7 +285,7 @@ $ python -m pytest -n auto --dist=loadfile -s -v ./tests/
 and for the examples:
 
 ```bash
-$ pip install -r examples/requirements.txt  # only needed the first time
+$ pip install -r examples/xxx/requirements.txt  # only needed the first time
 $ python -m pytest -n auto --dist=loadfile -s -v ./examples/
 ```
 In fact, that's how `make test` and `make test-examples` are implemented (sans the `pip install` line)!

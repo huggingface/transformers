@@ -55,10 +55,10 @@ Sequence Classification
 Sequence classification is the task of classifying sequences according to a given number of classes. An example of
 sequence classification is the GLUE dataset, which is entirely based on that task. If you would like to fine-tune a
 model on a GLUE sequence classification task, you may leverage the :prefix_link:`run_glue.py
-<examples/text-classification/run_glue.py>`, :prefix_link:`run_tf_glue.py
-<examples/text-classification/run_tf_glue.py>`, :prefix_link:`run_tf_text_classification.py
-<examples/text-classification/run_tf_text_classification.py>` or :prefix_link:`run_xnli.py
-<examples/text-classification/run_xnli.py>` scripts.
+<examples/pytorch/text-classification/run_glue.py>`, :prefix_link:`run_tf_glue.py
+<examples/tensorflow/text-classification/run_tf_glue.py>`, :prefix_link:`run_tf_text_classification.py
+<examples/tensorflow/text-classification/run_tf_text_classification.py>` or :prefix_link:`run_xnli.py
+<examples/pytorch/text-classification/run_xnli.py>` scripts.
 
 Here is an example of using pipelines to do sentiment analysis: identifying if a sequence is positive or negative. It
 leverages a fine-tuned model on sst2, which is a GLUE task.
@@ -168,8 +168,10 @@ Extractive Question Answering
 Extractive Question Answering is the task of extracting an answer from a text given a question. An example of a
 question answering dataset is the SQuAD dataset, which is entirely based on that task. If you would like to fine-tune a
 model on a SQuAD task, you may leverage the `run_qa.py
-<https://github.com/huggingface/transformers/tree/master/examples/question-answering/run_qa.py>`__ and `run_tf_squad.py
-<https://github.com/huggingface/transformers/tree/master/examples/question-answering/run_tf_squad.py>`__ scripts.
+<https://github.com/huggingface/transformers/tree/master/examples/pytorch/question-answering/run_qa.py>`__ and
+`run_tf_squad.py
+<https://github.com/huggingface/transformers/tree/master/examples/tensorflow/question-answering/run_tf_squad.py>`__
+scripts.
 
 
 Here is an example of using pipelines to do question answering: extracting an answer from a text given a question. It
@@ -184,7 +186,7 @@ leverages a fine-tuned model on SQuAD.
     >>> context = r"""
     ... Extractive Question Answering is the task of extracting an answer from a text given a question. An example of a
     ... question answering dataset is the SQuAD dataset, which is entirely based on that task. If you would like to fine-tune
-    ... a model on a SQuAD task, you may leverage the examples/question-answering/run_squad.py script.
+    ... a model on a SQuAD task, you may leverage the examples/pytorch/question-answering/run_squad.py script.
     ... """
 
 This returns an answer extracted from the text, a confidence score, alongside "start" and "end" values, which are the
@@ -325,8 +327,7 @@ fill that mask with an appropriate token. This allows the model to attend to bot
 right of the mask) and the left context (tokens on the left of the mask). Such a training creates a strong basis for
 downstream tasks requiring bi-directional context, such as SQuAD (question answering, see `Lewis, Lui, Goyal et al.
 <https://arxiv.org/abs/1910.13461>`__, part 4.2). If you would like to fine-tune a model on a masked language modeling
-task, you may leverage the `run_mlm.py
-<https://github.com/huggingface/transformers/tree/master/examples/language-modeling/run_mlm.py>`__ script.
+task, you may leverage the :prefix_link:`run_mlm.py <examples/pytorch/language-modeling/run_mlm.py>` script.
 
 Here is an example of using pipelines to replace a mask from a sequence:
 
@@ -435,7 +436,7 @@ Causal Language Modeling
 Causal language modeling is the task of predicting the token following a sequence of tokens. In this situation, the
 model only attends to the left context (tokens on the left of the mask). Such a training is particularly interesting
 for generation tasks. If you would like to fine-tune a model on a causal language modeling task, you may leverage the
-`run_clm.py <https://github.com/huggingface/transformers/tree/master/examples/language-modeling/run_clm.py>`__ script.
+:prefix_link:`run_clm.py <examples/pytorch/language-modeling/run_clm.py>` script.
 
 Usually, the next token is predicted by sampling from the logits of the last hidden state the model produces from the
 input sequence.
@@ -602,8 +603,7 @@ Named Entity Recognition
 Named Entity Recognition (NER) is the task of classifying tokens according to a class, for example, identifying a token
 as a person, an organisation or a location. An example of a named entity recognition dataset is the CoNLL-2003 dataset,
 which is entirely based on that task. If you would like to fine-tune a model on an NER task, you may leverage the
-`run_ner.py <https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_ner.py>`__
-script.
+:prefix_link:`run_ner.py <examples/pytorch/token-classification/run_ner.py>` script.
 
 Here is an example of using pipelines to do named entity recognition, specifically, trying to identify tokens as
 belonging to one of 9 classes:
@@ -743,11 +743,12 @@ Summarization
 
 Summarization is the task of summarizing a document or an article into a shorter text. If you would like to fine-tune a
 model on a summarization task, you may leverage the `run_summarization.py
-<https://github.com/huggingface/transformers/tree/master/examples/seq2seq/run_summarization.py>`__ script.
+<https://github.com/huggingface/transformers/tree/master/examples/pytorch/summarization/run_summarization.py>`__
+script.
 
 An example of a summarization dataset is the CNN / Daily Mail dataset, which consists of long news articles and was
 created for the task of summarization. If you would like to fine-tune a model on a summarization task, various
-approaches are described in this :prefix_link:`document <examples/seq2seq/README.md>`.
+approaches are described in this :prefix_link:`document <examples/pytorch/summarization/README.md>`.
 
 Here is an example of using the pipelines to do summarization. It leverages a Bart model that was fine-tuned on the CNN
 / Daily Mail data set.
@@ -794,7 +795,7 @@ Here is an example of doing summarization using a model and a tokenizer. The pro
 3. Add the T5 specific prefix "summarize: ".
 4. Use the ``PreTrainedModel.generate()`` method to generate the summary.
 
-In this example we use Google`s T5 model. Even though it was pre-trained only on a multi-task mixed dataset (including
+In this example we use Google's T5 model. Even though it was pre-trained only on a multi-task mixed dataset (including
 CNN / Daily Mail), it yields very good results.
 
 .. code-block::
@@ -823,11 +824,12 @@ Translation
 
 Translation is the task of translating a text from one language to another. If you would like to fine-tune a model on a
 translation task, you may leverage the `run_translation.py
-<https://github.com/huggingface/transformers/tree/master/examples/seq2seq/run_translation.py>`__ script.
+<https://github.com/huggingface/transformers/tree/master/examples/pytorch/translation/run_translation.py>`__ script.
 
 An example of a translation dataset is the WMT English to German dataset, which has sentences in English as the input
 data and the corresponding sentences in German as the target data. If you would like to fine-tune a model on a
-translation task, various approaches are described in this :prefix_link:`document <examples/seq2seq/README.md>`.
+translation task, various approaches are described in this :prefix_link:`document
+<examples/pytorch.translation/README.md>`.
 
 Here is an example of using the pipelines to do translation. It leverages a T5 model that was only pre-trained on a
 multi-task mixture dataset (including WMT), yet, yielding impressive translation results.

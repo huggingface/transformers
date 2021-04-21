@@ -16,9 +16,7 @@ limitations under the License.
 
 # Multiple Choice
 
-Based on the script [`run_swag.py`]().
-
-## PyTorch script: fine-tuning on SWAG
+## Fine-tuning on SWAG with the Trainer
 
 `run_swag` allows you to fine-tune any model from our [hub](https://huggingface.co/models) (as long as its architecture as a `ForMultipleChoice` version in the library) on the SWAG dataset or your own csv/jsonlines files as long as they are structured the same way. To make it works on another dataset, you will need to tweak the `preprocess_function` inside the script.
 
@@ -41,9 +39,9 @@ eval_acc = 0.8338998300509847
 eval_loss = 0.44457291918821606
 ```
 
-## PyTorch version, no Trainer
+## With Accelerate
 
-Based on the script [run_ner_no_trainer.py](https://github.com/huggingface/transformers/blob/master/examples/multiple-choice/run_swag_no_trainer.py).
+Based on the script [run_swag_no_trainer.py](https://github.com/huggingface/transformers/blob/master/examples/pytorch/multiple-choice/run_swag_no_trainer.py).
 
 Like `run_swag.py`, this script allows you to fine-tune any of the models on the [hub](https://huggingface.co/models) (as long as its architecture as a `ForMultipleChoice` version in the library) on
 the SWAG dataset or your own data in a csv or a JSON file. The main difference is that this
@@ -108,24 +106,3 @@ This command is the same and will work for:
 - a training on TPUs
 
 Note that this library is in alpha release so your feedback is more than welcome if you encounter any problem using it.
-
-## Tensorflow
-
-```bash
-export SWAG_DIR=/path/to/swag_data_dir
-python ./examples/multiple-choice/run_tf_multiple_choice.py \
---task_name swag \
---model_name_or_path bert-base-cased \
---do_train \
---do_eval \
---data_dir $SWAG_DIR \
---learning_rate 5e-5 \
---num_train_epochs 3 \
---max_seq_length 80 \
---output_dir models_bert/swag_base \
---per_gpu_eval_batch_size=16 \
---per_device_train_batch_size=16 \
---logging-dir logs \
---gradient_accumulation_steps 2 \
---overwrite_output
-```

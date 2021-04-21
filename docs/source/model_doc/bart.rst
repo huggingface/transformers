@@ -43,7 +43,7 @@ Examples
 _______________________________________________________________________________________________________________________
 
 - Examples and scripts for fine-tuning BART and other models for sequence to sequence tasks can be found in
-  :prefix_link:`examples/seq2seq/ <examples/seq2seq/README.md>`.
+  :prefix_link:`examples/pytorch/summarization/ <examples/pytorch/summarization/README.md>`.
 - An example of how to train :class:`~transformers.BartForConditionalGeneration` with a Hugging Face :obj:`datasets`
   object can be found in this `forum discussion
   <https://discuss.huggingface.co/t/train-bart-for-conditional-generation-e-g-summarization/1904>`__.

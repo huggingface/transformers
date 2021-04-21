@@ -87,7 +87,7 @@ class GlueDataset(Dataset):
         warnings.warn(
             "This dataset will be removed from the library soon, preprocessing should be handled with the 🤗 Datasets "
             "library. You can have a look at this example script for pointers: "
-            "https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_glue.py",
+            "https://github.com/huggingface/transformers/blob/master/examples/pytorch/text-classification/run_glue.py",
             FutureWarning,
         )
         self.args = args

@@ -14,7 +14,7 @@
 
 # This test is meant to be run in on an instance with TPUs like this:
 #
-#   python examples/xla_spawn.py --num_cores=8 tests/test_trainer_tpu.py
+#   python examples/pytorch/xla_spawn.py --num_cores=8 tests/test_trainer_tpu.py
 #
 # Replace 8 with the number of TPU cores you have.
 #
