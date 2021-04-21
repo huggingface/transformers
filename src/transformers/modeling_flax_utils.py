@@ -357,7 +357,7 @@ class FlaxPreTrainedModel(ABC):
                 except UnpicklingError:
                     raise EnvironmentError(f"Unable to convert {archive_file} to Flax deserializable object. ")
             # make sure all arrays are stored as jnp.arrays
-            state = {k: jnp.asarray(v) for k, v in state.items()}
+            state = unflatten_dict({k: jnp.asarray(v) for k, v in flatten_dict(state).items()})
 
         # if model is base model only use model_prefix key
         if cls.base_model_prefix not in dict(model.params) and cls.base_model_prefix in state:
