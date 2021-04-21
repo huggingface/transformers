@@ -17,6 +17,8 @@ limitations under the License.
 
 This folder contains actively maintained examples of use of 🤗 Transformers using the TensorFlow backend, organized along NLP tasks. It is under construction so we thank you for your patience!
 
+Files containing `tf` such as `run_tf_glue.py` are the old-style files that will be rewritten very soon! Files without this such as `run_text_classification.py` are the newer ones. This message will be removed when the revamp is complete.
+
 ## The Big Table of Tasks
 
 Here is the list of all our examples:
