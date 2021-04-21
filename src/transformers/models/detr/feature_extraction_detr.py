@@ -25,6 +25,9 @@ from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import logging
 from .modeling_detr import box_cxcywh_to_xyxy, box_xyxy_to_cxcywh
 
+if is_torch_available():
+    import torch
+    import torch.nn.functional as F
 
 logger = logging.get_logger(__name__)
 
@@ -556,7 +559,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         
         Args:
             outputs (:class:`~transformers.DetrForObjectDetection`):  
-                Raw outputs of the model.
+                Raw outputs of the model. 
             target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`, `optional`):
                 Tensor containing the size (h, w) of each images of the batch.
                 For evaluation, this must be the original image size (before any data augmentation).
