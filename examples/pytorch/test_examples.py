@@ -36,7 +36,8 @@ SRC_DIRS = [
         "language-modeling",
         "multiple-choice",
         "question-answering",
-        "seq2seq",
+        "summarization",
+        "translation",
     ]
 ]
 sys.path.extend(SRC_DIRS)
