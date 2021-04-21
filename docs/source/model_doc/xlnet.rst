@@ -44,7 +44,8 @@ Tips:
   `examples/text-generation/run_generation.py`)
 - XLNet is one of the few models that has no sequence length limit.
 
-The original code can be found `here <https://github.com/zihangdai/xlnet/>`__.
+This model was contributed by `thomwolf <https://huggingface.co/thomwolf>`__. The original code can be found `here
+<https://github.com/zihangdai/xlnet/>`__.
 
 
 XLNetConfig
