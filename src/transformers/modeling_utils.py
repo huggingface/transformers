@@ -876,6 +876,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                       this case, ``from_tf`` should be set to :obj:`True` and a configuration object should be provided
                       as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in
                       a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+                    - A path or url to a model folder containing a `flax checkpoint file` in `.msgpack` format (e.g,
+                      ``./flax_model/`` containing ``flax_model.msgpack``). In this case, ``from_flax`` should be set
+                      to :obj:`True`.
                     - :obj:`None` if you are both providing the configuration and state dictionary (resp. with keyword
                       arguments ``config`` and ``state_dict``).
             model_args (sequence of positional arguments, `optional`):
@@ -907,6 +910,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 standard cache should not be used.
             from_tf (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Load the model weights from a TensorFlow checkpoint save file (see docstring of
+                ``pretrained_model_name_or_path`` argument).
+            from_flax (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Load the model weights from a Flax checkpoint save file (see docstring of
                 ``pretrained_model_name_or_path`` argument).
             force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to force the (re-)download of the model weights and configuration files, overriding the
@@ -969,6 +975,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower, for example purposes, not runnable).
             >>> config = BertConfig.from_json_file('./tf_model/my_tf_model_config.json')
             >>> model = BertModel.from_pretrained('./tf_model/my_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+            >>> # Loading from a Flax checkpoint file instead of a PyTorch model (slower)
+            >>> model = BertModel.from_pretrained('bert-base-uncased', from_flax=True)
+
         """
         config = kwargs.pop("config", None)
         state_dict = kwargs.pop("state_dict", None)

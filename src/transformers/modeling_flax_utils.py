@@ -100,7 +100,7 @@ class FlaxPreTrainedModel(ABC):
         self._required_params = set(flatten_dict(unfreeze(random_params)).keys())
         self.params = random_params
 
-        # tie input and output word embeddings if model has output word embeddings 
+        # tie input and output word embeddings if model has output word embeddings
         # and ``self.config.tie_word_embedding is True``
         self.tie_weights()
 
@@ -111,8 +111,8 @@ class FlaxPreTrainedModel(ABC):
         raise NotImplementedError(f"get_input_embeddings_key method has to be implemented for {self}")
 
     def get_output_embeddings(self) -> Optional[jax.interpreters.xla._DeviceArray]:
-        """Overwrite this method for model classes that have output embeddings,
-        *e.g.*, FlaxBertForMaskedLM.
+        """
+        Overwrite this method for model classes that have output embeddings, *e.g.*, FlaxBertForMaskedLM.
         """
         return
 
