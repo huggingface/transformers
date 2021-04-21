@@ -31,6 +31,7 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_bart"] = [
         "BART_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "BartForCausalLM",
         "BartForConditionalGeneration",
         "BartForQuestionAnswering",
         "BartForSequenceClassification",
@@ -53,6 +54,7 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_bart import (
             BART_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BartForCausalLM,
             BartForConditionalGeneration,
             BartForQuestionAnswering,
             BartForSequenceClassification,

@@ -14,14 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-## Token classification
+# Token classification
 
-Fine-tuning the library models for token classification task such as Named Entity Recognition (NER) or Parts-of-speech
-tagging (POS). The main scrip `run_ner.py` leverages the 🤗 Datasets library and the Trainer API. You can easily
+## PyTorch version
+
+Fine-tuning the library models for token classification task such as Named Entity Recognition (NER), Parts-of-speech
+tagging (POS) pr phrase extraction (CHUNKS). The main scrip `run_ner.py` leverages the 🤗 Datasets library and the Trainer API. You can easily
 customize it to your needs if you need extra processing on your datasets.
 
 It will either run on a datasets hosted on our [hub](https://huggingface.co/datasets) or with your own text files for
-training and validation.
+training and validation, you might just need to add some tweaks in the data preprocessing.
 
 The following example fine-tunes BERT on CoNLL-2003:
 
@@ -56,6 +58,74 @@ of the script.
 ## Old version of the script
 
 You can find the old version of the PyTorch script [here](https://github.com/huggingface/transformers/blob/master/examples/legacy/token-classification/run_ner.py).
+
+## Pytorch version, no Trainer
+
+Based on the script [run_ner_no_trainer.py](https://github.com/huggingface/transformers/blob/master/examples/token-classification/run_ner_no_trainer.py).
+
+Like `run_ner.py`, this script allows you to fine-tune any of the models on the [hub](https://huggingface.co/models) on a
+token classification task, either NER, POS or CHUNKS tasks or your own data in a csv or a JSON file. The main difference is that this
+script exposes the bare training loop, to allow you to quickly experiment and add any customization you would like.
+
+It offers less options than the script with `Trainer` (for instance you can easily change the options for the optimizer
+or the dataloaders directly in the script) but still run in a distributed setup, on TPU and supports mixed precision by
+the mean of the [🤗 `Accelerate`](https://github.com/huggingface/accelerate) library. You can use the script normally
+after installing it:
+
+```bash
+pip install accelerate
+```
+
+then
+
+```bash
+export TASK_NAME=ner
+
+python run_ner_no_trainer.py \
+  --model_name_or_path bert-base-cased \
+  --task_name $TASK_NAME \
+  --max_seq_length 128 \
+  --per_device_train_batch_size 32 \
+  --learning_rate 2e-5 \
+  --num_train_epochs 3 \
+  --output_dir /tmp/$TASK_NAME/
+```
+
+You can then use your usual launchers to run in it in a distributed environment, but the easiest way is to run
+
+```bash
+accelerate config
+```
+
+and reply to the questions asked. Then
+
+```bash
+accelerate test
+```
+
+that will check everything is ready for training. Finally, you can launch training with
+
+```bash
+export TASK_NAME=ner
+
+accelerate launch run_ner_no_trainer.py \
+  --model_name_or_path bert-base-cased \
+  --task_name $TASK_NAME \
+  --max_seq_length 128 \
+  --per_device_train_batch_size 32 \
+  --learning_rate 2e-5 \
+  --num_train_epochs 3 \
+  --output_dir /tmp/$TASK_NAME/
+```
+
+This command is the same and will work for:
+
+- a CPU-only setup
+- a setup with one GPU
+- a distributed training with several GPUs (single or multi node)
+- a training on TPUs
+
+Note that this library is in alpha release so your feedback is more than welcome if you encounter any problem using it.
 
 ### TensorFlow version
 
@@ -118,69 +188,4 @@ export BATCH_SIZE=32
 export NUM_EPOCHS=3
 export SAVE_STEPS=750
 export SEED=1
-```
-
-#### Run the Tensorflow 2 version
-
-To start training, just run:
-
-```bash
-python3 run_tf_ner.py --data_dir ./ \
---labels ./labels.txt \
---model_name_or_path $BERT_MODEL \
---output_dir $OUTPUT_DIR \
---max_seq_length  $MAX_LENGTH \
---num_train_epochs $NUM_EPOCHS \
---per_device_train_batch_size $BATCH_SIZE \
---save_steps $SAVE_STEPS \
---seed $SEED \
---do_train \
---do_eval \
---do_predict
-```
-
-Such as the Pytorch version, if your GPU supports half-precision training, just add the `--fp16` flag. After training, the model will be both evaluated on development and test datasets.
-
-#### Evaluation
-
-Evaluation on development dataset outputs the following for our example:
-```bash
-           precision    recall  f1-score   support
-
- LOCderiv     0.7619    0.6154    0.6809        52
-  PERpart     0.8724    0.8997    0.8858      4057
-  OTHpart     0.9360    0.9466    0.9413       711
-  ORGpart     0.7015    0.6989    0.7002       269
-  LOCpart     0.7668    0.8488    0.8057       496
-      LOC     0.8745    0.9191    0.8963       235
- ORGderiv     0.7723    0.8571    0.8125        91
- OTHderiv     0.4800    0.6667    0.5581        18
-      OTH     0.5789    0.6875    0.6286        16
- PERderiv     0.5385    0.3889    0.4516        18
-      PER     0.5000    0.5000    0.5000         2
-      ORG     0.0000    0.0000    0.0000         3
-
-micro avg     0.8574    0.8862    0.8715      5968
-macro avg     0.8575    0.8862    0.8713      5968
-```
-
-On the test dataset the following results could be achieved:
-```bash
-           precision    recall  f1-score   support
-
-  PERpart     0.8847    0.8944    0.8896      9397
-  OTHpart     0.9376    0.9353    0.9365      1639
-  ORGpart     0.7307    0.7044    0.7173       697
-      LOC     0.9133    0.9394    0.9262       561
-  LOCpart     0.8058    0.8157    0.8107      1150
-      ORG     0.0000    0.0000    0.0000         8
- OTHderiv     0.5882    0.4762    0.5263        42
- PERderiv     0.6571    0.5227    0.5823        44
-      OTH     0.4906    0.6667    0.5652        39
- ORGderiv     0.7016    0.7791    0.7383       172
- LOCderiv     0.8256    0.6514    0.7282       109
-      PER     0.0000    0.0000    0.0000        11
-
-micro avg     0.8722    0.8774    0.8748     13869
-macro avg     0.8712    0.8774    0.8740     13869
 ```

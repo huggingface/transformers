@@ -46,12 +46,13 @@ class SimpleSummarizationPipelineTests(unittest.TestCase):
             decoder_attention_heads=1,
             max_length=4,
             min_length=1,
+            forced_eos_token_id=None,
         )
         model = BartForConditionalGeneration(config)
         # Bias output towards L
         V, C = model.lm_head.weight.shape
 
-        bias = torch.zeros(V, requires_grad=True)
+        bias = torch.zeros(V)
         bias[76] = 10
 
         model.lm_head.bias = torch.nn.Parameter(bias)

@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
@@ -64,7 +65,7 @@ def get_tfds(
     label_name = features_name.pop(label_column_id)
     label_list = list(set(ds[list(files.keys())[0]][label_name]))
     label2id = {label: i for i, label in enumerate(label_list)}
-    input_names = ["input_ids"] + tokenizer.model_input_names
+    input_names = tokenizer.model_input_names
     transformed_ds = {}
 
     if len(features_name) == 1:
@@ -224,12 +225,10 @@ def main():
         level=logging.INFO,
     )
     logger.info(
-        "n_replicas: %s, distributed training: %s, 16-bits training: %s",
-        training_args.n_replicas,
-        bool(training_args.n_replicas > 1),
-        training_args.fp16,
+        f"n_replicas: {training_args.n_replicas}, distributed training: {bool(training_args.n_replicas > 1)}, "
+        f"16-bits training: {training_args.fp16}"
     )
-    logger.info("Training/evaluation parameters %s", training_args)
+    logger.info(f"Training/evaluation parameters {training_args}")
 
     # Load pretrained model and tokenizer
     #
@@ -292,7 +291,6 @@ def main():
     results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
-
         result = trainer.evaluate()
         output_eval_file = os.path.join(training_args.output_dir, "eval_results.txt")
 
@@ -300,8 +298,8 @@ def main():
             logger.info("***** Eval results *****")
 
             for key, value in result.items():
-                logger.info("  %s = %s", key, value)
-                writer.write("%s = %s\n" % (key, value))
+                logger.info(f"  {key} = {value}")
+                writer.write(f"{key} = {value}\n")
 
             results.update(result)
 

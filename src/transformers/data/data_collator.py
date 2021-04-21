@@ -20,7 +20,9 @@ from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
-from ..tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTrainedTokenizerBase
+from ..file_utils import PaddingStrategy
+from ..modeling_utils import PreTrainedModel
+from ..tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 
 
 InputDataClass = NewType("InputDataClass", Any)
@@ -88,7 +90,7 @@ class DataCollatorWithPadding:
     Args:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
             The tokenizer used for encoding the data.
-        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 
@@ -137,7 +139,7 @@ class DataCollatorForTokenClassification:
     Args:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
             The tokenizer used for encoding the data.
-        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 
@@ -190,7 +192,7 @@ class DataCollatorForTokenClassification:
         return batch
 
 
-def _collate_batch(examples, tokenizer):
+def _collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
     """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
     # Tensorize if necessary.
     if isinstance(examples[0], (list, tuple)):
@@ -199,7 +201,7 @@ def _collate_batch(examples, tokenizer):
     # Check if padding is necessary.
     length_of_first = examples[0].size(0)
     are_tensors_same_length = all(x.size(0) == length_of_first for x in examples)
-    if are_tensors_same_length:
+    if are_tensors_same_length and (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0):
         return torch.stack(examples, dim=0)
 
     # If yes, check if we have a `pad_token`.
@@ -211,6 +213,8 @@ def _collate_batch(examples, tokenizer):
 
     # Creating the full tensor and filling it with our data.
     max_length = max(x.size(0) for x in examples)
+    if pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+        max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
     result = examples[0].new_full([len(examples), max_length], tokenizer.pad_token_id)
     for i, example in enumerate(examples):
         if tokenizer.padding_side == "right":
@@ -232,7 +236,12 @@ class DataCollatorForSeq2Seq:
     Args:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
             The tokenizer used for encoding the data.
-        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+        model (:class:`~transformers.PreTrainedModel`):
+            The model that is being trained. If set and has the `prepare_decoder_input_ids_from_labels`, use it to
+            prepare the `decoder_input_ids`
+
+            This is useful when using `label_smoothing` to avoid calculating loss twice.
+        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 
@@ -254,6 +263,7 @@ class DataCollatorForSeq2Seq:
     """
 
     tokenizer: PreTrainedTokenizerBase
+    model: Optional[PreTrainedModel] = None
     padding: Union[bool, str, PaddingStrategy] = True
     max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
@@ -272,13 +282,20 @@ class DataCollatorForSeq2Seq:
                     feature["labels"] + remainder if padding_side == "right" else remainder + feature["labels"]
                 )
 
-        return self.tokenizer.pad(
+        features = self.tokenizer.pad(
             features,
             padding=self.padding,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="pt",
         )
+
+        # prepare decoder_input_ids
+        if self.model is not None and hasattr(self.model, "prepare_decoder_input_ids_from_labels"):
+            decoder_input_ids = self.model.prepare_decoder_input_ids_from_labels(labels=features["labels"])
+            features["decoder_input_ids"] = decoder_input_ids
+
+        return features
 
 
 @dataclass
@@ -296,6 +313,8 @@ class DataCollatorForLanguageModeling:
             non-masked tokens and the value to predict for the masked token.
         mlm_probability (:obj:`float`, `optional`, defaults to 0.15):
             The probability with which to (randomly) mask tokens in the input, when :obj:`mlm` is set to :obj:`True`.
+        pad_to_multiple_of (:obj:`int`, `optional`):
+            If set will pad the sequence to a multiple of the provided value.
 
     .. note::
 
@@ -308,6 +327,7 @@ class DataCollatorForLanguageModeling:
     tokenizer: PreTrainedTokenizerBase
     mlm: bool = True
     mlm_probability: float = 0.15
+    pad_to_multiple_of: Optional[int] = None
 
     def __post_init__(self):
         if self.mlm and self.tokenizer.mask_token is None:
@@ -321,9 +341,9 @@ class DataCollatorForLanguageModeling:
     ) -> Dict[str, torch.Tensor]:
         # Handle dict or lists with proper padding and conversion to tensor.
         if isinstance(examples[0], (dict, BatchEncoding)):
-            batch = self.tokenizer.pad(examples, return_tensors="pt")
+            batch = self.tokenizer.pad(examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of)
         else:
-            batch = {"input_ids": _collate_batch(examples, self.tokenizer)}
+            batch = {"input_ids": _collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)}
 
         # If special token mask has been preprocessed, pop it from the dict.
         special_tokens_mask = batch.pop("special_tokens_mask", None)

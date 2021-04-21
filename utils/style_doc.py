@@ -49,6 +49,7 @@ _re_indent = re.compile(r"^(\s*)\S")
 _re_table = re.compile(r"(\+-+)+\+\s*$")
 # Matches a code block in rst `:: `.
 _re_code_block = re.compile(r"^\s*::\s*$")
+_re_code_block_explicit = re.compile(r"^\.\.\s+code\-block::")
 # Matches any block of the form `.. something::` or `.. something:: bla`.
 _re_ignore = re.compile(r"^\s*\.\.\s+(.*?)\s*::\s*\S*\s*$")
 # Matches comment introduction in rst.
@@ -135,6 +136,14 @@ class CodeStyler:
         """
         return SpecialBlock.NOT_SPECIAL
 
+    def end_of_special_style(self, line):
+        """
+        Sets back the `in_block` attribute to `NOT_SPECIAL`.
+
+        Useful for some docstrings where we may have to go back to `ARG_LIST` instead.
+        """
+        self.in_block = SpecialBlock.NOT_SPECIAL
+
     def style_paragraph(self, paragraph, max_len, no_style=False, min_indent=None):
         """
         Style `paragraph` (a list of lines) by making sure no line goes over `max_len`, except if the `no_style` flag
@@ -220,6 +229,7 @@ class CodeStyler:
         new_lines = []
         paragraph = []
         self.current_indent = ""
+        self.previous_indent = None
         # If one of those is True, the paragraph should not be touched (code samples, lists...)
         no_style = False
         no_style_next = False
@@ -251,7 +261,7 @@ class CodeStyler:
                                 self.current_indent = indent
                         elif not indent.startswith(self.current_indent):
                             # If not, we are leaving the block when we unindent.
-                            self.in_block = SpecialBlock.NOT_SPECIAL
+                            self.end_of_special_style(paragraph[0])
 
                     if self.is_special_block(paragraph[0]):
                         # Maybe we are starting a special block.
@@ -326,12 +336,22 @@ class DocstringStyler(CodeStyler):
 
     def is_special_block(self, line):
         if self.is_no_style_block(line):
+            if self.previous_indent is None and self.in_block == SpecialBlock.ARG_LIST:
+                self.previous_indent = self.current_indent
             self.in_block = SpecialBlock.NO_STYLE
             return True
         if _re_arg_def.search(line) is not None:
             self.in_block = SpecialBlock.ARG_LIST
             return True
         return False
+
+    def end_of_special_style(self, line):
+        if self.previous_indent is not None and line.startswith(self.previous_indent):
+            self.in_block = SpecialBlock.ARG_LIST
+            self.current_indent = self.previous_indent
+        else:
+            self.in_block = SpecialBlock.NOT_SPECIAL
+            self.previous_indent = None
 
     def init_in_block(self, text):
         lines = text.split("\n")
@@ -353,6 +373,28 @@ class DocstringStyler(CodeStyler):
 
 rst_styler = CodeStyler()
 doc_styler = DocstringStyler()
+
+
+def _reindent_code_blocks(text):
+    """Checks indent in code blocks is of four"""
+    lines = text.split("\n")
+    idx = 0
+    while idx < len(lines):
+        # Detect if the line is the start of a new code-block.
+        if _re_code_block.search(lines[idx]) is not None or _re_code_block_explicit.search(lines[idx]) is not None:
+            while len(get_indent(lines[idx])) == 0:
+                idx += 1
+            indent = len(get_indent(lines[idx]))
+            should_continue = True
+            while should_continue:
+                if len(lines[idx]) > 0 and indent < 4:
+                    lines[idx] = " " * 4 + lines[idx][indent:]
+                idx += 1
+                should_continue = (idx < len(lines)) and (len(lines[idx]) == 0 or len(get_indent(lines[idx])) > 0)
+        else:
+            idx += 1
+
+    return "\n".join(lines)
 
 
 def _add_new_lines_before_list(text):
@@ -393,8 +435,10 @@ def style_rst_file(doc_file, max_len=119, check_only=False):
     with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
         doc = f.read()
 
+    # Make sure code blocks are indented at 4
+    clean_doc = _reindent_code_blocks(doc)
     # Add missing new lines before lists
-    clean_doc = _add_new_lines_before_list(doc)
+    clean_doc = _add_new_lines_before_list(clean_doc)
     # Style
     clean_doc = rst_styler.style(clean_doc, max_len=max_len)
 

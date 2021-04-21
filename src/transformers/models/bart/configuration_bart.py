@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ BART model configuration """
+import warnings
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -72,9 +73,6 @@ class BartConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         init_std (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        force_bos_token_to_be_generated (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to force BOS token to be generated at step 1 (after ``decoder_start_token_id``), only
-            :obj:`True` for `bart-large-cnn`.
         encoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
             The LayerDrop probability for the encoder. See the `LayerDrop paper <see
             https://arxiv.org/abs/1909.11556>`__ for more details.
@@ -89,6 +87,9 @@ class BartConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
         num_labels: (:obj:`int`, `optional`, defaults to 3):
             The number of labels to use in :class:`~transformers.BartForSequenceClassification`.
+        forced_eos_token_id (:obj:`int`, `optional`, defaults to 2):
+            The id of the token to force as the last generated token when :obj:`max_length` is reached. Usually set to
+            :obj:`eos_token_id`.
 
     Example::
 
@@ -127,7 +128,6 @@ class BartConfig(PretrainedConfig):
         classifier_dropout=0.0,
         scale_embedding=False,
         gradient_checkpointing=False,
-        force_bos_token_to_be_generated=False,
         use_cache=True,
         num_labels=3,
         pad_token_id=1,
@@ -135,6 +135,7 @@ class BartConfig(PretrainedConfig):
         eos_token_id=2,
         is_encoder_decoder=True,
         decoder_start_token_id=2,
+        forced_eos_token_id=2,
         **kwargs
     ):
         super().__init__(
@@ -144,6 +145,7 @@ class BartConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
+            forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )
 
@@ -168,7 +170,14 @@ class BartConfig(PretrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.force_bos_token_to_be_generated = force_bos_token_to_be_generated  # only relevant for CNN
+
+        # ensure backward compatibilty for BART CNN models
+        if self.forced_bos_token_id is None and kwargs.get("force_bos_token_to_be_generated", False):
+            self.forced_bos_token_id = self.bos_token_id
+            warnings.warn(
+                f"Please make sure the config includes `forced_bos_token_id={self.bos_token_id}` in future versions."
+                "The config can simply be saved and uploaded again to be fixed."
+            )
 
     @property
     def num_attention_heads(self) -> int:

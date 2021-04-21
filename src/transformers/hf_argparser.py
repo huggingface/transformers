@@ -14,6 +14,7 @@
 
 import dataclasses
 import json
+import re
 import sys
 from argparse import ArgumentParser, ArgumentTypeError
 from enum import Enum
@@ -98,7 +99,9 @@ class HfArgumentParser(ArgumentParser):
                 kwargs["type"] = type(kwargs["choices"][0])
                 if field.default is not dataclasses.MISSING:
                     kwargs["default"] = field.default
-            elif field.type is bool or field.type is Optional[bool]:
+                else:
+                    kwargs["required"] = True
+            elif field.type is bool or field.type == Optional[bool]:
                 if field.default is True:
                     self.add_argument(f"--no_{field.name}", action="store_false", dest=field.name, **kwargs)
 
@@ -113,14 +116,18 @@ class HfArgumentParser(ArgumentParser):
                     kwargs["nargs"] = "?"
                     # This is the value that will get picked if we do --field_name (without value)
                     kwargs["const"] = True
-            elif hasattr(field.type, "__origin__") and issubclass(field.type.__origin__, List):
+            elif (
+                hasattr(field.type, "__origin__") and re.search(r"^typing\.List\[(.*)\]$", str(field.type)) is not None
+            ):
                 kwargs["nargs"] = "+"
                 kwargs["type"] = field.type.__args__[0]
                 assert all(
                     x == kwargs["type"] for x in field.type.__args__
-                ), "{} cannot be a List of mixed types".format(field.name)
+                ), f"{field.name} cannot be a List of mixed types"
                 if field.default_factory is not dataclasses.MISSING:
                     kwargs["default"] = field.default_factory()
+                elif field.default is dataclasses.MISSING:
+                    kwargs["required"] = True
             else:
                 kwargs["type"] = field.type
                 if field.default is not dataclasses.MISSING:

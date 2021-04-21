@@ -13,13 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections
 import time
 from typing import Optional
 
 import IPython.display as disp
 
 from ..trainer_callback import TrainerCallback
-from ..trainer_utils import EvaluationStrategy
+from ..trainer_utils import IntervalStrategy
 
 
 def format_time(t):
@@ -33,15 +34,6 @@ def html_progress_bar(value, total, prefix, label, width=300):
     # docstyle-ignore
     return f"""
     <div>
-        <style>
-            /* Turns off some styling */
-            progress {{
-                /* gets rid of default border in Firefox and Opera. */
-                border: none;
-                /* Needs to be in here for Safari polyfill so background images work as expected. */
-                background-size: auto;
-            }}
-        </style>
       {prefix}
       <progress value='{value}' max='{total}' style='width:{width}px; height:20px; vertical-align: middle;'></progress>
       {label}
@@ -277,11 +269,11 @@ class NotebookProgressCallback(TrainerCallback):
         self._force_next_update = False
 
     def on_train_begin(self, args, state, control, **kwargs):
-        self.first_column = "Epoch" if args.evaluation_strategy == EvaluationStrategy.EPOCH else "Step"
+        self.first_column = "Epoch" if args.evaluation_strategy == IntervalStrategy.EPOCH else "Step"
         self.training_loss = 0
         self.last_log = 0
         column_names = [self.first_column] + ["Training Loss"]
-        if args.evaluation_strategy != EvaluationStrategy.NO:
+        if args.evaluation_strategy != IntervalStrategy.NO:
             column_names.append("Validation Loss")
         self.training_tracker = NotebookTrainingTracker(state.max_steps, column_names)
 
@@ -295,6 +287,8 @@ class NotebookProgressCallback(TrainerCallback):
         self._force_next_update = False
 
     def on_prediction_step(self, args, state, control, eval_dataloader=None, **kwargs):
+        if not isinstance(eval_dataloader.dataset, collections.abc.Sized):
+            return
         if self.prediction_bar is None:
             if self.training_tracker is not None:
                 self.prediction_bar = self.training_tracker.add_child(len(eval_dataloader))
@@ -306,7 +300,7 @@ class NotebookProgressCallback(TrainerCallback):
 
     def on_log(self, args, state, control, logs=None, **kwargs):
         # Only for when there is no evaluation
-        if args.evaluation_strategy == EvaluationStrategy.NO and "loss" in logs:
+        if args.evaluation_strategy == IntervalStrategy.NO and "loss" in logs:
             values = {"Training Loss": logs["loss"]}
             # First column is necessarily Step sine we're not in epoch eval strategy
             values["Step"] = state.global_step
@@ -327,6 +321,8 @@ class NotebookProgressCallback(TrainerCallback):
             values["Validation Loss"] = metrics["eval_loss"]
             _ = metrics.pop("total_flos", None)
             _ = metrics.pop("epoch", None)
+            _ = metrics.pop("eval_runtime", None)
+            _ = metrics.pop("eval_samples_per_second", None)
             for k, v in metrics.items():
                 if k == "eval_loss":
                     values["Validation Loss"] = v

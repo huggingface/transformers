@@ -67,6 +67,8 @@ class TFGenerationMixin:
         attention_mask=None,
         decoder_start_token_id=None,
         use_cache=None,
+        forced_bos_token_id=None,
+        forced_eos_token_id=None,
     ):
         r"""
         Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
@@ -137,6 +139,12 @@ class TFGenerationMixin:
             use_cache: (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not the model should use the past last key/values attentions (if applicable to the model) to
                 speed up decoding.
+            forced_bos_token_id (:obj:`int`, `optional`):
+                The id of the token to force as the first generated token after the :obj:`decoder_start_token_id`.
+                Useful for multilingual models like :doc:`mBART <../model_doc/mbart>` where the first generated token
+                needs to be the target language token.
+            forced_eos_token_id (:obj:`int`, `optional`):
+                The id of the token to force as the last generated token when :obj:`max_length` is reached.
             model_specific_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model.
 
@@ -151,7 +159,7 @@ class TFGenerationMixin:
             tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
             model = TFAutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from huggingface.co and cache.
             outputs = model.generate(max_length=40)  # do greedy decoding
-            print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
+            print(f'Generated: {tokenizer.decode(outputs[0], skip_special_tokens=True)}')
 
             tokenizer = AutoTokenizer.from_pretrained('openai-gpt')   # Initialize tokenizer
             model = TFAutoModelWithLMHead.from_pretrained('openai-gpt')    # Download model and configuration from huggingface.co and cache.
@@ -159,7 +167,7 @@ class TFGenerationMixin:
             input_ids = tokenizer.encode(input_context, return_tensors='tf')  # encode input context
             outputs = model.generate(input_ids=input_ids, num_beams=5, num_return_sequences=3, temperature=1.5)  # generate 3 independent sequences using beam search decoding (5 beams) with sampling from initial context 'The dog'
             for i in range(3): #  3 output sequences were generated
-                print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
+                print(f'Generated {i}: {tokenizer.decode(outputs[i], skip_special_tokens=True)}')
 
             tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
             model = TFAutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from huggingface.co and cache.
@@ -167,14 +175,14 @@ class TFGenerationMixin:
             input_ids = tokenizer.encode(input_context, return_tensors='tf')  # encode input context
             outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, num_return_sequences=3, do_sample=True)  # generate 3 candidates using sampling
             for i in range(3): #  3 output sequences were generated
-                print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
+                print(f'Generated {i}: {tokenizer.decode(outputs[i], skip_special_tokens=True)}')
 
             tokenizer = AutoTokenizer.from_pretrained('ctrl')   # Initialize tokenizer
             model = TFAutoModelWithLMHead.from_pretrained('ctrl')    # Download model and configuration from huggingface.co and cache.
             input_context = 'Legal My neighbor is'  # "Legal" is one of the control codes for ctrl
             input_ids = tokenizer.encode(input_context, return_tensors='tf')  # encode input context
             outputs = model.generate(input_ids=input_ids, max_length=50, temperature=0.7, repetition_penalty=1.2)  # generate sequences
-            print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
+            print(f'Generated: {tokenizer.decode(outputs[0], skip_special_tokens=True)}')
 
             tokenizer = AutoTokenizer.from_pretrained('gpt2')   # Initialize tokenizer
             model = TFAutoModelWithLMHead.from_pretrained('gpt2')    # Download model and configuration from huggingface.co and cache.
@@ -213,6 +221,12 @@ class TFGenerationMixin:
         )
         decoder_start_token_id = (
             decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
+        )
+        forced_bos_token_id = (
+            forced_bos_token_id if forced_bos_token_id is not None else self.config.forced_bos_token_id
+        )
+        forced_eos_token_id = (
+            forced_eos_token_id if forced_eos_token_id is not None else self.config.forced_eos_token_id
         )
 
         if input_ids is not None:
@@ -277,9 +291,7 @@ class TFGenerationMixin:
             attention_mask = tf.ones_like(input_ids)
 
         if pad_token_id is None and eos_token_id is not None:
-            logger.warning(
-                "Setting `pad_token_id` to {} (first `eos_token_id`) to generate sequence".format(eos_token_id)
-            )
+            logger.warning(f"Setting `pad_token_id` to {eos_token_id} (first `eos_token_id`) to generate sequence")
             pad_token_id = eos_token_id
 
         # current position and vocab size
@@ -301,8 +313,8 @@ class TFGenerationMixin:
             assert (
                 decoder_start_token_id is not None
             ), "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
-            assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
-            assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
+            assert hasattr(self, "get_encoder"), f"{self} should have a 'get_encoder' function defined"
+            assert callable(self.get_encoder), f"{self.get_encoder} should be a method"
 
             # get encoder and store encoder outputs
             encoder = self.get_encoder()
@@ -380,6 +392,8 @@ class TFGenerationMixin:
                 encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
+                forced_bos_token_id=forced_bos_token_id,
+                forced_eos_token_id=forced_eos_token_id,
             )
         else:
             output = self._generate_no_beam_search(
@@ -425,6 +439,7 @@ class TFGenerationMixin:
         encoder_outputs,
         attention_mask,
         use_cache,
+        **kwargs
     ):
         """
         Generate sequences for each example without beam search (num_beams == 1). All returned sequence are generated
@@ -439,7 +454,7 @@ class TFGenerationMixin:
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **kwargs
             )
             outputs = self(**model_inputs)
             next_token_logits = outputs[0][:, -1, :]
@@ -535,7 +550,7 @@ class TFGenerationMixin:
                 # unfinished_sents is set to zero if eos in sentence
                 unfinished_sents -= is_sents_unfinished_and_token_to_add_is_eos
 
-            # stop when there is a </s> in each sentence, or if we exceed the maximul length
+            # stop when there is a </s> in each sentence, or if we exceed the maximum length
             if tf.math.reduce_max(unfinished_sents) == 0:
                 break
 
@@ -591,6 +606,9 @@ class TFGenerationMixin:
         encoder_outputs,
         attention_mask,
         use_cache,
+        forced_bos_token_id,
+        forced_eos_token_id,
+        **kwargs,
     ):
         """Generate sequences for each example with beam search."""
 
@@ -619,7 +637,7 @@ class TFGenerationMixin:
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **kwargs
             )
             outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
             next_token_logits = outputs[0][:, -1, :]  # (batch_size * num_beams, vocab_size)
@@ -641,7 +659,11 @@ class TFGenerationMixin:
 
             if self.config.is_encoder_decoder and do_sample is False:
                 next_token_logits = self.adjust_logits_during_generation(
-                    next_token_logits, cur_len=cur_len, max_length=max_length
+                    next_token_logits,
+                    cur_len=cur_len,
+                    max_length=max_length,
+                    forced_bos_token_id=forced_bos_token_id,
+                    forced_eos_token_id=forced_eos_token_id,
                 )
             #             calculate log softmax score
             scores = tf.nn.log_softmax(next_token_logits, axis=-1)  # (batch_size * num_beams, vocab_size)
@@ -739,7 +761,7 @@ class TFGenerationMixin:
                 if done[batch_idx]:
                     assert (
                         len(generated_hyps[batch_idx]) >= num_beams
-                    ), "Batch can only be done if at least {} beams have been generated".format(num_beams)
+                    ), f"Batch can only be done if at least {num_beams} beams have been generated."
                     assert (
                         eos_token_id is not None and pad_token_id is not None
                     ), "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
@@ -819,12 +841,14 @@ class TFGenerationMixin:
             if eos_token_id is not None and all(
                 (token_id % vocab_size).numpy().item() != eos_token_id for token_id in next_tokens[batch_idx]
             ):
-                assert tf.reduce_all(
+                if not tf.reduce_all(
                     next_scores[batch_idx, :num_beams] == tf.reshape(beam_scores, (batch_size, num_beams))[batch_idx]
-                ), "If batch_idx is not done, final next scores: {} have to equal to accumulated beam_scores: {}".format(
-                    next_scores[:, :num_beams][batch_idx], tf.reshape(beam_scores, (batch_size, num_beams))[batch_idx]
-                )
-
+                ):
+                    raise ValueError(
+                        f"If batch_idx is not done, final next scores: {next_scores[:, :num_beams][batch_idx]} have "
+                        "to equal to accumulated beam_scores: "
+                        f"{tf.reshape(beam_scores, (batch_size, num_beams))[batch_idx]}"
+                    )
             # need to add best num_beams hypotheses to generated hyps
             for beam_id in range(num_beams):
                 effective_beam_id = batch_idx * num_beams + beam_id
@@ -847,9 +871,9 @@ class TFGenerationMixin:
                 best_hyp = sorted_hyps.pop()[1]
                 sent_lengths_list.append(len(best_hyp))
                 best.append(best_hyp)
-        assert output_batch_size == len(best), "Output batch size {} must match output beam hypotheses {}".format(
-            output_batch_size, len(best)
-        )
+        assert output_batch_size == len(
+            best
+        ), f"Output batch size {output_batch_size} must match output beam hypotheses {len(best)}"
 
         sent_lengths = tf.convert_to_tensor(sent_lengths_list, dtype=tf.int32)
 
@@ -893,12 +917,21 @@ class TFGenerationMixin:
     def _reorder_cache(past, beam_idx):
         return tuple(tf.gather(layer_past, beam_idx, axis=1) for layer_past in past)
 
-    def adjust_logits_during_generation(self, logits, **kwargs):
+    def adjust_logits_during_generation(
+        self, logits, cur_len, max_length, forced_bos_token_id, forced_eos_token_id, **kwargs
+    ):
         """
         Implement in subclasses of :class:`~transformers.PreTrainedModel` for custom behavior to adjust the logits in
         the generate method.
         """
-        return logits
+        if cur_len == 1 and forced_bos_token_id is not None:
+            vocab_range = tf.constant(range(self.config.vocab_size))
+            return tf.where(vocab_range != forced_bos_token_id, -1e8, logits)
+        elif cur_len == max_length - 1 and forced_eos_token_id is not None:
+            vocab_range = tf.constant(range(self.config.vocab_size))
+            return tf.where(vocab_range != forced_eos_token_id, -1e8, logits)
+        else:
+            return logits
 
 
 def _create_next_token_logits_penalties(input_ids, logits, repetition_penalty):
@@ -959,9 +992,9 @@ def calc_banned_bad_words_ids(prev_input_ids, bad_words_ids):
         banned_tokens_slice = []
 
         for banned_token_seq in bad_words_ids:
-            assert len(banned_token_seq) > 0, "Banned words token sequences {} cannot have an empty list".format(
-                bad_words_ids
-            )
+            assert (
+                len(banned_token_seq) > 0
+            ), f"Banned words token sequences { bad_words_ids} cannot have an empty list"
 
             if _tokens_match(prev_input_ids_slice.numpy().tolist(), banned_token_seq[:-1]) is False:
                 # if tokens do not match continue

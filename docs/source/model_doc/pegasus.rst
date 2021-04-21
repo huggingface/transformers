@@ -51,8 +51,8 @@ All the `checkpoints <https://huggingface.co/models?search=pegasus>`__ are fine-
 Examples
 _______________________________________________________________________________________________________________________
 
-- :prefix_link:`Script <examples/seq2seq/finetune_pegasus_xsum.sh>` to fine-tune pegasus on the XSUM dataset. Data
-  download instructions at :prefix_link:`examples/seq2seq/ <examples/seq2seq/README.md>`.
+- :prefix_link:`Script <examples/research_projects/seq2seq-distillation/finetune_pegasus_xsum.sh>` to fine-tune pegasus
+  on the XSUM dataset. Data download instructions at :prefix_link:`examples/seq2seq/ <examples/seq2seq/README.md>`.
 - FP16 is not supported (help/ideas on this appreciated!).
 - The adafactor optimizer is recommended for pegasus fine-tuning.
 
@@ -78,20 +78,20 @@ Usage Example
 
 .. code-block:: python
 
-    from transformers import PegasusForConditionalGeneration, PegasusTokenizer
-    import torch
-    src_text = [
-        """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
-    ]
+    >>> from transformers import PegasusForConditionalGeneration, PegasusTokenizer
+    >>> import torch
+    >>> src_text = [
+    ...     """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
+    >>> ]
 
-    model_name = 'google/pegasus-xsum'
-    torch_device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    tokenizer = PegasusTokenizer.from_pretrained(model_name)
-    model = PegasusForConditionalGeneration.from_pretrained(model_name).to(torch_device)
-    batch = tokenizer.prepare_seq2seq_batch(src_text, truncation=True, padding='longest', return_tensors="pt").to(torch_device)
-    translated = model.generate(**batch)
-    tgt_text = tokenizer.batch_decode(translated, skip_special_tokens=True)
-    assert tgt_text[0] == "California's largest electricity provider has turned off power to hundreds of thousands of customers."
+    >>> model_name = 'google/pegasus-xsum'
+    >>> device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    >>> tokenizer = PegasusTokenizer.from_pretrained(model_name)
+    >>> model = PegasusForConditionalGeneration.from_pretrained(model_name).to(device)
+    >>> batch = tokenizer(src_text, truncation=True, padding='longest', return_tensors="pt").to(torch_device)
+    >>> translated = model.generate(**batch)
+    >>> tgt_text = tokenizer.batch_decode(translated, skip_special_tokens=True)
+    >>> assert tgt_text[0] == "California's largest electricity provider has turned off power to hundreds of thousands of customers."
 
 
 
@@ -107,7 +107,7 @@ PegasusTokenizer
 warning: ``add_tokens`` does not work at the moment.
 
 .. autoclass:: transformers.PegasusTokenizer
-    :members: __call__, prepare_seq2seq_batch
+    :members:
 
 
 PegasusTokenizerFast
@@ -128,6 +128,13 @@ PegasusForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.PegasusForConditionalGeneration
+    :members: forward
+
+
+PegasusForCausalLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.PegasusForCausalLM
     :members: forward
 
 

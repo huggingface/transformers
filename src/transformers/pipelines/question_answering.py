@@ -4,10 +4,9 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ..data import SquadExample, SquadFeatures, squad_convert_examples_to_features
-from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
+from ..file_utils import PaddingStrategy, add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
 from ..tokenization_utils import PreTrainedTokenizer
-from ..tokenization_utils_base import PaddingStrategy
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
 
 
@@ -43,12 +42,12 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
                 if k not in item:
                     raise KeyError("You need to provide a dictionary with keys {question:..., context:...}")
                 elif item[k] is None:
-                    raise ValueError("`{}` cannot be None".format(k))
+                    raise ValueError(f"`{k}` cannot be None")
                 elif isinstance(item[k], str) and len(item[k]) == 0:
-                    raise ValueError("`{}` cannot be empty".format(k))
+                    raise ValueError(f"`{k}` cannot be empty")
 
             return QuestionAnsweringPipeline.create_sample(**item)
-        raise ValueError("{} argument needs to be of type (SquadExample, dict)".format(item))
+        raise ValueError(f"{item} argument needs to be of type (SquadExample, dict)")
 
     def __call__(self, *args, **kwargs):
         # Detect where the actual inputs are
@@ -78,7 +77,7 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
             else:
                 raise ValueError("Arguments can't be understood")
         else:
-            raise ValueError("Unknown arguments {}".format(kwargs))
+            raise ValueError(f"Unknown arguments {kwargs}")
 
         # Normalize inputs
         if isinstance(inputs, dict):
@@ -87,7 +86,7 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
             # Copy to avoid overriding arguments
             inputs = [i for i in inputs]
         else:
-            raise ValueError("Invalid arguments {}".format(inputs))
+            raise ValueError(f"Invalid arguments {kwargs}")
 
         for i, item in enumerate(inputs):
             inputs[i] = self.normalize(item)
@@ -196,8 +195,9 @@ class QuestionAnsweringPipeline(Pipeline):
             A :obj:`dict` or a list of :obj:`dict`: Each result comes as a dictionary with the following keys:
 
             - **score** (:obj:`float`) -- The probability associated to the answer.
-            - **start** (:obj:`int`) -- The start index of the answer (in the tokenized version of the input).
-            - **end** (:obj:`int`) -- The end index of the answer (in the tokenized version of the input).
+            - **start** (:obj:`int`) -- The character start index of the answer (in the tokenized version of the
+              input).
+            - **end** (:obj:`int`) -- The character end index of the answer (in the tokenized version of the input).
             - **answer** (:obj:`str`) -- The answer to the question.
         """
         # Set defaults values
@@ -210,10 +210,10 @@ class QuestionAnsweringPipeline(Pipeline):
         kwargs.setdefault("handle_impossible_answer", False)
 
         if kwargs["topk"] < 1:
-            raise ValueError("topk parameter should be >= 1 (got {})".format(kwargs["topk"]))
+            raise ValueError(f"topk parameter should be >= 1 (got {kwargs['topk']})")
 
         if kwargs["max_answer_len"] < 1:
-            raise ValueError("max_answer_len parameter should be >= 1 (got {})".format(kwargs["max_answer_len"]))
+            raise ValueError(f"max_answer_len parameter should be >= 1 (got {(kwargs['max_answer_len'])}")
 
         # Convert inputs to features
         examples = self._args_parser(*args, **kwargs)
@@ -268,7 +268,7 @@ class QuestionAnsweringPipeline(Pipeline):
                 )
 
                 # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
-                if self.tokenizer.cls_token_id:
+                if self.tokenizer.cls_token_id is not None:
                     cls_index = np.nonzero(encoded_inputs["input_ids"] == self.tokenizer.cls_token_id)
                     p_mask[cls_index] = 0
 
@@ -300,7 +300,7 @@ class QuestionAnsweringPipeline(Pipeline):
 
         all_answers = []
         for features, example in zip(features_list, examples):
-            model_input_names = self.tokenizer.model_input_names + ["input_ids"]
+            model_input_names = self.tokenizer.model_input_names
             fw_args = {k: [feature.__dict__[k] for feature in features] for k in model_input_names}
 
             # Manage tensor allocation on correct device

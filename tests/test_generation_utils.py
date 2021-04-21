@@ -26,7 +26,10 @@ if is_torch_available():
     from transformers import BartForConditionalGeneration, BartTokenizer, top_k_top_p_filtering
     from transformers.generation_beam_search import BeamSearchScorer
     from transformers.generation_logits_process import (
+        ForcedBOSTokenLogitsProcessor,
+        ForcedEOSTokenLogitsProcessor,
         HammingDiversityLogitsProcessor,
+        InfNanRemoveLogitsProcessor,
         LogitsProcessorList,
         MinLengthLogitsProcessor,
         NoBadWordsLogitsProcessor,
@@ -36,7 +39,10 @@ if is_torch_available():
         TopKLogitsWarper,
         TopPLogitsWarper,
     )
+    from transformers.generation_stopping_criteria import MaxLengthCriteria, StoppingCriteriaList
     from transformers.generation_utils import (
+        BeamSampleDecoderOnlyOutput,
+        BeamSampleEncoderDecoderOutput,
         BeamSearchDecoderOnlyOutput,
         BeamSearchEncoderDecoderOutput,
         GreedySearchDecoderOnlyOutput,
@@ -49,12 +55,13 @@ if is_torch_available():
 class GenerationTesterMixin:
     model_tester = None
     all_generative_model_classes = ()
+    input_name = "input_ids"
 
     def _get_input_ids_and_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        input_ids = inputs_dict["input_ids"]
-        attention_mask = torch.ones_like(input_ids)
+        input_ids = inputs_dict[self.input_name]
+        attention_mask = torch.ones_like(input_ids, dtype=torch.long)
 
         # cut to half length & take max batch_size 3
         max_batch_size = 2
@@ -70,7 +77,14 @@ class GenerationTesterMixin:
         return config, input_ids, attention_mask, max_length
 
     @staticmethod
-    def _get_logits_processor_and_kwargs(input_length, eos_token_id, diversity_penalty=None):
+    def _get_logits_processor_and_kwargs(
+        input_length,
+        eos_token_id,
+        forced_bos_token_id=None,
+        forced_eos_token_id=None,
+        max_length=None,
+        diversity_penalty=None,
+    ):
         process_kwargs = {
             "min_length": input_length + 1,
             "bad_words_ids": [[1, 0]],
@@ -90,6 +104,18 @@ class GenerationTesterMixin:
                     MinLengthLogitsProcessor(process_kwargs["min_length"], eos_token_id),
                 ]
                 if eos_token_id is not None
+                else []
+            )
+            + (
+                [
+                    ForcedBOSTokenLogitsProcessor(forced_bos_token_id),
+                ]
+                if forced_bos_token_id is not None
+                else []
+            )
+            + (
+                [ForcedEOSTokenLogitsProcessor(max_length, forced_eos_token_id)]
+                if forced_eos_token_id is not None
                 else []
             )
             + [
@@ -182,13 +208,17 @@ class GenerationTesterMixin:
         output_hidden_states=False,
         return_dict_in_generate=False,
     ):
+        if model.config.is_encoder_decoder:
+            max_length = 4
         logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-            input_ids.shape[-1], model.config.eos_token_id
+            input_ids.shape[-1],
+            eos_token_id=model.config.eos_token_id,
+            forced_bos_token_id=model.config.forced_bos_token_id,
+            forced_eos_token_id=model.config.forced_eos_token_id,
+            max_length=max_length,
         )
 
         kwargs = {}
-        if model.config.is_encoder_decoder:
-            max_length = 4
 
         output_generate = model.generate(
             input_ids,
@@ -200,6 +230,7 @@ class GenerationTesterMixin:
             output_hidden_states=output_hidden_states,
             output_scores=output_scores,
             return_dict_in_generate=return_dict_in_generate,
+            remove_invalid_values=True,
             **logits_process_kwargs,
         )
 
@@ -255,6 +286,7 @@ class GenerationTesterMixin:
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict_in_generate=return_dict_in_generate,
+            remove_invalid_values=True,
             **logits_warper_kwargs,
             **process_kwargs,
         )
@@ -276,19 +308,23 @@ class GenerationTesterMixin:
             attention_mask_clone = attention_mask.repeat_interleave(num_return_sequences, dim=0)
             input_ids_clone = input_ids.repeat_interleave(num_return_sequences, dim=0)
 
+        # prevent flaky generation test failures
+        logits_processor.append(InfNanRemoveLogitsProcessor())
+
         with torch.no_grad():
-            output_sample = model.sample(
-                input_ids_clone,
-                attention_mask=attention_mask_clone,
-                max_length=max_length,
-                logits_processor=logits_processor,
-                logits_warper=logits_warper,
-                output_scores=output_scores,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict_in_generate=return_dict_in_generate,
-                **kwargs,
-            )
+            with torch.no_grad():
+                output_sample = model.sample(
+                    input_ids_clone,
+                    attention_mask=attention_mask_clone,
+                    max_length=max_length,
+                    logits_processor=logits_processor,
+                    logits_warper=logits_warper,
+                    output_scores=output_scores,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    return_dict_in_generate=return_dict_in_generate,
+                    **kwargs,
+                )
         return output_sample, output_generate
 
     def _beam_search_generate(
@@ -315,6 +351,7 @@ class GenerationTesterMixin:
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict_in_generate=return_dict_in_generate,
+            remove_invalid_values=True,
             **beam_kwargs,
             **logits_process_kwargs,
         )
@@ -377,6 +414,7 @@ class GenerationTesterMixin:
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict_in_generate=return_dict_in_generate,
+            remove_invalid_values=True,
             **beam_kwargs,
             **logits_warper_kwargs,
         )
@@ -395,6 +433,10 @@ class GenerationTesterMixin:
         else:
             attention_mask = attention_mask.repeat_interleave(beam_scorer.num_beams * num_return_sequences, dim=0)
 
+        # prevent flaky generation test failures
+        logits_processor = LogitsProcessorList()
+        logits_processor.append(InfNanRemoveLogitsProcessor())
+
         torch.manual_seed(0)
         with torch.no_grad():
             output_beam_sample = model.beam_sample(
@@ -403,6 +445,7 @@ class GenerationTesterMixin:
                 max_length=max_length,
                 attention_mask=attention_mask,
                 logits_warper=logits_warper,
+                logits_processor=logits_processor,
                 output_scores=output_scores,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -436,6 +479,7 @@ class GenerationTesterMixin:
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict_in_generate=return_dict_in_generate,
+            remove_invalid_values=True,
             **beam_kwargs,
             **logits_process_kwargs,
         )
@@ -544,13 +588,18 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
             model = model_class(config).to(torch_device).eval()
-            process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-                input_ids.shape[-1], model.config.eos_token_id
-            )
-            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
 
             if model.config.is_encoder_decoder:
                 max_length = 4
+
+            process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+                input_ids.shape[-1],
+                model.config.eos_token_id,
+                forced_bos_token_id=model.config.forced_bos_token_id,
+                forced_eos_token_id=model.config.forced_eos_token_id,
+                max_length=max_length,
+            )
+            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
 
             # check `generate()` and `sample()` are equal
             output_sample, output_generate = self._sample_generate(
@@ -586,13 +635,17 @@ class GenerationTesterMixin:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
             config.use_cache = False
             model = model_class(config).to(torch_device).eval()
-            process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-                input_ids.shape[-1], model.config.eos_token_id
-            )
-            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
-
             if model.config.is_encoder_decoder:
                 max_length = 4
+
+            process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+                input_ids.shape[-1],
+                model.config.eos_token_id,
+                forced_bos_token_id=model.config.forced_bos_token_id,
+                forced_eos_token_id=model.config.forced_eos_token_id,
+                max_length=max_length,
+            )
+            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
 
             output_sample, output_generate = self._sample_generate(
                 model=model,
@@ -630,14 +683,19 @@ class GenerationTesterMixin:
             # shorter than `max_length` can be generated which could lead to flaky circle ci
             # failures if the top `num_return_sequences` beams are all shorter than the longest beam
             config.eos_token_id = None
+            config.forced_eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
-
-            logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-                input_ids.shape[-1], config.eos_token_id
-            )
             if model.config.is_encoder_decoder:
                 max_length = 4
+
+            logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+                input_ids.shape[-1],
+                config.eos_token_id,
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
+                max_length,
+            )
             beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
 
             # check `generate()` and `beam_search()` are equal
@@ -684,13 +742,19 @@ class GenerationTesterMixin:
             # shorter than `max_length` can be generated which could lead to flaky circle ci
             # failures if the top `num_return_sequences` beams are all shorter than the longest beam
             config.eos_token_id = None
+            config.forced_eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
-            logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-                input_ids.shape[-1], config.eos_token_id
-            )
             if model.config.is_encoder_decoder:
                 max_length = 4
+
+            logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+                input_ids.shape[-1],
+                config.eos_token_id,
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
+                max_length,
+            )
             beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
             output_generate, output_beam_search = self._beam_search_generate(
                 model=model,
@@ -732,19 +796,24 @@ class GenerationTesterMixin:
             # shorter than `max_length` can be generated which could lead to flaky circle ci
             # failures if the top `num_return_sequences` beams are all shorter than the longest beam
             config.eos_token_id = None
+            config.forced_eos_token_id = None
 
             if not hasattr(config, "use_cache"):
                 # only relevant if model has "use_cache"
                 return
 
             model = model_class(config).to(torch_device).eval()
-
-            logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-                input_ids.shape[-1], config.eos_token_id
-            )
-
             if model.config.is_encoder_decoder:
                 max_length = 4
+
+            logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+                input_ids.shape[-1],
+                config.eos_token_id,
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
+                max_length,
+            )
+
             beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
 
             config.use_cache = True
@@ -780,6 +849,7 @@ class GenerationTesterMixin:
             # shorter than `max_length` can be generated which could lead to flaky circle ci
             # failures if the top `num_return_sequences` beams are all shorter than the longest beam
             config.eos_token_id = None
+            config.forced_eos_token_id = None
 
             logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
 
@@ -819,6 +889,7 @@ class GenerationTesterMixin:
             # shorter than `max_length` can be generated which could lead to flaky circle ci
             # failures if the top `num_return_sequences` beams are all shorter than the longest beam
             config.eos_token_id = None
+            config.forced_eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
             logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
@@ -848,11 +919,11 @@ class GenerationTesterMixin:
             )
 
             if model.config.is_encoder_decoder:
-                self.assertIsInstance(output_beam_sample, BeamSearchEncoderDecoderOutput)
-                self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
+                self.assertIsInstance(output_beam_sample, BeamSampleEncoderDecoderOutput)
+                self.assertIsInstance(output_generate, BeamSampleEncoderDecoderOutput)
             else:
-                self.assertIsInstance(output_beam_sample, BeamSearchDecoderOnlyOutput)
-                self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
+                self.assertIsInstance(output_beam_sample, BeamSampleDecoderOnlyOutput)
+                self.assertIsInstance(output_generate, BeamSampleDecoderOnlyOutput)
 
             self.assertListEqual(output_generate.sequences.tolist(), output_beam_sample.sequences.tolist())
             self.assertTrue(
@@ -880,6 +951,7 @@ class GenerationTesterMixin:
             output_ids_generate = model.generate(
                 do_sample=False,
                 max_length=max_length,
+                remove_invalid_values=True,
             )
 
             self.assertIsNotNone(output_ids_generate)
@@ -892,16 +964,22 @@ class GenerationTesterMixin:
             # shorter than `max_length` can be generated which could lead to flaky circle ci
             # failures if the top `num_return_sequences` beams are all shorter than the longest beam
             config.eos_token_id = None
-
-            logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-                input_ids.shape[-1], config.eos_token_id, diversity_penalty=2.0
-            )
+            config.forced_eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
-
-            # check `generate()` and `group_beam_search()` are equal
             if model.config.is_encoder_decoder:
                 max_length = 4
+
+            logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+                input_ids.shape[-1],
+                config.eos_token_id,
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
+                max_length,
+                diversity_penalty=2.0,
+            )
+
+            # check `generate()` and `group_beam_search()` are equal
             beam_kwargs, beam_scorer = self._get_diverse_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
             output_generate, output_group_beam_search = self._group_beam_search_generate(
                 model=model,
@@ -943,16 +1021,22 @@ class GenerationTesterMixin:
             # shorter than `max_length` can be generated which could lead to flaky circle ci
             # failures if the top `num_return_sequences` beams are all shorter than the longest beam
             config.eos_token_id = None
+            config.forced_eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
+            if model.config.is_encoder_decoder:
+                max_length = 4
 
             logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-                input_ids.shape[-1], config.eos_token_id, diversity_penalty=2.0
+                input_ids.shape[-1],
+                config.eos_token_id,
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
+                max_length,
+                diversity_penalty=2.0,
             )
 
             num_return_sequences = 1
-            if model.config.is_encoder_decoder:
-                max_length = 4
             beam_kwargs, beam_scorer = self._get_diverse_beam_scorer_and_kwargs(
                 input_ids.shape[0], max_length, num_return_sequences=num_return_sequences
             )
@@ -1241,7 +1325,12 @@ class GenerationIntegrationTests(unittest.TestCase):
         input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
         outputs = bart_model.generate(
-            input_ids, num_beams=4, num_return_sequences=2, num_beam_groups=4, diversity_penalty=2.0
+            input_ids,
+            num_beams=4,
+            num_return_sequences=2,
+            num_beam_groups=4,
+            diversity_penalty=2.0,
+            remove_invalid_values=True,
         )
 
         generated_text = bart_tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -1253,3 +1342,192 @@ class GenerationIntegrationTests(unittest.TestCase):
                 "Justin Timberlake and Jessica Biel have a son. The baby is named Silas Randall Timberlake. It is the first child for both. The couple announced the pregnancy in January. The name Silas is the middle name of Timberlake's maternal grandfather. It's also his own middle name.",
             ],
         )
+
+    def test_max_length_backward_compat_greedy(self):
+        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
+        bart_tokenizer = BartTokenizer.from_pretrained("sshleifer/bart-tiny-random")
+        bart_model = BartForConditionalGeneration.from_pretrained("sshleifer/bart-tiny-random").to(torch_device)
+        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        max_length = 20
+        input_ids = input_ids.expand(2, -1)
+        model_kwargs = bart_model._prepare_encoder_decoder_kwargs_for_generation(input_ids, {})
+        input_ids = bart_model._prepare_decoder_input_ids_for_generation(
+            input_ids,
+            decoder_start_token_id=bart_model.config.decoder_start_token_id,
+            bos_token_id=bart_model.config.bos_token_id,
+        )
+
+        bart_model.greedy_search(
+            input_ids,
+            max_length=max_length,
+            pad_token_id=bart_model.config.pad_token_id,
+            eos_token_id=bart_model.config.eos_token_id,
+            **model_kwargs,
+        )
+
+    def test_max_length_backward_compat_sample(self):
+        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
+        bart_tokenizer = BartTokenizer.from_pretrained("sshleifer/bart-tiny-random")
+        bart_model = BartForConditionalGeneration.from_pretrained("sshleifer/bart-tiny-random").to(torch_device)
+        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        max_length = 20
+        input_ids = input_ids.expand(2, -1)
+        model_kwargs = bart_model._prepare_encoder_decoder_kwargs_for_generation(input_ids, {})
+        input_ids = bart_model._prepare_decoder_input_ids_for_generation(
+            input_ids,
+            decoder_start_token_id=bart_model.config.decoder_start_token_id,
+            bos_token_id=bart_model.config.bos_token_id,
+        )
+        with torch.no_grad():
+            bart_model.sample(
+                input_ids,
+                max_length=max_length,
+                pad_token_id=bart_model.config.pad_token_id,
+                eos_token_id=bart_model.config.eos_token_id,
+                **model_kwargs,
+            )
+
+    def test_max_length_backward_compat_beam_search(self):
+        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
+        bart_tokenizer = BartTokenizer.from_pretrained("sshleifer/bart-tiny-random")
+        bart_model = BartForConditionalGeneration.from_pretrained("sshleifer/bart-tiny-random").to(torch_device)
+        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        batch_size = 1
+        max_length = 20
+        num_beams = 2
+
+        input_ids = input_ids.expand(2, -1)
+        model_kwargs = bart_model._prepare_encoder_decoder_kwargs_for_generation(input_ids, {})
+        input_ids = bart_model._prepare_decoder_input_ids_for_generation(
+            input_ids,
+            decoder_start_token_id=bart_model.config.decoder_start_token_id,
+            bos_token_id=bart_model.config.bos_token_id,
+        )
+
+        beam_scorer = BeamSearchScorer(
+            batch_size=batch_size,
+            max_length=max_length,
+            num_beams=num_beams,
+            device=torch_device,
+        )
+        _ = bart_model.beam_search(
+            input_ids, num_beams=num_beams, max_length=max_length, beam_scorer=beam_scorer, **model_kwargs
+        )
+
+    def test_max_length_backward_compat_group_beam_search(self):
+        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
+        bart_tokenizer = BartTokenizer.from_pretrained("sshleifer/bart-tiny-random")
+        bart_model = BartForConditionalGeneration.from_pretrained("sshleifer/bart-tiny-random").to(torch_device)
+        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        batch_size = 1
+        max_length = 20
+        num_beams = 6
+        num_beam_groups = 3
+        num_return_sequences = num_beams * batch_size
+
+        input_ids = input_ids.expand(6, -1)
+        model_kwargs = bart_model._prepare_encoder_decoder_kwargs_for_generation(input_ids, {})
+        input_ids = bart_model._prepare_decoder_input_ids_for_generation(
+            input_ids,
+            decoder_start_token_id=bart_model.config.decoder_start_token_id,
+            bos_token_id=bart_model.config.bos_token_id,
+        )
+
+        diverse_beam_scorer = BeamSearchScorer(
+            batch_size=batch_size,
+            max_length=max_length,
+            num_beams=num_beams,
+            device=torch_device,
+            num_beam_hyps_to_keep=num_return_sequences,
+            num_beam_groups=num_beam_groups,
+        )
+        bart_model.group_beam_search(
+            input_ids, diverse_beam_scorer, num_beams=num_beams, max_length=max_length, **model_kwargs
+        )
+
+    def test_max_length_warning_if_different(self):
+        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
+        bart_tokenizer = BartTokenizer.from_pretrained("sshleifer/bart-tiny-random")
+        bart_model = BartForConditionalGeneration.from_pretrained("sshleifer/bart-tiny-random").to(torch_device)
+        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        batch_size = 1
+
+        max_length = 20
+        num_beams = 6
+        num_beam_groups = 3
+        num_return_sequences = num_beams * batch_size
+        stopping_criteria_max_length = 18
+        stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=stopping_criteria_max_length)])
+
+        # Greedy
+        input_ids = input_ids.expand(6, -1)
+        model_kwargs = bart_model._prepare_encoder_decoder_kwargs_for_generation(input_ids, {})
+        input_ids = bart_model._prepare_decoder_input_ids_for_generation(
+            input_ids,
+            decoder_start_token_id=bart_model.config.decoder_start_token_id,
+            bos_token_id=bart_model.config.bos_token_id,
+        )
+
+        with self.assertWarns(UserWarning):
+            bart_model.greedy_search(
+                input_ids,
+                max_length=max_length,
+                pad_token_id=bart_model.config.pad_token_id,
+                stopping_criteria=stopping_criteria,
+                eos_token_id=bart_model.config.eos_token_id,
+                **model_kwargs,
+            )
+
+        # Sample
+        with self.assertWarns(UserWarning):
+            with torch.no_grad():
+                bart_model.sample(
+                    input_ids,
+                    max_length=max_length,
+                    stopping_criteria=stopping_criteria,
+                    pad_token_id=bart_model.config.pad_token_id,
+                    eos_token_id=bart_model.config.eos_token_id,
+                    **model_kwargs,
+                )
+
+        # Beam
+        beam_scorer = BeamSearchScorer(
+            batch_size=batch_size,
+            max_length=max_length,
+            num_beams=num_beams,
+            device=torch_device,
+        )
+        with self.assertWarns(UserWarning):
+            with torch.no_grad():
+                bart_model.beam_search(
+                    input_ids,
+                    num_beams=num_beams,
+                    stopping_criteria=stopping_criteria,
+                    max_length=max_length,
+                    beam_scorer=beam_scorer,
+                    **model_kwargs,
+                )
+
+        # Grouped beam search
+        diverse_beam_scorer = BeamSearchScorer(
+            batch_size=batch_size,
+            max_length=max_length,
+            num_beams=num_beams,
+            device=torch_device,
+            num_beam_hyps_to_keep=num_return_sequences,
+            num_beam_groups=num_beam_groups,
+        )
+        with self.assertWarns(UserWarning):
+            bart_model.group_beam_search(
+                input_ids,
+                diverse_beam_scorer,
+                stopping_criteria=stopping_criteria,
+                num_beams=num_beams,
+                max_length=max_length,
+                **model_kwargs,
+            )

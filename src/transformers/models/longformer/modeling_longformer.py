@@ -44,6 +44,7 @@ from .configuration_longformer import LongformerConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "allenai/longformer-base-4096"
 _CONFIG_FOR_DOC = "LongformerConfig"
 _TOKENIZER_FOR_DOC = "LongformerTokenizer"
 
@@ -520,8 +521,8 @@ class LongformerSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
             )
         self.num_heads = config.num_attention_heads
         self.head_dim = int(config.hidden_size / config.num_attention_heads)
@@ -553,6 +554,7 @@ class LongformerSelfAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
+        layer_head_mask=None,
         is_index_masked=None,
         is_index_global_attn=None,
         is_global_attn=None,
@@ -640,6 +642,12 @@ class LongformerSelfAttention(nn.Module):
 
         attn_probs = F.softmax(attn_scores, dim=-1, dtype=torch.float32)  # use fp32 for numerical stability
 
+        if layer_head_mask is not None:
+            assert layer_head_mask.size() == (
+                self.num_heads,
+            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+            attn_probs = layer_head_mask.view(1, 1, -1, 1) * attn_probs
+
         # softmax sometimes inserts NaN if all positions are masked, replace them with 0
         attn_probs = torch.masked_fill(attn_probs, is_index_masked[:, :, None, None], 0.0)
         attn_probs = attn_probs.type_as(attn_scores)
@@ -677,6 +685,7 @@ class LongformerSelfAttention(nn.Module):
             global_attn_output, global_attn_probs = self._compute_global_attn_output_from_hidden(
                 hidden_states=hidden_states,
                 max_num_global_attn_indices=max_num_global_attn_indices,
+                layer_head_mask=layer_head_mask,
                 is_local_index_global_attn_nonzero=is_local_index_global_attn_nonzero,
                 is_index_global_attn_nonzero=is_index_global_attn_nonzero,
                 is_local_index_no_global_attn_nonzero=is_local_index_no_global_attn_nonzero,
@@ -984,6 +993,7 @@ class LongformerSelfAttention(nn.Module):
         self,
         hidden_states,
         max_num_global_attn_indices,
+        layer_head_mask,
         is_local_index_global_attn_nonzero,
         is_index_global_attn_nonzero,
         is_local_index_no_global_attn_nonzero,
@@ -1044,6 +1054,18 @@ class LongformerSelfAttention(nn.Module):
         global_attn_probs_float = F.softmax(
             global_attn_scores, dim=-1, dtype=torch.float32
         )  # use fp32 for numerical stability
+
+        # apply layer head masking
+        if layer_head_mask is not None:
+            assert layer_head_mask.size() == (
+                self.num_heads,
+            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+            global_attn_probs_float = layer_head_mask.view(1, -1, 1, 1) * global_attn_probs_float.view(
+                batch_size, self.num_heads, max_num_global_attn_indices, seq_len
+            )
+            global_attn_probs_float = global_attn_probs_float.view(
+                batch_size * self.num_heads, max_num_global_attn_indices, seq_len
+            )
 
         global_attn_probs = F.dropout(
             global_attn_probs_float.type_as(global_attn_scores), p=self.dropout, training=self.training
@@ -1109,6 +1131,7 @@ class LongformerAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
+        layer_head_mask=None,
         is_index_masked=None,
         is_index_global_attn=None,
         is_global_attn=None,
@@ -1117,6 +1140,7 @@ class LongformerAttention(nn.Module):
         self_outputs = self.self(
             hidden_states,
             attention_mask=attention_mask,
+            layer_head_mask=layer_head_mask,
             is_index_masked=is_index_masked,
             is_index_global_attn=is_index_global_attn,
             is_global_attn=is_global_attn,
@@ -1171,6 +1195,7 @@ class LongformerLayer(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
+        layer_head_mask=None,
         is_index_masked=None,
         is_index_global_attn=None,
         is_global_attn=None,
@@ -1179,6 +1204,7 @@ class LongformerLayer(nn.Module):
         self_attn_outputs = self.attention(
             hidden_states,
             attention_mask=attention_mask,
+            layer_head_mask=layer_head_mask,
             is_index_masked=is_index_masked,
             is_index_global_attn=is_index_global_attn,
             is_global_attn=is_global_attn,
@@ -1209,6 +1235,7 @@ class LongformerEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
+        head_mask=None,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
@@ -1222,7 +1249,12 @@ class LongformerEncoder(nn.Module):
         all_attentions = () if output_attentions else None  # All local attentions.
         all_global_attentions = () if (output_attentions and is_global_attn) else None
 
-        for i, layer_module in enumerate(self.layer):
+        # check if head_mask has a correct number of layers specified if desired
+        if head_mask is not None:
+            assert head_mask.size()[0] == (
+                len(self.layer)
+            ), f"The head_mask should be specified for {len(self.layer)} layers, but it is for {head_mask.size()[0]}."
+        for idx, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -1238,6 +1270,7 @@ class LongformerEncoder(nn.Module):
                     create_custom_forward(layer_module),
                     hidden_states,
                     attention_mask,
+                    head_mask[idx] if head_mask is not None else None,
                     is_index_masked,
                     is_index_global_attn,
                 )
@@ -1245,6 +1278,7 @@ class LongformerEncoder(nn.Module):
                 layer_outputs = layer_module(
                     hidden_states,
                     attention_mask=attention_mask,
+                    layer_head_mask=head_mask[idx] if head_mask is not None else None,
                     is_index_masked=is_index_masked,
                     is_index_global_attn=is_index_global_attn,
                     is_global_attn=is_global_attn,
@@ -1330,15 +1364,19 @@ class LongformerPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """ Initialize the weights """
-        if isinstance(module, (nn.Linear, nn.Embedding)):
+        if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
 
 
 LONGFORMER_START_DOCSTRING = r"""
@@ -1385,6 +1423,18 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
 
             - 0 for local attention (a sliding window attention),
             - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
+
+        head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
+            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the heas is **masked**.
+
+        decoder_head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
+            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
 
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
@@ -1492,9 +1542,8 @@ class LongformerModel(LongformerPreTrainedModel):
         padding_len = (attention_window - seq_len % attention_window) % attention_window
         if padding_len > 0:
             logger.info(
-                "Input ids are automatically padded from {} to {} to be a multiple of `config.attention_window`: {}".format(
-                    seq_len, seq_len + padding_len, attention_window
-                )
+                f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
+                f"`config.attention_window`: {attention_window}"
             )
             if input_ids is not None:
                 input_ids = F.pad(input_ids, (0, padding_len), value=pad_token_id)
@@ -1534,6 +1583,7 @@ class LongformerModel(LongformerPreTrainedModel):
         input_ids=None,
         attention_mask=None,
         global_attention_mask=None,
+        head_mask=None,
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
@@ -1617,6 +1667,7 @@ class LongformerModel(LongformerPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
+            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1667,6 +1718,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         input_ids=None,
         attention_mask=None,
         global_attention_mask=None,
+        head_mask=None,
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
@@ -1708,6 +1760,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             global_attention_mask=global_attention_mask,
+            head_mask=head_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
@@ -1732,6 +1785,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
             logits=prediction_scores,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            global_attentions=outputs.global_attentions,
         )
 
 
@@ -1758,7 +1812,7 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="allenai/longformer-base-4096",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LongformerSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1767,6 +1821,7 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
         input_ids=None,
         attention_mask=None,
         global_attention_mask=None,
+        head_mask=None,
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
@@ -1793,6 +1848,7 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             global_attention_mask=global_attention_mask,
+            head_mask=head_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
@@ -1822,6 +1878,7 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            global_attentions=outputs.global_attentions,
         )
 
 
@@ -1871,6 +1928,7 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
         input_ids=None,
         attention_mask=None,
         global_attention_mask=None,
+        head_mask=None,
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
@@ -1932,6 +1990,7 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             global_attention_mask=global_attention_mask,
+            head_mask=head_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
@@ -2002,7 +2061,7 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="allenai/longformer-base-4096",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LongformerTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -2011,6 +2070,7 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
         input_ids=None,
         attention_mask=None,
         global_attention_mask=None,
+        head_mask=None,
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
@@ -2030,6 +2090,7 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             global_attention_mask=global_attention_mask,
+            head_mask=head_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
@@ -2066,6 +2127,7 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            global_attentions=outputs.global_attentions,
         )
 
 
@@ -2091,7 +2153,7 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
     )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="allenai/longformer-base-4096",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LongformerMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -2101,6 +2163,7 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
         token_type_ids=None,
         attention_mask=None,
         global_attention_mask=None,
+        head_mask=None,
         labels=None,
         position_ids=None,
         inputs_embeds=None,
@@ -2150,6 +2213,7 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
             token_type_ids=flat_token_type_ids,
             attention_mask=flat_attention_mask,
             global_attention_mask=flat_global_attention_mask,
+            head_mask=head_mask,
             inputs_embeds=flat_inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

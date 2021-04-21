@@ -47,6 +47,7 @@
     _import_structure["models.{{cookiecutter.lowercase_modelname}}"].extend(
         [
             "{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "{{cookiecutter.camelcase_modelname}}ForCausalLM",
             "{{cookiecutter.camelcase_modelname}}ForConditionalGeneration",
             "{{cookiecutter.camelcase_modelname}}ForQuestionAnswering",
             "{{cookiecutter.camelcase_modelname}}ForSequenceClassification",
@@ -115,6 +116,7 @@
         from .models.{{cookiecutter.lowercase_modelname}} import (
             {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
             {{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
+            {{cookiecutter.camelcase_modelname}}ForCausalLM,
             {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
             {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
             {{cookiecutter.camelcase_modelname}}Model,
@@ -209,6 +211,7 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_mo
 {% else -%}
 from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_modelname}} import (
     {{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
+    {{cookiecutter.camelcase_modelname}}ForCausalLM,
     {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
     {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
     {{cookiecutter.camelcase_modelname}}Model,
@@ -232,10 +235,7 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_mo
 
 # Below: "# Model for Causal LM mapping"
 # Replace with:
-{% if cookiecutter.is_encoder_decoder_model == "False" -%}
         ({{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}ForCausalLM),
-{% else -%}
-{% endif -%}
 # End.
 
 # Below: "# Model for Masked LM mapping"
@@ -384,6 +384,7 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase
 {% else -%}
     "{{cookiecutter.camelcase_modelname}}Encoder",
     "{{cookiecutter.camelcase_modelname}}Decoder",
+    "{{cookiecutter.camelcase_modelname}}DecoderWrapper",
 {% endif -%}
 # End.
 
@@ -393,5 +394,6 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase
 {% else -%}
     "{{cookiecutter.camelcase_modelname}}Encoder",  # Building part of bigger (tested) model.
     "{{cookiecutter.camelcase_modelname}}Decoder",  # Building part of bigger (tested) model.
+    "{{cookiecutter.camelcase_modelname}}DecoderWrapper", # Building part of bigger (tested) model.
 {% endif -%}
 # End.

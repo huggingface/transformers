@@ -177,6 +177,7 @@ class TFBlenderbotModelTest(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (TFBlenderbotForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFBlenderbotModelTester(self)
@@ -211,14 +212,6 @@ class TFBlenderbotModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI
-        pass
-
-    def test_mixed_precision(self):
-        # TODO JP: Make Blenderbot float16 compliant
-        pass
-
-    def test_xla_mode(self):
-        # TODO JP: Make Blenderbot XLA compliant
         pass
 
     def test_resize_token_embeddings(self):
@@ -294,10 +287,9 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
             return True
         raise
     except Exception:
-        msg = "{} != {}".format(a, b)
-        if prefix:
-            msg = prefix + ": " + msg
-        raise AssertionError(msg)
+        if len(prefix) > 0:
+            prefix = f"{prefix}: "
+        raise AssertionError(f"{prefix}{a} != {b}")
 
 
 def _long_tensor(tok_lst):
@@ -316,7 +308,7 @@ class TFBlenderbot400MIntegrationTests(unittest.TestCase):
 
     @cached_property
     def model(self):
-        model = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name, from_pt=True)
+        model = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name)
         return model
 
     @slow

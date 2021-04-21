@@ -32,13 +32,16 @@ _import_structure = {
 
 if is_sentencepiece_available():
     _import_structure["tokenization_mbart"] = ["MBartTokenizer"]
+    _import_structure["tokenization_mbart50"] = ["MBart50Tokenizer"]
 
 if is_tokenizers_available():
+    _import_structure["tokenization_mbart50_fast"] = ["MBart50TokenizerFast"]
     _import_structure["tokenization_mbart_fast"] = ["MBartTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_mbart"] = [
         "MBART_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "MBartForCausalLM",
         "MBartForConditionalGeneration",
         "MBartForQuestionAnswering",
         "MBartForSequenceClassification",
@@ -55,13 +58,16 @@ if TYPE_CHECKING:
 
     if is_sentencepiece_available():
         from .tokenization_mbart import MBartTokenizer
+        from .tokenization_mbart50 import MBart50Tokenizer
 
     if is_tokenizers_available():
+        from .tokenization_mbart50_fast import MBart50TokenizerFast
         from .tokenization_mbart_fast import MBartTokenizerFast
 
     if is_torch_available():
         from .modeling_mbart import (
             MBART_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MBartForCausalLM,
             MBartForConditionalGeneration,
             MBartForQuestionAnswering,
             MBartForSequenceClassification,

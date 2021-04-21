@@ -27,15 +27,17 @@ import shutil
 import sys
 import tarfile
 import tempfile
-from collections import OrderedDict
+from collections import OrderedDict, UserDict
 from contextlib import contextmanager
 from dataclasses import fields
+from enum import Enum
 from functools import partial, wraps
 from hashlib import sha256
 from pathlib import Path
 from types import ModuleType
 from typing import Any, BinaryIO, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
+from uuid import uuid4
 from zipfile import ZipFile, is_zipfile
 
 import numpy as np
@@ -44,22 +46,16 @@ from tqdm.auto import tqdm
 
 import requests
 from filelock import FileLock
+from transformers.utils.versions import importlib_metadata
 
 from . import __version__
 from .hf_api import HfFolder
 from .utils import logging
 
 
-# The package importlib_metadata is in a different place, depending on the python version.
-if sys.version_info < (3, 8):
-    import importlib_metadata
-else:
-    import importlib.metadata as importlib_metadata
-
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-ENV_VARS_TRUE_VALUES = {"1", "ON", "YES"}
+ENV_VARS_TRUE_VALUES = {"1", "ON", "YES", "TRUE"}
 ENV_VARS_TRUE_AND_AUTO_VALUES = ENV_VARS_TRUE_VALUES.union({"AUTO"})
 
 USE_TF = os.environ.get("USE_TF", "AUTO").upper()
@@ -82,27 +78,24 @@ else:
 if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VALUES:
     _tf_available = importlib.util.find_spec("tensorflow") is not None
     if _tf_available:
+        candidates = (
+            "tensorflow",
+            "tensorflow-cpu",
+            "tensorflow-gpu",
+            "tf-nightly",
+            "tf-nightly-cpu",
+            "tf-nightly-gpu",
+            "intel-tensorflow",
+        )
+        _tf_version = None
         # For the metadata, we have to look for both tensorflow and tensorflow-cpu
-        try:
-            _tf_version = importlib_metadata.version("tensorflow")
-        except importlib_metadata.PackageNotFoundError:
+        for pkg in candidates:
             try:
-                _tf_version = importlib_metadata.version("tensorflow-cpu")
+                _tf_version = importlib_metadata.version(pkg)
+                break
             except importlib_metadata.PackageNotFoundError:
-                try:
-                    _tf_version = importlib_metadata.version("tensorflow-gpu")
-                except importlib_metadata.PackageNotFoundError:
-                    try:
-                        _tf_version = importlib_metadata.version("tf-nightly")
-                    except importlib_metadata.PackageNotFoundError:
-                        try:
-                            _tf_version = importlib_metadata.version("tf-nightly-cpu")
-                        except importlib_metadata.PackageNotFoundError:
-                            try:
-                                _tf_version = importlib_metadata.version("tf-nightly-gpu")
-                            except importlib_metadata.PackageNotFoundError:
-                                _tf_version = None
-                                _tf_available = False
+                pass
+        _tf_available = _tf_version is not None
     if _tf_available:
         if version.parse(_tf_version) < version.parse("2"):
             logger.info(f"TensorFlow found but with version {_tf_version}. Transformers requires version 2 minimum.")
@@ -144,7 +137,21 @@ try:
     _faiss_version = importlib_metadata.version("faiss")
     logger.debug(f"Successfully imported faiss version {_faiss_version}")
 except importlib_metadata.PackageNotFoundError:
-    _faiss_available = False
+    try:
+        _faiss_version = importlib_metadata.version("faiss-cpu")
+        logger.debug(f"Successfully imported faiss version {_faiss_version}")
+    except importlib_metadata.PackageNotFoundError:
+        _faiss_available = False
+
+
+_onnx_available = (
+    importlib.util.find_spec("keras2onnx") is not None and importlib.util.find_spec("onnxruntime") is not None
+)
+try:
+    _onxx_version = importlib_metadata.version("onnx")
+    logger.debug(f"Successfully imported onnx version {_onxx_version}")
+except importlib_metadata.PackageNotFoundError:
+    _onnx_available = False
 
 
 _scatter_available = importlib.util.find_spec("torch_scatter") is not None
@@ -153,6 +160,22 @@ try:
     logger.debug(f"Successfully imported torch-scatter version {_scatter_version}")
 except importlib_metadata.PackageNotFoundError:
     _scatter_available = False
+
+
+_soundfile_available = importlib.util.find_spec("soundfile") is not None
+try:
+    _soundfile_version = importlib_metadata.version("soundfile")
+    logger.debug(f"Successfully imported soundfile version {_soundfile_version}")
+except importlib_metadata.PackageNotFoundError:
+    _soundfile_available = False
+
+
+_torchaudio_available = importlib.util.find_spec("torchaudio") is not None
+try:
+    _torchaudio_version = importlib_metadata.version("torchaudio")
+    logger.debug(f"Successfully imported torchaudio version {_torchaudio_version}")
+except importlib_metadata.PackageNotFoundError:
+    _torchaudio_available = False
 
 
 torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
@@ -171,7 +194,7 @@ if (
     and "PYTORCH_TRANSFORMERS_CACHE" not in os.environ
     and "TRANSFORMERS_CACHE" not in os.environ
 ):
-    logger.warn(
+    logger.warning(
         "In Transformers v4.0.0, the default path to cache downloaded models changed from "
         "'~/.cache/torch/transformers' to '~/.cache/huggingface/transformers'. Since you don't seem to have overridden "
         "and '~/.cache/torch/transformers' is a directory that exists, we're moving it to "
@@ -183,12 +206,15 @@ if (
 PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path)
 PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
 TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
+SESSION_ID = uuid4().hex
+DISABLE_TELEMETRY = os.getenv("DISABLE_TELEMETRY", False) in ENV_VARS_TRUE_VALUES
 
 WEIGHTS_NAME = "pytorch_model.bin"
 TF2_WEIGHTS_NAME = "tf_model.h5"
 TF_WEIGHTS_NAME = "model.ckpt"
 FLAX_WEIGHTS_NAME = "flax_model.msgpack"
 CONFIG_NAME = "config.json"
+FEATURE_EXTRACTOR_NAME = "preprocessor_config.json"
 MODEL_CARD_NAME = "modelcard.json"
 
 SENTENCEPIECE_UNDERLINE = "▁"
@@ -210,12 +236,32 @@ PRESET_MIRROR_DICT = {
 }
 
 
+_is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0").upper() in ENV_VARS_TRUE_VALUES else False
+
+
+def is_offline_mode():
+    return _is_offline_mode
+
+
 def is_torch_available():
     return _torch_available
 
 
+def is_torch_cuda_available():
+    if is_torch_available():
+        import torch
+
+        return torch.cuda.is_available()
+    else:
+        return False
+
+
 def is_tf_available():
     return _tf_available
+
+
+def is_onnx_available():
+    return _onnx_available
 
 
 def is_flax_available():
@@ -275,6 +321,10 @@ def is_tokenizers_available():
     return importlib.util.find_spec("tokenizers") is not None
 
 
+def is_vision_available():
+    return importlib.util.find_spec("PIL") is not None
+
+
 def is_in_notebook():
     try:
         # Test adapted from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
@@ -297,7 +347,7 @@ def is_pandas_available():
     return importlib.util.find_spec("pandas") is not None
 
 
-def is_sagemaker_distributed_available():
+def is_sagemaker_dp_enabled():
     # Get the sagemaker specific env variable.
     sagemaker_params = os.getenv("SM_FRAMEWORK_PARAMS", "{}")
     try:
@@ -309,6 +359,47 @@ def is_sagemaker_distributed_available():
         return False
     # Lastly, check if the `smdistributed` module is present.
     return importlib.util.find_spec("smdistributed") is not None
+
+
+def is_sagemaker_mp_enabled():
+    # Get the sagemaker specific mp parameters from smp_options variable.
+    smp_options = os.getenv("SM_HP_MP_PARAMETERS", "{}")
+    try:
+        # Parse it and check the field "partitions" is included, it is required for model parallel.
+        smp_options = json.loads(smp_options)
+        if "partitions" not in smp_options:
+            return False
+    except json.JSONDecodeError:
+        return False
+
+    # Get the sagemaker specific framework parameters from mpi_options variable.
+    mpi_options = os.getenv("SM_FRAMEWORK_PARAMS", "{}")
+    try:
+        # Parse it and check the field "sagemaker_distributed_dataparallel_enabled".
+        mpi_options = json.loads(mpi_options)
+        if not mpi_options.get("sagemaker_mpi_enabled", False):
+            return False
+    except json.JSONDecodeError:
+        return False
+    # Lastly, check if the `smdistributed` module is present.
+    return importlib.util.find_spec("smdistributed") is not None
+
+
+def is_training_run_on_sagemaker():
+    return "SAGEMAKER_JOB_NAME" in os.environ
+
+
+def is_soundfile_availble():
+    return _soundfile_available
+
+
+def is_torchaudio_available():
+    return _torchaudio_available
+
+
+def is_speech_available():
+    # For now this depends on torchaudio but the exact dependency might evolve in the future.
+    return _torchaudio_available
 
 
 def torch_only_method(fn):
@@ -427,70 +518,46 @@ explained here: https://pandas.pydata.org/pandas-docs/stable/getting_started/ins
 """
 
 
-def requires_datasets(obj):
+# docstyle-ignore
+SPEECH_IMPORT_ERROR = """
+{0} requires the torchaudio library but it was not found in your environment. You can install it with pip:
+`pip install torchaudio`
+"""
+
+
+# docstyle-ignore
+VISION_IMPORT_ERROR = """
+{0} requires the PIL library but it was not found in your environment. You can install it with pip:
+`pip install pillow`
+"""
+
+
+BACKENDS_MAPPING = OrderedDict(
+    [
+        ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
+        ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
+        ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
+        ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
+        ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
+        ("scatter", (is_scatter_available, SCATTER_IMPORT_ERROR)),
+        ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
+        ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
+        ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
+        ("tf", (is_tf_available, TENSORFLOW_IMPORT_ERROR)),
+        ("tokenziers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
+        ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
+        ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
+    ]
+)
+
+
+def requires_backends(obj, backends):
+    if not isinstance(backends, (list, tuple)):
+        backends = [backends]
+
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_datasets_available():
-        raise ImportError(DATASETS_IMPORT_ERROR.format(name))
-
-
-def requires_faiss(obj):
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_faiss_available():
-        raise ImportError(FAISS_IMPORT_ERROR.format(name))
-
-
-def requires_pytorch(obj):
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_torch_available():
-        raise ImportError(PYTORCH_IMPORT_ERROR.format(name))
-
-
-def requires_sklearn(obj):
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_sklearn_available():
-        raise ImportError(SKLEARN_IMPORT_ERROR.format(name))
-
-
-def requires_tf(obj):
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_tf_available():
-        raise ImportError(TENSORFLOW_IMPORT_ERROR.format(name))
-
-
-def requires_flax(obj):
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_flax_available():
-        raise ImportError(FLAX_IMPORT_ERROR.format(name))
-
-
-def requires_tokenizers(obj):
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_tokenizers_available():
-        raise ImportError(TOKENIZERS_IMPORT_ERROR.format(name))
-
-
-def requires_sentencepiece(obj):
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_sentencepiece_available():
-        raise ImportError(SENTENCEPIECE_IMPORT_ERROR.format(name))
-
-
-def requires_protobuf(obj):
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_protobuf_available():
-        raise ImportError(PROTOBUF_IMPORT_ERROR.format(name))
-
-
-def requires_pandas(obj):
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_pandas_available():
-        raise ImportError(PANDAS_IMPORT_ERROR.format(name))
-
-
-def requires_scatter(obj):
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_scatter_available():
-        raise ImportError(SCATTER_IMPORT_ERROR.format(name))
+    if not all(BACKENDS_MAPPING[backend][0]() for backend in backends):
+        raise ImportError("".join([BACKENDS_MAPPING[backend][1].format(name) for backend in backends]))
 
 
 def add_start_docstrings(*docstr):
@@ -503,8 +570,8 @@ def add_start_docstrings(*docstr):
 
 def add_start_docstrings_to_model_forward(*docstr):
     def docstring_decorator(fn):
-        class_name = ":class:`~transformers.{}`".format(fn.__qualname__.split(".")[0])
-        intro = "   The {} forward method, overrides the :func:`__call__` special method.".format(class_name)
+        class_name = f":class:`~transformers.{fn.__qualname__.split('.')[0]}`"
+        intro = f"   The {class_name} forward method, overrides the :func:`__call__` special method."
         note = r"""
 
     .. note::
@@ -968,11 +1035,11 @@ def filename_to_url(filename, cache_dir=None):
 
     cache_path = os.path.join(cache_dir, filename)
     if not os.path.exists(cache_path):
-        raise EnvironmentError("file {} not found".format(cache_path))
+        raise EnvironmentError(f"file {cache_path} not found")
 
     meta_path = cache_path + ".json"
     if not os.path.exists(meta_path):
-        raise EnvironmentError("file {} not found".format(meta_path))
+        raise EnvironmentError(f"file {meta_path} not found")
 
     with open(meta_path, encoding="utf-8") as meta_file:
         metadata = json.load(meta_file)
@@ -1057,6 +1124,10 @@ def cached_path(
     if isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
 
+    if is_offline_mode() and not local_files_only:
+        logger.info("Offline mode: forcing local_files_only=True")
+        local_files_only = True
+
     if is_remote_url(url_or_filename):
         # URL, so get it from the cache (downloading if necessary)
         output_path = get_from_cache(
@@ -1074,10 +1145,10 @@ def cached_path(
         output_path = url_or_filename
     elif urlparse(url_or_filename).scheme == "":
         # File, but it doesn't exist.
-        raise EnvironmentError("file {} not found".format(url_or_filename))
+        raise EnvironmentError(f"file {url_or_filename} not found")
     else:
         # Something unknown
-        raise ValueError("unable to parse {} as a URL or as a local path".format(url_or_filename))
+        raise ValueError(f"unable to parse {url_or_filename} as a URL or as a local path")
 
     if extract_compressed_file:
         if not is_zipfile(output_path) and not tarfile.is_tarfile(output_path):
@@ -1106,24 +1177,57 @@ def cached_path(
                 tar_file.extractall(output_path_extracted)
                 tar_file.close()
             else:
-                raise EnvironmentError("Archive format of {} could not be identified".format(output_path))
+                raise EnvironmentError(f"Archive format of {output_path} could not be identified")
 
         return output_path_extracted
 
     return output_path
 
 
+def define_sagemaker_information():
+    try:
+        instance_data = requests.get(os.environ["ECS_CONTAINER_METADATA_URI"]).json()
+        dlc_container_used = instance_data["Image"]
+        dlc_tag = instance_data["Image"].split(":")[1]
+    except Exception:
+        dlc_container_used = None
+        dlc_tag = None
+
+    sagemaker_params = json.loads(os.getenv("SM_FRAMEWORK_PARAMS", "{}"))
+    runs_distributed_training = True if "sagemaker_distributed_dataparallel_enabled" in sagemaker_params else False
+    account_id = os.getenv("TRAINING_JOB_ARN").split(":")[4] if "TRAINING_JOB_ARN" in os.environ else None
+
+    sagemaker_object = {
+        "sm_framework": os.getenv("SM_FRAMEWORK_MODULE", None),
+        "sm_region": os.getenv("AWS_REGION", None),
+        "sm_number_gpu": os.getenv("SM_NUM_GPUS", 0),
+        "sm_number_cpu": os.getenv("SM_NUM_CPUS", 0),
+        "sm_distributed_training": runs_distributed_training,
+        "sm_deep_learning_container": dlc_container_used,
+        "sm_deep_learning_container_tag": dlc_tag,
+        "sm_account_id": account_id,
+    }
+    return sagemaker_object
+
+
 def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
     """
     Formats a user-agent string with basic info about a request.
     """
-    ua = "transformers/{}; python/{}".format(__version__, sys.version.split()[0])
+    ua = f"transformers/{__version__}; python/{sys.version.split()[0]}; session_id/{SESSION_ID}"
     if is_torch_available():
         ua += f"; torch/{_torch_version}"
     if is_tf_available():
         ua += f"; tensorflow/{_tf_version}"
+    if DISABLE_TELEMETRY:
+        return ua + "; telemetry/off"
+    if is_training_run_on_sagemaker():
+        ua += "; " + "; ".join(f"{k}/{v}" for k, v in define_sagemaker_information().items())
+    # CI will set this value to True
+    if os.environ.get("TRANSFORMERS_IS_CI", "").upper() in ENV_VARS_TRUE_VALUES:
+        ua += "; is_ci/true"
     if isinstance(user_agent, dict):
-        ua += "; " + "; ".join("{}/{}".format(k, v) for k, v in user_agent.items())
+        ua += "; " + "; ".join(f"{k}/{v}" for k, v in user_agent.items())
     elif isinstance(user_agent, str):
         ua += "; " + user_agent
     return ua
@@ -1131,11 +1235,11 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
 
 def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers: Optional[Dict[str, str]] = None):
     """
-    Donwload remote file. Do not gobble up errors.
+    Download remote file. Do not gobble up errors.
     """
     headers = copy.deepcopy(headers)
     if resume_size > 0:
-        headers["Range"] = "bytes=%d-" % (resume_size,)
+        headers["Range"] = f"bytes={resume_size}-"
     r = requests.get(url, stream=True, proxies=proxies, headers=headers)
     r.raise_for_status()
     content_length = r.headers.get("Content-Length")
@@ -1185,12 +1289,12 @@ def get_from_cache(
 
     headers = {"user-agent": http_user_agent(user_agent)}
     if isinstance(use_auth_token, str):
-        headers["authorization"] = "Bearer {}".format(use_auth_token)
+        headers["authorization"] = f"Bearer {use_auth_token}"
     elif use_auth_token:
         token = HfFolder.get_token()
         if token is None:
             raise EnvironmentError("You specified use_auth_token=True, but a huggingface token was not found.")
-        headers["authorization"] = "Bearer {}".format(token)
+        headers["authorization"] = f"Bearer {token}"
 
     url_to_download = url
     etag = None
@@ -1212,8 +1316,12 @@ def get_from_cache(
             # between the HEAD and the GET (unlikely, but hey).
             if 300 <= r.status_code <= 399:
                 url_to_download = r.headers["Location"]
+        except (requests.exceptions.SSLError, requests.exceptions.ProxyError):
+            # Actually raise for those subclasses of ConnectionError
+            raise
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
-            # etag is already None
+            # Otherwise, our Internet connection is down.
+            # etag is None
             pass
 
     filename = url_to_filename(url, etag)
@@ -1283,14 +1391,14 @@ def get_from_cache(
         # Download to temporary file, then copy to cache dir once finished.
         # Otherwise you get corrupt cache entries if the download gets interrupted.
         with temp_file_manager() as temp_file:
-            logger.info("%s not found in cache or force_download set to True, downloading to %s", url, temp_file.name)
+            logger.info(f"{url} not found in cache or force_download set to True, downloading to {temp_file.name}")
 
             http_get(url_to_download, temp_file, proxies=proxies, resume_size=resume_size, headers=headers)
 
-        logger.info("storing %s in cache at %s", url, cache_path)
+        logger.info(f"storing {url} in cache at {cache_path}")
         os.replace(temp_file.name, cache_path)
 
-        logger.info("creating metadata file for %s", cache_path)
+        logger.info(f"creating metadata file for {cache_path}")
         meta = {"url": url, "etag": etag}
         meta_path = cache_path + ".json"
         with open(meta_path, "w") as meta_file:
@@ -1359,6 +1467,52 @@ def is_tensor(x):
         if isinstance(x, tf.Tensor):
             return True
     return isinstance(x, np.ndarray)
+
+
+def _is_numpy(x):
+    return isinstance(x, np.ndarray)
+
+
+def _is_torch(x):
+    import torch
+
+    return isinstance(x, torch.Tensor)
+
+
+def _is_torch_device(x):
+    import torch
+
+    return isinstance(x, torch.device)
+
+
+def _is_tensorflow(x):
+    import tensorflow as tf
+
+    return isinstance(x, tf.Tensor)
+
+
+def _is_jax(x):
+    import jax.numpy as jnp  # noqa: F811
+
+    return isinstance(x, jnp.ndarray)
+
+
+def to_py_obj(obj):
+    """
+    Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a python list.
+    """
+    if isinstance(obj, (dict, UserDict)):
+        return {k: to_py_obj(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [to_py_obj(o) for o in obj]
+    elif is_tf_available() and _is_tensorflow(obj):
+        return obj.numpy().tolist()
+    elif is_torch_available() and _is_torch(obj):
+        return obj.detach().cpu().tolist()
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    else:
+        return obj
 
 
 class ModelOutput(OrderedDict):
@@ -1448,6 +1602,41 @@ class ModelOutput(OrderedDict):
         Convert self to a tuple containing all the attributes/keys that are not ``None``.
         """
         return tuple(self[k] for k in self.keys())
+
+
+class ExplicitEnum(Enum):
+    """
+    Enum with more explicit error message for missing values.
+    """
+
+    @classmethod
+    def _missing_(cls, value):
+        raise ValueError(
+            f"{value} is not a valid {cls.__name__}, please select one of {list(cls._value2member_map_.keys())}"
+        )
+
+
+class PaddingStrategy(ExplicitEnum):
+    """
+    Possible values for the ``padding`` argument in :meth:`PreTrainedTokenizerBase.__call__`. Useful for tab-completion
+    in an IDE.
+    """
+
+    LONGEST = "longest"
+    MAX_LENGTH = "max_length"
+    DO_NOT_PAD = "do_not_pad"
+
+
+class TensorType(ExplicitEnum):
+    """
+    Possible values for the ``return_tensors`` argument in :meth:`PreTrainedTokenizerBase.__call__`. Useful for
+    tab-completion in an IDE.
+    """
+
+    PYTORCH = "pt"
+    TENSORFLOW = "tf"
+    NUMPY = "np"
+    JAX = "jax"
 
 
 class _BaseLazyModule(ModuleType):

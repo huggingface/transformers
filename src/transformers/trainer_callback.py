@@ -15,7 +15,7 @@
 """
 Callbacks to use with the Trainer class and customize the training loop.
 """
-
+import collections
 import dataclasses
 import json
 from dataclasses import dataclass
@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 from tqdm.auto import tqdm
 
-from .trainer_utils import EvaluationStrategy
+from .trainer_utils import IntervalStrategy
 from .training_args import TrainingArguments
 from .utils import logging
 
@@ -52,8 +52,9 @@ class TrainerState:
             During training, represents the number of update steps completed.
         max_steps (:obj:`int`, `optional`, defaults to 0):
             The number of update steps to do during the current training.
-        total_flos (:obj:`int`, `optional`, defaults to 0):
-            The total number of floating operations done by the model since the beginning of training.
+        total_flos (:obj:`float`, `optional`, defaults to 0):
+            The total number of floating operations done by the model since the beginning of training (stored as floats
+            to avoid overflow).
         log_history (:obj:`List[Dict[str, float]]`, `optional`):
             The list of logs done since the beginning of training.
         best_metric (:obj:`float`, `optional`):
@@ -76,7 +77,7 @@ class TrainerState:
     global_step: int = 0
     max_steps: int = 0
     num_train_epochs: int = 0
-    total_flos: int = 0
+    total_flos: float = 0
     log_history: List[Dict[str, float]] = None
     best_metric: Optional[float] = None
     best_model_checkpoint: Optional[str] = None
@@ -288,7 +289,7 @@ class CallbackHandler(TrainerCallback):
         self.eval_dataloader = None
 
         if not any(isinstance(cb, DefaultFlowCallback) for cb in self.callbacks):
-            logger.warn(
+            logger.warning(
                 "The Trainer will not work properly if you don't have a `DefaultFlowCallback` in its callbacks. You\n"
                 + "should add one before training with `trainer.add_callback(DefaultFlowCallback). The current list of"
                 + "callbacks is\n:"
@@ -299,7 +300,7 @@ class CallbackHandler(TrainerCallback):
         cb = callback() if isinstance(callback, type) else callback
         cb_class = callback if isinstance(callback, type) else callback.__class__
         if cb_class in [c.__class__ for c in self.callbacks]:
-            logger.warn(
+            logger.warning(
                 f"You are adding a {cb_class} to the callbacks of this Trainer, but there is already one. The current"
                 + "list of callbacks is\n:"
                 + self.callback_list
@@ -402,17 +403,26 @@ class DefaultFlowCallback(TrainerCallback):
         # Log
         if state.global_step == 1 and args.logging_first_step:
             control.should_log = True
-        if args.logging_steps > 0 and state.global_step % args.logging_steps == 0:
+        if (
+            args.logging_strategy == IntervalStrategy.STEPS
+            and args.logging_steps > 0
+            and state.global_step % args.logging_steps == 0
+        ):
             control.should_log = True
 
         # Evaluate
-        if args.evaluation_strategy == EvaluationStrategy.STEPS and state.global_step % args.eval_steps == 0:
+        if args.evaluation_strategy == IntervalStrategy.STEPS and state.global_step % args.eval_steps == 0:
             control.should_evaluate = True
             if args.load_best_model_at_end:
                 control.should_save = True
 
         # Save
-        if not args.load_best_model_at_end and args.save_steps > 0 and state.global_step % args.save_steps == 0:
+        if (
+            not args.load_best_model_at_end
+            and args.save_strategy == IntervalStrategy.STEPS
+            and args.save_steps > 0
+            and state.global_step % args.save_steps == 0
+        ):
             control.should_save = True
 
         # End training
@@ -422,10 +432,20 @@ class DefaultFlowCallback(TrainerCallback):
         return control
 
     def on_epoch_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        if args.evaluation_strategy == EvaluationStrategy.EPOCH:
+        # Log
+        if args.logging_strategy == IntervalStrategy.EPOCH:
+            control.should_log = True
+
+        # Evaluate
+        if args.evaluation_strategy == IntervalStrategy.EPOCH:
             control.should_evaluate = True
             if args.load_best_model_at_end:
                 control.should_save = True
+
+        # Save
+        if args.save_strategy == IntervalStrategy.EPOCH:
+            control.should_save = True
+
         return control
 
 
@@ -449,7 +469,7 @@ class ProgressCallback(TrainerCallback):
             self.current_step = state.global_step
 
     def on_prediction_step(self, args, state, control, eval_dataloader=None, **kwargs):
-        if state.is_local_process_zero:
+        if state.is_local_process_zero and isinstance(eval_dataloader.dataset, collections.abc.Sized):
             if self.prediction_bar is None:
                 self.prediction_bar = tqdm(total=len(eval_dataloader), leave=self.training_bar is None)
             self.prediction_bar.update(1)
@@ -521,8 +541,8 @@ class EarlyStoppingCallback(TrainerCallback):
             args.metric_for_best_model is not None
         ), "EarlyStoppingCallback requires metric_for_best_model is defined"
         assert (
-            args.evaluation_strategy != EvaluationStrategy.NO
-        ), "EarlyStoppingCallback requires EvaluationStrategy of steps or epoch"
+            args.evaluation_strategy != IntervalStrategy.NO
+        ), "EarlyStoppingCallback requires IntervalStrategy of steps or epoch"
 
     def on_evaluate(self, args, state, control, metrics, **kwargs):
         metric_to_check = args.metric_for_best_model

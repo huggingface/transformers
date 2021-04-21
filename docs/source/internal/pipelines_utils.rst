@@ -47,6 +47,4 @@ Data format
 Utilities
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autofunction:: transformers.pipelines.get_framework
-
 .. autoclass:: transformers.pipelines.PipelineException

@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
@@ -115,12 +116,10 @@ def main():
         level=logging.INFO,
     )
     logger.warning(
-        "device: %s, n_replicas: %s, 16-bits training: %s",
-        training_args.device,
-        training_args.n_replicas,
-        training_args.fp16,
+        f"device: {training_args.device}, n_replicas: {training_args.n_replicas}, "
+        f"16-bits training: {training_args.fp16}"
     )
-    logger.info("Training/evaluation parameters %s", training_args)
+    logger.info(f"Training/evaluation parameters {training_args}")
 
     # Set seed
     set_seed(training_args.seed)
@@ -130,7 +129,7 @@ def main():
         label_list = processor.get_labels()
         num_labels = len(label_list)
     except KeyError:
-        raise ValueError("Task not found: %s" % (data_args.task_name))
+        raise ValueError(f"Task not found: {data_args.task_name}")
 
     # Load pretrained model and tokenizer
     #
@@ -209,8 +208,8 @@ def main():
         with open(output_eval_file, "w") as writer:
             logger.info("***** Eval results *****")
             for key, value in result.items():
-                logger.info("  %s = %s", key, value)
-                writer.write("%s = %s\n" % (key, value))
+                logger.info(f"  {key} = {value}")
+                writer.write(f"{key} = {value}\n")
 
             results.update(result)
 

@@ -27,7 +27,11 @@ if is_torch_available():
     import torch.nn.functional as F
 
     from transformers.generation_logits_process import (
+        EncoderNoRepeatNGramLogitsProcessor,
+        ForcedBOSTokenLogitsProcessor,
+        ForcedEOSTokenLogitsProcessor,
         HammingDiversityLogitsProcessor,
+        InfNanRemoveLogitsProcessor,
         LogitsProcessorList,
         MinLengthLogitsProcessor,
         NoBadWordsLogitsProcessor,
@@ -208,6 +212,68 @@ class LogitsProcessorTest(unittest.TestCase):
             torch.isinf(filtered_scores_3_gram).tolist(), [[False, False, False], [True, False, False]]
         )
 
+    def test_encoder_no_repeat_ngram_dist_processor(self):
+        vocab_size = 3
+        num_beams = 2
+        batch_size = 1
+
+        encoder_input_ids = torch.tensor([1, 2, 1, 1], device=torch_device, dtype=torch.long)
+
+        input_ids = torch.tensor([[1, 2, 1], [8, 0, 2]], device=torch_device, dtype=torch.long)
+        scores = self._get_uniform_logits(batch_size * num_beams, vocab_size)
+
+        no_repeat_proc_2_gram = EncoderNoRepeatNGramLogitsProcessor(2, encoder_input_ids=encoder_input_ids)
+        no_repeat_proc_3_gram = EncoderNoRepeatNGramLogitsProcessor(3, encoder_input_ids=encoder_input_ids)
+
+        filtered_scores_2_gram = no_repeat_proc_2_gram(input_ids, scores.clone())
+        filtered_scores_3_gram = no_repeat_proc_3_gram(input_ids, scores.clone())
+
+        # 2-gram would forbid 1st and 2nd token at 1st beam and 1st token (0) at 2nd beam
+        self.assertListEqual(torch.isinf(filtered_scores_2_gram).tolist(), [[False, True, True], [False, True, False]])
+
+        # 3-gram would forbid 1st token at 1st beam and no token at 2nd beam
+        self.assertListEqual(
+            torch.isinf(filtered_scores_3_gram).tolist(), [[False, True, False], [False, False, False]]
+        )
+
+        # Batched input
+        vocab_size = 3
+        num_beams = 2
+        batch_size = 2
+        encoder_input_ids = torch.tensor([[1, 2, 1, 1], [0, 0, 2, 1]], device=torch_device, dtype=torch.long)
+
+        input_ids = torch.tensor([[1, 2, 1], [1, 0, 2], [0, 0, 0], [0, 2, 2]], device=torch_device, dtype=torch.long)
+        scores = self._get_uniform_logits(batch_size * num_beams, vocab_size)
+
+        no_repeat_proc_2_gram = EncoderNoRepeatNGramLogitsProcessor(2, encoder_input_ids=encoder_input_ids)
+        no_repeat_proc_3_gram = EncoderNoRepeatNGramLogitsProcessor(3, encoder_input_ids=encoder_input_ids)
+
+        filtered_scores_2_gram = no_repeat_proc_2_gram(input_ids, scores.clone())
+        filtered_scores_3_gram = no_repeat_proc_3_gram(input_ids, scores.clone())
+
+        # 2gram
+        # Batch 1
+        #   - Beam 1: tokens (1, 2) forbidden
+        #   - Beam 2: tokens (1) forbidden
+        # Batch 2
+        #   - Beam 1: tokens (0, 2) forbidden
+        #   - Beam 2: tokens (1) forbidden
+        self.assertListEqual(
+            torch.isinf(filtered_scores_2_gram).tolist(),
+            [[False, True, True], [False, True, False], [True, False, True], [False, True, False]],
+        )
+
+        # Batch 1
+        #   - Beam 1: tokens (1) forbidden
+        #   - Beam 2: tokens () forbidden
+        # Batch 2
+        #   - Beam 1: tokens (2) forbidden
+        #   - Beam 2: tokens () forbidden
+        self.assertListEqual(
+            torch.isinf(filtered_scores_3_gram).tolist(),
+            [[False, True, False], [False, False, False], [False, False, True], [False, False, False]],
+        )
+
     def test_no_bad_words_dist_processor(self):
         vocab_size = 5
         batch_size = 2
@@ -328,5 +394,67 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertTrue(
             torch.allclose(
                 processed_scores[1], torch.tensor([0.2500, -0.7500, 0.2500, 0.2500], device=torch_device), atol=1e-3
+            )
+        )
+
+    def test_forced_bos_token_logits_processor(self):
+        vocab_size = 20
+        batch_size = 4
+        bos_token_id = 0
+
+        logits_processor = ForcedBOSTokenLogitsProcessor(bos_token_id=bos_token_id)
+
+        # check that all scores are -inf except the bos_token_id score
+        input_ids = ids_tensor((batch_size, 1), vocab_size=20)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores = logits_processor(input_ids, scores)
+        self.assertTrue(torch.isneginf(scores[:, bos_token_id + 1 :]).all())
+        self.assertListEqual(scores[:, bos_token_id].tolist(), 4 * [0])  # score for bos_token_id shold be zero
+
+        # check that bos_token_id is not forced if current length is greater than 1
+        input_ids = ids_tensor((batch_size, 4), vocab_size=20)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores = logits_processor(input_ids, scores)
+        self.assertFalse(torch.isinf(scores).any())
+
+    def test_forced_eos_token_logits_processor(self):
+        vocab_size = 20
+        batch_size = 4
+        eos_token_id = 0
+        max_length = 5
+
+        logits_processor = ForcedEOSTokenLogitsProcessor(max_length=max_length, eos_token_id=eos_token_id)
+
+        # check that all scores are -inf except the eos_token_id when max_length is reached
+        input_ids = ids_tensor((batch_size, 4), vocab_size=20)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores = logits_processor(input_ids, scores)
+        self.assertTrue(torch.isneginf(scores[:, eos_token_id + 1 :]).all())
+        self.assertListEqual(scores[:, eos_token_id].tolist(), 4 * [0])  # score for eos_token_id should be zero
+
+        # check that eos_token_id is not forced if max_length is not reached
+        input_ids = ids_tensor((batch_size, 3), vocab_size=20)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores = logits_processor(input_ids, scores)
+        self.assertFalse(torch.isinf(scores).any())
+
+    def test_remove_nan_inf_logits_processor(self):
+        scores = torch.tensor(
+            [[0.0, 0.7, 0.8, float("nan")], [0.1, float("inf"), 0.3, float("-inf")]], device=torch_device
+        )
+        input_ids = ids_tensor((2, 4), vocab_size=20)
+
+        logits_processor = InfNanRemoveLogitsProcessor()
+
+        scores = logits_processor(input_ids, scores)
+
+        self.assertTrue(
+            torch.allclose(
+                scores,
+                torch.tensor(
+                    [[0.0, 0.7, 0.8, 0.0], [0.1, torch.finfo(scores.dtype).max, 0.3, float("-inf")]],
+                    device=torch_device,
+                ),
+                atol=1e-6,
             )
         )

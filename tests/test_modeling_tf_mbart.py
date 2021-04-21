@@ -181,6 +181,7 @@ class TFMBartModelTest(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (TFMBartForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFMBartModelTester(self)
@@ -212,18 +213,6 @@ class TFMBartModelTest(TFModelTesterMixin, unittest.TestCase):
                 assert x is None
                 name = model.get_bias()
                 assert name is None
-
-    def test_saved_model_creation(self):
-        # This test is too long (>30sec) and makes fail the CI
-        pass
-
-    def test_mixed_precision(self):
-        # TODO JP: Make MBart float16 compliant
-        pass
-
-    def test_xla_mode(self):
-        # TODO JP: Make MBart XLA compliant
-        pass
 
     def test_resize_token_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -288,6 +277,10 @@ class TFMBartModelTest(TFModelTesterMixin, unittest.TestCase):
                                 models_equal = False
                     self.assertTrue(models_equal)
 
+    def test_saved_model_creation(self):
+        # This test is too long (>30sec) and makes fail the CI
+        pass
+
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
     """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
@@ -298,10 +291,9 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
             return True
         raise
     except Exception:
-        msg = "{} != {}".format(a, b)
-        if prefix:
-            msg = prefix + ": " + msg
-        raise AssertionError(msg)
+        if len(prefix) > 0:
+            prefix = f"{prefix}: "
+        raise AssertionError(f"{prefix}{a} != {b}")
 
 
 def _long_tensor(tok_lst):
@@ -337,9 +329,7 @@ class TFMBartModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(self.expected_text, generated_words)
 
     def translate_src_text(self, **tokenizer_kwargs):
-        model_inputs = self.tokenizer.prepare_seq2seq_batch(
-            src_texts=self.src_text, **tokenizer_kwargs, return_tensors="tf"
-        )
+        model_inputs = self.tokenizer(self.src_text, **tokenizer_kwargs, return_tensors="tf")
         generated_ids = self.model.generate(
             model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2
         )
