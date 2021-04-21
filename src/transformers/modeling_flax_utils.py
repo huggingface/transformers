@@ -101,7 +101,6 @@ class FlaxPreTrainedModel(ABC):
         self.params = random_params
 
         # tie input and output word embeddings
-        # if relevant
         self.tie_weights()
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> Dict:
