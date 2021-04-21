@@ -526,7 +526,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return encoded_inputs
 
-    def pad_and_create_pixel_mask(tensor_list):
+    def pad_and_create_pixel_mask(self, tensor_list):
         """ Pad images up to the largest image in a batch and create a corresponding pixel_mask.
 
         Only supports PyTorch. 
