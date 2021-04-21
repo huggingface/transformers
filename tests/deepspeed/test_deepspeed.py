@@ -594,7 +594,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             args = [x for x in args if x not in remove_args]
 
         ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}.json".split()
-        script = [f"{self.examples_dir_str}/seq2seq/run_translation.py"]
+        script = [f"{self.examples_dir_str}/pytorch/translation/run_translation.py"]
         launcher = self.get_launcher(distributed)
 
         cmd = launcher + script + args + ds_args
@@ -629,7 +629,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             """.split()
 
         ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}.json".split()
-        script = [f"{self.examples_dir_str}/language-modeling/run_clm.py"]
+        script = [f"{self.examples_dir_str}/pytorch/language-modeling/run_clm.py"]
         launcher = self.get_launcher(distributed=True)
 
         cmd = launcher + script + args + ds_args
