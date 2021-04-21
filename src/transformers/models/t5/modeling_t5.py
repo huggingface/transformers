@@ -692,7 +692,7 @@ class T5Block(nn.Module):
 
         if present_key_value_state is None:
             # For compatibility with gradient checkpointing
-            present_key_value_state = torch.tensor(-1., device=hidden_states.device)
+            present_key_value_state = torch.tensor(-1.0, device=hidden_states.device)
             # After PyTorch 1.8.0, the following line is no longer required
             present_key_value_state.requires_grad = True
 
@@ -952,7 +952,11 @@ class T5Stack(T5PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training and (not self.config.is_decoder):
+            if (
+                getattr(self.config, "gradient_checkpointing", False)
+                and self.training
+                and (not self.config.is_decoder)
+            ):
                 if use_cache:
                     logger.warn(
                         "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
@@ -963,6 +967,7 @@ class T5Stack(T5PreTrainedModel):
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         return tuple(module(*inputs, use_cache, output_attentions))
+
                     return custom_forward
 
                 layer_outputs = checkpoint(
@@ -996,9 +1001,9 @@ class T5Stack(T5PreTrainedModel):
             hidden_states, present_key_value_state = layer_outputs[:2]
 
             if (
-                isinstance(present_key_value_state, torch.Tensor) and
-                present_key_value_state.dim() == 0 and
-                present_key_value_state.item() == -1
+                isinstance(present_key_value_state, torch.Tensor)
+                and present_key_value_state.dim() == 0
+                and present_key_value_state.item() == -1
             ):
                 present_key_value_state = None
 
