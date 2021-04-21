@@ -226,7 +226,7 @@ class TestTrainerExt(TestCasePlus):
             distributed_args = f"""
                 -m torch.distributed.launch
                 --nproc_per_node={n_gpu}
-                {self.examples_dir_str}/seq2seq/run_translation.py
+                {self.examples_dir_str}/pytorch/translation/run_translation.py
             """.split()
             cmd = [sys.executable] + distributed_args + args
             execute_subprocess_async(cmd, env=self.get_env())
