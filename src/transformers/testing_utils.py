@@ -84,7 +84,7 @@ _run_slow_tests = parse_flag_from_env("RUN_SLOW", default=False)
 _run_pt_tf_cross_tests = parse_flag_from_env("RUN_PT_TF_CROSS_TESTS", default=False)
 _run_pt_flax_cross_tests = parse_flag_from_env("RUN_PT_FLAX_CROSS_TESTS", default=False)
 _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=False)
-_run_model_hub = parse_flag_from_env("RUN_MODEL_HUB_INTEGRATION", default=False)
+_run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=False)
 _run_git_lfs_tests = parse_flag_from_env("RUN_GIT_LFS_TESTS", default=False)
 _tf_gpu_memory_limit = parse_int_from_env("TF_GPU_MEMORY_LIMIT", default=None)
@@ -147,6 +147,23 @@ def is_pipeline_test(test_case):
             return pytest.mark.is_pipeline_test()(test_case)
 
 
+def is_staging_test(test_case):
+    """
+    Decorator marking a test as a staging test.
+
+    Those tests will run using the staging environment of huggingface.co instead of the real model hub.
+    """
+    if not _run_staging:
+        return unittest.skip("test is staging test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_staging_test()(test_case)
+
+
 def slow(test_case):
     """
     Decorator marking a test as slow.
@@ -180,19 +197,6 @@ def custom_tokenizers(test_case):
     """
     if not _run_custom_tokenizers:
         return unittest.skip("test of custom tokenizers")(test_case)
-    else:
-        return test_case
-
-
-def model_hub_integration(test_case):
-    """
-    Decorator marking a test for the model hub integration.
-
-    Those tests push model to the hub, in the namespace of the user running them, so are skipped by default. Set the
-    RUN_MODEL_HUB_INTEGRATION environment variable to a truthy value to run them.
-    """
-    if not _run_model_hub:
-        return unittest.skip("test of model hub integration")(test_case)
     else:
         return test_case
 

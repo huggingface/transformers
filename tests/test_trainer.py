@@ -29,7 +29,7 @@ from transformers.file_utils import WEIGHTS_NAME
 from transformers.testing_utils import (
     TestCasePlus,
     get_tests_dir,
-    model_hub_integration,
+    is_staging_test,
     require_datasets,
     require_optuna,
     require_ray,
@@ -1085,66 +1085,63 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertListEqual(trainer.optimizer.param_groups[1]["params"], no_wd_params)
 
 
-@model_hub_integration
+USER = "__DUMMY_TRANSFORMERS_USER__"
+PASS = "__DUMMY_TRANSFORMERS_PASS__"
+
+ENDPOINT_STAGING = "https://moon-staging.huggingface.co"
+ENDPOINT_STAGING_BASIC_AUTH = f"https://{USER}:{PASS}@moon-staging.huggingface.co"
+
+
 @require_torch
+@is_staging_test
 class TrainerIntegrationWithHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        token = os.environ.get("HUGGINGFACE_TOKEN", None)
-        if token is None:
-            cls.token = HfFolder.get_token()
-            cls.old_token = None
-        else:
-            cls.token = token
-            cls.old_token = HfFolder.get_token()
-            HfFolder.save_token(token)
+        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
+        cls._token = cls._api.login(username=USER, password=PASS)
 
     @classmethod
     def tearDownClass(cls):
-        if cls.old_token is not None:
-            HfFolder.save_token(cls.old_token)
         try:
-            HfApi().delete_repo(token=cls.token, name="test-model")
+            cls._api.delete_repo(token=cls._token, name="test-model")
         except HTTPError:
             pass
+
         try:
-            HfApi().delete_repo(token=cls.token, name="test-model-org", organization="huggingfacetest")
+            cls._api.delete_repo(token=cls._token, name="test-model-org", organization="valid_org")
         except HTTPError:
             pass
 
     def test_push_to_hub(self):
-        if self.token is None:
-            return
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(output_dir=tmp_dir)
             trainer.save_model()
-            url = trainer.push_to_hub(model_id="test-model")
+            url = trainer.push_to_hub(repo_name="test-model", use_auth_token=self._token)
 
             # Extract repo_name from the url
-            re_search = re.search(r"https://huggingface\.co/([^/]+/[^/]+)/", url)
+            re_search = re.search(ENDPOINT_STAGING + r"/([^/]+/[^/]+)/", url)
             self.assertTrue(re_search is not None)
             repo_name = re_search.groups()[0]
-            self.assertTrue(repo_name.endswith("test-model"))
+
+            self.assertEqual(repo_name, f"{USER}/test-model")
 
             model = RegressionPreTrainedModel.from_pretrained(repo_name)
             self.assertEqual(model.a.item(), trainer.model.a.item())
             self.assertEqual(model.b.item(), trainer.model.b.item())
 
     def test_push_to_hub_in_organization(self):
-        if self.token is None:
-            return
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(output_dir=tmp_dir)
             trainer.save_model()
-            url = trainer.push_to_hub(model_id="test-model-org", organization="huggingfacetest")
+            url = trainer.push_to_hub(repo_name="test-model-org", organization="valid_org", use_auth_token=self._token)
 
             # Extract repo_name from the url
-            re_search = re.search(r"https://huggingface\.co/([^/]+/[^/]+)/", url)
+            re_search = re.search(ENDPOINT_STAGING + r"/([^/]+/[^/]+)/", url)
             self.assertTrue(re_search is not None)
             repo_name = re_search.groups()[0]
-            self.assertEqual(repo_name, "huggingfacetest/test-model-org")
+            self.assertEqual(repo_name, "valid_org/test-model-org")
 
-            model = RegressionPreTrainedModel.from_pretrained("huggingfacetest/test-model-org")
+            model = RegressionPreTrainedModel.from_pretrained("valid_org/test-model-org")
             self.assertEqual(model.a.item(), trainer.model.a.item())
             self.assertEqual(model.b.item(), trainer.model.b.item())
 

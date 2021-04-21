@@ -128,7 +128,6 @@ jobs:
             - image: circleci/python:3.7
         environment:
             OMP_NUM_THREADS: 1
-            RUN_MODEL_HUB_INTEGRATION: yes
             TRANSFORMERS_IS_CI: yes
         resource_class: xlarge
         parallelism: 1
@@ -138,7 +137,6 @@ jobs:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get install git-lfs
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,speech,vision]
@@ -324,6 +322,7 @@ jobs:
         docker:
             - image: circleci/python:3.7
         environment:
+            HUGGINGFACE_CO_STAGING: yes
             RUN_GIT_LFS_TESTS: yes
             TRANSFORMERS_IS_CI: yes
         resource_class: xlarge
@@ -335,8 +334,8 @@ jobs:
                 git config --global user.email "ci@dummy.com"
                 git config --global user.name "ci"
             - run: pip install --upgrade pip
-            - run: pip install .[testing]
-            - run: python -m pytest -sv ./tests/test_hf_api.py -k "HfLargefilesTest"
+            - run: pip install .[testing, torch]
+            - run: python -m pytest -sv ./tests/ -m is_staging_test
 
     build_doc:
         working_directory: ~/transformers

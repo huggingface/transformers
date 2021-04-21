@@ -229,7 +229,12 @@ DUMMY_MASK = [[1, 1, 1, 1, 1], [1, 1, 1, 0, 0], [0, 0, 0, 1, 1]]
 
 S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
 CLOUDFRONT_DISTRIB_PREFIX = "https://cdn.huggingface.co"
-HUGGINGFACE_CO_PREFIX = "https://huggingface.co/{model_id}/resolve/{revision}/{filename}"
+
+_staging_mode = os.environ.get("HUGGINGFACE_CO_STAGING", "NO").upper() in ENV_VARS_TRUE_VALUES
+if _staging_mode:
+    HUGGINGFACE_CO_PREFIX = "https://moon-staging.huggingface.co/{model_id}/resolve/{revision}/{filename}"
+else:
+    HUGGINGFACE_CO_PREFIX = "https://huggingface.co/{model_id}/resolve/{revision}/{filename}"
 
 PRESET_MIRROR_DICT = {
     "tuna": "https://mirrors.tuna.tsinghua.edu.cn/hugging-face-models",
@@ -1749,7 +1754,9 @@ class PushToHubMixin:
             token = None
 
         if repo_url is None:
-            repo_url = HfApi().create_repo(
+            # Special provision for the test endpoint (CI)
+            endpoint = "https://moon-staging.huggingface.co" if _staging_mode else None
+            repo_url = HfApi(endpoint=endpoint).create_repo(
                 token,
                 repo_name,
                 organization=organization,

@@ -22,7 +22,7 @@ import unittest
 
 from requests.exceptions import HTTPError
 from transformers.hf_api import HfApi, HfFolder, ModelInfo, RepoObj
-from transformers.testing_utils import require_git_lfs
+from transformers.testing_utils import is_staging_test, require_git_lfs
 
 
 USER = "__DUMMY_TRANSFORMERS_USER__"
@@ -106,6 +106,7 @@ class HfFolderTest(unittest.TestCase):
 
 
 @require_git_lfs
+@is_staging_test
 class HfLargefilesTest(HfApiCommonTest):
     @classmethod
     def setUpClass(cls):
