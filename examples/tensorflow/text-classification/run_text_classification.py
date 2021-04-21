@@ -183,13 +183,11 @@ class DataTrainingArguments:
 
     def __post_init__(self):
         train_extension = self.train_file.split(".")[-1].lower() if self.train_file is not None else None
-        validation_extension = (
-            self.validation_file.split(".")[-1].lower() if self.validation_file is not None else None
-        )
+        validation_extension = self.validation_file.split(".")[-1].lower() if self.validation_file is not None else None
         test_extension = self.test_file.split(".")[-1].lower() if self.test_file is not None else None
         extensions = {train_extension, validation_extension, test_extension}
         extensions.discard(None)
-        assert len(extensions) != 0, "Need to supply either a --train_file or a --test_file!"
+        assert len(extensions) != 0, "Need to supply at least one of --train_file, --validation_file or --test_file!"
         assert len(extensions) == 1, "All input files should have the same file extension, either csv or json!"
         assert "csv" in extensions or "json" in extensions, "Input files should have either .csv or .json extensions!"
         self.input_file_extension = extensions.pop()
@@ -382,11 +380,12 @@ def main():
         clipnorm=training_args.max_grad_norm,
     )
     if is_regression:
-        # TODO Make sure we handle saving/loading regression models properly
         loss = tf.keras.losses.MeanSquaredError()
+        metrics = []
     else:
         loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-    model.compile(optimizer=optimizer, loss=loss)
+        metrics = ['accuracy']
+    model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
     # endregion
 
     # region Dataset preprocessing
@@ -501,8 +500,13 @@ def main():
         eval_dataset = DataSequence(
             eval_dataset, non_label_column_names, batch_size=training_args.per_device_eval_batch_size, labels=True
         )
-        print("Computing loss on validation data...")
-        model.evaluate(eval_dataset)
+        logger.info("Computing metrics  on validation data...")
+        if is_regression:
+            loss = model.evaluate(eval_dataset)
+            logger.info(f"Loss: {loss:.5f}")
+        else:
+            loss, accuracy = model.evaluate(eval_dataset)
+            logger.info(f"Loss: {loss:.5f}, Accuracy: {accuracy * 100:.4f}%")
     # endregion
 
     # region Prediction
