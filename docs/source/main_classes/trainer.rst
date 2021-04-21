@@ -338,7 +338,7 @@ For example here is how you could use it for ``run_translation.py`` with 2 GPUs:
 
 .. code-block:: bash
 
-    python -m torch.distributed.launch --nproc_per_node=2 examples/seq2seq/run_translation.py \
+    python -m torch.distributed.launch --nproc_per_node=2 examples/pytorch/translation/run_translation.py \
     --model_name_or_path t5-small --per_device_train_batch_size 1   \
     --output_dir output_dir --overwrite_output_dir \
     --do_train --max_train_samples 500 --num_train_epochs 1 \
@@ -363,7 +363,7 @@ For example here is how you could use it for ``run_translation.py`` with 2 GPUs:
 
 .. code-block:: bash
 
-    python -m torch.distributed.launch --nproc_per_node=2 examples/seq2seq/run_translation.py \
+    python -m torch.distributed.launch --nproc_per_node=2 examples/pytorch/translation/run_translation.py \
     --model_name_or_path t5-small --per_device_train_batch_size 1   \
     --output_dir output_dir --overwrite_output_dir \
     --do_train --max_train_samples 500 --num_train_epochs 1 \
@@ -540,7 +540,7 @@ Here is an example of running ``run_translation.py`` under DeepSpeed deploying a
 
 .. code-block:: bash
 
-    deepspeed examples/seq2seq/run_translation.py \
+    deepspeed examples/pytorch/translation/run_translation.py \
     --deepspeed tests/deepspeed/ds_config.json \
     --model_name_or_path t5-small --per_device_train_batch_size 1   \
     --output_dir output_dir --overwrite_output_dir --fp16 \
@@ -565,7 +565,7 @@ To deploy DeepSpeed with one GPU adjust the :class:`~transformers.Trainer` comma
 
 .. code-block:: bash
 
-    deepspeed --num_gpus=1 examples/seq2seq/run_translation.py \
+    deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
     --deepspeed tests/deepspeed/ds_config.json \
     --model_name_or_path t5-small --per_device_train_batch_size 1   \
     --output_dir output_dir --overwrite_output_dir --fp16 \
@@ -617,7 +617,7 @@ Notes:
 
    .. code-block:: bash
 
-       deepspeed --include localhost:1 examples/seq2seq/run_translation.py ...
+       deepspeed --include localhost:1 examples/pytorch/translation/run_translation.py ...
 
    In this example, we tell DeepSpeed to use GPU 1 (second gpu).
 
@@ -711,7 +711,7 @@ shell from a cell. For example, to use ``run_translation.py`` you would launch i
 .. code-block::
 
     !git clone https://github.com/huggingface/transformers
-    !cd transformers; deepspeed examples/seq2seq/run_translation.py ...
+    !cd transformers; deepspeed examples/pytorch/translation/run_translation.py ...
 
 or with ``%%bash`` magic, where you can write a multi-line code for the shell program to run:
 
@@ -721,7 +721,7 @@ or with ``%%bash`` magic, where you can write a multi-line code for the shell pr
 
     git clone https://github.com/huggingface/transformers
     cd transformers
-    deepspeed examples/seq2seq/run_translation.py ...
+    deepspeed examples/pytorch/translation/run_translation.py ...
 
 In such case you don't need any of the code presented at the beginning of this section.
 
