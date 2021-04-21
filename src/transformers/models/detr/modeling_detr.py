@@ -191,7 +191,7 @@ class Backbone(nn.Module):
         kwargs = {}
         if name in ["resnet18", "resnet34", "resnet50", "resnet101"]: 
             kwargs["norm_layer"] = FrozenBatchNorm2d
-        self.body = create_model(name, pretrained=True, **kwargs)
+        self.body = create_model(name, pretrained=True, num_classes=0, **kwargs)
         self.num_channels = self.body.num_features
 
         for name, parameter in self.body.named_parameters():
