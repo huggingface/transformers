@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google Flax Team Authors and The HuggingFace Inc. team.
+# Copyright 2021 The Google Flax Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -153,7 +153,7 @@ class FlaxPreTrainedModel(ABC):
             flattened_dict = flatten_dict(self.params)
 
             # transpose weight and set correctly
-            flattened_dict[input_embbeddings_key] = output_embeddings.T
+            flattened_dict[input_embbeddings_key] = jnp.asarray(output_embeddings.T)
 
             self.params = unflatten_dict(flattened_dict)
 
@@ -356,6 +356,8 @@ class FlaxPreTrainedModel(ABC):
                     state = from_bytes(cls, state_f.read())
                 except UnpicklingError:
                     raise EnvironmentError(f"Unable to convert {archive_file} to Flax deserializable object. ")
+            # make sure all arrays are stored as jnp.arrays
+            state = {k: jnp.asarray(v) for k, v in state.items()}
 
         # if model is base model only use model_prefix key
         if cls.base_model_prefix not in dict(model.params) and cls.base_model_prefix in state:
@@ -363,6 +365,7 @@ class FlaxPreTrainedModel(ABC):
 
         # flatten dicts
         state = flatten_dict(state)
+
         random_state = flatten_dict(unfreeze(model.params))
 
         missing_keys = model.required_params - set(state.keys())

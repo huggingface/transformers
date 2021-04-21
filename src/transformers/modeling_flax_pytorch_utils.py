@@ -20,6 +20,7 @@ from pickle import UnpicklingError
 
 import numpy as np
 
+import jax.numpy as jnp
 import transformers
 from flax.serialization import from_bytes
 from flax.traverse_util import flatten_dict, unflatten_dict
@@ -104,7 +105,7 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
                 )
 
         # also add unexpected weight so that warning is thrown
-        flax_state_dict[pt_tuple_key] = pt_tensor
+        flax_state_dict[pt_tuple_key] = jnp.asarray(pt_tensor)
 
     return unflatten_dict(flax_state_dict)
 
