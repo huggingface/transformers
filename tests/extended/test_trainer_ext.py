@@ -35,7 +35,7 @@ from transformers.trainer_utils import set_seed
 
 
 bindir = os.path.abspath(os.path.dirname(__file__))
-with ExtendSysPath(f"{bindir}/../../examples/seq2seq"):
+with ExtendSysPath(f"{bindir}/../../examples/pytorch/translation"):
     from run_translation import main  # noqa
 
 

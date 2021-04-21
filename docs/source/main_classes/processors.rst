@@ -69,7 +69,8 @@ Example usage
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 An example using these processors is given in the `run_glue.py
-<https://github.com/huggingface/pytorch-transformers/blob/master/examples/text-classification/run_glue.py>`__ script.
+<https://github.com/huggingface/pytorch-transformers/blob/master/examples/legacy/text-classification/run_glue.py>`__
+script.
 
 
 XNLI
@@ -90,7 +91,8 @@ This library hosts the processor to load the XNLI data:
 Please note that since the gold labels are available on the test set, evaluation is performed on the test set.
 
 An example using these processors is given in the `run_xnli.py
-<https://github.com/huggingface/pytorch-transformers/blob/master/examples/text-classification/run_xnli.py>`__ script.
+<https://github.com/huggingface/pytorch-transformers/blob/master/examples/legacy/text-classification/run_xnli.py>`__
+script.
 
 
 SQuAD
@@ -169,4 +171,4 @@ Using `tensorflow_datasets` is as easy as using a data file:
 
 
 Another example using these processors is given in the :prefix_link:`run_squad.py
-<examples/question-answering/run_squad.py>` script.
+<examples/legacy/question-answering/run_squad.py>` script.

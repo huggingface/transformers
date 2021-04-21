@@ -94,7 +94,7 @@ class DependencyVersionCheckTest(TestCasePlus):
             require_version_examples("numpy>1000.4.5")
         except ImportError as e:
             self.assertIn("is required", str(e))
-            self.assertIn("pip install -r examples/requirements.txt", str(e))
+            self.assertIn("pip install -r examples/pytorch/_test_requirements.txt", str(e))
 
     def test_python(self):
 
