@@ -181,7 +181,7 @@ class TestTrainerExt(TestCasePlus):
         extra_args_str: str = None,
         predict_with_generate: bool = True,
     ):
-        data_dir = self.examples_dir / "test_data/wmt_en_ro"
+        data_dir = self.test_file_dir / "../fixtures/tests_samples/wmt_en_ro"
         output_dir = self.get_auto_remove_tmp_dir()
         args = f"""
             --model_name_or_path {model_name}
