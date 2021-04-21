@@ -502,20 +502,18 @@ Distributed training
 thing and end up thinking they are ``pytest`` and start running the test suite in loops. It works, however, if one
 spawns a normal process that then spawns off multiple workers and manages the IO pipes.
 
-This is still under development but you can study 2 different tests that perform this successfully:
+Here are some tests that use it:
 
-* :prefix_link:`test_seq2seq_examples_multi_gpu.py <examples/seq2seq/test_seq2seq_examples_multi_gpu.py>` - a
-  ``pytorch-lightning``-running test (had to use PL's ``ddp`` spawning method which is the default)
-* :prefix_link:`test_finetune_trainer.py <examples/seq2seq/test_finetune_trainer.py>` - a normal (non-PL) test
+* :prefix_link:`test_trainer_distributed.py <tests/test_trainer_distributed.py>`
+* :prefix_link:`test_deepspeed.py <tests/deepspeed/test_deepspeed.py>`
 
-To jump right into the execution point, search for the ``execute_subprocess_async`` function in those tests.
+To jump right into the execution point, search for the ``execute_subprocess_async`` call in those tests.
 
 You will need at least 2 GPUs to see these tests in action:
 
 .. code-block:: bash
 
-    CUDA_VISIBLE_DEVICES="0,1" RUN_SLOW=1 pytest -sv examples/seq2seq/test_finetune_trainer.py \
-    examples/seq2seq/test_seq2seq_examples_multi_gpu.py
+    CUDA_VISIBLE_DEVICES=0,1 RUN_SLOW=1 pytest -sv tests/test_trainer_distributed.py
 
 
 Output capture
@@ -718,10 +716,10 @@ To start using those all you need is to make sure that the test resides in a sub
     from transformers.testing_utils import TestCasePlus
     class PathExampleTest(TestCasePlus):
         def test_something_involving_local_locations(self):
-            data_dir = self.examples_dir / "seq2seq/test_data/wmt_en_ro"
+            data_dir = self.tests_dir / "fixtures/tests_samples/wmt_en_ro"
 
-If you don't need to manipulated paths via ``pathlib`` or you just need a path as a string, you can always invoked
-``str()`` on the ``pathlib`` oboject or use the accessors ending with ``_str``. For example:
+If you don't need to manipulate paths via ``pathlib`` or you just need a path as a string, you can always invoked
+``str()`` on the ``pathlib`` object or use the accessors ending with ``_str``. For example:
 
 .. code-block:: python
 
