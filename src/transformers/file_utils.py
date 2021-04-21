@@ -15,9 +15,9 @@
 Utilities for working with the local dataset cache. Parts of this file is adapted from the AllenNLP library at
 https://github.com/allenai/allennlp.
 """
-
 import copy
 import fnmatch
+import functools
 import importlib.util
 import io
 import json
@@ -27,6 +27,7 @@ import shutil
 import sys
 import tarfile
 import tempfile
+import types
 from collections import OrderedDict, UserDict
 from contextlib import contextmanager
 from dataclasses import fields
@@ -1674,3 +1675,12 @@ class _BaseLazyModule(ModuleType):
 
     def _get_module(self, module_name: str) -> ModuleType:
         raise NotImplementedError
+
+
+def copy_func(f):
+    """ Returns a copy of a function f."""
+    # Based on http://stackoverflow.com/a/6528148/190597 (Glenn Maynard)
+    g = types.FunctionType(f.__code__, f.__globals__, name=f.__name__, argdefs=f.__defaults__, closure=f.__closure__)
+    g = functools.update_wrapper(g, f)
+    g.__kwdefaults__ = f.__kwdefaults__
+    return g
