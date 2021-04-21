@@ -15,72 +15,14 @@ limitations under the License.
 
 # Examples
 
-This folder contains actively maintained examples of use of 🤗 Transformers organized along NLP tasks. If you are looking for an example that used to be in this folder, it may have moved to our [research projects](https://github.com/huggingface/transformers/tree/master/examples/research_projects) subfolder (which contains frozen snapshots of research projects) or to the [legacy](https://github.com/huggingface/transformers/tree/master/examples/legacy) subfolder.
-
-While we strive to present as many use cases as possible, the scripts in this folder are just examples. It is expected that they won't work out-of-the box on your specific problem and that you will be required to change a few lines of code to adapt them to your needs. To help you with that, all the PyTorch versions of the examples fully expose the preprocessing of the data. This way, you can easily tweak them.
-
-This is similar if you want the scripts to report another metric than the one they currently use: look at the `compute_metrics` function inside the script. It takes the full arrays of predictions and labels and has to return a dictionary of string keys and float values. Just change it to add (or replace) your own metric to the ones already reported.
-
-Please discuss on the [forum](https://discuss.huggingface.co/) or in an [issue](https://github.com/huggingface/transformers/issues) a feature you would like to implement in an example before submitting a PR: we welcome bug fixes but since we want to keep the examples as simple as possible, it's unlikely we will merge a pull request adding more functionality at the cost of readability.
-
-## Important note
-
-**Important**
-
-To make sure you can successfully run the latest versions of the example scripts, you have to **install the library from source** and install some example-specific requirements. To do this, execute the following steps in a new virtual environment:
-```bash
-git clone https://github.com/huggingface/transformers
-cd transformers
-pip install .
-```
-Then cd in the example folder of your choice and run
-```bash
-pip install -r requirements.txt
-```
-
-To browse the examples corresponding to released versions of 🤗 Transformers, click on the line below and then on your desired version of the library:
-
-<details>
-  <summary>Examples for older versions of 🤗 Transformers</summary>
-
-  - [v4.3.3](https://github.com/huggingface/transformers/tree/v4.3.3/examples)
-  - [v4.2.2](https://github.com/huggingface/transformers/tree/v4.2.2/examples)
-  - [v4.1.1](https://github.com/huggingface/transformers/tree/v4.1.1/examples)
-  - [v4.0.1](https://github.com/huggingface/transformers/tree/v4.0.1/examples)
-  - [v3.5.1](https://github.com/huggingface/transformers/tree/v3.5.1/examples)
-  - [v3.4.0](https://github.com/huggingface/transformers/tree/v3.4.0/examples)
-  - [v3.3.1](https://github.com/huggingface/transformers/tree/v3.3.1/examples)
-  - [v3.2.0](https://github.com/huggingface/transformers/tree/v3.2.0/examples)
-  - [v3.1.0](https://github.com/huggingface/transformers/tree/v3.1.0/examples)
-  - [v3.0.2](https://github.com/huggingface/transformers/tree/v3.0.2/examples)
-  - [v2.11.0](https://github.com/huggingface/transformers/tree/v2.11.0/examples)
-  - [v2.10.0](https://github.com/huggingface/transformers/tree/v2.10.0/examples)
-  - [v2.9.1](https://github.com/huggingface/transformers/tree/v2.9.1/examples)
-  - [v2.8.0](https://github.com/huggingface/transformers/tree/v2.8.0/examples)
-  - [v2.7.0](https://github.com/huggingface/transformers/tree/v2.7.0/examples)
-  - [v2.6.0](https://github.com/huggingface/transformers/tree/v2.6.0/examples)
-  - [v2.5.1](https://github.com/huggingface/transformers/tree/v2.5.1/examples)
-  - [v2.4.0](https://github.com/huggingface/transformers/tree/v2.4.0/examples)
-  - [v2.3.0](https://github.com/huggingface/transformers/tree/v2.3.0/examples)
-  - [v2.2.0](https://github.com/huggingface/transformers/tree/v2.2.0/examples)
-  - [v2.1.1](https://github.com/huggingface/transformers/tree/v2.1.0/examples)
-  - [v2.0.0](https://github.com/huggingface/transformers/tree/v2.0.0/examples)
-  - [v1.2.0](https://github.com/huggingface/transformers/tree/v1.2.0/examples)
-  - [v1.1.0](https://github.com/huggingface/transformers/tree/v1.1.0/examples)
-  - [v1.0.0](https://github.com/huggingface/transformers/tree/v1.0.0/examples)
-</details>
-
-Alternatively, you can find switch your cloned 🤗 Transformers to a specific version (for instance with v3.5.1) with
-```bash
-git checkout tags/v3.5.1
-```
-and run the example command as usual afterward.
+This folder contains actively maintained examples of use of 🤗 Transformers using the PyTorch backend, organized along NLP tasks.
 
 ## The Big Table of Tasks
 
 Here is the list of all our examples:
-- with information on whether they are **built on top of `Trainer`/`TFTrainer`** (if not, they still work, they might
+- with information on whether they are **built on top of `Trainer``** (if not, they still work, they might
   just lack some features),
+- whether or not they have a version using the [🤗 Accelerate](https://github.com/huggingface/accelerate) library.
 - whether or not they leverage the [🤗 Datasets](https://github.com/huggingface/datasets) library.
 - links to **Colab notebooks** to walk through the scripts and run them easily,
 <!--
@@ -88,16 +30,16 @@ Coming soon!
 - links to **Cloud deployments** to be able to deploy large-scale trainings in the Cloud with little to no setup.
 -->
 
-| Task | Example datasets | Trainer support | TFTrainer support | 🤗 Datasets | Colab
+| Task | Example datasets | Trainer support | 🤗 Accelerate | 🤗 Datasets | Colab
 |---|---|:---:|:---:|:---:|:---:|
-| [**`language-modeling`**](https://github.com/huggingface/transformers/tree/master/examples/language-modeling)       | WikiText-2      | ✅ | -  | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/language_modeling.ipynb)
-| [**`multiple-choice`**](https://github.com/huggingface/transformers/tree/master/examples/multiple-choice)           | SWAG            | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/multiple_choice.ipynb)
-| [**`question-answering`**](https://github.com/huggingface/transformers/tree/master/examples/question-answering)     | SQuAD           | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/question_answering.ipynb)
-| [**`summarization`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)                     |  XSum           | ✅ | -  | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/summarization.ipynb)
-| [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/text-classification)   | GLUE            | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification.ipynb)
-| [**`text-generation`**](https://github.com/huggingface/transformers/tree/master/examples/text-generation)           | -               | n/a | n/a | - | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/blog/blob/master/notebooks/02_how_to_generate.ipynb)
-| [**`token-classification`**](https://github.com/huggingface/transformers/tree/master/examples/token-classification) | CoNLL NER       | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/token_classification.ipynb)
-| [**`translation`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)                       | WMT             | ✅  | - | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/translation.ipynb)
+| [**`language-modeling`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/language-modeling) | WikiText-2 | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/language_modeling.ipynb)
+| [**`multiple-choice`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/multiple-choice) | SWAG | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/multiple_choice.ipynb)
+| [**`question-answering`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/question-answering) | SQuAD | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/question_answering.ipynb)
+| [**`summarization`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/summarization) |  XSum | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/summarization.ipynb)
+| [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/text-classification) | GLUE | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification.ipynb)
+| [**`text-generation`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/text-generation) | - | n/a | - | - | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/blog/blob/master/notebooks/02_how_to_generate.ipynb)
+| [**`token-classification`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/token-classification) | CoNLL NER | ✅ |✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/token_classification.ipynb)
+| [**`translation`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/translation) | WMT | ✅ | ✅ |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/translation.ipynb)
 
 
 ## Running quick tests
@@ -106,7 +48,7 @@ Most examples are equipped with a mechanism to truncate the number of dataset sa
 
 For example here is how to truncate all three splits to just 50 samples each:
 ```
-examples/token-classification/run_ner.py \
+examples/pytorch/token-classification/run_ner.py \
 --max_train_samples 50 \
 --max_val_samples 50 \
 --max_test_samples 50 \
@@ -115,7 +57,7 @@ examples/token-classification/run_ner.py \
 
 Most example scripts should have the first two command line arguments and some have the third one. You can quickly check if a given example supports any of these by passing a `-h` option, e.g.:
 ```
-examples/token-classification/run_ner.py -h
+examples/pytorch/token-classification/run_ner.py -h
 ```
 
 ## Resuming training
@@ -149,7 +91,7 @@ classification MNLI task using the `run_glue` script, with 8 GPUs:
 
 ```bash
 python -m torch.distributed.launch \
-    --nproc_per_node 8 text-classification/run_glue.py \
+    --nproc_per_node 8 pytorch/text-classification/run_glue.py \
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --task_name mnli \
     --do_train \
@@ -189,7 +131,7 @@ python xla_spawn.py --num_cores num_tpu_you_have \
 ```
 
 As an example, here is how you would fine-tune the BERT large model (with whole word masking) on the text
-classification MNLI task using the `run_glue` script, with 8 TPUs:
+classification MNLI task using the `run_glue` script, with 8 TPUs (from this folder):
 
 ```bash
 python xla_spawn.py --num_cores 8 \
@@ -203,6 +145,34 @@ python xla_spawn.py --num_cores 8 \
     --learning_rate 2e-5 \
     --num_train_epochs 3.0 \
     --output_dir /tmp/mnli_output/
+```
+
+## Using Accelerate
+
+Most PyTorch example scripts have a version using the [🤗 Accelerate](https://github.com/huggingface/accelerate) library
+that exposes the training loop so it's easy for you to customize or tweak them to your needs. They all require you to
+install `accelerate` with
+
+```bash
+pip install accelerate
+```
+
+Then you can easily launch any of the scripts by running
+
+```bash
+accelerate config
+```
+
+and reply to the questions asked. Then
+
+```bash
+accelerate test
+```
+
+that will check everything is ready for training. Finally, you cam launch training with
+
+```bash
+accelerate launch path_to_script.py --args_to_script
 ```
 
 ## Logging & Experiment tracking
