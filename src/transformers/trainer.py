@@ -1017,7 +1017,7 @@ class Trainer:
                         "yield to errors or unwanted behaviors."
                     )
 
-            if self.deepspeed:
+            if args.deepspeed:
                 # will be resumed in deepspeed_init
                 pass
             else:

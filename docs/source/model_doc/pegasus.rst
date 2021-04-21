@@ -31,7 +31,8 @@ According to the abstract,
   extractive summary.
 - Pegasus achieves SOTA summarization performance on all 12 downstream tasks, as measured by ROUGE and human eval.
 
-The Authors' code can be found `here <https://github.com/google-research/pegasus>`__.
+This model was contributed by `sshleifer <https://huggingface.co/sshleifer>`__. The Authors' code can be found `here
+<https://github.com/google-research/pegasus>`__.
 
 
 Checkpoints
