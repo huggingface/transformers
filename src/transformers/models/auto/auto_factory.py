@@ -14,10 +14,10 @@
 # limitations under the License.
 """Factory function to build auto-model classes."""
 
-import functools
 import types
 
 from ...configuration_utils import PretrainedConfig
+from ...file_utils import copy_func
 from .configuration_auto import AutoConfig, replace_list_option_in_docstrings
 
 
@@ -383,15 +383,6 @@ class _BaseAutoModelClass:
             f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
             f"Model type should be one of {', '.join(c.__name__ for c in cls._model_mapping.keys())}."
         )
-
-
-def copy_func(f):
-    """ Returns a copy of a function f."""
-    # Based on http://stackoverflow.com/a/6528148/190597 (Glenn Maynard)
-    g = types.FunctionType(f.__code__, f.__globals__, name=f.__name__, argdefs=f.__defaults__, closure=f.__closure__)
-    g = functools.update_wrapper(g, f)
-    g.__kwdefaults__ = f.__kwdefaults__
-    return g
 
 
 def insert_head_doc(docstring, head_doc=""):

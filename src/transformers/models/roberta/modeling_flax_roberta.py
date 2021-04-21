@@ -441,40 +441,7 @@ class FlaxRobertaPreTrainedModel(FlaxPreTrainedModel):
     config_class = RobertaConfig
     base_model_prefix = "roberta"
 
-    def init(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
-        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
-            jnp.zeros(input_shape, dtype="i4"), None, None, None
-        )
-
-        params_rng, dropout_rng = jax.random.split(rng)
-        rngs = {"params": params_rng, "dropout": dropout_rng}
-
-        return self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids)["params"]
-
-    def _check_inputs(self, input_ids, attention_mask, token_type_ids, position_ids):
-        if token_type_ids is None:
-            token_type_ids = jnp.ones_like(input_ids)
-
-        if position_ids is None:
-            position_ids = create_position_ids_from_input_ids(input_ids, self.config.pad_token_id)
-
-        if attention_mask is None:
-            attention_mask = jnp.ones_like(input_ids)
-
-        return input_ids, attention_mask, token_type_ids, position_ids
-
-
-@add_start_docstrings(
-    "The bare RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
-    ROBERTA_START_DOCSTRING,
-)
-class FlaxRobertaModel(FlaxRobertaPreTrainedModel):
-    """
-    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
-    cross-attention is added between the self-attention layers, following the architecture described in `Attention is
-    all you need`_ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
-    Kaiser and Illia Polosukhin.
-    """
+    module_class: nn.Module = None
 
     def __init__(
         self,
@@ -484,23 +451,41 @@ class FlaxRobertaModel(FlaxRobertaPreTrainedModel):
         dtype: jnp.dtype = jnp.float32,
         **kwargs
     ):
-        module = FlaxRobertaModule(config, dtype=dtype, **kwargs)
+        module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+        # init input tensors
+        input_ids = jnp.zeros(input_shape, dtype="i4")
+        token_type_ids = jnp.ones_like(input_ids)
+        position_ids = create_position_ids_from_input_ids(input_ids, self.config.pad_token_id)
+        attention_mask = jnp.ones_like(input_ids)
+
+        params_rng, dropout_rng = jax.random.split(rng)
+        rngs = {"params": params_rng, "dropout": dropout_rng}
+
+        return self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids)["params"]
 
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
         self,
         input_ids,
-        token_type_ids=None,
         attention_mask=None,
+        token_type_ids=None,
         position_ids=None,
         params: dict = None,
         dropout_rng: PRNGKey = None,
         train: bool = False,
     ):
-        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
-            input_ids, attention_mask, token_type_ids, position_ids
-        )
+        # init input tensors if not passed
+        if token_type_ids is None:
+            token_type_ids = jnp.ones_like(input_ids)
+
+        if position_ids is None:
+            position_ids = create_position_ids_from_input_ids(input_ids, self.config.pad_token_id)
+
+        if attention_mask is None:
+            attention_mask = jnp.ones_like(input_ids)
 
         # Handle any PRNG if needed
         rngs = {}
@@ -541,3 +526,11 @@ class FlaxRobertaModule(nn.Module):
 
         pooled = self.pooler(hidden_states)
         return hidden_states, pooled
+
+
+@add_start_docstrings(
+    "The bare RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
+    ROBERTA_START_DOCSTRING,
+)
+class FlaxRobertaModel(FlaxRobertaPreTrainedModel):
+    module_class = FlaxRobertaModule
