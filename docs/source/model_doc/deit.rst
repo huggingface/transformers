@@ -73,6 +73,8 @@ Tips:
   `facebook/deit-base-patch16-384`. Note that one should use :class:`~transformers.DeiTFeatureExtractor` in order to
   prepare images for the model.
 
+This model was contributed by `nielsr <https://huggingface.co/nielsr>`__.
+
 
 DeiTConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
