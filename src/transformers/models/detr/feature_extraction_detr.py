@@ -462,7 +462,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             if annotations is not None:
                 annotations = [annotations]
 
-        # prepare (COCO annotations as a list of Dict -> DETR target as a Dict)
+        # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
         if annotations is not None:
             for idx, (image, anno) in enumerate(zip(images, annotations)):
                 if not isinstance(image, Image.Image):

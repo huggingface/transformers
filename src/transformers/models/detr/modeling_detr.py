@@ -88,6 +88,8 @@ class DetrObjectDetectionOutput(ModelOutput):
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` are provided)):
             Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a bounding box loss.
             The latter is defined as a linear combination of the L1 loss and the generalized scale-invariant IoU loss.
+        loss_dict (:obj:`Dict`, `optional`):
+            A dictionary containing the individual losses.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, num_classes + 1)`):
             Classification logits (including no-object) for all queries.
         pred_boxes (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, 4)`):
@@ -1356,7 +1358,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         logits = self.class_labels_classifier(sequence_output)
         pred_boxes = self.bbox_predictor(sequence_output).sigmoid()
 
-        loss, auxiliary_outputs = None, None
+        loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
             # First: create the matcher
             matcher = HungarianMatcher(
@@ -1399,10 +1401,11 @@ class DetrForObjectDetection(DetrPreTrainedModel):
                 output = (logits, pred_boxes) + auxiliary_outputs + outputs
             else:
                 output = (logits, pred_boxes) + outputs
-            return ((loss,) + output) if loss is not None else output
+            return ((loss, loss_dict) + output) if loss is not None else output
 
         return DetrObjectDetectionOutput(
             loss=loss,
+            loss_dict=loss_dict,
             logits=logits,
             pred_boxes=pred_boxes,
             auxiliary_outputs=auxiliary_outputs,
