@@ -36,6 +36,8 @@ Tips:
 - Wav2Vec2 model was trained using connectionist temporal classification (CTC) so the model output has to be decoded
   using :class:`~transformers.Wav2Vec2CTCTokenizer`.
 
+This model was contributed by `patrickvonplaten <https://huggingface.co/patrickvonplaten>`__.
+
 
 Wav2Vec2Config
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

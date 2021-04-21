@@ -35,7 +35,8 @@ According to the abstract,
   state-of-the-art results on a range of abstractive dialogue, question answering, and summarization tasks, with gains
   of up to 6 ROUGE.
 
-The Authors' code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/bart>`__.
+This model was contributed by `sshleifer <https://huggingface.co/sshleifer>`__. The Authors' code can be found `here
+<https://github.com/pytorch/fairseq/tree/master/examples/bart>`__.
 
 
 Examples

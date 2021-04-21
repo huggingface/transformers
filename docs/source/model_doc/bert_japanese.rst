@@ -71,6 +71,8 @@ Tips:
 - This implementation is the same as BERT, except for tokenization method. Refer to the :doc:`documentation of BERT
   <bert>` for more usage examples.
 
+This model was contributed by `cl-tohoku <https://huggingface.co/cl-tohoku>`__.
+
 BertJapaneseTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

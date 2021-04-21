@@ -38,7 +38,8 @@ the training data performs consistently better on a wide range of NLP tasks, ach
 pre-trained models will be made publicly available at https://github.com/microsoft/DeBERTa.*
 
 
-The original code can be found `here <https://github.com/microsoft/DeBERTa>`__.
+This model was contributed by `DeBERTa <https://huggingface.co/DeBERTa>`__. The original code can be found `here
+<https://github.com/microsoft/DeBERTa>`__.
 
 
 DebertaConfig

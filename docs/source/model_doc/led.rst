@@ -53,6 +53,8 @@ Tips:
 - A notebook showing how to fine-tune LED, can be accessed `here
   <https://colab.research.google.com/drive/12LjJazBl7Gam0XBPy_y0CTOJZeZ34c2v?usp=sharing>`__.
 
+This model was contributed by `patrickvonplaten <https://huggingface.co/patrickvonplaten>`__.
+
 
 LEDConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
