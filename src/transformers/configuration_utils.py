@@ -338,7 +338,7 @@ class PretrainedConfig(PushToHubMixin):
             if commit_message is None:
                 commit_message = "update config"
             url = self.push_to_hub(save_directory, commit_message=commit_message, **kwargs)
-            logger.info(f"Model pushed to the hub in this commit: {url}")
+            logger.info(f"Configuration pushed to the hub in this commit: {url}")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
