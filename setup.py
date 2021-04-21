@@ -289,6 +289,7 @@ extras["dev"] = (
 
 extras["torchhub"] = deps_list(
     "filelock",
+    "huggingface-hub",
     "importlib_metadata",
     "numpy",
     "packaging",
