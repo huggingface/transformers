@@ -693,8 +693,9 @@ class T5Block(nn.Module):
         if present_key_value_state is None:
             # For compatibility with gradient checkpointing
             present_key_value_state = torch.tensor(-1.0, device=hidden_states.device)
-            # After PyTorch 1.8.0, the following line is no longer required
-            present_key_value_state.requires_grad = True
+            if self.training:
+                # After PyTorch 1.8.0, the following line is no longer required
+                present_key_value_state.requires_grad = True
 
         outputs = outputs + (present_key_value_state,) + attention_outputs
         return outputs  # hidden-states, present_key_value_states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
