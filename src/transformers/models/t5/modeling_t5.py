@@ -691,9 +691,11 @@ class T5Block(nn.Module):
         outputs = (hidden_states,)
 
         if present_key_value_state is None:
-            # for compatibility with gradient checkpointing
-            present_key_value_state = torch.tensor(-1.)
+            # For compatibility with gradient checkpointing
+            present_key_value_state = torch.tensor(-1., device=hidden_states.device)
+            # After PyTorch 1.8.0, the following line is no longer required
             present_key_value_state.requires_grad = True
+
         outputs = outputs + (present_key_value_state,) + attention_outputs
         return outputs  # hidden-states, present_key_value_states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
@@ -993,7 +995,11 @@ class T5Stack(T5PreTrainedModel):
             # hidden-states, key-value-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
             hidden_states, present_key_value_state = layer_outputs[:2]
 
-            if isinstance(present_key_value_state, torch.Tensor) and present_key_value_state.item() == -1:
+            if (
+                isinstance(present_key_value_state, torch.Tensor) and
+                present_key_value_state.dim() == 0 and
+                present_key_value_state.item() == -1
+            ):
                 present_key_value_state = None
 
             # We share the position biases between the layers - the first layer store them
