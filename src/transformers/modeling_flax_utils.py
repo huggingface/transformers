@@ -17,12 +17,12 @@ import os
 from abc import ABC
 from functools import partial
 from pickle import UnpicklingError
-from typing import Dict, Set, Tuple, Union
+from typing import Dict, Optional, Set, Tuple, Union
 
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
+from flax.core.frozen_dict import FrozenDict, unfreeze
 from flax.serialization import from_bytes, to_bytes
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax.random import PRNGKey
@@ -37,7 +37,7 @@ logger = logging.get_logger(__name__)
 
 
 ACT2FN = {
-    "gelu": nn.gelu,
+    "gelu": partial(nn.gelu, approximate=False),
     "relu": nn.relu,
     "silu": nn.swish,
     "swish": nn.swish,
@@ -91,8 +91,17 @@ class FlaxPreTrainedModel(ABC):
         self._required_params = set(flatten_dict(unfreeze(random_params)).keys())
         self.params = random_params
 
+        self.tie_weights()
+
     def init(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> Dict:
         raise NotImplementedError(f"init method has to be implemented for {self}")
+
+    def get_input_embeddings_key(self) -> str:
+        raise NotImplementedError(f"get_input_embeddings_key method has to be implemented for {self}")
+
+    def get_output_embeddings(self) -> Optional[jax.interpreters.xla._DeviceArray]:
+        """ Overwrite this method for model classes that have output embeddings """
+        return
 
     @property
     def config(self) -> PretrainedConfig:
@@ -120,7 +129,19 @@ class FlaxPreTrainedModel(ABC):
                 "Some parameters are missing. Make sure that `params` include the following "
                 f"parameters {self.required_params - param_keys}"
             )
-        self._params = freeze(params)
+        self._params = params
+
+    def tie_weights(self):
+        output_embeddings = self.get_output_embeddings()
+
+        if output_embeddings is not None and self.config.tie_word_embeddings:
+            input_embbeddings_key = self.get_input_embeddings_key()
+            flattened_dict = flatten_dict(self.params)
+
+            # transpose weight and set correctly
+            flattened_dict[input_embbeddings_key] = output_embeddings.T
+
+            self.params = unflatten_dict(flattened_dict)
 
     @classmethod
     def from_pretrained(
@@ -318,6 +339,7 @@ class FlaxPreTrainedModel(ABC):
         else:
             with open(resolved_archive_file, "rb") as state_f:
                 try:
+                    print(f"Class {cls}")
                     state = from_bytes(cls, state_f.read())
                 except UnpicklingError:
                     raise EnvironmentError(f"Unable to convert {archive_file} to Flax deserializable object. ")
@@ -368,6 +390,8 @@ class FlaxPreTrainedModel(ABC):
 
         # set correct parameters
         model.params = unflatten_dict(state)
+
+        model.tie_weights()
         return model
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike]):
