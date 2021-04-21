@@ -90,8 +90,8 @@ You can then feed it all as input to your model:
     >>> outputs = model(input_ids, langs=langs)
 
 
-The example :prefix_link:`run_generation.py <examples/text-generation/run_generation.py>` can generate text using the
-CLM checkpoints from XLM, using the language embeddings.
+The example :prefix_link:`run_generation.py <examples/pytorch/text-generation/run_generation.py>` can generate text
+using the CLM checkpoints from XLM, using the language embeddings.
 
 XLM without Language Embeddings
 -----------------------------------------------------------------------------------------------------------------------

@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-## SQuAD
+# SQuAD
 
-Based on the script [`run_qa.py`](https://github.com/huggingface/transformers/blob/master/examples/question-answering/run_qa.py).
+Based on the script [`run_qa.py`](https://github.com/huggingface/transformers/blob/master/examples/pytorch/question-answering/run_qa.py).
 
 **Note:** This script only works with models that have a fast tokenizer (backed by the 🤗 Tokenizers library) as it
 uses special features of those tokenizers. You can check if your favorite model has a fast tokenizer in
@@ -29,7 +29,9 @@ The old version of this script can be found [here](https://github.com/huggingfac
 
 Note that if your dataset contains samples with no possible answers (like SQUAD version 2), you need to pass along the flag `--version_2_with_negative`.
 
-#### Fine-tuning BERT on SQuAD1.0
+## Trainer-based scripts
+
+### Fine-tuning BERT on SQuAD1.0
 
 This example code fine-tunes BERT on the SQuAD1.0 dataset. It runs in 24 min (with BERT-base) or 68 min (with BERT-large)
 on a single tesla V100 16GB.
@@ -56,7 +58,6 @@ exact_match = 81.22
 ```
 
 #### Distributed training
-
 
 Here is an example using distributed training on 8 V100 GPUs and Bert Whole Word Masking uncased model to reach a F1 > 93 on SQuAD1.1:
 
@@ -127,6 +128,71 @@ python run_qa_beam_search.py \
     --per_device_train_batch_size=2   \
     --save_steps 5000
 ```
+
+## With Accelerate
+
+Based on the script `run_qa_no_trainer.py` and `run_qa_beam_search_no_trainer.py`.
+
+Like `run_qa.py` and `run_qa_beam_search.py`, these scripts allow you to fine-tune any of the models supported on a
+SQUAD or a similar dataset, the main difference is that this
+script exposes the bare training loop, to allow you to quickly experiment and add any customization you would like.
+
+It offers less options than the script with `Trainer` (for instance you can easily change the options for the optimizer
+or the dataloaders directly in the script) but still run in a distributed setup, on TPU and supports mixed precision by
+the mean of the [🤗 `Accelerate`](https://github.com/huggingface/accelerate) library. You can use the script normally
+after installing it:
+
+```bash
+pip install accelerate
+```
+
+then
+
+```bash
+python run_qa_no_trainer.py \
+  --model_name_or_path bert-base-uncased \
+  --dataset_name squad \
+  --max_seq_length 384 \
+  --doc_stride 128 \
+  --output_dir ~/tmp/debug_squad
+```
+
+You can then use your usual launchers to run in it in a distributed environment, but the easiest way is to run
+
+```bash
+accelerate config
+```
+
+and reply to the questions asked. Then
+
+```bash
+accelerate test
+```
+
+that will check everything is ready for training. Finally, you cna launch training with
+
+```bash
+export TASK_NAME=mrpc
+
+accelerate launch run_qa_no_trainer.py \
+  --model_name_or_path bert-base-uncased \
+  --dataset_name squad \
+  --max_seq_length 384 \
+  --doc_stride 128 \
+  --output_dir ~/tmp/debug_squad
+```
+
+This command is the same and will work for:
+
+- a CPU-only setup
+- a setup with one GPU
+- a distributed training with several GPUs (single or multi node)
+- a training on TPUs
+
+Note that this library is in alpha release so your feedback is more than welcome if you encounter any problem using it.
+
+
+## Results
 
 Larger batch size may improve the performance while costing more memory.
 
@@ -223,22 +289,3 @@ python -m torch.distributed.launch --nproc_per_node=8 ./examples/question-answer
 ```
 Training with the above command leads to the f1 score of 93.52, which is slightly better than the f1 score of 93.15 for 
 `bert-large-uncased-whole-word-masking`.
-
-## SQuAD with the Tensorflow Trainer
-
-```bash
-python run_tf_squad.py \
-    --model_name_or_path bert-base-uncased \
-    --output_dir model \
-    --max_seq_length 384 \
-    --num_train_epochs 2 \
-    --per_gpu_train_batch_size 8 \
-    --per_gpu_eval_batch_size 16 \
-    --do_train \
-    --logging_dir logs \    
-    --logging_steps 10 \
-    --learning_rate 3e-5 \
-    --doc_stride 128    
-```
-
-For the moment evaluation is not available in the Tensorflow Trainer only the training.

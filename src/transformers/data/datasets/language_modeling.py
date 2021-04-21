@@ -53,7 +53,7 @@ class TextDataset(Dataset):
     ):
         warnings.warn(
             DEPRECATION_WARNING.format(
-                "https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_mlm.py"
+                "https://github.com/huggingface/transformers/blob/master/examples/pytorch/language-modeling/run_mlm.py"
             ),
             FutureWarning,
         )
@@ -119,7 +119,7 @@ class LineByLineTextDataset(Dataset):
     def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int):
         warnings.warn(
             DEPRECATION_WARNING.format(
-                "https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_mlm.py"
+                "https://github.com/huggingface/transformers/blob/master/examples/pytorch/language-modeling/run_mlm.py"
             ),
             FutureWarning,
         )
@@ -151,7 +151,7 @@ class LineByLineWithRefDataset(Dataset):
     def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int, ref_path: str):
         warnings.warn(
             DEPRECATION_WARNING.format(
-                "https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_mlm_wwm.py"
+                "https://github.com/huggingface/transformers/blob/master/examples/pytorch/language-modeling/run_mlm_wwm.py"
             ),
             FutureWarning,
         )
@@ -193,7 +193,7 @@ class LineByLineWithSOPTextDataset(Dataset):
     def __init__(self, tokenizer: PreTrainedTokenizer, file_dir: str, block_size: int):
         warnings.warn(
             DEPRECATION_WARNING.format(
-                "https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_mlm.py"
+                "https://github.com/huggingface/transformers/blob/master/examples/pytorch/language-modeling/run_mlm.py"
             ),
             FutureWarning,
         )
@@ -348,7 +348,7 @@ class TextDatasetForNextSentencePrediction(Dataset):
     ):
         warnings.warn(
             DEPRECATION_WARNING.format(
-                "https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_mlm.py"
+                "https://github.com/huggingface/transformers/blob/master/examples/pytorch/language-modeling/run_mlm.py"
             ),
             FutureWarning,
         )

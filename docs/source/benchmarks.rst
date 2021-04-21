@@ -65,10 +65,10 @@ respectively.
 .. code-block:: bash
 
     ## PYTORCH CODE
-    python examples/benchmarking/run_benchmark.py --help
+    python examples/pytorch/benchmarking/run_benchmark.py --help
 
     ## TENSORFLOW CODE
-    python examples/benchmarking/run_benchmark_tf.py --help
+    python examples/tensorflow/benchmarking/run_benchmark_tf.py --help
 
 
 An instantiated benchmark object can then simply be run by calling ``benchmark.run()``.

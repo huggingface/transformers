@@ -43,7 +43,7 @@ class SingleNodeTest(unittest.TestCase):
     def setUp(self):
         if self.framework == "pytorch":
             subprocess.run(
-                f"cp ./examples/text-classification/run_glue.py {self.env.test_path}/run_glue.py".split(),
+                f"cp ./examples/pytorch/text-classification/run_glue.py {self.env.test_path}/run_glue.py".split(),
                 encoding="utf-8",
                 check=True,
             )

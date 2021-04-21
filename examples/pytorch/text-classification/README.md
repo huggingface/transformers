@@ -16,7 +16,7 @@ limitations under the License.
 
 # Text classification examples
 
-## PyTorch version
+## GLUE tasks
 
 Based on the script [`run_glue.py`](https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_glue.py).
 
@@ -129,7 +129,7 @@ and reply to the questions asked. Then
 accelerate test
 ```
 
-that will check everything is ready for training. Finally, you cna launch training with
+that will check everything is ready for training. Finally, you can launch training with
 
 ```bash
 export TASK_NAME=mrpc
@@ -152,84 +152,3 @@ This command is the same and will work for:
 - a training on TPUs
 
 Note that this library is in alpha release so your feedback is more than welcome if you encounter any problem using it.
-
-## TensorFlow 2.0 version
-
-Based on the script [`run_tf_glue.py`](https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_tf_glue.py).
-
-Fine-tuning the library TensorFlow 2.0 Bert model for sequence classification on the  MRPC task of the GLUE benchmark: [General Language Understanding Evaluation](https://gluebenchmark.com/).
-
-This script has an option for mixed precision (Automatic Mixed Precision / AMP) to run models on Tensor Cores (NVIDIA Volta/Turing GPUs) and future hardware and an option for XLA, which uses the XLA compiler to reduce model runtime.
-Options are toggled using `USE_XLA` or `USE_AMP` variables in the script.
-These options and the below benchmark are provided by @tlkh.
-
-Quick benchmarks from the script (no other modifications):
-
-| GPU    | Mode | Time (2nd epoch) | Val Acc (3 runs) |
-| --------- | -------- | ----------------------- | ----------------------|
-| Titan V | FP32 | 41s | 0.8438/0.8281/0.8333 |
-| Titan V | AMP | 26s | 0.8281/0.8568/0.8411 |
-| V100    | FP32 | 35s | 0.8646/0.8359/0.8464 |
-| V100    | AMP | 22s | 0.8646/0.8385/0.8411 |
-| 1080 Ti | FP32 | 55s | - |
-
-Mixed precision (AMP) reduces the training time considerably for the same hardware and hyper-parameters (same batch size was used).
-
-
-## Run generic text classification script in TensorFlow
-
-The script [run_tf_text_classification.py](https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_tf_text_classification.py) allows users to run a text classification on their own CSV files. For now there are few restrictions, the CSV files must have a header corresponding to the column names and not more than three columns: one column for the id, one column for the text and another column for a second piece of text in case of an entailment classification for example.
-
-To use the script, one as to run the following command line:
-```bash
-python run_tf_text_classification.py \
-  --train_file train.csv \ ### training dataset file location (mandatory if running with --do_train option)
-  --dev_file dev.csv \ ### development dataset file location (mandatory if running with --do_eval option)
-  --test_file test.csv \ ### test dataset file location (mandatory if running with --do_predict option)
-  --label_column_id 0 \ ### which column corresponds to the labels
-  --model_name_or_path bert-base-multilingual-uncased \
-  --output_dir model \
-  --num_train_epochs 4 \
-  --per_device_train_batch_size 16 \
-  --per_device_eval_batch_size 32 \
-  --do_train \
-  --do_eval \
-  --do_predict \
-  --logging_steps 10 \
-  --evaluation_strategy steps \
-  --save_steps 10 \
-  --overwrite_output_dir \
-  --max_seq_length 128
-```
-
-
-## XNLI
-
-Based on the script [`run_xnli.py`](https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_xnli.py).
-
-[XNLI](https://www.nyu.edu/projects/bowman/xnli/) is a crowd-sourced dataset based on [MultiNLI](http://www.nyu.edu/projects/bowman/multinli/). It is an evaluation benchmark for cross-lingual text representations. Pairs of text are labeled with textual entailment annotations for 15 different languages (including both high-resource language such as English and low-resource languages such as Swahili).
-
-#### Fine-tuning on XNLI
-
-This example code fine-tunes mBERT (multi-lingual BERT) on the XNLI dataset. It runs in 106 mins on a single tesla V100 16GB.
-
-```bash
-python run_xnli.py \
-  --model_name_or_path bert-base-multilingual-cased \
-  --language de \
-  --train_language en \
-  --do_train \
-  --do_eval \
-  --per_device_train_batch_size 32 \
-  --learning_rate 5e-5 \
-  --num_train_epochs 2.0 \
-  --max_seq_length 128 \
-  --output_dir /tmp/debug_xnli/ \
-  --save_steps -1
-```
-
-Training with the previously defined hyper-parameters yields the following results on the **test** set:
-
-```bash
-acc = 0.7093812375249501
-```

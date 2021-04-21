@@ -59,7 +59,7 @@ jobs:
           HF_HOME: /mnt/cache
           TRANSFORMERS_IS_CI: yes
         run: |
-          pip install -r examples/_tests_requirements.txt
+          pip install -r examples/pytorch/_tests_requirements.txt
           python -m pytest -n 1 --dist=loadfile --make-reports=examples_torch_gpu examples
 
       - name: Failure short reports

@@ -61,7 +61,7 @@ You can find the old version of the PyTorch script [here](https://github.com/hug
 
 ## Pytorch version, no Trainer
 
-Based on the script [run_ner_no_trainer.py](https://github.com/huggingface/transformers/blob/master/examples/token-classification/run_ner_no_trainer.py).
+Based on the script [run_ner_no_trainer.py](https://github.com/huggingface/transformers/blob/master/examples/pytorch/token-classification/run_ner_no_trainer.py).
 
 Like `run_ner.py`, this script allows you to fine-tune any of the models on the [hub](https://huggingface.co/models) on a
 token classification task, either NER, POS or CHUNKS tasks or your own data in a csv or a JSON file. The main difference is that this
@@ -126,66 +126,3 @@ This command is the same and will work for:
 - a training on TPUs
 
 Note that this library is in alpha release so your feedback is more than welcome if you encounter any problem using it.
-
-### TensorFlow version
-
-The following examples are covered in this section:
-
-* NER on the GermEval 2014 (German NER) dataset
-* Emerging and Rare Entities task: WNUT’17 (English NER) dataset
-
-Details and results for the fine-tuning provided by @stefan-it.
-
-### GermEval 2014 (German NER) dataset
-
-#### Data (Download and pre-processing steps)
-
-Data can be obtained from the [GermEval 2014](https://sites.google.com/site/germeval2014ner/data) shared task page.
-
-Here are the commands for downloading and pre-processing train, dev and test datasets. The original data format has four (tab-separated) columns, in a pre-processing step only the two relevant columns (token and outer span NER annotation) are extracted:
-
-```bash
-curl -L 'https://drive.google.com/uc?export=download&id=1Jjhbal535VVz2ap4v4r_rN1UEHTdLK5P' \
-| grep -v "^#" | cut -f 2,3 | tr '\t' ' ' > train.txt.tmp
-curl -L 'https://drive.google.com/uc?export=download&id=1ZfRcQThdtAR5PPRjIDtrVP7BtXSCUBbm' \
-| grep -v "^#" | cut -f 2,3 | tr '\t' ' ' > dev.txt.tmp
-curl -L 'https://drive.google.com/uc?export=download&id=1u9mb7kNJHWQCWyweMDRMuTFoOHOfeBTH' \
-| grep -v "^#" | cut -f 2,3 | tr '\t' ' ' > test.txt.tmp
-```
-
-The GermEval 2014 dataset contains some strange "control character" tokens like `'\x96', '\u200e', '\x95', '\xad' or '\x80'`.
-One problem with these tokens is, that `BertTokenizer` returns an empty token for them, resulting in misaligned `InputExample`s.
-The `preprocess.py` script located in the `scripts` folder a) filters these tokens and b) splits longer sentences into smaller ones (once the max. subtoken length is reached).
-
-Let's define some variables that we need for further pre-processing steps and training the model:
-
-```bash
-export MAX_LENGTH=128
-export BERT_MODEL=bert-base-multilingual-cased
-```
-
-Run the pre-processing script on training, dev and test datasets:
-
-```bash
-python3 scripts/preprocess.py train.txt.tmp $BERT_MODEL $MAX_LENGTH > train.txt
-python3 scripts/preprocess.py dev.txt.tmp $BERT_MODEL $MAX_LENGTH > dev.txt
-python3 scripts/preprocess.py test.txt.tmp $BERT_MODEL $MAX_LENGTH > test.txt
-```
-
-The GermEval 2014 dataset has much more labels than CoNLL-2002/2003 datasets, so an own set of labels must be used:
-
-```bash
-cat train.txt dev.txt test.txt | cut -d " " -f 2 | grep -v "^$"| sort | uniq > labels.txt
-```
-
-#### Prepare the run
-
-Additional environment variables must be set:
-
-```bash
-export OUTPUT_DIR=germeval-model
-export BATCH_SIZE=32
-export NUM_EPOCHS=3
-export SAVE_STEPS=750
-export SEED=1
-```
