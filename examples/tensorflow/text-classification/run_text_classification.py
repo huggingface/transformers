@@ -243,9 +243,6 @@ def main():
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
     output_dir = Path(training_args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    assert (
-        data_args.train_file is not None or data_args.validation_file is not None or data_args.test_file is not None
-    ), "Need to supply at least one of --train_file, --validation_file or --test_file!"
     # endregion
 
     # region Checkpoints
