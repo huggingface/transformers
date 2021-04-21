@@ -1358,13 +1358,14 @@ class GenerationIntegrationTests(unittest.TestCase):
             bos_token_id=bart_model.config.bos_token_id,
         )
 
-        bart_model.greedy_search(
-            input_ids,
-            max_length=max_length,
-            pad_token_id=bart_model.config.pad_token_id,
-            eos_token_id=bart_model.config.eos_token_id,
-            **model_kwargs,
-        )
+        with self.assertWarns(UserWarning):
+            bart_model.greedy_search(
+                input_ids,
+                max_length=max_length,
+                pad_token_id=bart_model.config.pad_token_id,
+                eos_token_id=bart_model.config.eos_token_id,
+                **model_kwargs,
+            )
 
     def test_max_length_backward_compat_sample(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
@@ -1381,13 +1382,14 @@ class GenerationIntegrationTests(unittest.TestCase):
             bos_token_id=bart_model.config.bos_token_id,
         )
         with torch.no_grad():
-            bart_model.sample(
-                input_ids,
-                max_length=max_length,
-                pad_token_id=bart_model.config.pad_token_id,
-                eos_token_id=bart_model.config.eos_token_id,
-                **model_kwargs,
-            )
+            with self.assertWarns(UserWarning):
+                bart_model.sample(
+                    input_ids,
+                    max_length=max_length,
+                    pad_token_id=bart_model.config.pad_token_id,
+                    eos_token_id=bart_model.config.eos_token_id,
+                    **model_kwargs,
+                )
 
     def test_max_length_backward_compat_beam_search(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
@@ -1413,9 +1415,10 @@ class GenerationIntegrationTests(unittest.TestCase):
             num_beams=num_beams,
             device=torch_device,
         )
-        _ = bart_model.beam_search(
-            input_ids, num_beams=num_beams, max_length=max_length, beam_scorer=beam_scorer, **model_kwargs
-        )
+        with self.assertWarns(UserWarning):
+            _ = bart_model.beam_search(
+                input_ids, num_beams=num_beams, max_length=max_length, beam_scorer=beam_scorer, **model_kwargs
+            )
 
     def test_max_length_backward_compat_group_beam_search(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
@@ -1445,9 +1448,10 @@ class GenerationIntegrationTests(unittest.TestCase):
             num_beam_hyps_to_keep=num_return_sequences,
             num_beam_groups=num_beam_groups,
         )
-        bart_model.group_beam_search(
-            input_ids, diverse_beam_scorer, num_beams=num_beams, max_length=max_length, **model_kwargs
-        )
+        with self.assertWarns(UserWarning):
+            bart_model.group_beam_search(
+                input_ids, diverse_beam_scorer, num_beams=num_beams, max_length=max_length, **model_kwargs
+            )
 
     def test_max_length_warning_if_different(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
