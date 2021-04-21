@@ -558,7 +558,7 @@ def main():
 
         predict_results = trainer.predict(
             predict_dataset,
-            metric_key_prefix="test",
+            metric_key_prefix="predict",
             max_length=data_args.val_max_target_length,
             num_beams=data_args.num_beams,
         )
@@ -573,12 +573,12 @@ def main():
 
         if trainer.is_world_process_zero():
             if training_args.predict_with_generate:
-                test_preds = tokenizer.batch_decode(
-                    test_results.predictions, skip_special_tokens=True, clean_up_tokenization_spaces=True
+                predictions = tokenizer.batch_decode(
+                    predict_results.predictions, skip_special_tokens=True, clean_up_tokenization_spaces=True
                 )
-                test_preds = [pred.strip() for pred in test_preds]
-                output_test_preds_file = os.path.join(training_args.output_dir, "predict_generations.txt")
-                with open(output_test_preds_file, "w") as writer:
+                predictions = [pred.strip() for pred in predictions]
+                output_prediction_file = os.path.join(training_args.output_dir, "generated_predictions.txt")
+                with open(output_prediction_file, "w") as writer:
                     writer.write("\n".join(test_preds))
 
     return results
