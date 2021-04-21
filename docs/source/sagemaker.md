@@ -325,7 +325,7 @@ When you create a `HuggingFace` Estimator, you can specify a [training script th
 
 If you are using `git_config` to run the [🤗 Transformers examples scripts](https://github.com/huggingface/transformers/tree/master/examples) keep in mind that you need to configure the right `'branch'` for you `transformers_version`, e.g. if you use `transformers_version='4.4.2` you have to use `'branch':'v4.4.2'`. 
 
-As an example to use `git_config` with an [example script from the transformers repository](https://github.com/huggingface/transformers/tree/master/pytorch/text-classification).
+As an example to use `git_config` with an [example script from the transformers repository](https://github.com/huggingface/transformers/tree/master/examples/pytorch/text-classification).
 
 _Tip: define `output_dir` as `/opt/ml/model` in the hyperparameter for the script to save your model to S3 after training._
 

@@ -18,7 +18,7 @@ limitations under the License.
 
 ## GLUE tasks
 
-Based on the script [`run_tf_glue.py`](https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_tf_glue.py).
+Based on the script [`run_tf_glue.py`](https://github.com/huggingface/transformers/blob/master/examples/tensorflow/text-classification/run_tf_glue.py).
 
 Fine-tuning the library TensorFlow 2.0 Bert model for sequence classification on the MRPC task of the GLUE benchmark: [General Language Understanding Evaluation](https://gluebenchmark.com/).
 
@@ -41,7 +41,7 @@ Mixed precision (AMP) reduces the training time considerably for the same hardwa
 
 ## Run generic text classification script in TensorFlow
 
-The script [run_tf_text_classification.py](https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_tf_text_classification.py) allows users to run a text classification on their own CSV files. For now there are few restrictions, the CSV files must have a header corresponding to the column names and not more than three columns: one column for the id, one column for the text and another column for a second piece of text in case of an entailment classification for example.
+The script [run_tf_text_classification.py](https://github.com/huggingface/transformers/blob/master/examples/tensorflow/text-classification/run_tf_text_classification.py) allows users to run a text classification on their own CSV files. For now there are few restrictions, the CSV files must have a header corresponding to the column names and not more than three columns: one column for the id, one column for the text and another column for a second piece of text in case of an entailment classification for example.
 
 To use the script, one as to run the following command line:
 ```bash

@@ -45,7 +45,7 @@ Tips:
   necessary though, just let us know if you need this option.
 
 The original code can be found `here
-<https://github.com/huggingface/transformers/tree/master/research-project/distillation>`__.
+<https://github.com/huggingface/transformers/tree/master/examples/research-projects/distillation>`__.
 
 
 DistilBertConfig

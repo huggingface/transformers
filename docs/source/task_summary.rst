@@ -168,8 +168,8 @@ Extractive Question Answering
 Extractive Question Answering is the task of extracting an answer from a text given a question. An example of a
 question answering dataset is the SQuAD dataset, which is entirely based on that task. If you would like to fine-tune a
 model on a SQuAD task, you may leverage the `run_qa.py
-<https://github.com/huggingface/transformers/tree/master/pytorch/question-answering/run_qa.py>`__ and `run_tf_squad.py
-<https://github.com/huggingface/transformers/tree/master/tensorflow/question-answering/run_tf_squad.py>`__ scripts.
+<https://github.com/huggingface/transformers/tree/master/examples/pytorch/question-answering/run_qa.py>`__ and `run_tf_squad.py
+<https://github.com/huggingface/transformers/tree/master/examples/tensorflow/question-answering/run_tf_squad.py>`__ scripts.
 
 
 Here is an example of using pipelines to do question answering: extracting an answer from a text given a question. It
@@ -435,7 +435,7 @@ Causal Language Modeling
 Causal language modeling is the task of predicting the token following a sequence of tokens. In this situation, the
 model only attends to the left context (tokens on the left of the mask). Such a training is particularly interesting
 for generation tasks. If you would like to fine-tune a model on a causal language modeling task, you may leverage the
-`run_clm.py <https://github.com/huggingface/transformers/tree/master/examples/pytorch/language-modeling/run_clm.py>`__
+:prefix_link:`run_clm.py <examples/pytorch/language-modeling/run_clm.py>`__
 script.
 
 Usually, the next token is predicted by sampling from the logits of the last hidden state the model produces from the
@@ -603,8 +603,8 @@ Named Entity Recognition
 Named Entity Recognition (NER) is the task of classifying tokens according to a class, for example, identifying a token
 as a person, an organisation or a location. An example of a named entity recognition dataset is the CoNLL-2003 dataset,
 which is entirely based on that task. If you would like to fine-tune a model on an NER task, you may leverage the
-`run_ner.py
-<https://github.com/huggingface/transformers/tree/master/examples/pytorch/token-classification/run_ner.py>`__ script.
+:prefix_link:`run_ner.py
+<examples/pytorch/token-classification/run_ner.py>`__ script.
 
 Here is an example of using pipelines to do named entity recognition, specifically, trying to identify tokens as
 belonging to one of 9 classes:
