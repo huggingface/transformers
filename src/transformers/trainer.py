@@ -676,43 +676,43 @@ class Trainer:
             pin_memory=self.args.dataloader_pin_memory,
         )
 
-    def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
+    def get_predict_dataloader(self, predict_dataset: Dataset) -> DataLoader:
         """
-        Returns the test :class:`~torch.utils.data.DataLoader`.
+        Returns the predict :class:`~torch.utils.data.DataLoader`.
 
         Subclass and override this method if you want to inject some custom behavior.
 
         Args:
-            test_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
-                The test dataset to use. If it is an :obj:`datasets.Dataset`, columns not accepted by the
+            predict_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
+                The predict dataset to use. If it is an :obj:`datasets.Dataset`, columns not accepted by the
                 ``model.forward()`` method are automatically removed. It must implement :obj:`__len__`.
         """
-        if is_datasets_available() and isinstance(test_dataset, datasets.Dataset):
-            test_dataset = self._remove_unused_columns(test_dataset, description="test")
+        if is_datasets_available() and isinstance(predict_dataset, datasets.Dataset):
+            predict_dataset = self._remove_unused_columns(predict_dataset, description="prediction")
 
-        if isinstance(test_dataset, torch.utils.data.dataset.IterableDataset):
+        if isinstance(predict_dataset, torch.utils.data.dataset.IterableDataset):
             if self.args.world_size > 1:
-                test_dataset = IterableDatasetShard(
-                    test_dataset,
+                predict_dataset = IterableDatasetShard(
+                    predict_dataset,
                     batch_size=self.args.eval_batch_size,
                     drop_last=self.args.dataloader_drop_last,
                     num_processes=self.args.world_size,
                     process_index=self.args.process_index,
                 )
             return DataLoader(
-                test_dataset,
+                predict_dataset,
                 batch_size=self.args.eval_batch_size,
                 collate_fn=self.data_collator,
                 num_workers=self.args.dataloader_num_workers,
                 pin_memory=self.args.dataloader_pin_memory,
             )
 
-        test_sampler = self._get_eval_sampler(test_dataset)
+        predict_sampler = self._get_eval_sampler(predict_dataset)
 
         # We use the same batch_size as for eval.
         return DataLoader(
-            test_dataset,
-            sampler=test_sampler,
+            predict_dataset,
+            sampler=predict_sampler,
             batch_size=self.args.eval_batch_size,
             collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
@@ -1896,24 +1896,24 @@ class Trainer:
         return output.metrics
 
     def predict(
-        self, test_dataset: Dataset, ignore_keys: Optional[List[str]] = None, metric_key_prefix: str = "test"
+        self, predict_dataset: Dataset, ignore_keys: Optional[List[str]] = None, metric_key_prefix: str = "predict"
     ) -> PredictionOutput:
         """
         Run prediction and returns predictions and potential metrics.
 
-        Depending on the dataset and your use case, your test dataset may contain labels. In that case, this method
+        Depending on the dataset and your use case, your predict dataset may contain labels. In that case, this method
         will also return metrics, like in :obj:`evaluate()`.
 
         Args:
-            test_dataset (:obj:`Dataset`):
+            predict_dataset (:obj:`Dataset`):
                 Dataset to run the predictions on. If it is an :obj:`datasets.Dataset`, columns not accepted by the
                 ``model.forward()`` method are automatically removed. Has to implement the method :obj:`__len__`
             ignore_keys (:obj:`Lst[str]`, `optional`):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
-            metric_key_prefix (:obj:`str`, `optional`, defaults to :obj:`"test"`):
+            metric_key_prefix (:obj:`str`, `optional`, defaults to :obj:`"predict"`):
                 An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named
-                "test_bleu" if the prefix is "test" (default)
+                "predict_bleu" if the prefix is "predict" (default)
 
         .. note::
 
@@ -1923,7 +1923,7 @@ class Trainer:
 
         Returns: `NamedTuple` A namedtuple with the following keys:
 
-            - predictions (:obj:`np.ndarray`): The predictions on :obj:`test_dataset`.
+            - predictions (:obj:`np.ndarray`): The predictions on :obj:`predict_dataset`.
             - label_ids (:obj:`np.ndarray`, `optional`): The labels (if the dataset contained some).
             - metrics (:obj:`Dict[str, float]`, `optional`): The potential dictionary of metrics (if the dataset
               contained labels).
@@ -1931,12 +1931,12 @@ class Trainer:
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
 
-        test_dataloader = self.get_test_dataloader(test_dataset)
+        predict_dataloader = self.get_predict_dataloader(predict_dataset)
         start_time = time.time()
 
         eval_loop = self.prediction_loop if self.args.use_legacy_prediction_loop else self.evaluation_loop
         output = eval_loop(
-            test_dataloader, description="Prediction", ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix
+            predict_dataloader, description="Prediction", ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix
         )
         output.metrics.update(speed_metrics(metric_key_prefix, start_time, output.num_samples))
 
