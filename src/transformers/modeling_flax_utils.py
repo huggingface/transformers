@@ -112,7 +112,7 @@ class FlaxPreTrainedModel(ABC):
 
     def get_output_embeddings(self) -> Optional[jax.interpreters.xla._DeviceArray]:
         """Overwrite this method for model classes that have output embeddings,
-        *e.g.* FlaxBertForMaskedLM
+        *e.g.*, FlaxBertForMaskedLM.
         """
         return
 
