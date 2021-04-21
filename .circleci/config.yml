@@ -334,7 +334,7 @@ jobs:
                 git config --global user.email "ci@dummy.com"
                 git config --global user.name "ci"
             - run: pip install --upgrade pip
-            - run: pip install .[testing,torch]
+            - run: pip install .[torch,testing]
             - run: python -m pytest -sv ./tests/ -m is_staging_test
 
     build_doc:
