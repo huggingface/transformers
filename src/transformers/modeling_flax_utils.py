@@ -100,7 +100,8 @@ class FlaxPreTrainedModel(ABC):
         self._required_params = set(flatten_dict(unfreeze(random_params)).keys())
         self.params = random_params
 
-        # tie input and output word embeddings
+        # tie input and output word embeddings if model has output word embeddings 
+        # and ``self.config.tie_word_embedding is True``
         self.tie_weights()
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> Dict:
