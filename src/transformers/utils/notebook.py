@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import collections
+import re
 import time
 from typing import Optional
 
@@ -308,7 +309,7 @@ class NotebookProgressCallback(TrainerCallback):
 
     def on_evaluate(self, args, state, control, metrics=None, **kwargs):
         if self.training_tracker is not None:
-            values = {"Training Loss": "No log"}
+            values = {"Training Loss": "No log", "Validation Loss": "No log"}
             for log in reversed(state.log_history):
                 if "loss" in log:
                     values["Training Loss"] = log["loss"]
@@ -318,13 +319,16 @@ class NotebookProgressCallback(TrainerCallback):
                 values["Epoch"] = int(state.epoch)
             else:
                 values["Step"] = state.global_step
-            values["Validation Loss"] = metrics["eval_loss"]
+            metric_key_prefix = "eval"
+            for k in metrics:
+                if k.endswith("_loss"):
+                    metric_key_prefix = re.sub(r"\_loss$", "", k)
             _ = metrics.pop("total_flos", None)
             _ = metrics.pop("epoch", None)
-            _ = metrics.pop("eval_runtime", None)
-            _ = metrics.pop("eval_samples_per_second", None)
+            _ = metrics.pop(f"{metric_key_prefix}_runtime", None)
+            _ = metrics.pop(f"{metric_key_prefix}_samples_per_second", None)
             for k, v in metrics.items():
-                if k == "eval_loss":
+                if k == f"{metric_key_prefix}_loss":
                     values["Validation Loss"] = v
                 else:
                     splits = k.split("_")
