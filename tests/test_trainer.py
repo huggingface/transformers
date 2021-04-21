@@ -22,7 +22,7 @@ import unittest
 
 import numpy as np
 
-from huggingface_hub import HfApi, HfFolder
+from huggingface_hub import HfApi
 from requests.exceptions import HTTPError
 from transformers import AutoTokenizer, IntervalStrategy, PretrainedConfig, TrainingArguments, is_torch_available
 from transformers.file_utils import WEIGHTS_NAME
