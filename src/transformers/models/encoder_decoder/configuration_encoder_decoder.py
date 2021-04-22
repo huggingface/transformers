@@ -71,24 +71,25 @@ class EncoderDecoderConfig(PretrainedConfig):
     model_type = "encoder-decoder"
     is_composition = True
 
-    def __init__(
-            self,
-            encoder: PretrainedConfig,
-            decoder: PretrainedConfig,
-            **kwargs
-    ):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        assert (
+            "encoder" in kwargs and "decoder" in kwargs
+        ), "Config has to be initialized with encoder and decoder config"
+        encoder_config = kwargs.pop("encoder")
+        encoder_model_type = encoder_config.pop("model_type")
+        decoder_config = kwargs.pop("decoder")
+        decoder_model_type = decoder_config.pop("model_type")
 
-        self.encoder = encoder
-        self.decoder = decoder
+        from ..auto.configuration_auto import AutoConfig
+
+        self.encoder = AutoConfig.for_model(encoder_model_type, **encoder_config)
+        self.decoder = AutoConfig.for_model(decoder_model_type, **decoder_config)
         self.is_encoder_decoder = True
 
     @classmethod
     def from_encoder_decoder_configs(
-        cls, 
-        encoder_config: PretrainedConfig, 
-        decoder_config: PretrainedConfig, 
-        **kwargs
+        cls, encoder_config: PretrainedConfig, decoder_config: PretrainedConfig, **kwargs
     ) -> PretrainedConfig:
         r"""
         Instantiate a :class:`~transformers.EncoderDecoderConfig` (or a derived class) from a pre-trained encoder model
@@ -101,7 +102,7 @@ class EncoderDecoderConfig(PretrainedConfig):
         decoder_config.is_decoder = True
         decoder_config.add_cross_attention = True
 
-        return cls(encoder=encoder_config, decoder=decoder_config, **kwargs)
+        return cls(encoder=encoder_config.to_dict(), decoder=decoder_config.to_dict(), **kwargs)
 
     def to_dict(self):
         """
