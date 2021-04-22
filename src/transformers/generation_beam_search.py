@@ -283,8 +283,6 @@ class BeamSearchScorer(BeamScorer):
     ) -> Tuple[torch.LongTensor]:
         batch_size = len(self._beam_hyps)
 
-        max_length = max_length - 1  # ignoring bos_token
-
         # finalize all open beam hypotheses and add to generated hypotheses
         for batch_idx, beam_hyp in enumerate(self._beam_hyps):
             if self._done[batch_idx]:
@@ -338,7 +336,7 @@ class BeamSearchScorer(BeamScorer):
 
 
 class BeamHypotheses:
-    def __init__(self, num_beams: int,  length_penalty: float, early_stopping: bool):
+    def __init__(self, num_beams: int, length_penalty: float, early_stopping: bool):
         """
         Initialize n-best list of hypotheses.
         """

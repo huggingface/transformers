@@ -148,7 +148,6 @@ class GenerationTesterMixin:
         }
         beam_scorer = BeamSearchScorer(
             batch_size=batch_size,
-            max_length=max_length,
             num_beams=beam_kwargs["num_beams"],
             device=torch_device,
             length_penalty=beam_kwargs["length_penalty"],
@@ -169,7 +168,6 @@ class GenerationTesterMixin:
         }
         beam_scorer = BeamSearchScorer(
             batch_size=batch_size,
-            max_length=max_length,
             num_beams=beam_kwargs["num_beams"],
             device=torch_device,
             length_penalty=beam_kwargs["length_penalty"],
@@ -1409,7 +1407,6 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         beam_scorer = BeamSearchScorer(
             batch_size=batch_size,
-            max_length=max_length,
             num_beams=num_beams,
             device=torch_device,
         )
@@ -1439,7 +1436,6 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         diverse_beam_scorer = BeamSearchScorer(
             batch_size=batch_size,
-            max_length=max_length,
             num_beams=num_beams,
             device=torch_device,
             num_beam_hyps_to_keep=num_return_sequences,
@@ -1498,7 +1494,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         # Beam
         beam_scorer = BeamSearchScorer(
             batch_size=batch_size,
-            max_length=max_length,
             num_beams=num_beams,
             device=torch_device,
         )
@@ -1516,7 +1511,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         # Grouped beam search
         diverse_beam_scorer = BeamSearchScorer(
             batch_size=batch_size,
-            max_length=max_length,
             num_beams=num_beams,
             device=torch_device,
             num_beam_hyps_to_keep=num_return_sequences,
