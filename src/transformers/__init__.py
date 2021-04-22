@@ -48,6 +48,7 @@ from .file_utils import (
     is_speech_available,
     is_tf_available,
     is_tokenizers_available,
+    is_timm_available,
     is_torch_available,
     is_vision_available,
 )
@@ -105,6 +106,7 @@ _import_structure = {
         "is_sklearn_available",
         "is_speech_available",
         "is_tf_available",
+        "is_timm_available",
         "is_tokenizers_available",
         "is_torch_available",
         "is_torch_tpu_available",

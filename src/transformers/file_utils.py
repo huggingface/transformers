@@ -173,6 +173,14 @@ except importlib_metadata.PackageNotFoundError:
     _soundfile_available = False
 
 
+_timm_available = importlib.util.find_spec("timm") is not None
+try:
+    _timm_version = importlib_metadata.version("timm")
+    logger.debug(f"Successfully imported timm version {_timm_version}")
+except importlib_metadata.PackageNotFoundError:
+    _timm_available = False
+
+
 _torchaudio_available = importlib.util.find_spec("torchaudio") is not None
 try:
     _torchaudio_version = importlib_metadata.version("torchaudio")
@@ -399,6 +407,10 @@ def is_training_run_on_sagemaker():
 
 def is_soundfile_availble():
     return _soundfile_available
+
+
+def is_timm_available():
+    return _timm_available
 
 
 def is_torchaudio_available():
