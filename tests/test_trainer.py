@@ -42,6 +42,8 @@ from transformers.testing_utils import (
 )
 from transformers.utils.hp_naming import TrialShortNamer
 
+from .test_hf_api import ENDPOINT_STAGING, PASS, USER
+
 
 if is_torch_available():
     import torch
@@ -1083,13 +1085,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         no_wd_params = [p for n, p in model.named_parameters() if n not in wd_names]
         self.assertListEqual(trainer.optimizer.param_groups[0]["params"], wd_params)
         self.assertListEqual(trainer.optimizer.param_groups[1]["params"], no_wd_params)
-
-
-USER = "__DUMMY_TRANSFORMERS_USER__"
-PASS = "__DUMMY_TRANSFORMERS_PASS__"
-
-ENDPOINT_STAGING = "https://moon-staging.huggingface.co"
-ENDPOINT_STAGING_BASIC_AUTH = f"https://{USER}:{PASS}@moon-staging.huggingface.co"
 
 
 @require_torch
