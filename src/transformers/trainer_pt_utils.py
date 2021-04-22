@@ -822,7 +822,7 @@ def log_metrics(self, split, metrics):
 
     Args:
         split (:obj:`str`):
-            Mode/split name: one of ``train``, ``eval``, ``predict``
+            Mode/split name: one of ``train``, ``eval``, ``test``
         metrics (:obj:`Dict[str, float]`):
             The metrics returned from train/evaluate/predictmetrics: metrics dict
 
@@ -911,7 +911,7 @@ def save_metrics(self, split, metrics, combined=True):
 
     Args:
         split (:obj:`str`):
-            Mode/split name: one of ``train``, ``eval``, ``predict``, ``all``
+            Mode/split name: one of ``train``, ``eval``, ``test``, ``all``
         metrics (:obj:`Dict[str, float]`):
             The metrics returned from train/evaluate/predict
         combined (:obj:`bool`, `optional`, defaults to :obj:`True`):
