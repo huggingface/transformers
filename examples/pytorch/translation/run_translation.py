@@ -550,7 +550,7 @@ def main():
 
         predict_results = trainer.predict(
             predict_dataset,
-            metric_key_prefix="test",
+            metric_key_prefix="predict",
             max_length=data_args.val_max_target_length,
             num_beams=data_args.num_beams,
         )

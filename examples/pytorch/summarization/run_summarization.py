@@ -579,7 +579,7 @@ def main():
                 predictions = [pred.strip() for pred in predictions]
                 output_prediction_file = os.path.join(training_args.output_dir, "generated_predictions.txt")
                 with open(output_prediction_file, "w") as writer:
-                    writer.write("\n".join(test_preds))
+                    writer.write("\n".join(predictions))
 
     return results
 
