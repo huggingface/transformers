@@ -16,7 +16,7 @@ import unittest
 
 from transformers import AutoFeatureExtractor, AutoTokenizer, Speech2TextForConditionalGeneration, Wav2Vec2ForCTC
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline
-from transformers.testing_utils import require_torch, require_torchaudio, slow
+from transformers.testing_utils import require_datasets, require_torch, require_torchaudio, slow
 
 
 # from .test_pipelines_common import CustomInputPipelineCommonMixin
@@ -32,6 +32,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
     @slow
     @require_torch
+    @require_datasets
     def test_simple_wav2vec2(self):
         import numpy as np
         from datasets import load_dataset
@@ -60,6 +61,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     @require_torchaudio
+    @require_datasets
     def test_simple_s2t(self):
         import numpy as np
         from datasets import load_dataset
