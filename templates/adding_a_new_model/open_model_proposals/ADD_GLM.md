@@ -1,6 +1,8 @@
 How to add GLM to 🤗 Transformers?
 =====================================
 
+Model: [GLM (General Language Model)](https://arxiv.org/pdf/2103.10360.pdf)
+
 Mentor: [Suraj](https://github.com/patil-suraj)
 
 Begin: [start date]
