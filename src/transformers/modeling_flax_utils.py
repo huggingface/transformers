@@ -357,6 +357,8 @@ class FlaxPreTrainedModel(ABC):
                 except UnpicklingError:
                     raise EnvironmentError(f"Unable to convert {archive_file} to Flax deserializable object. ")
             # make sure all arrays are stored as jnp.arrays
+            # NOTE: This is to prevent a bug this will be fixed in Flax >= v0.3.4:
+            # https://github.com/google/flax/issues/1261
             state = jax.tree_util.tree_map(jnp.array, state)
 
         # if model is base model only use model_prefix key
