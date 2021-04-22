@@ -67,7 +67,7 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
     Pipeline that aims at extracting spoken text contained within some audio.
 
     The input can be either a raw waveform or a audio file. In case of the audio file, ffmpeg should be installed for
-    the read function requires it (to support many formats).
+    to support multiple audio formats
     """
 
     def __init__(self, feature_extractor: "SequenceFeatureExtractor", *args, **kwargs):
