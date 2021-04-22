@@ -36,6 +36,9 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    ENDPOINT_STAGING,
+    PASS,
+    USER,
     get_tests_dir,
     is_pt_tf_cross_test,
     is_staging_test,
@@ -45,8 +48,6 @@ from transformers.testing_utils import (
     slow,
 )
 from transformers.tokenization_utils import AddedToken
-
-from .test_hf_api import ENDPOINT_STAGING, PASS, USER
 
 
 if TYPE_CHECKING:

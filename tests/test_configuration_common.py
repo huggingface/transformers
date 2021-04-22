@@ -22,9 +22,7 @@ import unittest
 from huggingface_hub import HfApi
 from requests.exceptions import HTTPError
 from transformers import BertConfig
-from transformers.testing_utils import is_staging_test
-
-from .test_hf_api import ENDPOINT_STAGING, PASS, USER
+from transformers.testing_utils import ENDPOINT_STAGING, PASS, USER, is_staging_test
 
 
 class ConfigTester(object):

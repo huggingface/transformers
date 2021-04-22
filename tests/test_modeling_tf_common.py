@@ -29,6 +29,9 @@ from requests.exceptions import HTTPError
 from transformers import is_tf_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
+    ENDPOINT_STAGING,
+    PASS,
+    USER,
     _tf_gpu_memory_limit,
     is_pt_tf_cross_test,
     is_staging_test,
@@ -37,8 +40,6 @@ from transformers.testing_utils import (
     slow,
     tooslow,
 )
-
-from .test_hf_api import ENDPOINT_STAGING, PASS, USER
 
 
 if is_tf_available():

@@ -27,6 +27,9 @@ from requests.exceptions import HTTPError
 from transformers import AutoTokenizer, IntervalStrategy, PretrainedConfig, TrainingArguments, is_torch_available
 from transformers.file_utils import WEIGHTS_NAME
 from transformers.testing_utils import (
+    ENDPOINT_STAGING,
+    PASS,
+    USER,
     TestCasePlus,
     get_tests_dir,
     is_staging_test,
@@ -41,8 +44,6 @@ from transformers.testing_utils import (
     slow,
 )
 from transformers.utils.hp_naming import TrialShortNamer
-
-from .test_hf_api import ENDPOINT_STAGING, PASS, USER
 
 
 if is_torch_available():

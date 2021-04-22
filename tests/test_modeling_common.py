@@ -28,6 +28,9 @@ from transformers import is_torch_available, logging
 from transformers.file_utils import WEIGHTS_NAME
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
+    ENDPOINT_STAGING,
+    PASS,
+    USER,
     CaptureLogger,
     is_staging_test,
     require_torch,
@@ -35,8 +38,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-
-from .test_hf_api import ENDPOINT_STAGING, PASS, USER
 
 
 if is_torch_available():

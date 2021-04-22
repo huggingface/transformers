@@ -50,6 +50,11 @@ DUMMY_UNKWOWN_IDENTIFIER = "julien-c/dummy-unknown"
 DUMMY_DIFF_TOKENIZER_IDENTIFIER = "julien-c/dummy-diff-tokenizer"
 # Used to test Auto{Config, Model, Tokenizer} model_type detection.
 
+# Used to test the hub
+USER = "__DUMMY_TRANSFORMERS_USER__"
+PASS = "__DUMMY_TRANSFORMERS_PASS__"
+ENDPOINT_STAGING = "https://moon-staging.huggingface.co"
+
 
 def parse_flag_from_env(key, default=False):
     try:
