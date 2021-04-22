@@ -77,8 +77,8 @@ token that you can just copy.
 Directly push your model to the hub
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Once you have an API token (either stored in the cache or copied and pasted in your notebook), you can directly push
-a finetuned model you saved in :obj:`save_drectory` by calling:
+Once you have an API token (either stored in the cache or copied and pasted in your notebook), you can directly push a
+finetuned model you saved in :obj:`save_drectory` by calling:
 
 .. code-block:: python
 
@@ -120,8 +120,8 @@ repo you created before as long as you know its URL (it should be :obj:`https://
 And that's all there is to it! It's also a very easy way to fix a mistake if one of the files online had a bug.
 
 To add a model for another backend, it's also super easy. Let's say you have fine-tuned a TensorFlow model and want to
-add the pytorch model files to your model repo, so that anyone in the community can use it. The following allows you
-to directly create a PyTorch version of your TensorFlow model:
+add the pytorch model files to your model repo, so that anyone in the community can use it. The following allows you to
+directly create a PyTorch version of your TensorFlow model:
 
 .. code-block:: python
 
@@ -129,8 +129,8 @@ to directly create a PyTorch version of your TensorFlow model:
 
     model = AutoModel.from_pretrained(save_directory, from_tf=True)
 
-You can also replace :obj:`save_directory` by the identifier of your model (:obj:`username/repo_name`) if you don't have
-a local save of it anymore. Then, just do the same as before:
+You can also replace :obj:`save_directory` by the identifier of your model (:obj:`username/repo_name`) if you don't
+have a local save of it anymore. Then, just do the same as before:
 
 .. code-block:: python
 
