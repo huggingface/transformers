@@ -1707,7 +1707,7 @@ class PushToHubMixin:
         use_auth_token: Optional[Union[bool, str]] = None,
     ) -> str:
         """
-        Upload `save_directory` to the 🤗 model hub.
+        Upload model checkpoint or tokenizer files to the 🤗 model hub.
 
         Parameters:
             repo_name (:obj:`str`, `optional`):
@@ -1776,8 +1776,8 @@ class PushToHubMixin:
             if token is None:
                 raise ValueError(
                     "You must login to the Hugging Face hub on this computer by typing `transformers-cli login` and "
-                    "entering your credentials to use `use_auth_token=True`. Alternatively, you can pass you own "
-                    "token the `use_auth_token` argument."
+                    "entering your credentials to use `use_auth_token=True`. Alternatively, you can pass your own "
+                    "token as the `use_auth_token` argument."
                 )
         else:
             token = None
