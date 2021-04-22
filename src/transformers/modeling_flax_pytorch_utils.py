@@ -181,7 +181,8 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
         if flax_key in pt_model_dict:
             if flax_tensor.shape != pt_model_dict[flax_key].shape:
                 raise ValueError(
-                    f"Flax checkpoint seems to be incorrect. Weight {flax_key_tuple} was expected to be of shape {pt_model_dict[flax_key].shape}, but is {flax_tensor.shape}."
+                    f"Flax checkpoint seems to be incorrect. Weight {flax_key_tuple} was expected"
+                    f"to be of shape {pt_model_dict[flax_key].shape}, but is {flax_tensor.shape}."
                 )
             else:
                 # add weight to pytorch dict
@@ -200,12 +201,12 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
 
     if len(unexpected_keys) > 0:
         logger.warning(
-            f"Some weights of the Flax model were not used when "
+            "Some weights of the Flax model were not used when "
             f"initializing the PyTorch model {pt_model.__class__.__name__}: {unexpected_keys}\n"
             f"- This IS expected if you are initializing {pt_model.__class__.__name__} from a Flax model trained on another task "
-            f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a FlaxBertForPreTraining model).\n"
+            "or with another architecture (e.g. initializing a BertForSequenceClassification model from a FlaxBertForPreTraining model).\n"
             f"- This IS NOT expected if you are initializing {pt_model.__class__.__name__} from a Flax model that you expect "
-            f"to be exactly identical (e.g. initializing a BertForSequenceClassification model from a FlaxBertForSequenceClassification model)."
+            "to be exactly identical (e.g. initializing a BertForSequenceClassification model from a FlaxBertForSequenceClassification model)."
         )
     else:
         logger.warning(f"All Flax model weights were used when initializing {pt_model.__class__.__name__}.\n")
@@ -213,12 +214,12 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
         logger.warning(
             f"Some weights of {pt_model.__class__.__name__} were not initialized from the Flax model "
             f"and are newly initialized: {missing_keys}\n"
-            f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+            "You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
         )
     else:
         logger.warning(
             f"All the weights of {pt_model.__class__.__name__} were initialized from the Flax model.\n"
-            f"If your task is similar to the task the model of the checkpoint was trained on, "
+            "If your task is similar to the task the model of the checkpoint was trained on, "
             f"you can already use {pt_model.__class__.__name__} for predictions without further training."
         )
 

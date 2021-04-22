@@ -142,6 +142,10 @@ class FlaxModelTesterMixin:
                 fx_model = model_class(config, dtype=jnp.float32)
 
                 pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
+
+                # make sure weights are tied in PyTorch
+                pt_model.tie_weights()
+
                 with torch.no_grad():
                     pt_outputs = pt_model(**pt_inputs).to_tuple()
 

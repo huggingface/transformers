@@ -17,7 +17,7 @@ import os
 from abc import ABC
 from functools import partial
 from pickle import UnpicklingError
-from typing import Dict, Optional, Set, Tuple, Union
+from typing import Dict, Set, Tuple, Union
 
 import flax.linen as nn
 import jax
@@ -100,21 +100,8 @@ class FlaxPreTrainedModel(ABC):
         self._required_params = set(flatten_dict(unfreeze(random_params)).keys())
         self.params = random_params
 
-        # tie input and output word embeddings if model has output word embeddings
-        # and ``self.config.tie_word_embedding is True``
-        self.tie_weights()
-
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> Dict:
         raise NotImplementedError(f"init method has to be implemented for {self}")
-
-    def get_input_embeddings_key(self) -> str:
-        raise NotImplementedError(f"get_input_embeddings_key method has to be implemented for {self}")
-
-    def get_output_embeddings(self) -> Optional[jax.interpreters.xla._DeviceArray]:
-        """
-        Overwrite this method for model classes that have output embeddings, *e.g.*, FlaxBertForMaskedLM.
-        """
-        return
 
     @property
     def config(self) -> PretrainedConfig:
@@ -143,19 +130,6 @@ class FlaxPreTrainedModel(ABC):
                 f"parameters {self.required_params - param_keys}"
             )
         self._params = params
-
-    def tie_weights(self):
-        output_embeddings = self.get_output_embeddings()
-
-        # tie word embedding with output embeddings
-        if output_embeddings is not None and self.config.tie_word_embeddings:
-            input_embbeddings_key = self.get_input_embeddings_key()
-            flattened_dict = flatten_dict(self.params)
-
-            # transpose weight and set correctly
-            flattened_dict[input_embbeddings_key] = jnp.asarray(output_embeddings.T)
-
-            self.params = unflatten_dict(flattened_dict)
 
     @classmethod
     def from_pretrained(
@@ -409,7 +383,6 @@ class FlaxPreTrainedModel(ABC):
         # set correct parameters
         model.params = unflatten_dict(state)
 
-        model.tie_weights()
         return model
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike]):

@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Optional, Tuple
+from typing import Callable, Tuple
 
 import numpy as np
 
@@ -352,7 +352,6 @@ class FlaxBertPredictionHeadTransform(nn.Module):
     def setup(self):
         self.dense = nn.Dense(self.config.hidden_size, dtype=self.dtype)
         self.activation = ACT2FN[self.config.hidden_act]
-        #        self.LayerNorm = nn.LayerNorm(hidden_size=self.config.hidden_size, epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
 
     def __call__(self, hidden_states):
@@ -368,15 +367,18 @@ class FlaxBertLMPredictionHead(nn.Module):
 
     def setup(self):
         self.transform = FlaxBertPredictionHeadTransform(self.config, dtype=self.dtype)
-        #        self.decoder = nn.Dense(self.config.vocab_size, dtype=self.dtype, use_bias=False)
-        self.decoder = nn.Dense(self.config.vocab_size, dtype=self.dtype)
+        self.decoder = nn.Dense(self.config.vocab_size, dtype=self.dtype, use_bias=False)
+        self.bias = self.param("bias", self.bias_init, (self.config.vocab_size,))
 
-    #        self.bias = self.param("bias", self.bias_init, (self.config.vocab_size,))
-
-    def __call__(self, hidden_states):
+    def __call__(self, hidden_states, shared_embedding=None):
         hidden_states = self.transform(hidden_states)
-        hidden_states = self.decoder(hidden_states)
-        #        hidden_states += self.bias
+
+        if shared_embedding is not None:
+            hidden_states = self.decoder.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
+        else:
+            hidden_states = self.decoder(hidden_states)
+
+        hidden_states += self.bias
         return hidden_states
 
 
@@ -387,8 +389,8 @@ class FlaxBertOnlyMLMHead(nn.Module):
     def setup(self):
         self.predictions = FlaxBertLMPredictionHead(self.config, dtype=self.dtype)
 
-    def __call__(self, hidden_states):
-        hidden_states = self.predictions(hidden_states)
+    def __call__(self, hidden_states, shared_embedding=None):
+        hidden_states = self.predictions(hidden_states, shared_embedding=shared_embedding)
         return hidden_states
 
 
@@ -410,8 +412,8 @@ class FlaxBertPreTrainingHeads(nn.Module):
         self.predictions = FlaxBertLMPredictionHead(self.config, dtype=self.dtype)
         self.seq_relationship = nn.Dense(2, dtype=self.dtype)
 
-    def __call__(self, hidden_states, pooled_output):
-        prediction_scores = self.predictions(hidden_states)
+    def __call__(self, hidden_states, pooled_output, shared_embedding=None):
+        prediction_scores = self.predictions(hidden_states, shared_embedding=shared_embedding)
         seq_relationship_score = self.seq_relationship(pooled_output)
         return prediction_scores, seq_relationship_score
 
@@ -443,11 +445,6 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
         return self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids)["params"]
-
-    def get_input_embeddings_key(self) -> str:
-        if self.base_model_prefix in self.params:
-            return ("bert", "embeddings", "word_embeddings", "embedding")
-        return ("embeddings", "word_embeddings", "embedding")
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
@@ -532,7 +529,15 @@ class FlaxBertForPreTrainingModule(nn.Module):
         hidden_states, pooled_output = self.bert(
             input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
         )
-        prediction_scores, seq_relationship_score = self.cls(hidden_states, pooled_output)
+
+        if self.config.tie_word_embeddings:
+            shared_embedding = self.bert.variables["params"]["embeddings"]["word_embeddings"]["embedding"]
+        else:
+            shared_embedding = None
+
+        prediction_scores, seq_relationship_score = self.cls(
+            hidden_states, pooled_output, shared_embedding=shared_embedding
+        )
 
         return (prediction_scores, seq_relationship_score)
 
@@ -546,9 +551,6 @@ class FlaxBertForPreTrainingModule(nn.Module):
 )
 class FlaxBertForPreTraining(FlaxBertPreTrainedModel):
     module_class = FlaxBertForPreTrainingModule
-
-    def get_output_embeddings(self) -> Optional[jax.interpreters.xla._DeviceArray]:
-        return self.params["cls"]["predictions"]["decoder"]["kernel"]
 
 
 class FlaxBertForMaskedLMModule(nn.Module):
@@ -564,8 +566,14 @@ class FlaxBertForMaskedLMModule(nn.Module):
     ):
         # Model
         hidden_states = self.bert(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic)
+
+        if self.config.tie_word_embeddings:
+            shared_embedding = self.bert.variables["params"]["embeddings"]["word_embeddings"]["embedding"]
+        else:
+            shared_embedding = None
+
         # Compute the prediction scores
-        logits = self.cls(hidden_states)
+        logits = self.cls(hidden_states, shared_embedding=shared_embedding)
 
         return (logits,)
 
@@ -573,9 +581,6 @@ class FlaxBertForMaskedLMModule(nn.Module):
 @add_start_docstrings("""Bert Model with a `language modeling` head on top. """, BERT_START_DOCSTRING)
 class FlaxBertForMaskedLM(FlaxBertPreTrainedModel):
     module_class = FlaxBertForMaskedLMModule
-
-    def get_output_embeddings(self) -> Optional[jax.interpreters.xla._DeviceArray]:
-        return self.params["cls"]["predictions"]["decoder"]["kernel"]
 
 
 class FlaxBertForNextSentencePredictionModule(nn.Module):
