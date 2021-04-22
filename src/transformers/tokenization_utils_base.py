@@ -1928,7 +1928,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         file_names = (tokenizer_config_file, special_tokens_map_file)
 
-        saved_files = self._save_pretrained(
+        save_files = self._save_pretrained(
             save_directory=save_directory,
             file_names=file_names,
             legacy_format=legacy_format,
@@ -1936,13 +1936,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         )
 
         if push_to_hub:
-            commit_message = kwargs.pop("commit_message", None)
-            if commit_message is None:
-                commit_message = "update tokenizer"
-            url = self.push_to_hub(save_directory, commit_message=commit_message, **kwargs)
+            # Annoyingly, the return contains files that don't exist.
+            existing_files = [f for f in save_files if os.path.isfile(f)]
+            url = self._push_to_hub(save_files=existing_files, **kwargs)
             logger.info(f"Tokenizer pushed to the hub in this commit: {url}")
 
-        return saved_files
+        return save_files
 
     def _save_pretrained(
         self,

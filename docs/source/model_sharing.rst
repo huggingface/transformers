@@ -82,7 +82,7 @@ finetuned model you saved in :obj:`save_drectory` by calling:
 
 .. code-block:: python
 
-    finetuned_model.push_to_hub(save_directory, repo_name="my-awesome-model")
+    finetuned_model.push_to_hub("my-awesome-model")
 
 If you have your API token not stored in the cache, you will need to pass it with :obj:`use_auth_token=your_token`.
 This is also be the case for all the examples below, so we won't mention it again.
@@ -111,11 +111,17 @@ Add new files to your model repo
 
 Once you have pushed your model to the hub, you might want to add the tokenizer, or a version of your model for another
 framework (TensorFlow, PyTorch, Flax). This is super easy to do! Let's begin with the tokenizer. You can add it to the
-repo you created before as long as you know its URL (it should be :obj:`https://huggingface.co/username/repo_name`)
+repo you created before like this
 
 .. code-block:: python
 
-    tokenizer.save_pretrained(local_directory, push_to_hub=True, repo_url=my_repo_url)
+    tokenizer.push_to_hub("my-awesome-model")
+
+If you know its URL (it should be :obj:`https://huggingface.co/username/repo_name`), you can also do:
+
+.. code-block:: python
+
+    tokenizer.push_to_hub(repo_url=my_repo_url)
 
 And that's all there is to it! It's also a very easy way to fix a mistake if one of the files online had a bug.
 
@@ -134,7 +140,13 @@ have a local save of it anymore. Then, just do the same as before:
 
 .. code-block:: python
 
-    model.save_pretrained(local_directory, push_to_hub=True, repo_url=my_repo_url)
+    model.push_to_hub("my-awesome-model")
+
+or
+
+.. code-block:: python
+
+    model.push_to_hub(repo_url=my_repo_url)
 
 
 Use your terminal and git

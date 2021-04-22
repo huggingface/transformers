@@ -2331,7 +2331,7 @@ class Trainer:
                 if os.path.isfile(fname):
                     shutil.copy(fname, os.path.join(tmp_dir, f))
 
-            return unwrap_model(self.model).push_to_hub(
+            return unwrap_model(self.model)._push_to_hub(
                 save_directory=tmp_dir,
                 repo_name=repo_name,
                 repo_url=repo_url,

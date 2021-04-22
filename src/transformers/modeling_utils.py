@@ -29,6 +29,7 @@ from torch.nn import functional as F
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
+    CONFIG_NAME,
     DUMMY_INPUTS,
     TF2_WEIGHTS_NAME,
     TF_WEIGHTS_NAME,
@@ -856,7 +857,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         logger.info(f"Model weights saved in {output_model_file}")
 
         if push_to_hub:
-            url = self.push_to_hub(save_directory, **kwargs)
+            saved_files = [output_model_file]
+            if save_config:
+                saved_files.append(os.path.join(save_directory, CONFIG_NAME))
+            url = self._push_to_hub(save_files=saved_files, **kwargs)
             logger.info(f"Model pushed to the hub in this commit: {url}")
 
     @classmethod

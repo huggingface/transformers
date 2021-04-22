@@ -30,6 +30,7 @@ from tensorflow.python.keras.saving import hdf5_format
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
+    CONFIG_NAME,
     DUMMY_INPUTS,
     TF2_WEIGHTS_NAME,
     WEIGHTS_NAME,
@@ -1052,7 +1053,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         logger.info(f"Model weights saved in {output_model_file}")
 
         if push_to_hub:
-            url = self.push_to_hub(save_directory, **kwargs)
+            saved_files = [os.path.join(save_directory, CONFIG_NAME), output_model_file]
+            url = self._push_to_hub(save_files=saved_files, **kwargs)
             logger.info(f"Model pushed to the hub in this commit: {url}")
 
     @classmethod

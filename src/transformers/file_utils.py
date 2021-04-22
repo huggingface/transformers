@@ -31,6 +31,7 @@ import types
 from collections import OrderedDict, UserDict
 from contextlib import contextmanager
 from dataclasses import fields
+from distutils.dir_util import copy_tree
 from enum import Enum
 from functools import partial, wraps
 from hashlib import sha256
@@ -231,10 +232,10 @@ S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
 CLOUDFRONT_DISTRIB_PREFIX = "https://cdn.huggingface.co"
 
 _staging_mode = os.environ.get("HUGGINGFACE_CO_STAGING", "NO").upper() in ENV_VARS_TRUE_VALUES
-if _staging_mode:
-    HUGGINGFACE_CO_PREFIX = "https://moon-staging.huggingface.co/{model_id}/resolve/{revision}/{filename}"
-else:
-    HUGGINGFACE_CO_PREFIX = "https://huggingface.co/{model_id}/resolve/{revision}/{filename}"
+_default_endpoint = "https://moon-staging.huggingface.co" if _staging_mode else "https://huggingface.co"
+
+HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", _default_endpoint)
+HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
 
 PRESET_MIRROR_DICT = {
     "tuna": "https://mirrors.tuna.tsinghua.edu.cn/hugging-face-models",
@@ -1696,9 +1697,8 @@ class PushToHubMixin:
     A Mixin containing the functionality to push a model or tokenizer to the hub.
     """
 
-    @staticmethod
     def push_to_hub(
-        save_directory: Optional[str],
+        self,
         repo_name: Optional[str] = None,
         repo_url: Optional[str] = None,
         commit_message: Optional[str] = None,
@@ -1710,8 +1710,6 @@ class PushToHubMixin:
         Upload `save_directory` to the 🤗 model hub.
 
         Parameters:
-            save_directory (:obj:`str` or :obj:`os.PathLike`):
-                Folder containing the objects to push to the hub.
             repo_name (:obj:`str`, `optional`):
                 Repository name for your model or tokenizer in the hub. If not specified, the repository name will be
                 the stem of :obj:`save_directory`.
@@ -1719,8 +1717,9 @@ class PushToHubMixin:
                 Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
                 repository will be created in your namespace (unless you specify an :obj:`organization`) with
                 :obj:`repo_name`.
-            commit_message (:obj:`str`, `optional`, defaults to :obj:`"add model"`):
-                Message to commit while pushing.
+            commit_message (:obj:`str`, `optional`):
+                Message to commit while pushing. Will default to :obj:`"add config"`, :obj:`"add tokenizer"` or
+                :obj:`"add model"` depending on the type of the class.
             organization (:obj:`str`, `optional`):
                 Organization in which you want to push your model or tokenizer (you must be a member of this
                 organization).
@@ -1735,8 +1734,38 @@ class PushToHubMixin:
         Returns:
             The url of the commit of your model in the given repository.
         """
-        if repo_name is None and repo_url is None:
-            repo_name = Path(save_directory).stem
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self.save_pretrained(tmp_dir)
+            self._push_to_hub(
+                save_directory=tmp_dir,
+                repo_name=repo_name,
+                repo_url=repo_url,
+                commit_message=commit_message,
+                organization=organization,
+                private=private,
+                use_auth_token=use_auth_token,
+            )
+
+    @classmethod
+    def _push_to_hub(
+        cls,
+        save_directory: Optional[str] = None,
+        save_files: Optional[List[str]] = None,
+        repo_name: Optional[str] = None,
+        repo_url: Optional[str] = None,
+        commit_message: Optional[str] = None,
+        organization: Optional[str] = None,
+        private: bool = None,
+        use_auth_token: Optional[Union[bool, str]] = None,
+    ) -> str:
+        # Private version of push_to_hub, that either accepts a folder to push or a list of files.
+        if save_directory is None and save_files is None:
+            raise ValueError("_push_to_hub requires either a `save_directory` or a list of `save_files`.")
+        if repo_name is None and repo_url is None and save_directory is None:
+            raise ValueError("Need either a `repo_name` or `repo_url` to know where to push!")
+
+        if repo_name is None and repo_url is None and save_files is None:
+            repo_name = Path(save_directory).name
         if use_auth_token is None and repo_url is None:
             use_auth_token = True
 
@@ -1755,8 +1784,7 @@ class PushToHubMixin:
 
         if repo_url is None:
             # Special provision for the test endpoint (CI)
-            endpoint = "https://moon-staging.huggingface.co" if _staging_mode else None
-            repo_url = HfApi(endpoint=endpoint).create_repo(
+            repo_url = HfApi(endpoint=HUGGINGFACE_CO_RESOLVE_ENDPOINT).create_repo(
                 token,
                 repo_name,
                 organization=organization,
@@ -1765,9 +1793,22 @@ class PushToHubMixin:
                 exist_ok=True,
             )
 
-        repo = Repository(save_directory, clone_from=repo_url, use_auth_token=use_auth_token)
-
         if commit_message is None:
-            commit_message = "add model"
+            if "Tokenizer" in cls.__name__:
+                commit_message = "add tokenizer"
+            if "Config" in cls.__name__:
+                commit_message = "add config"
+            else:
+                commit_message = "add model"
 
-        return repo.push_to_hub(commit_message=commit_message)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # First create the repo (and clone its content if it's nonempty), then add the files (otherwise there is
+            # no diff so nothing is pushed).
+            repo = Repository(tmp_dir, clone_from=repo_url, use_auth_token=use_auth_token)
+            if save_directory is None:
+                for filename in save_files:
+                    shutil.copy(filename, Path(tmp_dir) / Path(filename).name)
+            else:
+                copy_tree(save_directory, tmp_dir)
+
+            return repo.push_to_hub(commit_message=commit_message)

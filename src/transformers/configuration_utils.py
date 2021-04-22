@@ -334,10 +334,7 @@ class PretrainedConfig(PushToHubMixin):
         logger.info(f"Configuration saved in {output_config_file}")
 
         if push_to_hub:
-            commit_message = kwargs.pop("commit_message", None)
-            if commit_message is None:
-                commit_message = "update config"
-            url = self.push_to_hub(save_directory, commit_message=commit_message, **kwargs)
+            url = self._push_to_hub(save_files=[output_config_file], **kwargs)
             logger.info(f"Configuration pushed to the hub in this commit: {url}")
 
     @classmethod
