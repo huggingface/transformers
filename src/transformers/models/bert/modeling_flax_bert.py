@@ -252,7 +252,7 @@ class FlaxBertSelfAttention(nn.Module):
             attention_bias = None
 
         dropout_rng = None
-        if not deterministic and self.dropout_rate > 0.0:
+        if not deterministic and self.config.attention_probs_dropout_prob > 0.0:
             dropout_rng = self.make_rng("dropout")
 
         attn_output = dot_product_attention(
