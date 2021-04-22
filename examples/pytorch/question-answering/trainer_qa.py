@@ -87,7 +87,7 @@ class QuestionAnsweringTrainer(Trainer):
         if self.post_process_function is None or self.compute_metrics is None:
             return output
 
-        predictions = self.post_process_function(test_examples, test_dataset, output.predictions, "predict")
+        predictions = self.post_process_function(predict_examples, predict_dataset, output.predictions, "predict")
         metrics = self.compute_metrics(predictions)
 
-        return PredictionOutput(predictions=predictions.predictions, label_ids=eval_preds.label_ids, metrics=metrics)
+        return PredictionOutput(predictions=predictions.predictions, label_ids=predictions.label_ids, metrics=metrics)

@@ -522,12 +522,12 @@ def main():
     if training_args.do_predict:
         if "test" not in datasets:
             raise ValueError("--do_predict requires a test dataset")
-        test_examples = datasets["test"]
+        predict_examples = datasets["test"]
         if data_args.max_predict_samples is not None:
             # We will select sample from whole data
-            test_examples = test_examples.select(range(data_args.max_predict_samples))
+            predict_examples = predict_examples.select(range(data_args.max_predict_samples))
         # Test Feature Creation
-        test_dataset = test_examples.map(
+        predict_dataset = predict_examples.map(
             prepare_validation_features,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
@@ -536,7 +536,7 @@ def main():
         )
         if data_args.max_predict_samples is not None:
             # During Feature creation dataset samples might increase, we will select required samples again
-            test_dataset = test_dataset.select(range(data_args.max_predict_samples))
+            predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
 
     # Data collator
     # We have already padded to max length if the corresponding flag is True, otherwise we need to pad in the data
@@ -629,16 +629,16 @@ def main():
     # Prediction
     if training_args.do_predict:
         logger.info("*** Predict ***")
-        results = trainer.predict(test_dataset, test_examples)
+        results = trainer.predict(predict_dataset, predict_examples)
         metrics = results.metrics
 
         max_predict_samples = (
-            data_args.max_predict_samples if data_args.max_predict_samples is not None else len(test_dataset)
+            data_args.max_predict_samples if data_args.max_predict_samples is not None else len(predict_dataset)
         )
-        metrics["test_samples"] = min(max_predict_samples, len(test_dataset))
+        metrics["predict_samples"] = min(max_predict_samples, len(predict_dataset))
 
-        trainer.log_metrics("test", metrics)
-        trainer.save_metrics("test", metrics)
+        trainer.log_metrics("predict", metrics)
+        trainer.save_metrics("predict", metrics)
 
 
 def _mp_fn(index):
