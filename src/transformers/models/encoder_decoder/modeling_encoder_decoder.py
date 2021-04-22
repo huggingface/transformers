@@ -15,7 +15,7 @@
 """ Classes to support Encoder-Decoder architectures """
 
 
-from typing import Optional
+from typing import Optional, Tuple
 
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
@@ -175,6 +175,12 @@ class EncoderDecoderModel(PreTrainedModel):
 
         self.encoder = encoder
         self.decoder = decoder
+        
+        # we can not stop the users from calling the encoder or decoder individually,
+        # we need to link the individual configs with the encoderdecoderconfig to ensure consistency
+        self.config.encoder = self.encoder.config
+        self.config.decoder = self.decoder.config
+        
         assert (
             self.encoder.get_output_embeddings() is None
         ), "The encoder {} should not have a LM Head. Please use a model without LM Head"
