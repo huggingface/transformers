@@ -377,7 +377,7 @@ def main():
         forced_bos_token_id = (
             tokenizer.lang_code_to_id[data_args.forced_bos_token] if data_args.forced_bos_token is not None else None
         )
-        model.config.foced_bos_token_id = forced_bos_token_id
+        model.config.forced_bos_token_id = forced_bos_token_id
 
     # Get the language codes for input/target.
     source_lang = data_args.source_lang.split("_")[0]
