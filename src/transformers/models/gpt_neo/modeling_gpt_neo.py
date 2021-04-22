@@ -416,6 +416,20 @@ class GPTNeoLocalSelfAttention(nn.Module, GPTNeoAttentionMixin):
         # compute block length and num_blocks
         batch_size, seq_length = hidden_states.shape[:2]
         full_seq_length = seq_length + past_length
+
+        padding = None
+        if layer_past is None and full_seq_length % self.window_size != 0 and full_seq_length > self.window_size:
+            padding = self.window_size-(full_seq_length%self.window_size)
+            if attention_mask is None:
+                attention_mask = torch.zeros(query.shape[0], query.shape[1] + padding).to(query.device)
+                attention_mask[:, padding:] = 1
+            else:
+                attention_mask = torch.cat([torch.zeros(attention_mask.shape[0], padding).to(attention_mask.device), attention_mask], axis=1)
+            pad = lambda x: torch.cat([torch.zeros(x.shape[0],padding,x.shape[2]).to(x.device), x], axis=1)
+            query, key, value = map(pad, (query, key, value))
+            seq_length += padding
+            full_seq_length += padding
+
         block_length, num_blocks = self._get_block_length_and_num_blocks(full_seq_length, self.window_size)
 
         # create buckets
@@ -457,7 +471,11 @@ class GPTNeoLocalSelfAttention(nn.Module, GPTNeoAttentionMixin):
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
         attn_output = attn_output.reshape(batch_size, seq_length, self.embed_dim)
 
-        attn_output = self.out_proj(attn_output)
+        if padding is not None:
+            attn_output = attn_output[:,padding:]
+            attn_weights = attn_weights[:,padding:]
+
+        attn_output = self.out_proj(attn_output.to(hidden_states.dtype))
         attn_output = self.resid_dropout(attn_output)
 
         outputs = (attn_output,)
