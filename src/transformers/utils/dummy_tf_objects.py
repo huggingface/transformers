@@ -1785,6 +1785,11 @@ def create_optimizer(*args, **kwargs):
     requires_backends(create_optimizer, ["tf"])
 
 
+class TFSeq2SeqTrainer:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFTrainer:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])

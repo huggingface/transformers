@@ -275,6 +275,7 @@ _import_structure = {
     "trainer_utils": ["EvalPrediction", "IntervalStrategy", "SchedulerType", "set_seed"],
     "training_args": ["TrainingArguments"],
     "training_args_seq2seq": ["Seq2SeqTrainingArguments"],
+    "training_args_seq2seq_tf": ["TFSeq2SeqTrainingArguments"],
     "training_args_tf": ["TFTrainingArguments"],
     "utils": ["logging"],
 }
@@ -1347,6 +1348,7 @@ if is_tf_available():
         ]
     )
     _import_structure["optimization_tf"] = ["AdamWeightDecay", "GradientAccumulator", "WarmUp", "create_optimizer"]
+    _import_structure["trainer_seq2seq_tf"] = ["TFSeq2SeqTrainer"]
     _import_structure["trainer_tf"] = ["TFTrainer"]
 
 else:
@@ -1629,6 +1631,7 @@ if TYPE_CHECKING:
     from .trainer_utils import EvalPrediction, IntervalStrategy, SchedulerType, set_seed
     from .training_args import TrainingArguments
     from .training_args_seq2seq import Seq2SeqTrainingArguments
+    from .training_args_seq2seq_tf import TFSeq2SeqTrainingArguments
     from .training_args_tf import TFTrainingArguments
     from .utils import logging
 
@@ -2511,6 +2514,7 @@ if TYPE_CHECKING:
 
         # Optimization
         from .optimization_tf import AdamWeightDecay, GradientAccumulator, WarmUp, create_optimizer
+        from .trainer_seq2seq_tf import TFSeq2SeqTrainer
 
         # Trainer
         from .trainer_tf import TFTrainer
