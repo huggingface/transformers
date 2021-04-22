@@ -1735,7 +1735,7 @@ class PushToHubMixin:
         Returns:
             The url of the commit of your model in the given repository.
         """
-        if repo_name is None:
+        if repo_name is None and repo_url is None:
             repo_name = Path(save_directory).stem
         if use_auth_token is None and repo_url is None:
             use_auth_token = True
