@@ -94,14 +94,14 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
             modeling. This is the token which the model will try to predict.
         additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
-        enable_sampling (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Enable subword regularization.
-        nbest_size (:obj:`int`, `optional`, defaults to -1):
-            Sampling parameters for unigram. Invalid for BPE-Dropout. nbest_size = {0,1}: No sampling is performed.
-            nbest_size > 1: samples from the nbest_size results. nbest_size < 0: assuming that nbest_size is infinite
-            and samples from the all hypothesis (lattice) using forward-filtering-and-backward-sampling algorithm.
-        alpha (:obj:`float`, `optional`, defaults to 0.1):
-            Smoothing parameter for unigram sampling, and dropout probability of merge operations for BPE-dropout.
+        sp_model_kwargs (:obj:`dict`, `optional`, defaults to :obj:`None`):
+            Will be passed to the SentencePieceProcessor ``__init__()`` method. Can be used to set:
+
+            - ``enable_sampling``: Enable subword regularization.
+            - ``nbest_size``: Sampling parameters for unigram. Invalid for BPE-Dropout. nbest_size = {0,1}: No sampling is performed.
+              nbest_size > 1: samples from the nbest_size results. nbest_size < 0: assuming that nbest_size is infinite
+              and samples from the all hypothesis (lattice) using forward-filtering-and-backward-sampling algorithm.
+            - ``alpha``: Smoothing parameter for unigram sampling, and dropout probability of merge operations for BPE-dropout.
 
     Attributes:
         sp_model (:obj:`SentencePieceProcessor`):
@@ -123,13 +123,13 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        enable_sampling=False,
-        nbest_size=-1,
-        alpha=0.1,
+        sp_model_kwargs=None,
         **kwargs
     ):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
+        sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         super().__init__(
             bos_token=bos_token,
@@ -139,17 +139,11 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
             cls_token=cls_token,
             pad_token=pad_token,
             mask_token=mask_token,
-            enable_sampling=enable_sampling,
-            nbest_size=nbest_size,
-            alpha=alpha,
+            sp_model_kwargs=sp_model_kwargs,
             **kwargs,
         )
 
-        self.sp_model = spm.SentencePieceProcessor(
-            enable_sampling=enable_sampling,
-            nbest_size=nbest_size,
-            alpha=alpha,
-        )
+        self.sp_model = spm.SentencePieceProcessor(**sp_model_kwargs)
         self.sp_model.Load(str(vocab_file))
         self.vocab_file = vocab_file
 
