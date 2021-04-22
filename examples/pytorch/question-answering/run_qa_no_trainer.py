@@ -510,7 +510,7 @@ def main():
             # We will select sample from whole data
             predict_examples = predict_examples.select(range(args.max_predict_samples))
         # Predict Feature Creation
-        predict_examples = predict_examples.map(
+        predict_dataset = predict_examples.map(
             prepare_validation_features,
             batched=True,
             num_proc=args.preprocessing_num_workers,
@@ -739,7 +739,7 @@ def main():
         # Now we need to add extra columns which we removed for post processing
         predict_dataset.set_format(type=None, columns=list(predict_dataset.features.keys()))
         outputs_numpy = (start_logits_concat, end_logits_concat)
-        prediction = post_processing_function(test_examples, predict_dataset, outputs_numpy)
+        prediction = post_processing_function(predict_examples, predict_dataset, outputs_numpy)
         predict_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)
         logger.info(f"Predict metrics: {predict_metric}")
 
