@@ -27,6 +27,10 @@ Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
+This model was contributed by `<INSERT YOUR HF USERNAME HERE> 
+<https://huggingface.co/<INSERT YOUR HF USERNAME HERE>>`__. The original code can be found `here 
+<<INSERT LINK TO GITHUB REPO HERE>>`__.
+
 {{cookiecutter.camelcase_modelname}}Config
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
