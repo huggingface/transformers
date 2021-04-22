@@ -101,10 +101,10 @@ Even better, you can combine this push to the hub with the call to :obj:`save_pr
 
     finetuned_model.save_pretrained(save_directory, push_to_hub=True, repo_name="my-awesome-model")
 
-If you are a premium user and want your model to be private, just add :obj:`private=True` to this call!
+If you are a premium user and want your model to be private, just add :obj:`private=True` to this call.
 
 If you are a member of an organization and want to push it inside the namespace of the organization instead of yours,
-just add :obj:`organization=my_amazing_org`!
+just add :obj:`organization=my_amazing_org`.
 
 Add new files to your model repo
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
