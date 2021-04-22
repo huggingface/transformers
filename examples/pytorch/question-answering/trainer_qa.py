@@ -67,7 +67,7 @@ class QuestionAnsweringTrainer(Trainer):
         return metrics
 
     def predict(self, predict_dataset, predict_examples, ignore_keys=None):
-        predict_dataloader = self.get_predict_dataloader(predict_dataset)
+        predict_dataloader = self.get_test_dataloader(predict_dataset)
 
         # Temporarily disable metric computation, we will do it in the loop here.
         compute_metrics = self.compute_metrics

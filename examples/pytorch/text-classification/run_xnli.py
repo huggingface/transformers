@@ -369,7 +369,7 @@ def main():
     # Prediction
     if training_args.do_predict:
         logger.info("*** Predict ***")
-        predictions, labels, metrics = trainer.predict(predict_dataset)
+        predictions, labels, metrics = trainer.predict(predict_dataset, metric_key_prefix="predict")
 
         max_predict_samples = (
             data_args.max_predict_samples if data_args.max_predict_samples is not None else len(predict_dataset)
