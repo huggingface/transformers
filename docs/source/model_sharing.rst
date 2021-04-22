@@ -99,7 +99,7 @@ Even better, you can combine this push to the hub with the call to :obj:`save_pr
 
 .. code-block:: python
 
-    finetuned_model.push_to_hub(save_directory, push_to_hub=True, repo_name="my-awesome-model")
+    finetuned_model.save_pretrained(save_directory, push_to_hub=True, repo_name="my-awesome-model")
 
 If you are a premium user and want your model to be private, just add :obj:`private=True` to this call!
 
