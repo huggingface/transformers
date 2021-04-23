@@ -412,7 +412,12 @@ class Trainer:
         if args.fp16 and not args.deepspeed:  # deepspeed manages its own fp16
             if self.fp16_backend == "amp":
                 self.use_amp = True
-                self.scaler = ShardedGradScaler() if self.sharded_ddp is not None else torch.cuda.amp.GradScaler()
+                if is_sagemaker_mp_enabled():
+                    self.scaler = smp.amp.GradScaler()
+                elif self.sharded_ddp is not None:
+                    self.scaler = ShardedGradScaler()
+                else:
+                    self.scaler = torch.cuda.amp.GradScaler()
             else:
                 if not is_apex_available():
                     raise ImportError(
@@ -1607,7 +1612,8 @@ class Trainer:
         inputs = self._prepare_inputs(inputs)
 
         if is_sagemaker_mp_enabled():
-            loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
+            scaler = self.scaler if self.use_amp else None
+            loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps, scaler=scaler)
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
         if self.use_amp:
