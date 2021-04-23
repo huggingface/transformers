@@ -305,6 +305,7 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
             "i'm not sure. i just feel like i've been feeling like i have to be in a certain place",
         )
 
+    @slow
     def test_90_generation_from_short_input(self):
         model_inputs = self.tokenizer(["sam"], return_tensors="pt").to(torch_device)
 
