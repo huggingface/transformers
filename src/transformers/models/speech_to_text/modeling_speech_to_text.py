@@ -629,10 +629,7 @@ SPEECH_TO_TEXT_INPUTS_DOCSTRING = r"""
             :func:`modeling_speech_to_text._prepare_decoder_inputs` and modify to your needs. See diagram 1 in `the
             paper <https://arxiv.org/abs/1910.13461>`__ for more information on the default strategy.
         head_mask (:obj:`torch.Tensor` of shape :obj:`(encoder_layers, encoder_attention_heads)`, `optional`):
-=======
-        head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
->>>>>>> upstream/master Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in
-``[0, 1]``:
+            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
