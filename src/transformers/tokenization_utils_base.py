@@ -34,6 +34,7 @@ import requests
 from .file_utils import (
     ExplicitEnum,
     PaddingStrategy,
+    PushToHubMixin,
     TensorType,
     _is_jax,
     _is_numpy,
@@ -1415,7 +1416,7 @@ INIT_TOKENIZER_DOCSTRING = r"""
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
-class PreTrainedTokenizerBase(SpecialTokensMixin):
+class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     """
     Base class for :class:`~transformers.PreTrainedTokenizer` and :class:`~transformers.PreTrainedTokenizerFast`.
 
@@ -1850,6 +1851,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         save_directory: Union[str, os.PathLike],
         legacy_format: Optional[bool] = None,
         filename_prefix: Optional[str] = None,
+        push_to_hub: bool = False,
+        **kwargs,
     ) -> Tuple[str]:
         """
         Save the full tokenizer state.
@@ -1925,12 +1928,20 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         file_names = (tokenizer_config_file, special_tokens_map_file)
 
-        return self._save_pretrained(
+        save_files = self._save_pretrained(
             save_directory=save_directory,
             file_names=file_names,
             legacy_format=legacy_format,
             filename_prefix=filename_prefix,
         )
+
+        if push_to_hub:
+            # Annoyingly, the return contains files that don't exist.
+            existing_files = [f for f in save_files if os.path.isfile(f)]
+            url = self._push_to_hub(save_files=existing_files, **kwargs)
+            logger.info(f"Tokenizer pushed to the hub in this commit: {url}")
+
+        return save_files
 
     def _save_pretrained(
         self,
