@@ -28,7 +28,10 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
-    from transformers.modeling_flax_pytorch_utils import convert_pytorch_state_dict_to_flax
+    from transformers.modeling_flax_pytorch_utils import (
+        convert_pytorch_state_dict_to_flax,
+        load_flax_weights_in_pytorch_model,
+    )
 
     os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.12"  # assumed parallelism: 8
 
@@ -83,21 +86,24 @@ class FlaxModelTesterMixin:
         self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
 
     @is_pt_flax_cross_test
-    def test_equivalence_flax_pytorch(self):
+    def test_equivalence_pt_to_flax(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
+                # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
+
+                # load corresponding PyTorch class
                 pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
                 pt_model_class = getattr(transformers, pt_model_class_name)
-                pt_model = pt_model_class(config).eval()
 
+                pt_model = pt_model_class(config).eval()
                 fx_model = model_class(config, dtype=jnp.float32)
+
                 fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
                 fx_model.params = fx_state
-
-                pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
 
                 with torch.no_grad():
                     pt_outputs = pt_model(**pt_inputs).to_tuple()
@@ -105,7 +111,7 @@ class FlaxModelTesterMixin:
                 fx_outputs = fx_model(**prepared_inputs_dict)
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 2e-3)
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-3)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     pt_model.save_pretrained(tmpdirname)
@@ -116,7 +122,50 @@ class FlaxModelTesterMixin:
                     len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
                 )
                 for fx_output_loaded, pt_output in zip(fx_outputs_loaded, pt_outputs):
-                    self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 5e-3)
+                    self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 1e-3)
+
+    @is_pt_flax_cross_test
+    def test_equivalence_flax_to_pt(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                # prepare inputs
+                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
+
+                # load corresponding PyTorch class
+                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
+                pt_model_class = getattr(transformers, pt_model_class_name)
+
+                pt_model = pt_model_class(config).eval()
+                fx_model = model_class(config, dtype=jnp.float32)
+
+                pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
+
+                # make sure weights are tied in PyTorch
+                pt_model.tie_weights()
+
+                with torch.no_grad():
+                    pt_outputs = pt_model(**pt_inputs).to_tuple()
+
+                fx_outputs = fx_model(**prepared_inputs_dict)
+                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+                for fx_output, pt_output in zip(fx_outputs, pt_outputs):
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-3)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    fx_model.save_pretrained(tmpdirname)
+                    pt_model_loaded = pt_model_class.from_pretrained(tmpdirname, from_flax=True)
+
+                with torch.no_grad():
+                    pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
+
+                self.assertEqual(
+                    len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch"
+                )
+                for fx_output, pt_output in zip(fx_outputs, pt_outputs_loaded):
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 5e-3)
 
     def test_from_pretrained_save_pretrained(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -134,7 +183,7 @@ class FlaxModelTesterMixin:
 
                 outputs_loaded = model_loaded(**prepared_inputs_dict)
                 for output_loaded, output in zip(outputs_loaded, outputs):
-                    self.assert_almost_equals(output_loaded, output, 5e-3)
+                    self.assert_almost_equals(output_loaded, output, 1e-3)
 
     def test_jit_compilation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
