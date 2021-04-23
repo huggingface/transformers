@@ -31,6 +31,7 @@ import types
 from collections import OrderedDict, UserDict
 from contextlib import contextmanager
 from dataclasses import fields
+from distutils.dir_util import copy_tree
 from enum import Enum
 from functools import partial, wraps
 from hashlib import sha256
@@ -47,10 +48,10 @@ from tqdm.auto import tqdm
 
 import requests
 from filelock import FileLock
+from huggingface_hub import HfApi, HfFolder, Repository
 from transformers.utils.versions import importlib_metadata
 
 from . import __version__
-from .hf_api import HfFolder
 from .utils import logging
 
 
@@ -229,7 +230,12 @@ DUMMY_MASK = [[1, 1, 1, 1, 1], [1, 1, 1, 0, 0], [0, 0, 0, 1, 1]]
 
 S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
 CLOUDFRONT_DISTRIB_PREFIX = "https://cdn.huggingface.co"
-HUGGINGFACE_CO_PREFIX = "https://huggingface.co/{model_id}/resolve/{revision}/{filename}"
+
+_staging_mode = os.environ.get("HUGGINGFACE_CO_STAGING", "NO").upper() in ENV_VARS_TRUE_VALUES
+_default_endpoint = "https://moon-staging.huggingface.co" if _staging_mode else "https://huggingface.co"
+
+HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", _default_endpoint)
+HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
 
 PRESET_MIRROR_DICT = {
     "tuna": "https://mirrors.tuna.tsinghua.edu.cn/hugging-face-models",
@@ -1684,3 +1690,125 @@ def copy_func(f):
     g = functools.update_wrapper(g, f)
     g.__kwdefaults__ = f.__kwdefaults__
     return g
+
+
+class PushToHubMixin:
+    """
+    A Mixin containing the functionality to push a model or tokenizer to the hub.
+    """
+
+    def push_to_hub(
+        self,
+        repo_name: Optional[str] = None,
+        repo_url: Optional[str] = None,
+        commit_message: Optional[str] = None,
+        organization: Optional[str] = None,
+        private: bool = None,
+        use_auth_token: Optional[Union[bool, str]] = None,
+    ) -> str:
+        """
+        Upload model checkpoint or tokenizer files to the 🤗 model hub.
+
+        Parameters:
+            repo_name (:obj:`str`, `optional`):
+                Repository name for your model or tokenizer in the hub. If not specified, the repository name will be
+                the stem of :obj:`save_directory`.
+            repo_url (:obj:`str`, `optional`):
+                Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
+                repository will be created in your namespace (unless you specify an :obj:`organization`) with
+                :obj:`repo_name`.
+            commit_message (:obj:`str`, `optional`):
+                Message to commit while pushing. Will default to :obj:`"add config"`, :obj:`"add tokenizer"` or
+                :obj:`"add model"` depending on the type of the class.
+            organization (:obj:`str`, `optional`):
+                Organization in which you want to push your model or tokenizer (you must be a member of this
+                organization).
+            private (:obj:`bool`, `optional`):
+                Whether or not the repository created should be private (requires a paying subscription).
+            use_auth_token (:obj:`bool` or :obj:`str`, `optional`):
+                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`). Will default to
+                :obj:`True` if :obj:`repo_url` is not specified.
+
+
+        Returns:
+            The url of the commit of your model in the given repository.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self.save_pretrained(tmp_dir)
+            self._push_to_hub(
+                save_directory=tmp_dir,
+                repo_name=repo_name,
+                repo_url=repo_url,
+                commit_message=commit_message,
+                organization=organization,
+                private=private,
+                use_auth_token=use_auth_token,
+            )
+
+    @classmethod
+    def _push_to_hub(
+        cls,
+        save_directory: Optional[str] = None,
+        save_files: Optional[List[str]] = None,
+        repo_name: Optional[str] = None,
+        repo_url: Optional[str] = None,
+        commit_message: Optional[str] = None,
+        organization: Optional[str] = None,
+        private: bool = None,
+        use_auth_token: Optional[Union[bool, str]] = None,
+    ) -> str:
+        # Private version of push_to_hub, that either accepts a folder to push or a list of files.
+        if save_directory is None and save_files is None:
+            raise ValueError("_push_to_hub requires either a `save_directory` or a list of `save_files`.")
+        if repo_name is None and repo_url is None and save_directory is None:
+            raise ValueError("Need either a `repo_name` or `repo_url` to know where to push!")
+
+        if repo_name is None and repo_url is None and save_files is None:
+            repo_name = Path(save_directory).name
+        if use_auth_token is None and repo_url is None:
+            use_auth_token = True
+
+        if isinstance(use_auth_token, str):
+            token = use_auth_token
+        elif use_auth_token:
+            token = HfFolder.get_token()
+            if token is None:
+                raise ValueError(
+                    "You must login to the Hugging Face hub on this computer by typing `transformers-cli login` and "
+                    "entering your credentials to use `use_auth_token=True`. Alternatively, you can pass your own "
+                    "token as the `use_auth_token` argument."
+                )
+        else:
+            token = None
+
+        if repo_url is None:
+            # Special provision for the test endpoint (CI)
+            repo_url = HfApi(endpoint=HUGGINGFACE_CO_RESOLVE_ENDPOINT).create_repo(
+                token,
+                repo_name,
+                organization=organization,
+                private=private,
+                repo_type=None,
+                exist_ok=True,
+            )
+
+        if commit_message is None:
+            if "Tokenizer" in cls.__name__:
+                commit_message = "add tokenizer"
+            if "Config" in cls.__name__:
+                commit_message = "add config"
+            else:
+                commit_message = "add model"
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # First create the repo (and clone its content if it's nonempty), then add the files (otherwise there is
+            # no diff so nothing is pushed).
+            repo = Repository(tmp_dir, clone_from=repo_url, use_auth_token=use_auth_token)
+            if save_directory is None:
+                for filename in save_files:
+                    shutil.copy(filename, Path(tmp_dir) / Path(filename).name)
+            else:
+                copy_tree(save_directory, tmp_dir)
+
+            return repo.push_to_hub(commit_message=commit_message)

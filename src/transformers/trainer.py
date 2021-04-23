@@ -23,6 +23,7 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 import time
 import warnings
 from logging import StreamHandler
@@ -62,6 +63,7 @@ from .dependency_versions_check import dep_version_check
 from .file_utils import (
     CONFIG_NAME,
     WEIGHTS_NAME,
+    PushToHubMixin,
     is_apex_available,
     is_datasets_available,
     is_in_notebook,
@@ -2273,6 +2275,71 @@ class Trainer:
             return self.model.floating_point_ops(inputs)
         else:
             return 0
+
+    def push_to_hub(
+        self,
+        save_directory: Optional[str] = None,
+        repo_name: Optional[str] = None,
+        repo_url: Optional[str] = None,
+        commit_message: Optional[str] = "add model",
+        organization: Optional[str] = None,
+        private: bool = None,
+        use_auth_token: Optional[Union[bool, str]] = None,
+    ):
+        """
+        Upload `self.model` to the 🤗 model hub.
+
+        Parameters:
+            save_directory (:obj:`str` or :obj:`os.PathLike`):
+                Folder containing the model weights and config. Will default to :obj:`self.args.output_dir`.
+            repo_name (:obj:`str`, `optional`):
+                Repository name for your model or tokenizer in the hub. If not specified, the repository name will be
+                the stem of :obj:`save_directory`.
+            repo_url (:obj:`str`, `optional`):
+                Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
+                repository will be created in your namespace (unless you specify an :obj:`organization`) with
+                :obj:`repo_name`.
+            commit_message (:obj:`str`, `optional`, defaults to :obj:`"add model"`):
+                Message to commit while pushing.
+            organization (:obj:`str`, `optional`):
+                Organization in which you want to push your model or tokenizer (you must be a member of this
+                organization).
+            private (:obj:`bool`, `optional`):
+                Whether or not the repository created should be private (requires a paying subscription).
+            use_auth_token (:obj:`bool` or :obj:`str`, `optional`):
+                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`). Will default to
+                :obj:`True` if :obj:`repo_url` is not specified.
+
+        Returns:
+            The url of the commit of your model in the given repository.
+        """
+        if not self.is_world_process_zero():
+            return
+
+        if not isinstance(unwrap_model(self.model), PushToHubMixin):
+            raise ValueError(
+                "The `upload_model_to_hub` method only works for models that inherit from `PushToHubMixin` models."
+            )
+        if save_directory is None:
+            save_directory = self.args.output_dir
+
+        # To avoid pushing all checkpoints, we just copy all the files in save_directory in a tmp dir.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            for f in os.listdir(save_directory):
+                fname = os.path.join(save_directory, f)
+                if os.path.isfile(fname):
+                    shutil.copy(fname, os.path.join(tmp_dir, f))
+
+            return unwrap_model(self.model)._push_to_hub(
+                save_directory=tmp_dir,
+                repo_name=repo_name,
+                repo_url=repo_url,
+                commit_message=commit_message,
+                organization=organization,
+                private=private,
+                use_auth_token=use_auth_token,
+            )
 
     #
     # Deprecated code
