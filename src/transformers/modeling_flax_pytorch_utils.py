@@ -86,7 +86,7 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
             pt_tuple_key = (flax_model.base_model_prefix,) + pt_tuple_key
 
         # Correctly rename weight parameters
-        if pt_tuple_key[-1] == "weight" and pt_tuple_key[:-1] + ("scale",) in random_flax_state_dict:
+        if pt_tuple_key[-1] in ["weight", "gamma"] and pt_tuple_key[:-1] + ("scale",) in random_flax_state_dict:
             pt_tuple_key = pt_tuple_key[:-1] + ("scale",)
         if pt_tuple_key[-1] == "weight" and pt_tuple_key[:-1] + ("embedding",) in random_flax_state_dict:
             pt_tuple_key = pt_tuple_key[:-1] + ("embedding",)
