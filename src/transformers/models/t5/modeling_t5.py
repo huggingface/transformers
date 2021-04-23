@@ -424,7 +424,7 @@ class T5Attention(nn.Module):
         batch_size, seq_length = hidden_states.shape[:2]
 
         int_seq_length = int(seq_length)
-        
+
         real_seq_length = seq_length
 
         if past_key_value is not None:
