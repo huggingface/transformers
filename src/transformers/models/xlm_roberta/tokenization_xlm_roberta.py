@@ -95,14 +95,16 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
         sp_model_kwargs (:obj:`dict`, `optional`, defaults to :obj:`None`):
-            Will be passed to the ``.SentencePieceProcessor.__init__()`` method. Can be used, among other things, to
-            set:
+            Will be passed to the ``SentencePieceProcessor.__init__()`` method. The `Python wrapper for SentencePiece
+            <https://github.com/google/sentencepiece/tree/master/python>`_ can be used, among other things, to set:
 
             - ``enable_sampling``: Enable subword regularization.
-            - ``nbest_size``: Sampling parameters for unigram. Invalid for BPE-Dropout. nbest_size = {0,1}: No sampling
-              is performed. nbest_size > 1: samples from the nbest_size results. nbest_size < 0: assuming that
-              nbest_size is infinite and samples from the all hypothesis (lattice) using
-              forward-filtering-and-backward-sampling algorithm.
+            - ``nbest_size``: Sampling parameters for unigram. Invalid for BPE-Dropout.
+
+              - ``nbest_size = {0,1}``: No sampling is performed.
+              - ``nbest_size > 1``: samples from the nbest_size results.
+              - ``nbest_size < 0``: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+                using forward-filtering-and-backward-sampling algorithm.
             - ``alpha``: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
               BPE-dropout.
 
