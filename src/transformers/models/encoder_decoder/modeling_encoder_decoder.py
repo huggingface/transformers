@@ -176,8 +176,8 @@ class EncoderDecoderModel(PreTrainedModel):
         self.encoder = encoder
         self.decoder = decoder
         
-        # we can not stop the users from calling the encoder or decoder individually,
-        # we need to link the individual configs with the encoderdecoderconfig to ensure consistency
+        # make sure that the individual model's config refers to the shared config
+        # so that the updates to the config will be synced
         self.config.encoder = self.encoder.config
         self.config.decoder = self.decoder.config
         
