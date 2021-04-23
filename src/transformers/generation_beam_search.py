@@ -27,7 +27,7 @@ PROCESS_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_beams, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using any class inheriting from :class:`~transformers.PretrainedTokenizer`. See
+            Indices can be obtained using any class inheriting from :class:`~transformers.PreTrainedTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
@@ -60,7 +60,7 @@ FINALIZE_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_beams, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using any class inheriting from :class:`~transformers.PretrainedTokenizer`. See
+            Indices can be obtained using any class inheriting from :class:`~transformers.PreTrainedTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
@@ -86,8 +86,8 @@ FINALIZE_INPUTS_DOCSTRING = r"""
 
 class BeamScorer(ABC):
     """
-    Abstract base class for all beam scorers that are used for :meth:`~transformers.PretrainedModel.beam_search` and
-    :meth:`~transformers.PretrainedModel.beam_sample`.
+    Abstract base class for all beam scorers that are used for :meth:`~transformers.PreTrainedModel.beam_search` and
+    :meth:`~transformers.PreTrainedModel.beam_sample`.
     """
 
     @abstractmethod

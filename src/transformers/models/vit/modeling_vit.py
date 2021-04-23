@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Google AI, Ross Weightman, The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 Google AI, Ross Wightman, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -175,7 +175,7 @@ class ViTSelfAttention(nn.Module):
 
 class ViTSelfOutput(nn.Module):
     """
-    The residual connection is defined in VitLayer instead of here (as is the case with other models), due to the
+    The residual connection is defined in ViTLayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
     """
 
@@ -475,7 +475,7 @@ class ViTModel(ViTPreTrainedModel):
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
             >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
-            >>> model = ViTModel.from_pretrained('google/vit-base-patch16-224')
+            >>> model = ViTModel.from_pretrained('google/vit-base-patch16-224-in21k')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)

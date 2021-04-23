@@ -33,7 +33,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     is_scatter_available,
     replace_return_docstrings,
-    requires_scatter,
+    requires_backends,
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
 from ...modeling_utils import (
@@ -792,7 +792,7 @@ class TapasModel(TapasPreTrainedModel):
     """
 
     def __init__(self, config, add_pooling_layer=True):
-        requires_scatter(self)
+        requires_backends(self, "scatter")
         super().__init__(config)
         self.config = config
 

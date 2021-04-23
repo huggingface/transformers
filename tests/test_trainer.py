@@ -16,16 +16,23 @@
 import dataclasses
 import gc
 import os
+import re
 import tempfile
 import unittest
 
 import numpy as np
 
+from huggingface_hub import HfApi
+from requests.exceptions import HTTPError
 from transformers import AutoTokenizer, IntervalStrategy, PretrainedConfig, TrainingArguments, is_torch_available
 from transformers.file_utils import WEIGHTS_NAME
 from transformers.testing_utils import (
+    ENDPOINT_STAGING,
+    PASS,
+    USER,
     TestCasePlus,
     get_tests_dir,
+    is_staging_test,
     require_datasets,
     require_optuna,
     require_ray,
@@ -44,9 +51,7 @@ if is_torch_available():
     from torch.utils.data import IterableDataset
 
     from transformers import (
-        AutoModelForMaskedLM,
         AutoModelForSequenceClassification,
-        DataCollatorForLanguageModeling,
         EarlyStoppingCallback,
         GlueDataset,
         GlueDataTrainingArguments,
@@ -54,7 +59,6 @@ if is_torch_available():
         GPT2LMHeadModel,
         LineByLineTextDataset,
         PreTrainedModel,
-        TextDataset,
         Trainer,
         TrainerState,
     )
@@ -132,21 +136,18 @@ class RegressionModelConfig(PretrainedConfig):
         self.a = a
         self.b = b
         self.double_output = double_output
+        self.hidden_size = 1
 
 
 if is_torch_available():
 
     class SampleIterableDataset(IterableDataset):
-        """
-        Criteria is not whether it is IterableDataset or not, criteria is whether __len__ is implemented
-        """
-
-        def __init__(self, file_path, tokenizer):
-            self.ds = TextDataset(file_path=file_path, tokenizer=tokenizer, block_size=64)
+        def __init__(self, a=2, b=3, length=64, seed=42, label_names=None):
+            self.dataset = RegressionDataset(a=a, b=b, length=length, seed=seed, label_names=label_names)
 
         def __iter__(self):
-            for i in range(len(self.ds)):
-                yield self.ds[i]
+            for i in range(len(self.dataset)):
+                yield self.dataset[i]
 
     class RegressionModel(torch.nn.Module):
         def __init__(self, a=0, b=0, double_output=False):
@@ -731,6 +732,46 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
 
+    def test_resume_training_with_frozen_params(self):
+        if torch.cuda.device_count() > 2:
+            # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
+            # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
+            # won't be the same since the training dataloader is shuffled).
+            return
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                train_len=128,
+                per_device_train_batch_size=4,
+                save_steps=5,
+                learning_rate=0.1,
+            )
+            trainer.model.a.requires_grad_(False)
+            trainer.train()
+            (a, b) = trainer.model.a.item(), trainer.model.b.item()
+            state = dataclasses.asdict(trainer.state)
+
+            checkpoint = os.path.join(tmpdir, "checkpoint-5")
+
+            # Reinitialize trainer
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                train_len=128,
+                per_device_train_batch_size=4,
+                save_steps=5,
+                learning_rate=0.1,
+            )
+            trainer.model.a.requires_grad_(False)
+
+            trainer.train(resume_from_checkpoint=checkpoint)
+
+            self.assertFalse(trainer.model.a.requires_grad)
+            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            state1 = dataclasses.asdict(trainer.state)
+            self.assertEqual(a, a1)
+            self.assertEqual(b, b1)
+            self.check_trainer_state_are_the_same(state, state1)
+
     def test_load_best_model_at_end(self):
         total = int(self.n_epochs * 64 / self.batch_size)
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -825,52 +866,64 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         self.assertEqual(len(dataset), 31)
 
-    def test_trainer_iterable_dataset(self):
-        # Simulate Language Modeling with an IterableDataset, with no __len__ method
-        # Pick-up a tiny model, so it works on CPU
-        # See Issue #5990: https://github.com/huggingface/transformers/issues/5990
-        MODEL_ID = "sshleifer/tiny-distilbert-base-cased"
-        model = AutoModelForMaskedLM.from_pretrained(MODEL_ID)
-        tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-        train_dataset = SampleIterableDataset(file_path=PATH_SAMPLE_TEXT, tokenizer=tokenizer)
-        training_args = TrainingArguments(output_dir="./examples", no_cuda=True, max_steps=2)
-        data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=True, mlm_probability=0.15)
+    def test_training_iterable_dataset(self):
+        config = RegressionModelConfig()
+        model = RegressionPreTrainedModel(config)
+        train_dataset = SampleIterableDataset()
 
-        training_args = TrainingArguments(output_dir="./examples", no_cuda=True, max_steps=2)
-        trainer = Trainer(model=model, args=training_args, train_dataset=train_dataset, data_collator=data_collator)
+        args = RegressionTrainingArguments(output_dir="./examples", max_steps=4)
+        trainer = Trainer(model=model, args=args, train_dataset=train_dataset)
         trainer.train()
+        self.assertEqual(trainer.state.global_step, 4)
 
         loader = trainer.get_train_dataloader()
         self.assertIsInstance(loader, torch.utils.data.DataLoader)
         self.assertIsInstance(loader.sampler, torch.utils.data.dataloader._InfiniteConstantSampler)
 
-        # Exception if giving iterable dataset and no max_steps
-        with self.assertRaises(ValueError):
-            training_args = TrainingArguments(output_dir="./examples", no_cuda=True)
-            _ = Trainer(model=model, args=training_args, train_dataset=train_dataset, data_collator=data_collator)
+    def test_evaluation_iterable_dataset(self):
+        config = RegressionModelConfig(a=1.5, b=2.5)
+        model = RegressionPreTrainedModel(config)
+        eval_dataset = SampleIterableDataset()
 
-        # Exception if eval_dataset is iterable in __init__
-        with self.assertRaises(ValueError):
-            training_args = TrainingArguments(output_dir="./examples", no_cuda=True, max_steps=2)
-            _ = Trainer(
-                model=model,
-                args=training_args,
-                train_dataset=train_dataset,
-                eval_dataset=train_dataset,
-                data_collator=data_collator,
-            )
+        args = RegressionTrainingArguments(output_dir="./examples")
+        trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset, compute_metrics=AlmostAccuracy())
+        results = trainer.evaluate()
 
-        # Exception if predicting with iterable dataset
-        with self.assertRaises(ValueError):
-            training_args = TrainingArguments(output_dir="./examples", no_cuda=True)
-            trainer = Trainer(model=model, args=training_args, data_collator=data_collator)
-            trainer.predict(train_dataset)
+        x, y = trainer.eval_dataset.dataset.x, trainer.eval_dataset.dataset.ys[0]
+        pred = 1.5 * x + 2.5
+        expected_loss = ((pred - y) ** 2).mean()
+        self.assertAlmostEqual(results["eval_loss"], expected_loss)
+        expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
+        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
-        # Exception if evaluating with iterable dataset
-        with self.assertRaises(ValueError):
-            training_args = TrainingArguments(output_dir="./examples", no_cuda=True)
-            trainer = Trainer(model=model, args=training_args, data_collator=data_collator)
-            trainer.evaluate(train_dataset)
+        # With a number of elements not a round multiple of the batch size
+        eval_dataset = SampleIterableDataset(length=66)
+        results = trainer.evaluate(eval_dataset)
+
+        x, y = eval_dataset.dataset.x, eval_dataset.dataset.ys[0]
+        pred = 1.5 * x + 2.5
+        expected_loss = ((pred - y) ** 2).mean()
+        self.assertAlmostEqual(results["eval_loss"], expected_loss)
+        expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
+        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
+
+    def test_predict_iterable_dataset(self):
+        config = RegressionModelConfig(a=1.5, b=2.5)
+        model = RegressionPreTrainedModel(config)
+        eval_dataset = SampleIterableDataset()
+
+        args = RegressionTrainingArguments(output_dir="./examples")
+        trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset, compute_metrics=AlmostAccuracy())
+
+        preds = trainer.predict(trainer.eval_dataset).predictions
+        x = eval_dataset.dataset.x
+        self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
+
+        # With a number of elements not a round multiple of the batch size
+        test_dataset = SampleIterableDataset(length=66)
+        preds = trainer.predict(test_dataset).predictions
+        x = test_dataset.dataset.x
+        self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
 
     def test_num_train_epochs_in_training(self):
         # len(train_dl) < gradient_accumulation_steps shouldn't give ``ZeroDivisionError`` when ``max_steps`` is given.
@@ -1033,6 +1086,60 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         no_wd_params = [p for n, p in model.named_parameters() if n not in wd_names]
         self.assertListEqual(trainer.optimizer.param_groups[0]["params"], wd_params)
         self.assertListEqual(trainer.optimizer.param_groups[1]["params"], no_wd_params)
+
+
+@require_torch
+@is_staging_test
+class TrainerIntegrationWithHubTester(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
+        cls._token = cls._api.login(username=USER, password=PASS)
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-model")
+        except HTTPError:
+            pass
+
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-model-org", organization="valid_org")
+        except HTTPError:
+            pass
+
+    def test_push_to_hub(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(output_dir=tmp_dir)
+            trainer.save_model()
+            url = trainer.push_to_hub(repo_name="test-model", use_auth_token=self._token)
+
+            # Extract repo_name from the url
+            re_search = re.search(ENDPOINT_STAGING + r"/([^/]+/[^/]+)/", url)
+            self.assertTrue(re_search is not None)
+            repo_name = re_search.groups()[0]
+
+            self.assertEqual(repo_name, f"{USER}/test-model")
+
+            model = RegressionPreTrainedModel.from_pretrained(repo_name)
+            self.assertEqual(model.a.item(), trainer.model.a.item())
+            self.assertEqual(model.b.item(), trainer.model.b.item())
+
+    def test_push_to_hub_in_organization(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(output_dir=tmp_dir)
+            trainer.save_model()
+            url = trainer.push_to_hub(repo_name="test-model-org", organization="valid_org", use_auth_token=self._token)
+
+            # Extract repo_name from the url
+            re_search = re.search(ENDPOINT_STAGING + r"/([^/]+/[^/]+)/", url)
+            self.assertTrue(re_search is not None)
+            repo_name = re_search.groups()[0]
+            self.assertEqual(repo_name, "valid_org/test-model-org")
+
+            model = RegressionPreTrainedModel.from_pretrained("valid_org/test-model-org")
+            self.assertEqual(model.a.item(), trainer.model.a.item())
+            self.assertEqual(model.b.item(), trainer.model.b.item())
 
 
 @require_torch

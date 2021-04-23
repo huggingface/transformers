@@ -93,6 +93,10 @@ logger = logging.get_logger(__name__)
 
 
 # Register all the supported tasks here
+TASK_ALIASES = {
+    "sentiment-analysis": "text-classification",
+    "ner": "token-classification",
+}
 SUPPORTED_TASKS = {
     "feature-extraction": {
         "impl": FeatureExtractionPipeline,
@@ -100,7 +104,7 @@ SUPPORTED_TASKS = {
         "pt": AutoModel if is_torch_available() else None,
         "default": {"model": {"pt": "distilbert-base-cased", "tf": "distilbert-base-cased"}},
     },
-    "sentiment-analysis": {
+    "text-classification": {
         "impl": TextClassificationPipeline,
         "tf": TFAutoModelForSequenceClassification if is_tf_available() else None,
         "pt": AutoModelForSequenceClassification if is_torch_available() else None,
@@ -111,7 +115,7 @@ SUPPORTED_TASKS = {
             },
         },
     },
-    "ner": {
+    "token-classification": {
         "impl": TokenClassificationPipeline,
         "tf": TFAutoModelForTokenClassification if is_tf_available() else None,
         "pt": AutoModelForTokenClassification if is_torch_available() else None,
@@ -206,8 +210,10 @@ def check_task(task: str) -> Tuple[Dict, Any]:
             The task defining which pipeline will be returned. Currently accepted tasks are:
 
             - :obj:`"feature-extraction"`
-            - :obj:`"sentiment-analysis"`
-            - :obj:`"ner"`
+            - :obj:`"text-classification"`
+            - :obj:`"sentiment-analysis"` (alias of :obj:`"text-classification")
+            - :obj:`"token-classification"`
+            - :obj:`"ner"` (alias of :obj:`"token-classification")
             - :obj:`"question-answering"`
             - :obj:`"fill-mask"`
             - :obj:`"summarization"`
@@ -222,6 +228,8 @@ def check_task(task: str) -> Tuple[Dict, Any]:
 
 
     """
+    if task in TASK_ALIASES:
+        task = TASK_ALIASES[task]
     if task in SUPPORTED_TASKS:
         targeted_task = SUPPORTED_TASKS[task]
         return targeted_task, None
@@ -246,6 +254,7 @@ def pipeline(
     framework: Optional[str] = None,
     revision: Optional[str] = None,
     use_fast: bool = True,
+    use_auth_token: Optional[Union[str, bool]] = None,
     model_kwargs: Dict[str, Any] = {},
     **kwargs
 ) -> Pipeline:
@@ -263,8 +272,12 @@ def pipeline(
             The task defining which pipeline will be returned. Currently accepted tasks are:
 
             - :obj:`"feature-extraction"`: will return a :class:`~transformers.FeatureExtractionPipeline`.
-            - :obj:`"sentiment-analysis"`: will return a :class:`~transformers.TextClassificationPipeline`.
-            - :obj:`"ner"`: will return a :class:`~transformers.TokenClassificationPipeline`.
+            - :obj:`"text-classification"`: will return a :class:`~transformers.TextClassificationPipeline`.
+            - :obj:`"sentiment-analysis"`: (alias of :obj:`"text-classification") will return a
+              :class:`~transformers.TextClassificationPipeline`.
+            - :obj:`"token-classification"`: will return a :class:`~transformers.TokenClassificationPipeline`.
+            - :obj:`"ner"` (alias of :obj:`"token-classification"): will return a
+              :class:`~transformers.TokenClassificationPipeline`.
             - :obj:`"question-answering"`: will return a :class:`~transformers.QuestionAnsweringPipeline`.
             - :obj:`"fill-mask"`: will return a :class:`~transformers.FillMaskPipeline`.
             - :obj:`"summarization"`: will return a :class:`~transformers.SummarizationPipeline`.
@@ -308,6 +321,10 @@ def pipeline(
             artifacts on huggingface.co, so ``revision`` can be any identifier allowed by git.
         use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to use a Fast tokenizer if possible (a :class:`~transformers.PreTrainedTokenizerFast`).
+        use_auth_token (:obj:`str` or `bool`, `optional`):
+            The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+            generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
+            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
         model_kwargs:
             Additional dictionary of keyword arguments passed along to the model's :obj:`from_pretrained(...,
             **model_kwargs)` function.
@@ -351,7 +368,7 @@ def pipeline(
             # Impossible to guest what is the right tokenizer here
             raise Exception(
                 "Impossible to guess which tokenizer to use. "
-                "Please provided a PretrainedTokenizer class or a path/identifier to a pretrained tokenizer."
+                "Please provided a PreTrainedTokenizer class or a path/identifier to a pretrained tokenizer."
             )
 
     modelcard = None
@@ -367,6 +384,9 @@ def pipeline(
 
     task_class, model_class = targeted_task["impl"], targeted_task[framework]
 
+    # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
+    model_kwargs["use_auth_token"] = model_kwargs.get("use_auth_token", use_auth_token)
+
     # Instantiate tokenizer if needed
     if isinstance(tokenizer, (str, tuple)):
         if isinstance(tokenizer, tuple):
@@ -377,12 +397,12 @@ def pipeline(
             )
         else:
             tokenizer = AutoTokenizer.from_pretrained(
-                tokenizer, revision=revision, use_fast=use_fast, _from_pipeline=task
+                tokenizer, revision=revision, use_fast=use_fast, _from_pipeline=task, **model_kwargs
             )
 
     # Instantiate config if needed
     if isinstance(config, str):
-        config = AutoConfig.from_pretrained(config, revision=revision, _from_pipeline=task)
+        config = AutoConfig.from_pretrained(config, revision=revision, _from_pipeline=task, **model_kwargs)
 
     # Instantiate modelcard if needed
     if isinstance(modelcard, str):

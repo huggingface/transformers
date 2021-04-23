@@ -31,6 +31,7 @@ extra_quality_checks:
 	python utils/check_table.py
 	python utils/check_dummies.py
 	python utils/check_repo.py
+	python utils/check_inits.py
 
 # this target runs checks on all files
 quality:
@@ -72,7 +73,7 @@ test:
 # Run tests for examples
 
 test-examples:
-	python -m pytest -n auto --dist=loadfile -s -v ./examples/
+	python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/
 
 # Run tests for SageMaker DLC release
 
