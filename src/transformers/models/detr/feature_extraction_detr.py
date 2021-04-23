@@ -387,10 +387,11 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
 
-            annotations (:obj:`List[Dict]`, :obj:`List[List[Dict]]`, `optional`):
-                The corresponding annotations in COCO format. Each image can have one or more annotations. Each
-                annotation is a Python dictionary, with the following keys: segmentation, area, iscrowd, image_id,
-                bbox, category_id, id.
+            annotations (:obj:`Dict`, :obj:`List[Dict]`, `optional`):
+                The corresponding annotations in COCO format. The annotations for each image should have the following format:
+                {'image_id': image_id, 'annotations': target}, in other words a dicitionary with 2 keys:
+                * image_id
+                * annotations, which is a list of COCO annotations. 
 
             return_segmentation_masks (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether to return segmentation masks. Should only be set to `True` if the annotations include a "segmentation" key. 
@@ -442,24 +443,24 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         # Check that annotations has a valid type
         if annotations is not None:
             if not is_batched:
-                if isinstance(annotations, (list, tuple)):
-                    if len(annotations) == 0 or isinstance(annotations[0], Dict):
-                        valid_annotations = True
+                if isinstance(annotations, dict) and 'image_id' in annotations and 'annotations' in annotations: 
+                    if isinstance(annotations['annotations'], (list, tuple)): 
+                        # an image can have no annotations
+                        if len(annotations['annotations']) == 0 or isinstance(annotations['annotations'][0], dict):
+                            valid_annotations = True
             else:
-                assert len(images) == len(annotations), "There must be as many annotations as there are images"
                 if isinstance(annotations, (list, tuple)):
-                    if len(annotations) == 0 or (
-                        isinstance(annotations[0], List) and isinstance(annotations[0][0], Dict)
-                    ):
+                    assert len(images) == len(annotations), "There must be as many annotations as there are images"
+                    if isinstance(annotations[0], Dict) and isinstance(annotations[0]['annotations'], (list, tuple)):
                         valid_annotations = True
 
-        if not valid_images:
-            raise ValueError(
-                """
-                Annotations must of type `List[Dict]` (single image) or `List[List[Dict]]` (batch of images). Each
-                annotation should be in COCO format.
-                """
-            )
+            if not valid_annotations:
+                raise ValueError(
+                    """
+                    Annotations must of type `Dict` (single image) or `List[Dict]` (batch of images). Each dictionary should be
+                    of the format {'image_id': 39769, 'annotations': target}, with the target in COCO format.
+                    """
+                )
         
         if not is_batched:
             images = [images]
@@ -468,10 +469,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
         if annotations is not None:
-            for idx, (image, anno) in enumerate(zip(images, annotations)):
+            for idx, (image, target) in enumerate(zip(images, annotations)):
                 if not isinstance(image, Image.Image):
                     image = self.to_pil_image(image)
-                target = {"image_id": anno[0]["image_id"], "annotations": anno}
                 image, target = self.convertCocoToDetrFormat(image, target, tensor_type=return_tensors, return_segmentation_masks=return_segmentation_masks)
                 images[idx] = image
                 annotations[idx] = target

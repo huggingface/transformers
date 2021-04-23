@@ -277,6 +277,8 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", 'r') as f:
             target = json.loads(f.read())
 
+        target = {'image_id': 39769, 'annotations': target}
+        
         # encode them
         #TODO add .from_pretrained("facebook/detr-resnet-50")
         feature_extractor = DetrFeatureExtractor()
