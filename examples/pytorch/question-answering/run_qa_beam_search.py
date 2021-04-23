@@ -638,6 +638,9 @@ def main():
         trainer.log_metrics("test", metrics)
         trainer.save_metrics("test", metrics)
 
+    if training_args.push_to_hub:
+        trainer.push_to_hub()
+
 
 def _mp_fn(index):
     # For xla_spawn (TPUs)

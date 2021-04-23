@@ -317,24 +317,33 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/reports
 
-    run_tests_git_lfs:
+    run_tests_hub:
         working_directory: ~/transformers
         docker:
             - image: circleci/python:3.7
         environment:
+            HUGGINGFACE_CO_STAGING: yes
             RUN_GIT_LFS_TESTS: yes
             TRANSFORMERS_IS_CI: yes
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-hub-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
             - run: sudo apt-get install git-lfs
             - run: |
                 git config --global user.email "ci@dummy.com"
                 git config --global user.name "ci"
             - run: pip install --upgrade pip
-            - run: pip install .[testing]
-            - run: python -m pytest -sv ./tests/test_hf_api.py -k "HfLargefilesTest"
+            - run: pip install .[torch,sentencepiece,testing]
+            - save_cache:
+                  key: v0.4-hub-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: python -m pytest -sv ./tests/ -m is_staging_test
 
     build_doc:
         working_directory: ~/transformers
@@ -469,7 +478,7 @@ workflows:
             - run_tests_flax
             - run_tests_pipelines_torch
             - run_tests_pipelines_tf
-            - run_tests_git_lfs
+            - run_tests_hub
             - build_doc
             - deploy_doc: *workflow_filters
 #    tpu_testing_jobs:

@@ -571,6 +571,9 @@ def main():
                 with open(output_test_preds_file, "w") as writer:
                     writer.write("\n".join(test_preds))
 
+    if training_args.push_to_hub:
+        trainer.push_to_hub()
+
     return results
 
 
