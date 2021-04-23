@@ -73,3 +73,10 @@ Generation
 
 .. autoclass:: transformers.generation_tf_utils.TFGenerationMixin
     :members:
+
+
+Pushing to the Hub
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.file_utils.PushToHubMixin
+    :members:

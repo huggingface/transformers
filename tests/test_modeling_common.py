@@ -22,10 +22,22 @@ import tempfile
 import unittest
 from typing import List, Tuple
 
+from huggingface_hub import HfApi
+from requests.exceptions import HTTPError
 from transformers import is_torch_available, logging
 from transformers.file_utils import WEIGHTS_NAME
 from transformers.models.auto import get_values
-from transformers.testing_utils import CaptureLogger, require_torch, require_torch_multi_gpu, slow, torch_device
+from transformers.testing_utils import (
+    ENDPOINT_STAGING,
+    PASS,
+    USER,
+    CaptureLogger,
+    is_staging_test,
+    require_torch,
+    require_torch_multi_gpu,
+    slow,
+    torch_device,
+)
 
 
 if is_torch_available():
@@ -1300,3 +1312,54 @@ class ModelUtilsTest(unittest.TestCase):
         with CaptureLogger(logger) as cl:
             BertModel.from_pretrained(TINY_T5)
         self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
+
+
+@require_torch
+@is_staging_test
+class ModelPushToHubTester(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
+        cls._token = cls._api.login(username=USER, password=PASS)
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-model")
+        except HTTPError:
+            pass
+
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-model-org", organization="valid_org")
+        except HTTPError:
+            pass
+
+    def test_push_to_hub(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        model = BertModel(config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, push_to_hub=True, repo_name="test-model", use_auth_token=self._token)
+
+            new_model = BertModel.from_pretrained(f"{USER}/test-model")
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
+    def test_push_to_hub_in_organization(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        model = BertModel(config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(
+                tmp_dir,
+                push_to_hub=True,
+                repo_name="test-model-org",
+                use_auth_token=self._token,
+                organization="valid_org",
+            )
+
+            new_model = BertModel.from_pretrained("valid_org/test-model-org")
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))

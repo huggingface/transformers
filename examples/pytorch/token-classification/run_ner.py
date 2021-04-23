@@ -491,6 +491,9 @@ def main():
                 for prediction in true_predictions:
                     writer.write(" ".join(prediction) + "\n")
 
+    if training_args.push_to_hub:
+        trainer.push_to_hub()
+
 
 def _mp_fn(index):
     # For xla_spawn (TPUs)

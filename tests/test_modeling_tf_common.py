@@ -24,11 +24,17 @@ import unittest
 from importlib import import_module
 from typing import List, Tuple
 
+from huggingface_hub import HfApi
+from requests.exceptions import HTTPError
 from transformers import is_tf_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
+    ENDPOINT_STAGING,
+    PASS,
+    USER,
     _tf_gpu_memory_limit,
     is_pt_tf_cross_test,
+    is_staging_test,
     require_onnx,
     require_tf,
     slow,
@@ -50,6 +56,8 @@ if is_tf_available():
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        BertConfig,
+        TFBertModel,
         TFSharedEmbeddings,
         tf_top_k_top_p_filtering,
     )
@@ -1326,3 +1334,62 @@ class UtilsFunctionsTest(unittest.TestCase):
 
         tf.debugging.assert_near(non_inf_output, non_inf_expected_output, rtol=1e-12)
         tf.debugging.assert_equal(non_inf_idx, non_inf_expected_idx)
+
+
+@require_tf
+@is_staging_test
+class TFModelPushToHubTester(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
+        cls._token = cls._api.login(username=USER, password=PASS)
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-model")
+        except HTTPError:
+            pass
+
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-model-org", organization="valid_org")
+        except HTTPError:
+            pass
+
+    def test_push_to_hub(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        model = TFBertModel(config)
+        # Make sure model is properly initialized
+        _ = model(model.dummy_inputs)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, push_to_hub=True, repo_name="test-model", use_auth_token=self._token)
+
+            new_model = TFBertModel.from_pretrained(f"{USER}/test-model")
+            models_equal = True
+            for p1, p2 in zip(model.weights, new_model.weights):
+                if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                    models_equal = False
+            self.assertTrue(models_equal)
+
+    def test_push_to_hub_in_organization(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        model = TFBertModel(config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(
+                tmp_dir,
+                push_to_hub=True,
+                repo_name="test-model-org",
+                use_auth_token=self._token,
+                organization="valid_org",
+            )
+
+            new_model = TFBertModel.from_pretrained("valid_org/test-model-org")
+            models_equal = True
+            for p1, p2 in zip(model.weights, new_model.weights):
+                if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                    models_equal = False
+            self.assertTrue(models_equal)
