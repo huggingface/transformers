@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google Flax Team Authors and The HuggingFace Inc. team.
+# Copyright 2021 The Google Flax Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ from typing import Dict, Set, Tuple, Union
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
+from flax.core.frozen_dict import FrozenDict, unfreeze
 from flax.serialization import from_bytes, to_bytes
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax.random import PRNGKey
@@ -46,7 +46,7 @@ logger = logging.get_logger(__name__)
 
 
 ACT2FN = {
-    "gelu": nn.gelu,
+    "gelu": partial(nn.gelu, approximate=False),
     "relu": nn.relu,
     "silu": nn.swish,
     "swish": nn.swish,
@@ -129,7 +129,7 @@ class FlaxPreTrainedModel(ABC):
                 "Some parameters are missing. Make sure that `params` include the following "
                 f"parameters {self.required_params - param_keys}"
             )
-        self._params = freeze(params)
+        self._params = params
 
     @classmethod
     def from_pretrained(
@@ -330,6 +330,10 @@ class FlaxPreTrainedModel(ABC):
                     state = from_bytes(cls, state_f.read())
                 except UnpicklingError:
                     raise EnvironmentError(f"Unable to convert {archive_file} to Flax deserializable object. ")
+            # make sure all arrays are stored as jnp.arrays
+            # NOTE: This is to prevent a bug this will be fixed in Flax >= v0.3.4:
+            # https://github.com/google/flax/issues/1261
+            state = jax.tree_util.tree_map(jnp.array, state)
 
         # if model is base model only use model_prefix key
         if cls.base_model_prefix not in dict(model.params) and cls.base_model_prefix in state:
@@ -337,6 +341,7 @@ class FlaxPreTrainedModel(ABC):
 
         # flatten dicts
         state = flatten_dict(state)
+
         random_state = flatten_dict(unfreeze(model.params))
 
         missing_keys = model.required_params - set(state.keys())
@@ -377,6 +382,7 @@ class FlaxPreTrainedModel(ABC):
 
         # set correct parameters
         model.params = unflatten_dict(state)
+
         return model
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike]):
