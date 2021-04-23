@@ -98,10 +98,12 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
             Will be passed to the SentencePieceProcessor ``__init__()`` method. Can be used to set:
 
             - ``enable_sampling``: Enable subword regularization.
-            - ``nbest_size``: Sampling parameters for unigram. Invalid for BPE-Dropout. nbest_size = {0,1}: No sampling is performed.
-              nbest_size > 1: samples from the nbest_size results. nbest_size < 0: assuming that nbest_size is infinite
-              and samples from the all hypothesis (lattice) using forward-filtering-and-backward-sampling algorithm.
-            - ``alpha``: Smoothing parameter for unigram sampling, and dropout probability of merge operations for BPE-dropout.
+            - ``nbest_size``: Sampling parameters for unigram. Invalid for BPE-Dropout. nbest_size = {0,1}: No sampling
+              is performed. nbest_size > 1: samples from the nbest_size results. nbest_size < 0: assuming that
+              nbest_size is infinite and samples from the all hypothesis (lattice) using
+              forward-filtering-and-backward-sampling algorithm.
+            - ``alpha``: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+              BPE-dropout.
 
     Attributes:
         sp_model (:obj:`SentencePieceProcessor`):
