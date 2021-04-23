@@ -442,8 +442,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         # Check that annotations has a valid type
         if annotations is not None:
             if not is_batched:
-                if isinstance(annotations, (list, tuple)) and isinstance(annotations[0], Dict):
-                    valid_annotations = True
+                if isinstance(annotations, (list, tuple)):
+                    if len(annotations) == 0 or isinstance(annotations[0], Dict):
+                        valid_annotations = True
             else:
                 assert len(images) == len(annotations), "There must be as many annotations as there are images"
                 if isinstance(annotations, (list, tuple)):
