@@ -66,7 +66,8 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
 
     assert (
         hf_shape == value.shape
-    ), f"Shape of hf {key + '.' + weight_type} is {hf_shape}, but should be {value.shape} for {full_name}"
+    ), f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be {value.shape} for {full_name}"
+
     if weight_type == "weight":
         hf_pointer.weight.data = value
     elif weight_type == "weight_g":
