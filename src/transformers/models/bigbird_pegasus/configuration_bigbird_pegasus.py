@@ -133,7 +133,7 @@ class BigBirdPegasusConfig(PretrainedConfig):
         init_std=0.02,
         decoder_start_token_id=2,
         classifier_dropout=0.0,
-        scale_embedding=False,
+        scale_embedding=True,
         gradient_checkpointing=False,
         pad_token_id=0,
         bos_token_id=2,
@@ -141,7 +141,7 @@ class BigBirdPegasusConfig(PretrainedConfig):
         attention_type="block_sparse",  # only for encoder
         block_size=64,
         num_random_blocks=3,
-        use_bias=True,
+        use_bias=False,
         **kwargs
     ):
         super().__init__(
