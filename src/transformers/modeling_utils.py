@@ -30,6 +30,7 @@ from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
     DUMMY_INPUTS,
+    FLAX_WEIGHTS_NAME,
     TF2_WEIGHTS_NAME,
     TF_WEIGHTS_NAME,
     WEIGHTS_NAME,
@@ -875,6 +876,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                       this case, ``from_tf`` should be set to :obj:`True` and a configuration object should be provided
                       as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in
                       a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+                    - A path or url to a model folder containing a `flax checkpoint file` in `.msgpack` format (e.g,
+                      ``./flax_model/`` containing ``flax_model.msgpack``). In this case, ``from_flax`` should be set
+                      to :obj:`True`.
                     - :obj:`None` if you are both providing the configuration and state dictionary (resp. with keyword
                       arguments ``config`` and ``state_dict``).
             model_args (sequence of positional arguments, `optional`):
@@ -906,6 +910,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 standard cache should not be used.
             from_tf (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Load the model weights from a TensorFlow checkpoint save file (see docstring of
+                ``pretrained_model_name_or_path`` argument).
+            from_flax (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Load the model weights from a Flax checkpoint save file (see docstring of
                 ``pretrained_model_name_or_path`` argument).
             force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to force the (re-)download of the model weights and configuration files, overriding the
@@ -968,11 +975,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower, for example purposes, not runnable).
             >>> config = BertConfig.from_json_file('./tf_model/my_tf_model_config.json')
             >>> model = BertModel.from_pretrained('./tf_model/my_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+            >>> # Loading from a Flax checkpoint file instead of a PyTorch model (slower)
+            >>> model = BertModel.from_pretrained('bert-base-uncased', from_flax=True)
+
         """
         config = kwargs.pop("config", None)
         state_dict = kwargs.pop("state_dict", None)
         cache_dir = kwargs.pop("cache_dir", None)
         from_tf = kwargs.pop("from_tf", False)
+        from_flax = kwargs.pop("from_flax", False)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
@@ -1023,13 +1034,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 elif from_tf and os.path.isfile(os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)):
                     # Load from a TF 2.0 checkpoint in priority if from_tf
                     archive_file = os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)
+                elif from_flax and os.path.isfile(os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME)):
+                    # Load from a Flax checkpoint in priority if from_flax
+                    archive_file = os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME)
                 elif os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
                     # Load from a PyTorch checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
                 else:
                     raise EnvironmentError(
-                        f"Error no file named {[WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + '.index']} found in "
-                        f"directory {pretrained_model_name_or_path} or `from_tf` set to False."
+                        f"Error no file named {[WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + '.index', FLAX_WEIGHTS_NAME]} found in "
+                        f"directory {pretrained_model_name_or_path} or `from_tf` and `from_flax` set to False."
                     )
             elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
@@ -1041,9 +1055,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     )
                 archive_file = pretrained_model_name_or_path + ".index"
             else:
+                # set correct filename
+                if from_tf:
+                    filename = TF2_WEIGHTS_NAME
+                elif from_flax:
+                    filename = FLAX_WEIGHTS_NAME
+                else:
+                    filename = WEIGHTS_NAME
+
                 archive_file = hf_bucket_url(
                     pretrained_model_name_or_path,
-                    filename=(TF2_WEIGHTS_NAME if from_tf else WEIGHTS_NAME),
+                    filename=filename,
                     revision=revision,
                     mirror=mirror,
                 )
@@ -1090,7 +1112,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         else:
             model = cls(config, *model_args, **model_kwargs)
 
-        if state_dict is None and not from_tf:
+        if state_dict is None and not (from_tf or from_flax):
             try:
                 state_dict = torch.load(resolved_archive_file, map_location="cpu")
             except Exception:
@@ -1120,6 +1142,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                         "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions."
                     )
                     raise
+        elif from_flax:
+            try:
+                from .modeling_flax_pytorch_utils import load_flax_checkpoint_in_pytorch_model
+
+                model = load_flax_checkpoint_in_pytorch_model(model, resolved_archive_file)
+            except ImportError:
+                logger.error(
+                    "Loading a Flax model in PyTorch, requires both PyTorch and Flax to be installed. Please see "
+                    "https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation instructions."
+                )
+                raise
         else:
             # Convert old format to new format if needed from a PyTorch state_dict
             old_keys = []
