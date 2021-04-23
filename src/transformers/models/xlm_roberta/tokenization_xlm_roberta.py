@@ -95,7 +95,8 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
         sp_model_kwargs (:obj:`dict`, `optional`, defaults to :obj:`None`):
-            Will be passed to the SentencePieceProcessor ``__init__()`` method. Can be used to set:
+            Will be passed to the SentencePieceProcessor ``__init__()`` method. Can be used, among other things, to
+            set:
 
             - ``enable_sampling``: Enable subword regularization.
             - ``nbest_size``: Sampling parameters for unigram. Invalid for BPE-Dropout. nbest_size = {0,1}: No sampling
