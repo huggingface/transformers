@@ -1320,6 +1320,8 @@ class Trainer:
                 )
 
         metrics = speed_metrics("train", start_time, self.state.max_steps)
+        self.store_flos()
+        metrics["total_flos"] = self.state.total_flos
         self.log(metrics)
 
         self.control = self.callback_handler.on_train_end(args, self.state, self.control)
@@ -1562,9 +1564,6 @@ class Trainer:
         """
         if self.state.epoch is not None:
             logs["epoch"] = round(self.state.epoch, 2)
-
-        self.store_flos()
-        logs["total_flos"] = self.state.total_flos
 
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
@@ -1883,6 +1882,7 @@ class Trainer:
         )
 
         output.metrics.update(speed_metrics(metric_key_prefix, start_time, output.num_samples))
+
         self.log(output.metrics)
 
         if self.args.tpu_metrics_debug or self.args.debug:
