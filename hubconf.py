@@ -22,15 +22,16 @@ sys.path.append(SRC_DIR)
 from transformers import (
     AutoConfig,
     AutoModel,
+    AutoModelForCausalLM,
+    AutoModelForMaskedLM,
     AutoModelForQuestionAnswering,
     AutoModelForSequenceClassification,
-    AutoModelWithLMHead,
     AutoTokenizer,
     add_start_docstrings,
 )
 
 
-dependencies = ["torch", "numpy", "tokenizers", "filelock", "requests", "tqdm", "regex", "sentencepiece", "sacremoses", "importlib_metadata"]
+dependencies = ["torch", "numpy", "tokenizers", "filelock", "requests", "tqdm", "regex", "sentencepiece", "sacremoses", "importlib_metadata", "huggingface_hub"]
 
 
 @add_start_docstrings(AutoConfig.__doc__)
@@ -78,7 +79,7 @@ def model(*args, **kwargs):
             model = torch.hub.load('huggingface/transformers', 'model', 'bert-base-uncased', output_attentions=True)  # Update configuration during loading
             assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-            config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+            config = AutoConfig.from_pretrained('./tf_model/bert_tf_model_config.json')
             model = torch.hub.load('huggingface/transformers', 'model', './tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
@@ -86,22 +87,41 @@ def model(*args, **kwargs):
     return AutoModel.from_pretrained(*args, **kwargs)
 
 
-@add_start_docstrings(AutoModelWithLMHead.__doc__)
-def modelWithLMHead(*args, **kwargs):
+@add_start_docstrings(AutoModelForCausalLM.__doc__)
+def modelForCausalLM(*args, **kwargs):
     r"""
         # Using torch.hub !
         import torch
 
-        model = torch.hub.load('huggingface/transformers', 'modelWithLMHead', 'bert-base-uncased')    # Download model and configuration from huggingface.co and cache.
-        model = torch.hub.load('huggingface/transformers', 'modelWithLMHead', './test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-        model = torch.hub.load('huggingface/transformers', 'modelWithLMHead', 'bert-base-uncased', output_attentions=True)  # Update configuration during loading
+        model = torch.hub.load('huggingface/transformers', 'modelForCausalLM', 'gpt2')    # Download model and configuration from huggingface.co and cache.
+        model = torch.hub.load('huggingface/transformers', 'modelForCausalLM', './test/saved_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+        model = torch.hub.load('huggingface/transformers', 'modelForCausalLM', 'gpt2', output_attentions=True)  # Update configuration during loading
         assert model.config.output_attentions == True
         # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-        config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
-        model = torch.hub.load('huggingface/transformers', 'modelWithLMHead', './tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+        config = AutoConfig.from_pretrained('./tf_model/gpt_tf_model_config.json')
+        model = torch.hub.load('huggingface/transformers', 'modelForCausalLM', './tf_model/gpt_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
     """
-    return AutoModelWithLMHead.from_pretrained(*args, **kwargs)
+    return AutoModelForCausalLM.from_pretrained(*args, **kwargs)
+
+
+@add_start_docstrings(AutoModelForMaskedLM.__doc__)
+def modelForMaskedLM(*args, **kwargs):
+    r"""
+            # Using torch.hub !
+            import torch
+
+            model = torch.hub.load('huggingface/transformers', 'modelForMaskedLM', 'bert-base-uncased')    # Download model and configuration from huggingface.co and cache.
+            model = torch.hub.load('huggingface/transformers', 'modelForMaskedLM', './test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            model = torch.hub.load('huggingface/transformers', 'modelForMaskedLM', 'bert-base-uncased', output_attentions=True)  # Update configuration during loading
+            assert model.config.output_attentions == True
+            # Loading from a TF checkpoint file instead of a PyTorch model (slower)
+            config = AutoConfig.from_pretrained('./tf_model/bert_tf_model_config.json')
+            model = torch.hub.load('huggingface/transformers', 'modelForMaskedLM', './tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+
+        """
+
+    return AutoModelForMaskedLM.from_pretrained(*args, **kwargs)
 
 
 @add_start_docstrings(AutoModelForSequenceClassification.__doc__)
@@ -115,7 +135,7 @@ def modelForSequenceClassification(*args, **kwargs):
             model = torch.hub.load('huggingface/transformers', 'modelForSequenceClassification', 'bert-base-uncased', output_attentions=True)  # Update configuration during loading
             assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-            config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+            config = AutoConfig.from_pretrained('./tf_model/bert_tf_model_config.json')
             model = torch.hub.load('huggingface/transformers', 'modelForSequenceClassification', './tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
@@ -134,7 +154,7 @@ def modelForQuestionAnswering(*args, **kwargs):
         model = torch.hub.load('huggingface/transformers', 'modelForQuestionAnswering', 'bert-base-uncased', output_attentions=True)  # Update configuration during loading
         assert model.config.output_attentions == True
         # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-        config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+        config = AutoConfig.from_pretrained('./tf_model/bert_tf_model_config.json')
         model = torch.hub.load('huggingface/transformers', 'modelForQuestionAnswering', './tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
     """

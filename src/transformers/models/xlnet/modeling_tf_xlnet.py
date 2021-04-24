@@ -69,8 +69,8 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
         if config.d_model % config.n_head != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.d_model, config.n_head)
+                f"The hidden size ({config.d_model}) is not a multiple of the number of attention "
+                f"heads ({config.n_head}"
             )
 
         self.n_head = config.n_head
@@ -455,7 +455,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         self.word_embedding = TFSharedEmbeddings(
             config.vocab_size, config.d_model, initializer_range=config.initializer_range, name="word_embedding"
         )
-        self.layer = [TFXLNetLayer(config, name="layer_._{}".format(i)) for i in range(config.n_layer)]
+        self.layer = [TFXLNetLayer(config, name=f"layer_._{i}") for i in range(config.n_layer)]
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
         self.use_mems_eval = config.use_mems_eval
@@ -550,7 +550,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             # beg, end = klen - 1, -1
             beg, end = klen, -1
         else:
-            raise ValueError("Unknown `attn_type` {}.".format(self.attn_type))
+            raise ValueError(f"Unknown `attn_type` {self.attn_type}.")
 
         if self.bi_data:
             fwd_pos_seq = tf.range(beg, end, -1.0)
@@ -662,7 +662,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         elif self.attn_type == "bi":
             attn_mask = None
         else:
-            raise ValueError("Unsupported attention type: {}".format(self.attn_type))
+            raise ValueError(f"Unsupported attention type: {self.attn_type}")
 
         # data mask: input mask & perm mask
         assert inputs["input_mask"] is None or inputs["attention_mask"] is None, (
