@@ -612,7 +612,8 @@ For a practical usage example of this type of deployment, please, see this `post
 
 You may also try the ZeRO-3 with CPU and NVMe offload as explained further in this document.
 
-TODO: Benchmark whether we can get better performance out of ZeRO-3 vs. ZeRO-2 on a single GPU.
+TODO: Benchmark whether we can get better performance out of ZeRO-3 vs. ZeRO-2 on a single GPU, and then recommend
+ZeRO-3 config as starting one.
 
 Notes:
 
@@ -647,7 +648,7 @@ If you're using only 1 GPU, here is how you'd have to adjust your training code 
     os.environ['WORLD_SIZE'] = "1"
 
     # Now proceed as normal, plus pass the deepspeed config file
-    training_args = TrainingArguments(..., deepspeed="ds_config.json")
+    training_args = TrainingArguments(..., deepspeed="ds_config_zero3.json")
     trainer = Trainer(...)
     trainer.train()
 
@@ -663,47 +664,62 @@ cell with:
 .. code-block:: python
 
     %%bash
-    cat <<'EOT' > ds_config.json
+    cat <<'EOT' > ds_config_zero3.json
     {
         "fp16": {
-            "enabled": true,
+            "enabled": "auto",
             "loss_scale": 0,
             "loss_scale_window": 1000,
+            "initial_scale_power": 16,
             "hysteresis": 2,
             "min_loss_scale": 1
-        },
-
-        "zero_optimization": {
-            "stage": 2,
-            "allgather_partitions": true,
-            "allgather_bucket_size": 2e8,
-            "overlap_comm": true,
-            "reduce_scatter": true,
-            "reduce_bucket_size": 2e8,
-            "contiguous_gradients": true,
-            "cpu_offload": true
         },
 
         "optimizer": {
             "type": "AdamW",
             "params": {
-                "lr": 3e-5,
-                "betas": [0.8, 0.999],
-                "eps": 1e-8,
-                "weight_decay": 3e-7
+                "lr": "auto",
+                "betas": "auto",
+                "eps": "auto",
+                "weight_decay": "auto"
             }
         },
 
         "scheduler": {
             "type": "WarmupLR",
             "params": {
-                "warmup_min_lr": 0,
-                "warmup_max_lr": 3e-5,
-                "warmup_num_steps": 500
+                "warmup_min_lr": "auto",
+                "warmup_max_lr": "auto",
+                "warmup_num_steps": "auto"
             }
         },
 
+        "zero_optimization": {
+            "stage": 3,
+            "offload_optimizer": {
+                "device": "cpu",
+                "pin_memory": true
+            },
+            "offload_param": {
+                "device": "cpu",
+                "pin_memory": true
+            },
+            "overlap_comm": true,
+            "contiguous_gradients": true,
+            "sub_group_size": 1e14,
+            "reduce_bucket_size": "auto",
+            "stage3_prefetch_bucket_size": "auto",
+            "stage3_param_persistence_threshold": "auto",
+            "stage3_max_live_parameters": 1e9,
+            "stage3_max_reuse_distance": 1e9,
+            "stage3_gather_fp16_weights_on_model_save": true
+        },
+
+        "gradient_accumulation_steps": "auto",
+        "gradient_clipping": "auto",
         "steps_per_print": 2000,
+        "train_batch_size": "auto",
+        "train_micro_batch_size_per_gpu": "auto",
         "wall_clock_breakdown": false
     }
     EOT
@@ -764,48 +780,55 @@ When using DeepSpeed you always need to supply a DeepSpeed configuration file, y
 to be configured via the command line. You will find the nuances in the rest of this guide.
 
 To get an idea of what DeepSpeed configuration file looks like, here is one that activates ZeRO stage 2 features,
-enables FP16, uses ``AdamW`` optimizer and ``WarmupLR`` scheduler:
+including optimizer states cpu offload, uses ``AdamW`` optimizer and ``WarmupLR`` scheduler and will enable mixed
+precision training if ``--fp16`` is passed:
 
 .. code-block:: json
 
     {
         "fp16": {
-            "enabled": true,
+            "enabled": "auto",
             "loss_scale": 0,
             "loss_scale_window": 1000,
+            "initial_scale_power": 16,
             "hysteresis": 2,
             "min_loss_scale": 1
         },
 
-       "zero_optimization": {
-           "stage": 2,
-           "allgather_partitions": true,
-           "allgather_bucket_size": 5e8,
-           "overlap_comm": true,
-           "reduce_scatter": true,
-           "reduce_bucket_size": 5e8,
-           "contiguous_gradients": true,
-           "cpu_offload": true
-       },
+        "optimizer": {
+            "type": "AdamW",
+            "params": {
+                "lr": "auto",
+                "betas": "auto",
+                "eps": "auto",
+                "weight_decay": "auto"
+            }
+        },
 
-       "optimizer": {
-         "type": "AdamW",
-         "params": {
-           "lr": 3e-5,
-           "betas": [ 0.8, 0.999 ],
-           "eps": 1e-8,
-           "weight_decay": 3e-7
-         }
-       },
+        "scheduler": {
+            "type": "WarmupLR",
+            "params": {
+                "warmup_min_lr": "auto",
+                "warmup_max_lr": "auto",
+                "warmup_num_steps": "auto"
+            }
+        },
 
-       "scheduler": {
-         "type": "WarmupLR",
-         "params": {
-           "warmup_min_lr": 0,
-           "warmup_max_lr": 3e-5,
-           "warmup_num_steps": 500
-         }
-       }
+        "zero_optimization": {
+            "stage": 2,
+            "allgather_partitions": true,
+            "allgather_bucket_size": 2e8,
+            "overlap_comm": true,
+            "reduce_scatter": true,
+            "reduce_bucket_size": 2e8,
+            "contiguous_gradients": true,
+            "cpu_offload": true
+        },
+
+        "gradient_accumulation_steps": "auto",
+        "gradient_clipping": "auto",
+        "train_batch_size": "auto",
+        "train_micro_batch_size_per_gpu": "auto",
     }
 
 When you execute the program, DeepSpeed will log the configuration it received from the :class:`~transformers.Trainer`
@@ -839,25 +862,28 @@ or:
 Shared Configuration
 =======================================================================================================================
 
-Some configuration information is required by both the :class:`~transformers.Trainer` and DeepSpeed to function
-correctly, therefore, to prevent conflicting definitions, which could lead to hard to detect errors, we chose to
-configure those via the :class:`~transformers.Trainer` command line arguments.
 
-Therefore, the following DeepSpeed configuration params shouldn't be used with the :class:`~transformers.Trainer`:
+.. warning::
 
-* ``train_batch_size``
-* ``train_micro_batch_size_per_gpu``
-* ``gradient_accumulation_steps``
+    This section is a must-read
 
-as these will be automatically derived from the run time environment and the following 2 command line arguments:
+Some configuration values are required by both the :class:`~transformers.Trainer` and DeepSpeed to function correctly,
+therefore, to prevent conflicting definitions, which could lead to hard to detect errors, we chose to configure those
+via the :class:`~transformers.Trainer` command line arguments.
 
-.. code-block:: bash
+Additionally, some configuration values are derived automatically based on the model's configuration, so instead of
+remembering to manually adjust multiple values, it's the best to let the :class:`~transformers.Trainer` do the majority
+of configuration for you.
 
-    --per_device_train_batch_size 8 --gradient_accumulation_steps 2
+Therefore, in the rest of this guide you will find a special configuration value: ``auto``, which when set will be
+automatically replaced with the correct or most efficient value. Please feel free to choose to ignore this
+recommendation and set the values explicitly, in which case be very careful that your the
+:class:`~transformers.Trainer` arguments and DeepSpeed configurations agree. For example, are you using the same
+learning rate, or batch size, or gradient accumulation settings? if these mismatch the training may fail in very
+difficult to detect ways. You have been warned.
 
-which are always required to be supplied.
-
-Of course, you will need to adjust the values in this example to your situation.
+There are multiple other values that are specific to DeepSpeed-only and those you will have to set manually to suit
+your needs.
 
 
 
@@ -930,19 +956,19 @@ The following is an example configuration for ZeRO stage 3:
                 "pin_memory": true
             },
             "offload_param": {
-                "device": "cpu"
+                "device": "cpu",
                 "pin_memory": true
             },
             "overlap_comm": true,
             "contiguous_gradients": true,
             "sub_group_size": 1e14,
-            "reduce_bucket_size": 1e6,
-            "stage3_prefetch_bucket_size": 0.94e6,
-            "stage3_param_persistence_threshold": 1e4,
+            "reduce_bucket_size": "auto",
+            "stage3_prefetch_bucket_size": "auto",
+            "stage3_param_persistence_threshold": "auto",
             "stage3_max_live_parameters": 1e9,
             "stage3_max_reuse_distance": 1e9,
             "stage3_gather_fp16_weights_on_model_save": true
-        }
+        },
     }
 
 If you are getting OOMs, because your model or activations don't fit into the GPU memory and you have unutilized CPU
@@ -957,9 +983,6 @@ and its typically accessed much faster than normal CPU memory.
 **Performance tuning:**
 
 - ``sub_group_size``: ``1e14``
-- ``reduce_bucket_size``: ``hidden_size*hidden_size``
-- ``stage3_prefetch_bucket_size``: ``0.9 * hidden_size * hidden_size``
-- ``stage3_param_persistence_threshold``: ``10 * hidden_size``
 - ``stage3_max_live_parameters``: ``1e9``
 - ``stage3_max_reuse_distance``: ``1e9``
 
@@ -974,46 +997,23 @@ going to be used again in near future (less than ``stage3_max_reuse_distance``) 
 overhead. This is super helpful when you have activation checkpointing enabled, where we do a forward recompute and
 backward passes a a single layer granularity and want to keep the parameter in the forward recompute till the backward
 
-If you set ``reduce_bucket_size``, ``stage3_prefetch_bucket_size`` and ``stage3_param_persistence_threshold`` as
-recommended above, they will already be fairly small so you won't have to tune those much.
+The following configuration values depend on the model's hidden size:
 
-Since ``hidden_size`` varies from model to model, the ``Trainer`` will automatically set the needed value for the 3
-config parameters that contain that variable (using ``model.config.hidden_size``). Just set these values to ``0`` as
-shown below and the right configuration will be passed to DeepSpeed:
+- ``reduce_bucket_size``: ``hidden_size*hidden_size``
+- ``stage3_prefetch_bucket_size``: ``0.9 * hidden_size * hidden_size``
+- ``stage3_param_persistence_threshold``: ``10 * hidden_size``
 
-.. code-block:: json
-
-    {
-        "zero_optimization": {
-            "stage": 3,
-            "offload_optimizer": {
-                "device": "cpu",
-                "pin_memory": true
-            },
-            "offload_param": {
-                "device": "cpu"
-                "pin_memory": true
-            },
-            "overlap_comm": true,
-            "contiguous_gradients": true,
-            "sub_group_size": 1e14,
-            "reduce_bucket_size": 0,
-            "stage3_prefetch_bucket_size": 0,
-            "stage3_param_persistence_threshold": 0,
-            "stage3_max_live_parameters": 1e9,
-            "stage3_max_reuse_distance": 1e9,
-            "stage3_gather_fp16_weights_on_model_save": true
-        }
-    }
+therefore set these values to ``auto`` and the :class:`~transformers.Trainer` will automatically assign the recommended
+values. But, of course, feel free to set these explicitly as well.
 
 ``stage3_gather_fp16_weights_on_model_save`` enables model fp16 weights consolidation when model gets saved. With large
 models and multiple GPUs this is an expensive operation both in terms of memory and speed. It's currently required if
 you plan to resume the training. Watch out for future updates that will remove this limitation and make things more
 flexible.
 
-Note: if you're migrating from ZeRO-2 configuration that: ``allgather_partitions``, ``allgather_bucket_size`` and
+If you're migrating from ZeRO-2 configuration note that ``allgather_partitions``, ``allgather_bucket_size`` and
 ``reduce_scatter`` configuration parameters are not used in ZeRO-3. If you keep these in the config file they will just
-be ignored.
+be ignored. Make sure to remove ``cpu_offload`` though, since it has been deprecated in ZeRO-3.
 
 
 
@@ -1058,9 +1058,9 @@ The following configuration example enables NVMe to offload both optimizer state
             "overlap_comm": true,
             "contiguous_gradients": true,
             "sub_group_size": 1e14,
-            "reduce_bucket_size": 0,
-            "stage3_prefetch_bucket_size": 0,
-            "stage3_param_persistence_threshold": 0,
+            "reduce_bucket_size": "auto",
+            "stage3_prefetch_bucket_size": "auto",
+            "stage3_param_persistence_threshold": "auto",
             "stage3_max_live_parameters": 1e9,
             "stage3_max_reuse_distance": 1e9,
             "stage3_gather_fp16_weights_on_model_save": true
@@ -1107,18 +1107,37 @@ these help you to trade scalability for speed depending on your needs.
 ZeRO-2 Example
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-Here is a full ZeRO-2 all-enabled configuration file ``ds_config_zero2.json``:
+Here is a full ZeRO-2 auto-configuration file ``ds_config_zero2.json``:
 
 .. code-block:: json
 
     {
         "fp16": {
-            "enabled": true,
+            "enabled": "auto",
             "loss_scale": 0,
             "loss_scale_window": 1000,
             "initial_scale_power": 16,
             "hysteresis": 2,
             "min_loss_scale": 1
+        },
+
+        "optimizer": {
+            "type": "AdamW",
+            "params": {
+                "lr": "auto",
+                "betas": "auto",
+                "eps": "auto",
+                "weight_decay": "auto"
+            }
+        },
+
+        "scheduler": {
+            "type": "WarmupLR",
+            "params": {
+                "warmup_min_lr": "auto",
+                "warmup_max_lr": "auto",
+                "warmup_num_steps": "auto"
+            }
         },
 
         "zero_optimization": {
@@ -1130,6 +1149,30 @@ Here is a full ZeRO-2 all-enabled configuration file ``ds_config_zero2.json``:
             "reduce_bucket_size": 2e8,
             "contiguous_gradients": true,
             "cpu_offload": true
+        },
+
+        "gradient_accumulation_steps": "auto",
+        "gradient_clipping": "auto",
+        "steps_per_print": 2000,
+        "train_batch_size": "auto",
+        "train_micro_batch_size_per_gpu": "auto",
+        "wall_clock_breakdown": false
+    }
+
+
+Here is a full ZeRO-2 all-enabled manually set configuration file. It is here mainly for you to see what the typical
+values look like, but we highly recommend using the one with multiple ``auto`` settings in it.
+
+.. code-block:: json
+
+    {
+        "fp16": {
+            "enabled": true,
+            "loss_scale": 0,
+            "loss_scale_window": 1000,
+            "initial_scale_power": 16,
+            "hysteresis": 2,
+            "min_loss_scale": 1
         },
 
         "optimizer": {
@@ -1151,6 +1194,17 @@ Here is a full ZeRO-2 all-enabled configuration file ``ds_config_zero2.json``:
             }
         },
 
+        "zero_optimization": {
+            "stage": 2,
+            "allgather_partitions": true,
+            "allgather_bucket_size": 2e8,
+            "overlap_comm": true,
+            "reduce_scatter": true,
+            "reduce_bucket_size": 2e8,
+            "contiguous_gradients": true,
+            "cpu_offload": true
+        },
+
         "steps_per_print": 2000,
         "wall_clock_breakdown": false
     }
@@ -1160,7 +1214,71 @@ Here is a full ZeRO-2 all-enabled configuration file ``ds_config_zero2.json``:
 ZeRO-3 Example
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-Here is a full ZeRO-3 all-enabled configuration file ``ds_config_zero3.json``:
+Here is a full ZeRO-3 auto-configuration file ``ds_config_zero3.json``:
+
+
+.. code-block:: json
+
+    {
+        "fp16": {
+            "enabled": "auto",
+            "loss_scale": 0,
+            "loss_scale_window": 1000,
+            "initial_scale_power": 16,
+            "hysteresis": 2,
+            "min_loss_scale": 1
+        },
+
+        "optimizer": {
+            "type": "AdamW",
+            "params": {
+                "lr": "auto",
+                "betas": "auto",
+                "eps": "auto",
+                "weight_decay": "auto"
+            }
+        },
+
+        "scheduler": {
+            "type": "WarmupLR",
+            "params": {
+                "warmup_min_lr": "auto",
+                "warmup_max_lr": "auto",
+                "warmup_num_steps": "auto"
+            }
+        },
+
+        "zero_optimization": {
+            "stage": 3,
+            "offload_optimizer": {
+                "device": "cpu",
+                "pin_memory": true
+            },
+            "offload_param": {
+                "device": "cpu",
+                "pin_memory": true
+            },
+            "overlap_comm": true,
+            "contiguous_gradients": true,
+            "sub_group_size": 1e14,
+            "reduce_bucket_size": "auto",
+            "stage3_prefetch_bucket_size": "auto",
+            "stage3_param_persistence_threshold": "auto",
+            "stage3_max_live_parameters": 1e9,
+            "stage3_max_reuse_distance": 1e9,
+            "stage3_gather_fp16_weights_on_model_save": true
+        },
+
+        "gradient_accumulation_steps": "auto",
+        "gradient_clipping": "auto",
+        "steps_per_print": 2000,
+        "train_batch_size": "auto",
+        "train_micro_batch_size_per_gpu": "auto",
+        "wall_clock_breakdown": false
+    }
+
+Here is a full ZeRO-3 all-enabled manually set configuration file. It is here mainly for you to see what the typical
+values look like, but we highly recommend using the one with multiple ``auto`` settings in it.
 
 .. code-block:: json
 
@@ -1172,6 +1290,25 @@ Here is a full ZeRO-3 all-enabled configuration file ``ds_config_zero3.json``:
             "initial_scale_power": 16,
             "hysteresis": 2,
             "min_loss_scale": 1
+        },
+
+        "optimizer": {
+            "type": "AdamW",
+            "params": {
+                "lr": 3e-5,
+                "betas": [0.8, 0.999],
+                "eps": 1e-8,
+                "weight_decay": 3e-7
+            }
+        },
+
+        "scheduler": {
+            "type": "WarmupLR",
+            "params": {
+                "warmup_min_lr": 0,
+                "warmup_max_lr": 3e-5,
+                "warmup_num_steps": 500
+            }
         },
 
         "zero_optimization": {
@@ -1193,25 +1330,6 @@ Here is a full ZeRO-3 all-enabled configuration file ``ds_config_zero3.json``:
             "stage3_max_live_parameters": 1e9,
             "stage3_max_reuse_distance": 1e9,
             "stage3_gather_fp16_weights_on_model_save": true
-        },
-
-        "optimizer": {
-            "type": "AdamW",
-            "params": {
-                "lr": 3e-5,
-                "betas": [0.8, 0.999],
-                "eps": 1e-8,
-                "weight_decay": 3e-7
-            }
-        },
-
-        "scheduler": {
-            "type": "WarmupLR",
-            "params": {
-                "warmup_min_lr": 0,
-                "warmup_max_lr": 3e-5,
-                "warmup_num_steps": 500
-            }
         },
 
         "steps_per_print": 2000,
@@ -1249,7 +1367,35 @@ If you don't configure the ``optimizer`` entry in the configuration file, the :c
 automatically set it to ``AdamW`` and will use the supplied values or the defaults for the following command line
 arguments: ``--learning_rate``, ``--adam_beta1``, ``--adam_beta2``, ``--adam_epsilon`` and ``--weight_decay``.
 
-Here is an example of the pre-configured ``optimizer`` entry for ``AdamW``:
+Here is an example of the auto-configured ``optimizer`` entry for ``AdamW``:
+
+.. code-block:: json
+
+    {
+       "optimizer": {
+           "type": "AdamW",
+           "params": {
+             "lr": "auto",
+             "betas": "auto",
+             "eps": "auto",
+             "weight_decay": "auto"
+           }
+         }
+    }
+
+
+Note that the command line arguments will set the values in the configuration file. This is so that there is one
+definitive source of the values and to avoid hard to find errors when for example, the learning rate is set to
+different values in different places. Command line rules. The values that get overridden are:
+
+- ``lr`` with the value of ``--learning_rate``
+- ``betas`` with the value of ``--adam_beta1 --adam_beta2``
+- ``eps`` with the value of ``--adam_epsilon``
+- ``weight_decay`` with the value of ``--weight_decay``
+
+Therefore please remember to tune the shared hyperparameters on the command line.
+
+You can also set the values explicitly:
 
 .. code-block:: json
 
@@ -1265,29 +1411,26 @@ Here is an example of the pre-configured ``optimizer`` entry for ``AdamW``:
          }
     }
 
-Note that the command line arguments will override the values in the configuration file. This is so that there is one
-definitive source of the values and to avoid hard to find errors when for example, the learning rate is set to
-different values in different places. Command line rules. The values that get overridden are:
+But then you're on your own synchronizing the :class:`~transformers.Trainer` command line arguments and the DeepSpeed
+configuration.
 
-- ``lr`` with the value of ``--learning_rate``
-- ``betas`` with the value of ``--adam_beta1 --adam_beta2``
-- ``eps`` with the value of ``--adam_epsilon``
-- ``weight_decay`` with the value of ``--weight_decay``
+If you want to use another optimizer which is not listed above, you will have to add to the top level configuration.
 
-Therefore please remember to tune the shared hyperparameters on the command line.
+.. code-block:: json
 
-If you want to use another optimizer which is not listed above, you will have to add ``"zero_allow_untested_optimizer":
-true`` to the top level configuration.
+    {
+       "zero_allow_untested_optimizer": true
+    }
 
-If you want to use one of the officially supported optimizers, configure them explicitly in the configuration file, and
-make sure to adjust the values. e.g. if use Adam you will want ``weight_decay`` around ``0.01``.
+Similarly to ``AdamW``, you can configure other officially supported optimizers. Just remember that may have different
+config values. e.g. for Adam you will want ``weight_decay`` around ``0.01``.
 
 
 Scheduler
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-DeepSpeed supports LRRangeTest, OneCycle, WarmupLR and WarmupDecayLR LR schedulers. The full documentation is `here
-<https://www.deepspeed.ai/docs/config-json/#scheduler-parameters>`__.
+DeepSpeed supports ``LRRangeTest``, ``OneCycle``, ``WarmupLR`` and ``WarmupDecayLR`` learning rate schedulers. The full
+documentation is `here <https://www.deepspeed.ai/docs/config-json/#scheduler-parameters>`__.
 
 Here is where the schedulers overlap between 🤗 Transformers and DeepSpeed:
 
@@ -1295,12 +1438,37 @@ Here is where the schedulers overlap between 🤗 Transformers and DeepSpeed:
 * ``WarmupDecayLR`` via ``--lr_scheduler_type linear``. This is also the default value for ``--lr_scheduler_type``,
   therefore, if you don't configure the scheduler this is scheduler that will get configured by default.
 
-
 If you don't configure the ``scheduler`` entry in the configuration file, the :class:`~transformers.Trainer` will use
 the values of ``--lr_scheduler_type``, ``--learning_rate`` and ``--warmup_steps`` to configure a 🤗 Transformers version
 of it.
 
-Here is an example of the pre-configured ``scheduler`` entry for ``WarmupLR``:
+Here is an example of the auto-configured ``scheduler`` entry for ``WarmupLR``:
+
+.. code-block:: json
+
+    {
+       "scheduler": {
+             "type": "WarmupLR",
+             "params": {
+                 "warmup_min_lr": "auto",
+                 "warmup_max_lr": "auto",
+                 "warmup_num_steps": "auto"
+             }
+         }
+    }
+
+Since `"auto"` is used the :class:`~transformers.Trainer` arguments will set the correct values in the configuration
+file. This is so that there is one definitive source of the values and to avoid hard to find errors when, for example,
+the learning rate is set to different values in different places. Command line rules. The values that get set are:
+
+- ``warmup_min_lr`` with the value of ``0``
+- ``warmup_max_lr`` with the value of ``--learning_rate``
+- ``warmup_num_steps`` with the value of ``--warmup_steps``
+- ``total_num_steps`` with either the value of ``--max_steps`` or if it is not provided, derived automatically at run
+  time based on the environment and the size of the dataset and other command line arguments (needed for
+  ``WarmupDecayLR``).
+
+You can, of course, take over any or all of the configuration values and set those yourself:
 
 .. code-block:: json
 
@@ -1315,17 +1483,8 @@ Here is an example of the pre-configured ``scheduler`` entry for ``WarmupLR``:
          }
     }
 
-Note that the command line arguments will override the values in the configuration file. This is so that there is one
-definitive source of the values and to avoid hard to find errors when for example, the learning rate is set to
-different values in different places. Command line rules. The values that get overridden are:
-
-- ``warmup_max_lr`` with the value of ``--learning_rate``
-- ``warmup_num_steps`` with the value of ``--warmup_steps``
-- ``total_num_steps`` with either the value of ``--max_steps`` or if it is not provided, derived automatically at run
-  time based on the environment and the size of the dataset and other command line arguments (needed for
-  ``WarmupDecayLR``).
-
-Therefore please remember to tune the shared hyperparameters on the command line.
+But then you're on your own synchronizing the :class:`~transformers.Trainer` command line arguments and the DeepSpeed
+configuration.
 
 For example, for ``WarmupDecayLR``, you can use the following entry:
 
@@ -1335,16 +1494,16 @@ For example, for ``WarmupDecayLR``, you can use the following entry:
        "scheduler": {
              "type": "WarmupDecayLR",
              "params": {
-                 "total_num_steps": 10,
+                 "total_num_steps": "auto",
+                 "warmup_min_lr": "auto",
+                 "warmup_max_lr": "auto",
+                 "warmup_num_steps": "auto"
                  "last_batch_iteration": -1,
-                 "warmup_min_lr": 0,
-                 "warmup_max_lr": 0.001,
-                 "warmup_num_steps": 1000
              }
          }
     }
 
-and ``warmup_max_lr``, ``warmup_num_steps`` and ``total_num_steps`` will be corrected at loading time.
+and ``total_num_steps`, ``warmup_max_lr``, ``warmup_num_steps`` and ``total_num_steps`` will be set at loading time.
 
 
 
@@ -1353,10 +1512,30 @@ Automatic Mixed Precision
 
 You can use automatic mixed precision with either a pytorch-like AMP way or the apex-like way:
 
-If you want to use an equivalent of the Pytorch native amp, you can either configure the ``fp16`` entry in the
-configuration file, or use the following command line arguments: ``--fp16 --fp16_backend amp``.
+To configure pytorch AMP-like mode set:
 
-Here is an example of the ``fp16`` configuration:
+.. code-block:: json
+
+    {
+        "fp16": {
+            "enabled": "auto",
+            "loss_scale": 0,
+            "loss_scale_window": 1000,
+            "initial_scale_power": 16,
+            "hysteresis": 2,
+            "min_loss_scale": 1
+        },
+    }
+
+and the :class:`~transformers.Trainer` will automatically enable or disable it based on the value of
+``args.fp16_backend``. The rest of config values are up to you.
+
+This mode gets enabled when ``--fp16 --fp16_backend amp`` command line args are passed.
+
+XXX: However, at the moment DeepSpeed doesn't supported fp32 mode, though it will become available soon. Until then it
+will be always set to ``true``.
+
+You can also enable/disable this mode explicitly:
 
 .. code-block:: json
 
@@ -1365,17 +1544,32 @@ Here is an example of the ``fp16`` configuration:
             "enabled": true,
             "loss_scale": 0,
             "loss_scale_window": 1000,
+            "initial_scale_power": 16,
             "hysteresis": 2,
             "min_loss_scale": 1
         },
     }
 
+But then you're on your own synchronizing the :class:`~transformers.Trainer` command line arguments and the DeepSpeed
+configuration.
+
 Here is the `documentation <https://www.deepspeed.ai/docs/config-json/#fp16-training-options>`__.
 
-If you want to use NVIDIA's apex instead, you can can either configure the ``amp`` entry in the configuration file, or
-use the following command line arguments: ``--fp16 --fp16_backend apex --fp16_opt_level 01``.
+To configure apex AMP-like mode set:
 
-Here is an example of the ``amp`` configuration:
+.. code-block:: json
+
+    "amp": {
+        "enabled": "auto",
+        "opt_level": "auto",
+    }
+
+and the :class:`~transformers.Trainer` will automatically configure it based on the values of ``args.fp16_backend`` and
+``args.fp16_opt_level``.
+
+This mode gets enabled when ``--fp16 --fp16_backend apex --fp16_opt_level 01`` command line args are passed.
+
+You can also configure this mode explicitly:
 
 .. code-block:: json
 
@@ -1386,6 +1580,9 @@ Here is an example of the ``amp`` configuration:
         }
     }
 
+But then you're on your own synchronizing the :class:`~transformers.Trainer` command line arguments and the DeepSpeed
+configuration.
+
 Here is the `documentation
 <https://www.deepspeed.ai/docs/config-json/#automatic-mixed-precision-amp-training-options>`__.
 
@@ -1393,7 +1590,17 @@ Here is the `documentation
 Gradient Accumulation
 =======================================================================================================================
 
-While normally DeepSpeed gets gradient accumulation configured with:
+To configure gradient accumulation set:
+
+.. code-block:: json
+
+    {
+        "gradient_accumulation_steps": "auto"
+    }
+
+and the :class:`~transformers.Trainer` will automatically set it to the value of ``args.gradient_accumulation_steps``.
+
+You can also set the value explicitly:
 
 .. code-block:: json
 
@@ -1401,28 +1608,33 @@ While normally DeepSpeed gets gradient accumulation configured with:
         "gradient_accumulation_steps": 3,
     }
 
-in this case, to enable gradient accumulation, pass the command line ``--gradient_accumulation_steps 3`` argument as
-normal and it will get injected into the DeepSpeed configuration.
-
-If you try to add it directly to the configuration file, you will receive an error from the ``Trainer`` - this is
-because this setting is needed by the ``Trainer`` too, and so this approach ensures that there is a single way of
-setting this value and thus avoid potential subtle errors.
-
+But then you're on your own synchronizing the :class:`~transformers.Trainer` command line arguments and the DeepSpeed
+configuration.
 
 
 Gradient Clipping
 =======================================================================================================================
 
-If you don't configure the ``gradient_clipping`` entry in the configuration file, the :class:`~transformers.Trainer`
-will use the value of the ``--max_grad_norm`` command line argument to set it.
+To configure gradient gradient clipping set:
 
-Here is an example of the ``gradient_clipping`` configuration:
+.. code-block:: json
+
+    {
+        "gradient_clipping": "auto"
+    }
+
+and the :class:`~transformers.Trainer` will automatically set it to the value of ``args.max_grad_norm``.
+
+You can also set the value explicitly:
 
 .. code-block:: json
 
     {
         "gradient_clipping": 1.0,
     }
+
+But then you're on your own synchronizing the :class:`~transformers.Trainer` command line arguments and the DeepSpeed
+configuration.
 
 
 
@@ -1443,6 +1655,16 @@ therefore ``"stage3_gather_fp16_weights_on_model_save": true`` is required to ge
 version of the weights. If this setting is ``False`` ``pytorch_model.bin`` won't be created. This is because by default
 DeepSpeed's ``state_dict`` contains a placeholder and not the real weights. If we were to save this ``state_dict`` it
 won't be possible to load it back.
+
+
+.. code-block:: json
+
+    {
+        "zero_optimization": {
+            "stage3_gather_fp16_weights_on_model_save": true
+        }
+    }
+
 
 **FP32 Weights:**
 

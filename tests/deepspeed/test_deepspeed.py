@@ -176,23 +176,10 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_zero2_dict)
             with self.assertRaises(Exception) as context:
                 trainer.train()
-        self.assertTrue("HF scheduler + DeepSpeed optimizer combination is not possible" in str(context.exception))
-
-    def test_hf_optimizer_with_offload(self):
-        # must not allow non-DS optimizer when using ZERO-offload
-        with mockenv_context(**self.dist_env_1_gpu):
-            ds_config_zero2_dict = self.get_config_dict(ZERO2)
-            del ds_config_zero2_dict["optimizer"]  # force default HF Trainer optimizer
-            ds_config_zero2_dict["zero_optimization"]["cpu_offload"] = True
-            # sanity check - should the default config change
-            assert (
-                "cpu_offload" in ds_config_zero2_dict["zero_optimization"]
-                and ds_config_zero2_dict["zero_optimization"]["cpu_offload"] is True
-            ), "ensure the config is set up correctly"
-            trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_zero2_dict)
-            with self.assertRaises(Exception) as context:
-                trainer.train()
-        self.assertTrue("ZeRO Offload can only work with DeepSpeed optimizers" in str(context.exception))
+        self.assertTrue(
+            "HF scheduler + DeepSpeed optimizer combination is not possible" in str(context.exception),
+            f"got exception: {context.exception}",
+        )
 
     def test_stage3_nvme_offload(self):
 
@@ -210,6 +197,23 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         assert "DeepSpeed info" in cs.out, "expected DeepSpeed logger output but got none"
 
     # --- These tests need to run on both zero stages --- #
+
+    @parameterized.expand(stages)
+    def test_hf_optimizer_with_offload(self, stage):
+        # must not allow non-DS optimizer when using ZERO-offload
+        with mockenv_context(**self.dist_env_1_gpu):
+            ds_config_dict = self.get_config_dict(stage)
+            del ds_config_dict["optimizer"]  # force default HF Trainer optimizer
+            # force cpu offload
+            if stage == "stage2":
+                ds_config_dict["zero_optimization"]["cpu_offload"] = True
+            elif stage == "stage3":
+                ds_config_dict["zero_optimization"]["offload_optimizer"]["device"] = "cpu"
+            trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_dict)
+            with self.assertRaises(Exception) as context:
+                trainer.train()
+        self.assertTrue("ZeRO Offload can only work with DeepSpeed optimizers" in str(context.exception))
+
     @parameterized.expand(stages)
     def test_fake_notebook_no_launcher(self, stage):
         # this setup emulates a notebook where a launcher needs to be emulated by hand
