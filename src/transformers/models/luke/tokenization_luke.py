@@ -151,7 +151,7 @@ class LukeTokenizer(RobertaTokenizer):
     This tokenizer inherits from :class:`~transformers.RobertaTokenizer` which contains most of the main methods. Users
     should refer to this superclass for more information regarding those methods. Compared to
     :class:`~transformers.RobertaTokenizer`, :class:`~transformers.LukeTokenizer` also creates entity sequences, namely
-    :obj:`entity_ids`, :obj:`entity_attention_mask`, :obj:`entity_token_type_ids` and :obj:`entity_position_ids` to be
+    :obj:`entity_ids`, :obj:`entity_attention_mask`, :obj:`entity_token_type_ids`, and :obj:`entity_position_ids` to be
     used by the LUKE model.
 
     Args:
@@ -162,19 +162,19 @@ class LukeTokenizer(RobertaTokenizer):
         entity_vocab_file (:obj:`str`):
             Path to the entity vocabulary file.
         task (:obj:`str`, `optional`):
-            Task for which you want to prepare sequences. One of obj:`"entity_classification"` or
-            obj:`"entity_pair_classification"`. If you specify this argument, the entity sequence is automatically
-            created based on the given entity spans.
+            Task for which you want to prepare sequences. One of :obj:`"entity_classification"` or
+            :obj:`"entity_pair_classification"`. If you specify this argument, the entity sequence is automatically
+            created based on the given entity span(s).
         max_entity_length (:obj:`int`, `optional`, defaults to 32):
             The maximum length of :obj:`entity_ids`.
         max_mention_length (:obj:`int`, `optional`, defaults to 30):
             The maximum number of tokens inside an entity span.
         entity_token_1 (:obj:`str`, `optional`, defaults to :obj:`<ent>`):
-            The special token representing an entity span. This token is only used when ``task`` is set to
-            obj:`"entity_classification"` or obj:`"entity_pair_classification"`.
+            The special token used to represent an entity span in a word token sequence. This token is only used when
+            ``task`` is set to :obj:`"entity_classification"` or :obj:`"entity_pair_classification"`.
         entity_token_2 (:obj:`str`, `optional`, defaults to :obj:`<ent2>`):
-            The special token representing an entity span. This token is only used when ``task`` is set to
-            obj:`"entity_pair_classification"`.
+            The special token used to represent an entity span in a word token sequence. This token is only used when
+            ``task`` is set to :obj:`"entity_pair_classification"`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -277,15 +277,15 @@ class LukeTokenizer(RobertaTokenizer):
                 tokenizer does not support tokenization based on pretokenized strings.
             entity_spans (:obj:`List[Tuple[int, int]]`, :obj:`List[List[Tuple[int, int]]]`, `optional`):
                 The sequence or batch of sequences of entity spans to be encoded. Each sequence consists of tuples each
-                with two integers denoting start and end positions of entities. If you specify
-                obj:`"entity_classification"` or obj:`"entity_pair_classification"` as the ``task`` argument in the
+                with two integers denoting character-based start and end positions of entities. If you specify
+                :obj:`"entity_classification"` or :obj:`"entity_pair_classification"` as the ``task`` argument in the
                 constructor, the length of each sequence must be 1 or 2, respectively. If you specify ``entities``, the
                 length of each sequence must be equal to the length of each sequence of ``entities``.
             entity_spans_pair (:obj:`List[Tuple[int, int]]`, :obj:`List[List[Tuple[int, int]]]`, `optional`):
                 The sequence or batch of sequences of entity spans to be encoded. Each sequence consists of tuples each
-                with two integers denoting start and end positions of entities. If you specify the ``task`` argument in
-                the constructor, this argument is ignored. If you specify ``entities_pair``, the length of each
-                sequence must be equal to the length of each sequence of ``entities_pair``.
+                with two integers denoting character-based start and end positions of entities. If you specify the
+                ``task`` argument in the constructor, this argument is ignored. If you specify ``entities_pair``, the
+                length of each sequence must be equal to the length of each sequence of ``entities_pair``.
             entities (:obj:`List[str]`, :obj:`List[List[str]]`, `optional`):
                 The sequence or batch of sequences of entities to be encoded. Each sequence consists of strings
                 representing entities, i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., New
@@ -422,17 +422,17 @@ class LukeTokenizer(RobertaTokenizer):
                 The first sequence to be encoded. Each sequence must be a string.
             text_pair (:obj:`str`):
                 The second sequence to be encoded. Each sequence must be a string.
-            entity_spans (:obj:`List[Tuple[int, int]]`, obj:`List[List[Tuple[int, int]]]`, `optional`)::
+            entity_spans (:obj:`List[Tuple[int, int]]`, :obj:`List[List[Tuple[int, int]]]`, `optional`)::
                 The first sequence of entity spans to be encoded. The sequence consists of tuples each with two
-                integers denoting start and end positions of entities. If you specify obj:`"entity_classification"` or
-                obj:`"entity_pair_classification"` as the ``task`` argument in the constructor, the length of each
-                sequence must be 1 or 2, respectively. If you specify ``entities``, the length of the sequence must be
-                equal to the length of ``entities``.
-            entity_spans_pair (:obj:`List[Tuple[int, int]]`, obj:`List[List[Tuple[int, int]]]`, `optional`)::
+                integers denoting character-based start and end positions of entities. If you specify
+                :obj:`"entity_classification"` or :obj:`"entity_pair_classification"` as the ``task`` argument in the
+                constructor, the length of each sequence must be 1 or 2, respectively. If you specify ``entities``,
+                the length of the sequence must be equal to the length of ``entities``.
+            entity_spans_pair (:obj:`List[Tuple[int, int]]`, :obj:`List[List[Tuple[int, int]]]`, `optional`)::
                 The second sequence of entity spans to be encoded. The sequence consists of tuples each with two
-                integers denoting start and end positions of entities. If you specify the ``task`` argument in the
-                constructor, this argument is ignored. If you specify ``entities_pair``, the length of the sequence
-                must be equal to the length of ``entities_pair``.
+                integers denoting character-based start and end positions of entities. If you specify the ``task``
+                argument in the constructor, this argument is ignored. If you specify ``entities_pair``, the length of
+                the sequence must be equal to the length of ``entities_pair``.
             entities (:obj:`List[str]` `optional`)::
                 The first sequence of entities to be encoded. The sequence consists of strings representing entities,
                 i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., New York). This argument is
@@ -440,7 +440,7 @@ class LukeTokenizer(RobertaTokenizer):
                 equal to the length of ``entity_spans``. If you specify ``entity_spans`` without specifying this
                 argument, the entity sequence is automatically constructed by filling it with the [MASK] special
                 entities.
-            entities_pair (:obj:`List[str]`, obj:`List[List[str]]`, `optional`)::
+            entities_pair (:obj:`List[str]`, :obj:`List[List[str]]`, `optional`)::
                 The second sequence of entities to be encoded. The sequence consists of strings representing entities,
                 i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., New York). This argument is
                 ignored if you specify the ``task`` argument in the constructor. The length of the sequence must be

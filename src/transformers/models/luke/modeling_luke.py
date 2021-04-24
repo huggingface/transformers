@@ -117,9 +117,9 @@ class EntityClassificationOutput(ModelOutput):
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
+            Classification loss.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+            Classification scores (before SoftMax).
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
@@ -148,9 +148,9 @@ class EntityPairClassificationOutput(ModelOutput):
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
+            Classification loss.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+            Classification scores (before SoftMax).
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
@@ -179,9 +179,9 @@ class EntitySpanClassificationOutput(ModelOutput):
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
+            Classification loss.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+            Classification scores (before SoftMax).
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
@@ -873,7 +873,7 @@ class LukeModel(LukePreTrainedModel):
             >>> word_last_hidden_state = outputs.last_hidden_state
             >>> entity_last_hidden_state = outputs.entity_last_hidden_state
 
-            # Input Wikipedia entities to obtain enriched contextualized representations.
+            # Input Wikipedia entities to obtain enriched contextualized representations of word tokens.
             >>> text = "Beyoncé lives in New York."
             >>> entities = ["Beyoncé", "New York City"]  # Wikipedia entity titles corresponding to the entity mentions "Beyoncé" and "New York"
             >>> entity_spans = [(0, 7), (17, 25)]  # character-based entity spans corresponding to "Beyoncé" and "New York"
@@ -1052,7 +1052,7 @@ class LukeForEntityClassification(LukePreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)` or :obj:`(batch_size, num_labels), `optional`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)` or :obj:`(batch_size, num_labels)`, `optional`):
             Labels for computing the classification loss. If the shape is :obj:`(batch_size,)`, the cross entropy loss
             is used for the single-label classification. In this case, labels should contain the indices that should be
             in :obj:`[0, ..., config.num_labels - 1]`. If the shape is :obj:`(batch_size, num_labels)`, the binary
@@ -1162,7 +1162,7 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)` or :obj:`(batch_size, num_labels), `optional`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)` or :obj:`(batch_size, num_labels)`, `optional`):
             Labels for computing the classification loss. If the shape is :obj:`(batch_size,)`, the cross entropy loss
             is used for the single-label classification. In this case, labels should contain the indices that should be
             in :obj:`[0, ..., config.num_labels - 1]`. If the shape is :obj:`(batch_size, num_labels)`, the binary
@@ -1282,7 +1282,7 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
         entity_end_positions (:obj:`torch.LongTensor`):
             The end positions of entities in the word token sequence.
 
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, entity_length)` or :obj:`(batch_size, entity_length, num_labels), `optional`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, entity_length)` or :obj:`(batch_size, entity_length, num_labels)`, `optional`):
             Labels for computing the classification loss. If the shape is :obj:`(batch_size, entity_length)`, the cross
             entropy loss is used for the single-label classification. In this case, labels should contain the indices
             that should be in :obj:`[0, ..., config.num_labels - 1]`. If the shape is :obj:`(batch_size, entity_length,
