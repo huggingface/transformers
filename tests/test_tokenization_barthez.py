@@ -78,7 +78,7 @@ class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_subword_regularization_tokenizer(self):
         # Subword regularization is only available for the slow tokenizer.
-        tokenizer = BarthezTokenizer.from_pretrained(
+        tokenizer = tokenizer_class.from_pretrained(
             "moussaKam/mbarthez", sp_model_kwargs={"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
         )
 
