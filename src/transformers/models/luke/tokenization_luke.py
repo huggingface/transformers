@@ -133,6 +133,10 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 
               `What are attention masks? <../glossary.html#attention-mask>`__
 
+            - **entity_start_positions** -- List of the start positions of entities in the word token sequence
+              (when :obj:`task="entity_span_classification"`).
+            - **entity_end_positions** -- List of the end positions of entities in the word token sequence
+              (when :obj:`task="entity_span_classification"`).
             - **overflowing_tokens** -- List of overflowing tokens sequences (when a :obj:`max_length` is specified and
               :obj:`return_overflowing_tokens=True`).
             - **num_truncated_tokens** -- Number of tokens truncated (when a :obj:`max_length` is specified and
@@ -162,9 +166,9 @@ class LukeTokenizer(RobertaTokenizer):
         entity_vocab_file (:obj:`str`):
             Path to the entity vocabulary file.
         task (:obj:`str`, `optional`):
-            Task for which you want to prepare sequences. One of :obj:`"entity_classification"` or
-            :obj:`"entity_pair_classification"`. If you specify this argument, the entity sequence is automatically
-            created based on the given entity span(s).
+            Task for which you want to prepare sequences. One of :obj:`"entity_classification"`,
+            :obj:`"entity_pair_classification"`, or :obj:`"entity_span_classification"`. If you specify this argument,
+            the entity sequence is automatically created based on the given entity span(s).
         max_entity_length (:obj:`int`, `optional`, defaults to 32):
             The maximum length of :obj:`entity_ids`.
         max_mention_length (:obj:`int`, `optional`, defaults to 30):
@@ -224,7 +228,7 @@ class LukeTokenizer(RobertaTokenizer):
             self.entity_vocab = json.load(entity_vocab_handle)
 
         self.task = task
-        if task is None:
+        if task is None or task == "entity_span_classification":
             self.max_entity_length = max_entity_length
         elif task == "entity_classification":
             self.max_entity_length = 1
@@ -232,7 +236,7 @@ class LukeTokenizer(RobertaTokenizer):
             self.max_entity_length = 2
         else:
             raise ValueError(
-                f"Task {task} not supported. Select task from ['entity_classification', 'entity_pair_classification'] only."
+                f"Task {task} not supported. Select task from ['entity_classification', 'entity_pair_classification', 'entity_span_classification'] only."
             )
 
         self.max_mention_length = max_mention_length
@@ -900,6 +904,16 @@ class LukeTokenizer(RobertaTokenizer):
                 first_ids = first_ids[:entity_token_end] + [special_token_id] + first_ids[entity_token_end:]
                 first_ids = first_ids[:entity_token_start] + [special_token_id] + first_ids[entity_token_start:]
 
+        elif self.task == "entity_span_classification":
+            mask_entity_id = self.entity_vocab["[MASK]"]
+
+            assert isinstance(entity_spans, list) and isinstance(
+                entity_spans[0], tuple
+            ), "Entity spans should be provided as a list of tuples, each tuple containing the start and end character indices of an entity"
+
+            first_ids, first_entity_token_spans = get_input_ids_and_entity_token_spans(text, entity_spans)
+            first_entity_ids = [mask_entity_id] * len(entity_spans)
+
         else:
             raise ValueError(f"Task {self.task} not supported")
 
@@ -1165,6 +1179,8 @@ class LukeTokenizer(RobertaTokenizer):
             final_entity_ids = valid_entity_ids + valid_pair_entity_ids if valid_pair_entity_ids else valid_entity_ids
             encoded_inputs["entity_ids"] = list(final_entity_ids)
             entity_position_ids = []
+            entity_start_positions = []
+            entity_end_positions = []
             for (token_spans, offset) in (
                 (valid_entity_token_spans, entity_token_offset),
                 (valid_pair_entity_token_spans, pair_entity_token_offset),
@@ -1176,8 +1192,13 @@ class LukeTokenizer(RobertaTokenizer):
                         position_ids = list(range(start, end))[: self.max_mention_length]
                         position_ids += [-1] * (self.max_mention_length - end + start)
                         entity_position_ids.append(position_ids)
+                        entity_start_positions.append(start)
+                        entity_end_positions.append(end - 1)
 
             encoded_inputs["entity_position_ids"] = entity_position_ids
+            if self.task == "entity_span_classification":
+                encoded_inputs["entity_start_positions"] = entity_start_positions
+                encoded_inputs["entity_end_positions"] = entity_end_positions
 
             if return_token_type_ids:
                 encoded_inputs["entity_token_type_ids"] = [0] * len(encoded_inputs["entity_ids"])
@@ -1453,6 +1474,13 @@ class LukeTokenizer(RobertaTokenizer):
                     encoded_inputs["entity_position_ids"] = (
                         encoded_inputs["entity_position_ids"] + [[-1] * self.max_mention_length] * entity_difference
                     )
+                    if self.task == "entity_span_classification":
+                        encoded_inputs["entity_start_positions"] = (
+                            encoded_inputs["entity_start_positions"] + [0] * entity_difference
+                        )
+                        encoded_inputs["entity_end_positions"] = (
+                            encoded_inputs["entity_end_positions"] + [0] * entity_difference
+                        )
 
             elif self.padding_side == "left":
                 if return_attention_mask:
@@ -1475,6 +1503,13 @@ class LukeTokenizer(RobertaTokenizer):
                     encoded_inputs["entity_position_ids"] = [
                         [-1] * self.max_mention_length
                     ] * entity_difference + encoded_inputs["entity_position_ids"]
+                    if self.task == "entity_span_classification":
+                        encoded_inputs["entity_start_positions"] = [0] * entity_difference + encoded_inputs[
+                            "entity_start_positions"
+                        ]
+                        encoded_inputs["entity_end_positions"] = [0] * entity_difference + encoded_inputs[
+                            "entity_end_positions"
+                        ]
             else:
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
         else:

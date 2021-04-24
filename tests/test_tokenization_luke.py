@@ -512,3 +512,63 @@ class LukeTokenizerIntegrationTests(unittest.TestCase):
         self.assertEqual(
             encoding["entity_position_ids"].shape, (1, tokenizer.max_entity_length, tokenizer.max_mention_length)
         )
+
+    def test_entity_span_classification_no_padding_or_truncation(self):
+        tokenizer = LukeTokenizer.from_pretrained(
+            "studio-ousia/luke-base", task="entity_span_classification", return_token_type_ids=True
+        )
+        sentence = "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck."
+        spans = [(0, 8), (9, 21), (39, 42)]
+
+        encoding = tokenizer(sentence, entity_spans=spans, return_token_type_ids=True)
+
+        self.assertEqual(
+            tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
+            "<s>Top seed Ana Ivanovic said on Thursday she could hardly believe her luck.</s>",
+        )
+
+        self.assertEqual(encoding["entity_ids"], [2, 2, 2])
+        self.assertEqual(encoding["entity_attention_mask"], [1, 1, 1])
+        self.assertEqual(encoding["entity_token_type_ids"], [0, 0, 0])
+        # fmt: off
+        self.assertEqual(
+            encoding["entity_position_ids"],
+            [
+                [1, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [3, 4, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [9, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+            ]
+        )
+        # fmt: on
+        self.assertEqual(encoding["entity_start_positions"], [1, 3, 9])
+        self.assertEqual(encoding["entity_end_positions"], [2, 5, 9])
+
+    def test_entity_span_classification_padding_pytorch_tensors(self):
+        tokenizer = LukeTokenizer.from_pretrained(
+            "studio-ousia/luke-base", task="entity_span_classification", return_token_type_ids=True
+        )
+        sentence = "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck."
+        spans = [(0, 8), (9, 21), (39, 42)]
+
+        encoding = tokenizer(
+            sentence,
+            entity_spans=spans,
+            return_token_type_ids=True,
+            padding="max_length",
+            max_length=30,
+            max_entity_length=16,
+            return_tensors="pt",
+        )
+
+        # test words
+        self.assertEqual(encoding["input_ids"].shape, (1, 30))
+        self.assertEqual(encoding["attention_mask"].shape, (1, 30))
+        self.assertEqual(encoding["token_type_ids"].shape, (1, 30))
+
+        # test entities
+        self.assertEqual(encoding["entity_ids"].shape, (1, 16))
+        self.assertEqual(encoding["entity_attention_mask"].shape, (1, 16))
+        self.assertEqual(encoding["entity_token_type_ids"].shape, (1, 16))
+        self.assertEqual(encoding["entity_position_ids"].shape, (1, 16, tokenizer.max_mention_length))
+        self.assertEqual(encoding["entity_start_positions"].shape, (1, 16))
+        self.assertEqual(encoding["entity_end_positions"].shape, (1, 16))
