@@ -252,6 +252,29 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
 
 
 class SPMTokenizer:
+    r"""
+    Constructs a tokenizer based on `SentencePiece <https://github.com/google/sentencepiece>`__.
+
+    Args:
+        vocab_file (:obj:`str`):
+            `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
+            contains the vocabulary necessary to instantiate a tokenizer.
+        sp_model_kwargs (:obj:`dict`, `optional`, defaults to :obj:`None`):
+            Will be passed to the ``SentencePieceProcessor.__init__()`` method. The `Python wrapper for SentencePiece
+            <https://github.com/google/sentencepiece/tree/master/python>`__ can be used, among other things, to set:
+
+            - ``enable_sampling``: Enable subword regularization.
+            - ``nbest_size``: Sampling parameters for unigram. Invalid for BPE-Dropout.
+
+              - ``nbest_size = {0,1}``: No sampling is performed.
+              - ``nbest_size > 1``: samples from the nbest_size results.
+              - ``nbest_size < 0``: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+                using forward-filtering-and-backward-sampling algorithm.
+
+            - ``alpha``: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+              BPE-dropout.
+    """
+
     def __init__(self, vocab_file, split_by_punct=False, sp_model_kwargs=None):
         self.split_by_punct = split_by_punct
         self.vocab_file = vocab_file
