@@ -25,7 +25,8 @@ transcripts/translations autoregressively. Speech2Text has been fine-tuned on se
 `LibriSpeech <http://www.openslr.org/12>`__, `CoVoST 2 <https://github.com/facebookresearch/covost>`__, `MuST-C
 <https://ict.fbk.eu/must-c/>`__.
 
-The original code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/speech_to_text>`__.
+This model was contributed by `valhalla <https://huggingface.co/valhalla>`__. The original code can be found `here
+<https://github.com/pytorch/fairseq/tree/master/examples/speech_to_text>`__.
 
 
 Inference
@@ -58,7 +59,7 @@ be installed as follows: ``apt install libsndfile1-dev``
         >>> import soundfile as sf
 
         >>> model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
-        >>> processor = Speech2Textprocessor.from_pretrained("facebook/s2t-small-librispeech-asr")
+        >>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
 
         >>> def map_to_array(batch):
         ...     speech, _ = sf.read(batch["file"])
@@ -68,8 +69,8 @@ be installed as follows: ``apt install libsndfile1-dev``
         >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
-        >>> input_features = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt").input_features  # Batch size 1
-        >>> generated_ids = model.generate(input_ids=input_features)
+        >>> inputs = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt")
+        >>> generated_ids = model.generate(input_ids=inputs["input_features"], attention_mask=inputs["attention_mask"])
 
         >>> transcription = processor.batch_decode(generated_ids)
 
@@ -90,7 +91,7 @@ be installed as follows: ``apt install libsndfile1-dev``
         >>> import soundfile as sf
 
         >>> model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
-        >>> processor = Speech2Textprocessor.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
+        >>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
 
         >>> def map_to_array(batch):
         ...     speech, _ = sf.read(batch["file"])
@@ -100,8 +101,8 @@ be installed as follows: ``apt install libsndfile1-dev``
         >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
-        >>> input_features = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt").input_features  # Batch size 1
-        >>> generated_ids = model.generate(input_ids=input_features, forced_bos_token_id=processor.tokenizer.lang_code_to_id["fr"])
+        >>> inputs = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt")
+        >>> generated_ids = model.generate(input_ids=inputs["input_features"], attention_mask=inputs["attention_mask], forced_bos_token_id=processor.tokenizer.lang_code_to_id["fr"])
 
         >>> translation = processor.batch_decode(generated_ids)
 

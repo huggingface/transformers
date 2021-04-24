@@ -36,7 +36,8 @@ and code publicly available. Human evaluations show our best models are superior
 dialogue in terms of engagingness and humanness measurements. We then discuss the limitations of this work by analyzing
 failure cases of our models.*
 
-The authors' code can be found `here <https://github.com/facebookresearch/ParlAI>`__ .
+This model was contributed by `sshleifer <https://huggingface.co/sshleifer>`__. The authors' code can be found `here
+<https://github.com/facebookresearch/ParlAI>`__ .
 
 
 Implementation Notes

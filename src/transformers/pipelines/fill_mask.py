@@ -129,9 +129,8 @@ class FillMaskPipeline(Pipeline):
                 target_enc = self.tokenizer.tokenize(target)
                 if len(target_enc) > 1 or target_enc[0] == self.tokenizer.unk_token:
                     logger.warning(
-                        "The specified target token `{}` does not exist in the model vocabulary. Replacing with `{}`.".format(
-                            target, target_enc[0]
-                        )
+                        f"The specified target token `{target}` does not exist in the model vocabulary. "
+                        f"Replacing with `{target_enc[0]}`."
                     )
                 targets_proc.append(target_enc[0])
             target_inds = np.array(self.tokenizer.convert_tokens_to_ids(targets_proc))

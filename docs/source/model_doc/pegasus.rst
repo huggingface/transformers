@@ -31,7 +31,8 @@ According to the abstract,
   extractive summary.
 - Pegasus achieves SOTA summarization performance on all 12 downstream tasks, as measured by ROUGE and human eval.
 
-The Authors' code can be found `here <https://github.com/google-research/pegasus>`__.
+This model was contributed by `sshleifer <https://huggingface.co/sshleifer>`__. The Authors' code can be found `here
+<https://github.com/google-research/pegasus>`__.
 
 
 Checkpoints
@@ -51,8 +52,9 @@ All the `checkpoints <https://huggingface.co/models?search=pegasus>`__ are fine-
 Examples
 _______________________________________________________________________________________________________________________
 
-- :prefix_link:`Script <examples/seq2seq/finetune_pegasus_xsum.sh>` to fine-tune pegasus on the XSUM dataset. Data
-  download instructions at :prefix_link:`examples/seq2seq/ <examples/seq2seq/README.md>`.
+- :prefix_link:`Script <examples/research_projects/seq2seq-distillation/finetune_pegasus_xsum.sh>` to fine-tune pegasus
+  on the XSUM dataset. Data download instructions at :prefix_link:`examples/pytorch/summarization/
+  <examples/pytorch/summarization/README.md>`.
 - FP16 is not supported (help/ideas on this appreciated!).
 - The adafactor optimizer is recommended for pegasus fine-tuning.
 

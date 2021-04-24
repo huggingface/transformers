@@ -287,10 +287,9 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
             return True
         raise
     except Exception:
-        msg = "{} != {}".format(a, b)
-        if prefix:
-            msg = prefix + ": " + msg
-        raise AssertionError(msg)
+        if len(prefix) > 0:
+            prefix = f"{prefix}: "
+        raise AssertionError(f"{prefix}{a} != {b}")
 
 
 def _long_tensor(tok_lst):
@@ -309,7 +308,7 @@ class TFBlenderbot400MIntegrationTests(unittest.TestCase):
 
     @cached_property
     def model(self):
-        model = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name, from_pt=True)
+        model = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name)
         return model
 
     @slow

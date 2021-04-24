@@ -30,7 +30,7 @@ from transformers import (
     Wav2Vec2Tokenizer,
 )
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
-from transformers.testing_utils import slow
+from transformers.testing_utils import require_torch, slow
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -340,6 +340,7 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
         self.assertListEqual(processed.attention_mask.sum(-1).tolist(), [800, 1000, 1200])
 
     @slow
+    @require_torch
     def test_pretrained_checkpoints_are_set_correctly(self):
         # this test makes sure that models that are using
         # group norm don't have their tokenizer return the
@@ -446,6 +447,26 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertEqual(batch_tokens, ["HELLO<unk>!?!?$$$", "BYE BYE<unk>$$$"])
 
+    def test_special_characters_in_vocab(self):
+        sent = "ʈʰ æ æ̃ ˧ kʰ"
+
+        vocab_dict = {k: v for v, k in enumerate({phoneme for phoneme in sent.split()})}
+        vocab_file = os.path.join(self.tmpdirname, "vocab_special.json")
+
+        with open(vocab_file, "w") as f:
+            json.dump(vocab_dict, f)
+
+        tokenizer = Wav2Vec2CTCTokenizer(vocab_file)
+
+        expected_sent = tokenizer.decode(tokenizer(sent).input_ids, spaces_between_special_tokens=True)
+        self.assertEqual(sent, expected_sent)
+
+        tokenizer.save_pretrained(os.path.join(self.tmpdirname, "special_tokenizer"))
+        tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(os.path.join(self.tmpdirname, "special_tokenizer"))
+
+        expected_sent = tokenizer.decode(tokenizer(sent).input_ids, spaces_between_special_tokens=True)
+        self.assertEqual(sent, expected_sent)
+
     def test_pretrained_model_lists(self):
-        # Wav2Vec2Model has no max model length => no
+        # Wav2Vec2Model has no max model length => no testing
         pass

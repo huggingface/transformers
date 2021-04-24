@@ -151,6 +151,33 @@ generation.
 .. autoclass:: transformers.HammingDiversityLogitsProcessor
     :members: __call__
 
+.. autoclass:: transformers.ForcedBOSTokenLogitsProcessor
+    :members: __call__
+
+.. autoclass:: transformers.ForcedEOSTokenLogitsProcessor
+    :members: __call__
+
+.. autoclass:: transformers.InfNanRemoveLogitsProcessor
+    :members: __call__
+
+
+StoppingCriteria
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A :class:`~transformers.StoppingCriteria` can be used to change when to stop generation (other than EOS token).
+
+.. autoclass:: transformers.StoppingCriteria
+    :members: __call__
+
+.. autoclass:: transformers.StoppingCriteriaList
+    :members: __call__
+
+.. autoclass:: transformers.MaxLengthCriteria
+    :members: __call__
+
+.. autoclass:: transformers.MaxTimeCriteria
+    :members: __call__
+
 BeamSearch
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
