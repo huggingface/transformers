@@ -578,7 +578,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             args.extend(
                 """
             --do_eval
-            --max_val_samples 100
+            --max_eval_samples 100
             --per_device_eval_batch_size 2
             """.split()
             )
@@ -620,7 +620,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --do_train
             --do_eval
             --max_train_samples 10
-            --max_val_samples 10
+            --max_eval_samples 10
             --per_device_train_batch_size 5
             --per_device_eval_batch_size 5
             --num_train_epochs 1
