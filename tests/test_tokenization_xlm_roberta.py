@@ -122,7 +122,7 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_subword_regularization_tokenizer(self):
         # Subword regularization is only available for the slow tokenizer.
-        tokenizer = tokenizer_class(
+        tokenizer = self.tokenizer_class(
             SAMPLE_VOCAB, keep_accents=True, sp_model_kwargs={"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
         )
 
