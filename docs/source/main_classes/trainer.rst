@@ -400,18 +400,18 @@ DeepSpeed
 `DeepSpeed <https://github.com/microsoft/DeepSpeed>`__ implements everything described in the `ZeRO paper
 <https://arxiv.org/abs/1910.02054>`__. Currently it provides full support for:
 
-1. Optimizer State Partitioning (ZeRO stage 1)
-2. Gradient Partitioning (ZeRO stage 2)
-3. Param Partitioning (ZeRO stage 3)
+1. Optimizer state partitioning (ZeRO stage 1)
+2. Gradient partitioning (ZeRO stage 2)
+3. Parameter partitioning (ZeRO stage 3)
 4. Custom mixed precision training handling
-5. A range of fast CUDA-extension-based Optimizers
-6. ZeRO-Offload
+5. A range of fast CUDA-extension-based optimizers
+6. ZeRO-Offload to CPU and NVMe
 
 ZeRO-Offload has its own dedicated paper: `ZeRO-Offload: Democratizing Billion-Scale Model Training
-<https://arxiv.org/abs/2101.06840>`__.
+<https://arxiv.org/abs/2101.06840>`__. And NVMe-support is described in the paper `ZeRO-Infinity: Breaking the GPU
+Memory Wall for Extreme Scale Deep Learning <https://arxiv.org/abs/2104.07857>`__.
 
-DeepSpeed ZeRO-2 is currently used only for training, as all the currently available features are of no use to
-inference.
+DeepSpeed ZeRO-2 is primarily used only for training, as its features are of no use to inference.
 
 DeepSpeed ZeRO-3 can be used for inference as well, since it allows huge models to be loaded on multiple GPUs, which
 won't be possible on a single GPU.
@@ -541,7 +541,7 @@ Here is an example of running ``run_translation.py`` under DeepSpeed deploying a
 .. code-block:: bash
 
     deepspeed examples/pytorch/translation/run_translation.py \
-    --deepspeed tests/deepspeed/ds_config.json \
+    --deepspeed tests/deepspeed/ds_config_zero3.json \
     --model_name_or_path t5-small --per_device_train_batch_size 1   \
     --output_dir output_dir --overwrite_output_dir --fp16 \
     --do_train --max_train_samples 500 --num_train_epochs 1 \
@@ -566,17 +566,17 @@ To deploy DeepSpeed with one GPU adjust the :class:`~transformers.Trainer` comma
 .. code-block:: bash
 
     deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
-    --deepspeed tests/deepspeed/ds_config.json \
+    --deepspeed tests/deepspeed/ds_config_zero2.json \
     --model_name_or_path t5-small --per_device_train_batch_size 1   \
     --output_dir output_dir --overwrite_output_dir --fp16 \
     --do_train --max_train_samples 500 --num_train_epochs 1 \
     --dataset_name wmt16 --dataset_config "ro-en" \
     --source_lang en --target_lang ro
 
-This is almost the same as with multiple-GPUs, but here we tell DeepSpeed explicitly to use just one GPU. By default,
-DeepSpeed deploys all GPUs it can see. If you have only 1 GPU to start with, then you don't need this argument. The
-following `documentation <https://www.deepspeed.ai/getting-started/#resource-configuration-multi-node>`__ discusses the
-launcher options.
+This is almost the same as with multiple-GPUs, but here we tell DeepSpeed explicitly to use just one GPU via
+``--num_gpus=1``. By default, DeepSpeed deploys all GPUs it can see on the given node. If you have only 1 GPU to start
+with, then you don't need this argument. The following `documentation
+<https://www.deepspeed.ai/getting-started/#resource-configuration-multi-node>`__ discusses the launcher options.
 
 Why would you want to use DeepSpeed with just one GPU?
 
@@ -609,6 +609,10 @@ find more details in the discussion below.
 
 For a practical usage example of this type of deployment, please, see this `post
 <https://github.com/huggingface/transformers/issues/8771#issuecomment-759176685>`__.
+
+You may also try the ZeRO-3 with CPU and NVMe offload as explained further in this document.
+
+TODO: Benchmark whether we can get better performance out of ZeRO-3 vs. ZeRO-2 on a single GPU.
 
 Notes:
 
@@ -725,7 +729,7 @@ or with ``%%bash`` magic, where you can write a multi-line code for the shell pr
 
 In such case you don't need any of the code presented at the beginning of this section.
 
-Note: ``%%bash`` magic is neat, but currently it buffers the output so you won't see the logs until the process
+Note: While ``%%bash`` magic is neat, but currently it buffers the output so you won't see the logs until the process
 completes.
 
 
@@ -860,10 +864,10 @@ Of course, you will need to adjust the values in this example to your situation.
 ZeRO
 =======================================================================================================================
 
-`Zero Redundancy Optimizer (ZeRO) <https://www.deepspeed.ai/tutorials/zero/>`__ is the work horse of DeepSpeed. It
+`Zero Redundancy Optimizer (ZeRO) <https://www.deepspeed.ai/tutorials/zero/>`__ is the workhorse of DeepSpeed. It
 support 3 different levels (stages) of optimization. The first one is not quite interesting for scalability purposes,
-therefore this document focuses on stages 2 and 3. You will find more indepth information in the DeepSpeed
-documentation.
+therefore this document focuses on stages 2 and 3. Stage 3 is further improved by the latest addition of ZeRO-Infinity.
+You will find more indepth information in the DeepSpeed documentation.
 
 The ``zero_optimization`` section of the configuration file is the most important part (`docs
 <https://www.deepspeed.ai/docs/config-json/#zero-optimizations-for-fp16-training>`__), since that is where you define
@@ -916,15 +920,19 @@ ZeRO-3 Config
 
 The following is an example configuration for ZeRO stage 3:
 
-
 .. code-block:: json
 
     {
         "zero_optimization": {
             "stage": 3,
-            "cpu_offload": true,
-            "cpu_offload_params": true,
-            "cpu_offload_use_pin_memory" : true,
+            "offload_optimizer": {
+                "device": "cpu",
+                "pin_memory": true
+            },
+            "offload_param": {
+                "device": "cpu"
+                "pin_memory": true
+            },
             "overlap_comm": true,
             "contiguous_gradients": true,
             "sub_group_size": 1e14,
@@ -937,8 +945,14 @@ The following is an example configuration for ZeRO stage 3:
         }
     }
 
-Note: if you're migrating from ZeRO-2 configuration that: ``allgather_partitions``, ``allgather_bucket_size`` and
-``reduce_scatter`` configuration parameters are not used in ZeRO-3. If you keep these they will just be ignored.
+If you are getting OOMs, because your model or activations don't fit into the GPU memory and you have unutilized CPU
+memory offloading the optimizer states and parameters to CPU memory with ``"device": "cpu"`` may solve this limitation.
+If you don't want to offload to CPU memory, use ``none`` instead of ``cpu`` for the ``device`` entry. Offloading to
+NVMe is discussed further down.
+
+Pinned memory is enabled with ``pin_memory`` set to ``true``. This feature can improve the throughput at the cost of
+making less memory available to other processes. Pinned memory is set aside to the specific process that requested it
+and its typically accessed much faster than normal CPU memory.
 
 **Performance tuning:**
 
@@ -972,9 +986,14 @@ shown below and the right configuration will be passed to DeepSpeed:
     {
         "zero_optimization": {
             "stage": 3,
-            "cpu_offload": true,
-            "cpu_offload_params": true,
-            "cpu_offload_use_pin_memory" : true,
+            "offload_optimizer": {
+                "device": "cpu",
+                "pin_memory": true
+            },
+            "offload_param": {
+                "device": "cpu"
+                "pin_memory": true
+            },
             "overlap_comm": true,
             "contiguous_gradients": true,
             "sub_group_size": 1e14,
@@ -991,6 +1010,78 @@ shown below and the right configuration will be passed to DeepSpeed:
 models and multiple GPUs this is an expensive operation both in terms of memory and speed. It's currently required if
 you plan to resume the training. Watch out for future updates that will remove this limitation and make things more
 flexible.
+
+Note: if you're migrating from ZeRO-2 configuration that: ``allgather_partitions``, ``allgather_bucket_size`` and
+``reduce_scatter`` configuration parameters are not used in ZeRO-3. If you keep these in the config file they will just
+be ignored.
+
+
+
+
+NVMe Support
+=======================================================================================================================
+
+ZeRO-Infinity allows for training incredibly large models by extending GPU and CPU memory with NVMe memory. Thanks to
+smart partitioning and tiling algorithms each GPU needs to send and receive very small amounts of data during
+offloading so modern NVMe proved to be fit to allow for an even larger total memory pool available to your training
+process. ZeRO-Infinity requires ZeRO-3 enabled.
+
+The following configuration example enables NVMe to offload both optimizer states and the params:
+
+.. code-block:: json
+
+    {
+        "zero_optimization": {
+            "stage": 3,
+            "offload_optimizer": {
+                "device": "nvme",
+                "nvme_path": "/local_nvme",
+                "pin_memory": true,
+                "buffer_count": 4,
+                "fast_init": false
+            },
+            "offload_param": {
+                "device": "nvme",
+                "nvme_path": "/local_nvme",
+                "pin_memory": true,
+                "buffer_count": 5,
+                "buffer_size": 1e8,
+                "max_in_cpu": 1e9
+            }
+            "aio": {
+                "block_size": 262144,
+                "queue_depth": 32,
+                "thread_count": 1,
+                "single_submit": false,
+                "overlap_events": true
+            }
+            "overlap_comm": true,
+            "contiguous_gradients": true,
+            "sub_group_size": 1e14,
+            "reduce_bucket_size": 0,
+            "stage3_prefetch_bucket_size": 0,
+            "stage3_param_persistence_threshold": 0,
+            "stage3_max_live_parameters": 1e9,
+            "stage3_max_reuse_distance": 1e9,
+            "stage3_gather_fp16_weights_on_model_save": true
+        },
+    }
+
+You can choose to offload both optimizer states and params to NVMe, or just one of them or none. For example, if you
+have copious amounts of CPU memory available, by all means offload to CPU memory only as it'd be faster (hint:
+`"device": "cpu"`).
+
+Here is the full documentation for offloading `optimizer states
+<https://www.deepspeed.ai/docs/config-json/#optimizer-offloading>`__ and `parameters
+<https://www.deepspeed.ai/docs/config-json/#parameter-offloading>`__.
+
+Make sure that your ``nvme_path`` is actually an NVMe, since it will work with the normal hard drive or SSD, but it'll
+be much much slower. The fast scalable training was designed with modern NVMe transfer speeds in mind (as of this
+writing one can have ~3.5GB/s read, ~3GB/s write peak speeds).
+
+In order to figure out the optimal ``aio`` configuration block you must run a benchmark on your target setup, as
+`explained here <https://github.com/microsoft/DeepSpeed/issues/998>`__.
+
 
 
 ZeRO-2 vs ZeRO-3 Performance
@@ -1085,9 +1176,14 @@ Here is a full ZeRO-3 all-enabled configuration file ``ds_config_zero3.json``:
 
         "zero_optimization": {
             "stage": 3,
-            "cpu_offload": true,
-            "cpu_offload_params": true,
-            "cpu_offload_use_pin_memory" : true,
+            "offload_optimizer": {
+                "device": "cpu",
+                "pin_memory": true
+            },
+            "offload_param": {
+                "device": "cpu"
+                "pin_memory": true
+            },
             "overlap_comm": true,
             "contiguous_gradients": true,
             "sub_group_size": 1e14,
@@ -1192,7 +1288,6 @@ Scheduler
 
 DeepSpeed supports LRRangeTest, OneCycle, WarmupLR and WarmupDecayLR LR schedulers. The full documentation is `here
 <https://www.deepspeed.ai/docs/config-json/#scheduler-parameters>`__.
-
 
 Here is where the schedulers overlap between 🤗 Transformers and DeepSpeed:
 
@@ -1315,9 +1410,6 @@ setting this value and thus avoid potential subtle errors.
 
 
 
-
-
-
 Gradient Clipping
 =======================================================================================================================
 
@@ -1334,7 +1426,7 @@ Here is an example of the ``gradient_clipping`` configuration:
 
 
 
-Getting the model weights out
+Getting The Model Weights Out
 =======================================================================================================================
 
 As long as you continue training and resuming using DeepSpeed you don't need to worry about anything. DeepSpeed stores
@@ -1398,42 +1490,16 @@ This is it. ``pytorch_model.bin`` will now contain the full fp32 model weights c
 
 Note: currently the script requires 2x general RAM of the final fp32 model weights.
 
-ZeRO 3 Nuances
+
+ZeRO-3 and Infinity Nuances
 =======================================================================================================================
 
-ZeRO 3 is quite different from ZeRO 2 because of its param sharding feature.
+ZeRO-3 is quite different from ZeRO-2 because of its param sharding feature.
+
+ZeRO-Infinity further extends ZeRO-3 to support NVMe memory and multiple other speed and scalability improvements.
 
 While all the efforts were made for things to just work without needing any special changes to your models, in certain
 circumstances you may find the following information to be needed.
-
-
-Registering External Parameters
-+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-If layer A needs to access weights belonging to layer B, currently layer A needs to tell DeepSpeed about it. This is
-done with the help of ``deepspeed.zero.register_external_parameter`` that needs to be called in ``A.__init__`` and can
-be seen in the following example:
-
-.. code-block:: python
-
-    class ModuleZ3(torch.nn.Module):
-        def __init__(self, *args):
-            super().__init__(self, *args)
-            self.layer1 = SomeLayer()
-            self.layer2 = OtherLayer()
-            deepspeed.zero.register_external_parameter(self, self.layer1.weight)
-
-        def forward(self, input):
-            x = self.layer1(input)
-            # self.layer1.weight is needed in ModuleZ3.forward
-            y = self.layer2(x, self.layer1.weight)
-            return y
-
-In general ``transformers`` models don't use this style of referring to other layer's weights so most likely you won't
-need to use it.
-
-For full details on this method please refer to `Registering External Parameters
-<https://deepspeed.readthedocs.io/en/latest/zero3.html#registering-external-parameters>`__.
 
 
 
@@ -1475,8 +1541,6 @@ For full details on this method and other related features please refer to `Cons
 
 
 
-
-
 Gathering Parameters
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
@@ -1501,8 +1565,6 @@ larger multi-dimensional shape, this means that the parameter is partitioned and
 
 
 
-
-
 Notes
 =======================================================================================================================
 
@@ -1513,6 +1575,7 @@ Notes
 * You don't have to use the :class:`~transformers.Trainer` to use DeepSpeed with 🤗 Transformers - you can use any model
   with your own trainer, and you will have to adapt the latter according to `the DeepSpeed integration instructions
   <https://www.deepspeed.ai/getting-started/#writing-deepspeed-models>`__.
+
 
 Main DeepSpeed Resources
 =======================================================================================================================
@@ -1526,6 +1589,7 @@ Papers:
 
 - `ZeRO: Memory Optimizations Toward Training Trillion Parameter Models <https://arxiv.org/abs/1910.02054>`__
 - `ZeRO-Offload: Democratizing Billion-Scale Model Training <https://arxiv.org/abs/2101.06840>`__
+- `ZeRO-Infinity: Breaking the GPU Memory Wall for Extreme Scale Deep Learning <https://arxiv.org/abs/2104.07857>`__
 
 Finally, please, remember that, HuggingFace :class:`~transformers.Trainer` only integrates DeepSpeed, therefore if you
 have any problems or questions with regards to DeepSpeed usage, please, file an issue with `DeepSpeed GitHub

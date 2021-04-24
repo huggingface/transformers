@@ -66,6 +66,9 @@ def require_deepspeed(test_case):
         return test_case
 
 
+if is_deepspeed_available():
+    from deepspeed.utils import logger  # noqa
+
 ZERO2 = "zero2"
 ZERO3 = "zero3"
 stages = [ZERO2, ZERO3]
@@ -191,6 +194,21 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 trainer.train()
         self.assertTrue("ZeRO Offload can only work with DeepSpeed optimizers" in str(context.exception))
 
+    def test_stage3_nvme_offload(self):
+
+        with CaptureLogger(logger) as cs:
+            with mockenv_context(**self.dist_env_1_gpu):
+                # this actually doesn't have to be on NVMe, any storage will do since this test only
+                # runs a simple check that we can use some directory as if it were NVMe
+                nvme_path = self.get_auto_remove_tmp_dir()
+                nvme_config = dict(device="nvme", nvme_path=nvme_path)
+                ds_config_zero3_dict = self.get_config_dict(ZERO3)
+                ds_config_zero3_dict["zero_optimization"]["offload_optimizer"] = nvme_config
+                ds_config_zero3_dict["zero_optimization"]["offload_param"] = nvme_config
+                trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_zero3_dict)
+                trainer.train()
+        assert "DeepSpeed info" in cs.out, "expected DeepSpeed logger output but got none"
+
     # --- These tests need to run on both zero stages --- #
     @parameterized.expand(stages)
     def test_fake_notebook_no_launcher(self, stage):
@@ -200,7 +218,6 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # DeepSpeed log if this test happens to run first in this pytest worker. But it will fail if
         # it's run not as a first test as `sys.stdout` will no longer be the same. So we either have
         # to reset `logger.handlers[0].setStream(sys.stdout)` or directly capture from the logger.
-        from deepspeed.utils import logger
 
         with CaptureLogger(logger) as cs:
             with mockenv_context(**self.dist_env_1_gpu):

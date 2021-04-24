@@ -10,9 +10,14 @@
 
     "zero_optimization": {
         "stage": 3,
-        "cpu_offload": true,
-        "cpu_offload_params": true,
-        "cpu_offload_use_pin_memory" : true,
+        "offload_optimizer": {
+            "device": "cpu",
+            "pin_memory": true
+        },
+        "offload_param": {
+            "device": "cpu",
+            "pin_memory": true
+        },
         "overlap_comm": true,
         "contiguous_gradients": true,
         "sub_group_size": 1e14,
