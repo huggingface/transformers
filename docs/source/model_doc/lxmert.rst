@@ -52,7 +52,8 @@ Tips:
   contains self-attention for each respective modality and cross-attention, only the cross attention is returned and
   both self attention outputs are disregarded.
 
-The original code can be found `here <https://github.com/airsplay/lxmert>`__.
+This model was contributed by `eltoto1219 <https://huggingface.co/eltoto1219>`__. The original code can be found `here
+<https://github.com/airsplay/lxmert>`__.
 
 
 LxmertConfig
