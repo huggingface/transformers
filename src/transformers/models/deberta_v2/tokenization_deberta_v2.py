@@ -75,6 +75,20 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         mask_token (:obj:`str`, `optional`, defaults to :obj:`"[MASK]"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
+        sp_model_kwargs (:obj:`dict`, `optional`, defaults to :obj:`None`):
+            Will be passed to the ``SentencePieceProcessor.__init__()`` method. The `Python wrapper for SentencePiece
+            <https://github.com/google/sentencepiece/tree/master/python>`__ can be used, among other things, to set:
+
+            - ``enable_sampling``: Enable subword regularization.
+            - ``nbest_size``: Sampling parameters for unigram. Invalid for BPE-Dropout.
+
+              - ``nbest_size = {0,1}``: No sampling is performed.
+              - ``nbest_size > 1``: samples from the nbest_size results.
+              - ``nbest_size < 0``: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+                using forward-filtering-and-backward-sampling algorithm.
+
+            - ``alpha``: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+              BPE-dropout.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -92,8 +106,11 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         pad_token="[PAD]",
         cls_token="[CLS]",
         mask_token="[MASK]",
+        sp_model_kwargs=None,
         **kwargs
     ):
+        sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+
         super().__init__(
             do_lower_case=do_lower_case,
             unk_token=unk_token,
@@ -102,6 +119,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
             cls_token=cls_token,
             mask_token=mask_token,
             split_by_punct=split_by_punct,
+            sp_model_kwargs=sp_model_kwargs,
             **kwargs,
         )
 
@@ -112,7 +130,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
             )
         self.do_lower_case = do_lower_case
         self.split_by_punct = split_by_punct
-        self._tokenizer = SPMTokenizer(vocab_file, split_by_punct=split_by_punct)
+        self._tokenizer = SPMTokenizer(vocab_file, split_by_punct=split_by_punct, sp_model_kwargs=sp_model_kwargs)
 
     @property
     def vocab_size(self):
@@ -234,10 +252,11 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
 
 
 class SPMTokenizer:
-    def __init__(self, vocab_file, split_by_punct=False):
+    def __init__(self, vocab_file, split_by_punct=False, sp_model_kwargs=None):
         self.split_by_punct = split_by_punct
         self.vocab_file = vocab_file
-        spm = sp.SentencePieceProcessor()
+        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+        spm = sp.SentencePieceProcessor(**self.sp_model_kwargs)
         assert os.path.exists(vocab_file)
         spm.load(vocab_file)
         bpe_vocab_size = spm.GetPieceSize()
@@ -261,7 +280,7 @@ class SPMTokenizer:
 
     def __setstate__(self, d):
         self.__dict__ = d
-        self.spm = sp.SentencePieceProcessor()
+        self.spm = sp.SentencePieceProcessor(**self.sp_model_kwargs)
         self.spm.Load(self.vocab_file)
 
     def tokenize(self, text):
@@ -344,10 +363,10 @@ class SPMTokenizer:
         text = convert_to_unicode(text)
         if self.split_by_punct:
             words = self._run_split_on_punc(text)
-            pieces = [self.spm.encode_as_pieces(w) for w in words]
+            pieces = [self.spm.encode(w, out_type=str) for w in words]
             return [p for w in pieces for p in w]
         else:
-            return self.spm.encode_as_pieces(text)
+            return self.spm.encode(text, out_type=str)
 
     def split_to_words(self, text):
         pieces = self._encode_as_pieces(text)
