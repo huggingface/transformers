@@ -43,14 +43,29 @@ Tips:
 - LUKE adds :obj:`entity_ids`, :obj:`entity_attention_mask`, :obj:`entity_token_type_ids` and
   :obj:`entity_position_ids` as extra input to the model. Input entities can be special entities (e.g., [MASK]) or
   Wikipedia entities (e.g., New York City). You can obtain those using :class:`~transformers.LukeTokenizer`.
-- There are 3 head models defined:
-  - :class:`~transformers.LukeForEntityClassification`, for tasks such as entity typing (given an entity in a sentence, classify it), 
-  e.g. the `Open Entity dataset <https://www.cs.utexas.edu/~eunsol/html_pages/open_entity.html>__`. Here, one places a linear head
-  on top of the special <ent> token. 
-  - :class:`~transformers.LukeForEntityPairClassification`, for tasks such as relation classification (classifying the relationship 
-  between two entities), e.g. the `TACRED dataset <https://nlp.stanford.edu/projects/tacred/>__`
-  - :class:`~transformers.LukeForEntitySpanClassification`, for tasks such as named-entity recognition (NER). Here, one provides all 
-  possible entity spans to the model. Each span is then classified appropriately. 
+- There are two main use cases:
+
+  - **Inputting the special [MASK] entities to compute entity representations**: The [MASK] special entity is used
+    to mask entities to be predicted during pretraining. When LUKE receives the [MASK] entity, it tries to predict the
+    original entity by gathering the information about the entity from the input text. Therefore, the [MASK] entity can
+    be used as input tokens when addressing downstream tasks involving entities such as entity typing, relation
+    classification, and named entity recognition.
+  - **Inputting Wikipedia entities to compute knowledge-enhanced representations**: LUKE stores the detailed
+    information regarding Wikipedia entities in its entity embedding. By using Wikipedia entities as input tokens, LUKE
+    outputs representations enriched by the information stored in the embeddings of these entities. This is effective
+    for tasks requiring real-world knowledge, such as question answering.
+
+- There are three head models for the former use case:
+
+  - :class:`~transformers.LukeForEntityClassification`, for tasks to classify a single entity in an input text such as
+    entity typing, e.g. the `Open Entity dataset <https://www.cs.utexas.edu/~eunsol/html_pages/open_entity.html>`__.
+    This model places a linear head on top of the output entity representation.
+  - :class:`~transformers.LukeForEntityPairClassification`, for tasks to classify the relationship between two entities
+    such as relation classification, e.g. the `TACRED dataset <https://nlp.stanford.edu/projects/tacred/>`__. This
+    model places a linear head on top of the concatenated output representation of the pair of given entities.
+  - :class:`~transformers.LukeForEntitySpanClassification`, for tasks to classify the sequence of entity spans, such as
+    named entity recognition (NER). This model places a linear head on top of the output entity representations. You
+    can address NER with this model by inputting all possible entity spans in the text to the model.
 
 Example:
 
@@ -69,7 +84,7 @@ Example:
     >>> word_last_hidden_state = outputs.last_hidden_state
     >>> entity_last_hidden_state = outputs.entity_last_hidden_state
 
-    # Input Wikipedia entities to obtain enriched contextualized representations.
+    # Input Wikipedia entities to obtain enriched contextualized representations
     >>> text = "Beyoncé lives in New York."
     >>> entities = ["Beyoncé", "New York City"]  # Wikipedia entity titles corresponding to the entity mentions "Beyoncé" and "New York"
     >>> entity_spans = [(0, 7), (17, 25)]  # character-based entity spans corresponding to "Beyoncé" and "New York"

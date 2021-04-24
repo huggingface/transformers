@@ -873,7 +873,7 @@ class LukeModel(LukePreTrainedModel):
             >>> word_last_hidden_state = outputs.last_hidden_state
             >>> entity_last_hidden_state = outputs.entity_last_hidden_state
 
-            # Input Wikipedia entities to obtain enriched contextualized representations of word tokens.
+            # Input Wikipedia entities to obtain enriched contextualized representations of word tokens
             >>> text = "Beyoncé lives in New York."
             >>> entities = ["Beyoncé", "New York City"]  # Wikipedia entity titles corresponding to the entity mentions "Beyoncé" and "New York"
             >>> entity_spans = [(0, 7), (17, 25)]  # character-based entity spans corresponding to "Beyoncé" and "New York"
