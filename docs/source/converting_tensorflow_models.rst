@@ -33,8 +33,8 @@ You can convert any TensorFlow checkpoint for BERT (in particular `the pre-train
 This CLI takes as input a TensorFlow checkpoint (three files starting with ``bert_model.ckpt``\ ) and the associated
 configuration file (\ ``bert_config.json``\ ), and creates a PyTorch model for this configuration, loads the weights
 from the TensorFlow checkpoint in the PyTorch model and saves the resulting model in a standard PyTorch save file that
-can be imported using ``from_pretrained()`` (see example in :doc:`quicktour` , `run_glue.py
-<https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_glue.py>`_\ ).
+can be imported using ``from_pretrained()`` (see example in :doc:`quicktour` , :prefix_link:`run_glue.py
+<examples/pytorch/text-classification/run_glue.py>` \ ).
 
 You only need to run this conversion script **once** to get a PyTorch model. You can then disregard the TensorFlow
 checkpoint (the three files starting with ``bert_model.ckpt``\ ) but be sure to keep the configuration file (\

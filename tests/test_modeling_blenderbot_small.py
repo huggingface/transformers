@@ -50,6 +50,7 @@ def prepare_blenderbot_small_inputs_dict(
     decoder_attention_mask=None,
     head_mask=None,
     decoder_head_mask=None,
+    cross_attn_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.ne(config.pad_token_id)
@@ -59,6 +60,8 @@ def prepare_blenderbot_small_inputs_dict(
         head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
     if decoder_head_mask is None:
         decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+    if cross_attn_head_mask is None:
+        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
@@ -66,6 +69,7 @@ def prepare_blenderbot_small_inputs_dict(
         "decoder_attention_mask": attention_mask,
         "head_mask": head_mask,
         "decoder_head_mask": decoder_head_mask,
+        "cross_attn_head_mask": cross_attn_head_mask,
     }
 
 
@@ -305,6 +309,7 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
             "i'm not sure. i just feel like i've been feeling like i have to be in a certain place",
         )
 
+    @slow
     def test_90_generation_from_short_input(self):
         model_inputs = self.tokenizer(["sam"], return_tensors="pt").to(torch_device)
 
