@@ -1295,11 +1295,19 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
 
             >>> from transformers import LukeTokenizer, LukeForEntitySpanClassification
 
-            >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base")
+            >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base", task="entity_span_classification")
             >>> model = LukeForEntitySpanClassification.from_pretrained("studio-ousia/luke-base")
 
-            >>> text = "Beyoncé lives in New York."
-            >>> entity_spans = [(0, 7), (17, 25)]  # character-based entity spans corresponding to "Beyoncé" and "New York"
+            >>> text = "Beyoncé lives in New York"
+
+            # List all possible entity spans in the text
+            >>> word_start_positions = [0, 8, 14, 17, 21]  # character-based start positions of word tokens
+            >>> word_end_positions = [7, 13, 16, 20, 25]  # character-based end positions of word tokens
+            >>> entity_spans = []
+            >>> for i, start_pos in enumerate(word_start_positions):
+            ...     for end_pos in word_end_positions[i:]:
+            ...         entity_spans.append((start_pos, end_pos))
+
             >>> inputs = tokenizer(text, entity_spans=entity_spans, return_tensors="pt")
             >>> outputs = model(**inputs)
             >>> logits = outputs.logits
