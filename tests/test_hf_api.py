@@ -22,13 +22,9 @@ import unittest
 
 from requests.exceptions import HTTPError
 from transformers.hf_api import HfApi, HfFolder, ModelInfo, RepoObj
-from transformers.testing_utils import require_git_lfs
+from transformers.testing_utils import ENDPOINT_STAGING, PASS, USER, is_staging_test, require_git_lfs
 
 
-USER = "__DUMMY_TRANSFORMERS_USER__"
-PASS = "__DUMMY_TRANSFORMERS_PASS__"
-
-ENDPOINT_STAGING = "https://moon-staging.huggingface.co"
 ENDPOINT_STAGING_BASIC_AUTH = f"https://{USER}:{PASS}@moon-staging.huggingface.co"
 
 REPO_NAME = f"my-model-{int(time.time())}"
@@ -106,6 +102,7 @@ class HfFolderTest(unittest.TestCase):
 
 
 @require_git_lfs
+@is_staging_test
 class HfLargefilesTest(HfApiCommonTest):
     @classmethod
     def setUpClass(cls):

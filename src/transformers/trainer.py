@@ -23,6 +23,7 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 import time
 import warnings
 from logging import StreamHandler
@@ -62,6 +63,7 @@ from .dependency_versions_check import dep_version_check
 from .file_utils import (
     CONFIG_NAME,
     WEIGHTS_NAME,
+    PushToHubMixin,
     is_apex_available,
     is_datasets_available,
     is_in_notebook,
@@ -426,9 +428,9 @@ class Trainer:
 
         self.state = TrainerState()
         self.control = TrainerControl()
-        # Internal variable for total_flos used to count as tensors (for distributed + TPU), will be sent in the
-        # state at each call to self.log.
-        self._total_flos = None
+        # Internal variable to count flos in each process, will be accumulated in `self.state.total_flos` then
+        # returned to 0 every time flos need to be logged
+        self.current_flos = 0
         self.hp_search_backend = None
         self.use_tune_checkpoints = False
         default_label_names = (
@@ -482,7 +484,7 @@ class Trainer:
 
     def _remove_unused_columns(self, dataset: "datasets.Dataset", description: Optional[str] = None):
         if not self.args.remove_unused_columns:
-            return
+            return dataset
         if self._signature_columns is None:
             # Inspect model forward signature to keep only the arguments it accepts.
             signature = inspect.signature(self.model.forward)
@@ -1017,7 +1019,7 @@ class Trainer:
                         "yield to errors or unwanted behaviors."
                     )
 
-            if self.deepspeed:
+            if args.deepspeed:
                 # will be resumed in deepspeed_init
                 pass
             else:
@@ -1162,7 +1164,6 @@ class Trainer:
         # _total_loss_scalar is updated everytime .item() has to be called on tr_loss and stores the sum of all losses
         self._total_loss_scalar = 0.0
         self._globalstep_last_logged = self.state.global_step
-        self._total_flos = self.state.total_flos
         model.zero_grad()
 
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
@@ -1220,7 +1221,7 @@ class Trainer:
                         tr_loss += self.training_step(model, inputs)
                 else:
                     tr_loss += self.training_step(model, inputs)
-                self._total_flos += float(self.floating_point_ops(inputs))
+                self.current_flos += float(self.floating_point_ops(inputs))
 
                 # Optimizer step for deepspeed must be called on every step regardless of the value of gradient_accumulation_steps
                 if self.deepspeed:
@@ -1321,9 +1322,8 @@ class Trainer:
                 )
 
         metrics = speed_metrics("train", start_time, self.state.max_steps)
-        if self._total_flos is not None:
-            self.store_flos()
-            metrics["total_flos"] = self.state.total_flos
+        self.store_flos()
+        metrics["total_flos"] = self.state.total_flos
         self.log(metrics)
 
         self.control = self.callback_handler.on_train_end(args, self.state, self.control)
@@ -1788,11 +1788,12 @@ class Trainer:
 
     def store_flos(self):
         # Storing the number of floating-point operations that went into the model
-        if self._total_flos is not None:
-            if self.args.local_rank != -1:
-                self.state.total_flos = distributed_broadcast_scalars([self._total_flos]).sum().item()
-            else:
-                self.state.total_flos = self._total_flos
+        if self.args.local_rank != -1:
+            self.state.total_flos += distributed_broadcast_scalars([self.current_flos]).sum().item()
+            self.current_flos = 0
+        else:
+            self.state.total_flos = self.current_flos
+            self.current_flos = 0
 
     def _sorted_checkpoints(
         self, output_dir=None, checkpoint_prefix=PREFIX_CHECKPOINT_DIR, use_mtime=False
@@ -1883,6 +1884,7 @@ class Trainer:
         )
 
         output.metrics.update(speed_metrics(metric_key_prefix, start_time, output.num_samples))
+
         self.log(output.metrics)
 
         if self.args.tpu_metrics_debug or self.args.debug:
@@ -2273,6 +2275,71 @@ class Trainer:
             return self.model.floating_point_ops(inputs)
         else:
             return 0
+
+    def push_to_hub(
+        self,
+        save_directory: Optional[str] = None,
+        repo_name: Optional[str] = None,
+        repo_url: Optional[str] = None,
+        commit_message: Optional[str] = "add model",
+        organization: Optional[str] = None,
+        private: bool = None,
+        use_auth_token: Optional[Union[bool, str]] = None,
+    ):
+        """
+        Upload `self.model` to the 🤗 model hub.
+
+        Parameters:
+            save_directory (:obj:`str` or :obj:`os.PathLike`):
+                Folder containing the model weights and config. Will default to :obj:`self.args.output_dir`.
+            repo_name (:obj:`str`, `optional`):
+                Repository name for your model or tokenizer in the hub. If not specified, the repository name will be
+                the stem of :obj:`save_directory`.
+            repo_url (:obj:`str`, `optional`):
+                Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
+                repository will be created in your namespace (unless you specify an :obj:`organization`) with
+                :obj:`repo_name`.
+            commit_message (:obj:`str`, `optional`, defaults to :obj:`"add model"`):
+                Message to commit while pushing.
+            organization (:obj:`str`, `optional`):
+                Organization in which you want to push your model or tokenizer (you must be a member of this
+                organization).
+            private (:obj:`bool`, `optional`):
+                Whether or not the repository created should be private (requires a paying subscription).
+            use_auth_token (:obj:`bool` or :obj:`str`, `optional`):
+                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`). Will default to
+                :obj:`True` if :obj:`repo_url` is not specified.
+
+        Returns:
+            The url of the commit of your model in the given repository.
+        """
+        if not self.is_world_process_zero():
+            return
+
+        if not isinstance(unwrap_model(self.model), PushToHubMixin):
+            raise ValueError(
+                "The `upload_model_to_hub` method only works for models that inherit from `PushToHubMixin` models."
+            )
+        if save_directory is None:
+            save_directory = self.args.output_dir
+
+        # To avoid pushing all checkpoints, we just copy all the files in save_directory in a tmp dir.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            for f in os.listdir(save_directory):
+                fname = os.path.join(save_directory, f)
+                if os.path.isfile(fname):
+                    shutil.copy(fname, os.path.join(tmp_dir, f))
+
+            return unwrap_model(self.model)._push_to_hub(
+                save_directory=tmp_dir,
+                repo_name=repo_name,
+                repo_url=repo_url,
+                commit_message=commit_message,
+                organization=organization,
+                private=private,
+                use_auth_token=use_auth_token,
+            )
 
     #
     # Deprecated code

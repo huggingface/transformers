@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google Flax Team Authors and The HuggingFace Inc. team.
+# Copyright 2021 The Google Flax Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,9 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Callable, Tuple
-
-import numpy as np
+from typing import Tuple
 
 import flax.linen as nn
 import jax
@@ -110,70 +108,6 @@ ROBERTA_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayerNorm with Bert->Roberta
-class FlaxRobertaLayerNorm(nn.Module):
-    """
-    Layer normalization (https://arxiv.org/abs/1607.06450). Operates on the last axis of the input data.
-    """
-
-    hidden_size: int
-    epsilon: float = 1e-6
-    dtype: jnp.dtype = jnp.float32
-    use_bias: bool = True
-    scale: bool = True
-    scale_init: Callable[..., np.ndarray] = jax.nn.initializers.ones
-    bias_init: Callable[..., np.ndarray] = jax.nn.initializers.zeros
-
-    def setup(self):
-        self.weight = self.param("weight", self.scale_init, (self.hidden_size,))
-        self.bias = self.param("bias", self.scale_init, (self.hidden_size,))
-
-    def __call__(self, x):
-        """
-        Applies layer normalization on the input. It normalizes the activations of the layer for each given example in
-        a batch independently, rather than across a batch like Batch Normalization. i.e. applies a transformation that
-        maintains the mean activation within each example close to 0 and the activation standard deviation close to 1
-
-        Args:
-          x: the inputs
-
-        Returns:
-          Normalized inputs (the same shape as inputs).
-        """
-        mean = jnp.mean(x, axis=-1, keepdims=True)
-        mean2 = jnp.mean(jax.lax.square(x), axis=-1, keepdims=True)
-        var = mean2 - jax.lax.square(mean)
-        mul = jax.lax.rsqrt(var + self.epsilon)
-
-        if self.scale:
-            mul = mul * jnp.asarray(self.weight)
-        y = (x - mean) * mul
-
-        if self.use_bias:
-            y = y + jnp.asarray(self.bias)
-        return y
-
-
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEmbedding with Bert->Roberta
-class FlaxRobertaEmbedding(nn.Module):
-    """
-    Specify a new class for doing the embedding stuff as Flax's one use 'embedding' for the parameter name and PyTorch
-    use 'weight'
-    """
-
-    vocab_size: int
-    hidden_size: int
-    initializer_range: float
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-
-    def setup(self):
-        init_fn: Callable[..., np.ndarray] = jax.nn.initializers.normal(stddev=self.initializer_range)
-        self.embeddings = self.param("weight", init_fn, (self.vocab_size, self.hidden_size))
-
-    def __call__(self, input_ids):
-        return jnp.take(self.embeddings, input_ids, axis=0)
-
-
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEmbeddings with Bert->Roberta
 class FlaxRobertaEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
@@ -182,35 +116,37 @@ class FlaxRobertaEmbeddings(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.word_embeddings = FlaxRobertaEmbedding(
+        self.word_embeddings = nn.Embed(
             self.config.vocab_size,
             self.config.hidden_size,
-            initializer_range=self.config.initializer_range,
+            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
             dtype=self.dtype,
         )
-        self.position_embeddings = FlaxRobertaEmbedding(
+        self.position_embeddings = nn.Embed(
             self.config.max_position_embeddings,
             self.config.hidden_size,
-            initializer_range=self.config.initializer_range,
+            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
             dtype=self.dtype,
         )
-        self.token_type_embeddings = FlaxRobertaEmbedding(
+        self.token_type_embeddings = nn.Embed(
             self.config.type_vocab_size,
             self.config.hidden_size,
-            initializer_range=self.config.initializer_range,
+            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
             dtype=self.dtype,
         )
-        self.LayerNorm = FlaxRobertaLayerNorm(hidden_size=self.config.hidden_size, dtype=self.dtype)
+        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
     def __call__(self, input_ids, token_type_ids, position_ids, attention_mask, deterministic: bool = True):
+        batch_size, sequence_length = input_ids.shape
         # Embed
-        inputs_embeds = self.word_embeddings(jnp.atleast_2d(input_ids.astype("i4")))
-        position_embeds = self.position_embeddings(jnp.atleast_2d(position_ids.astype("i4")))
-        token_type_embeddings = self.token_type_embeddings(jnp.atleast_2d(token_type_ids.astype("i4")))
+        inputs_embeds = self.word_embeddings(input_ids.astype("i4"))
+        position_embeds = self.position_embeddings(position_ids.astype("i4"))
+        token_type_embeddings = self.token_type_embeddings(token_type_ids.astype("i4"))
 
         # Sum all embeddings
-        hidden_states = inputs_embeds + jnp.broadcast_to(position_embeds, inputs_embeds.shape) + token_type_embeddings
+        hidden_states = inputs_embeds + token_type_embeddings + position_embeds
+        #        hidden_states = hidden_states.reshape((batch_size, sequence_length, -1))
 
         # Layer Norm
         hidden_states = self.LayerNorm(hidden_states)
@@ -271,7 +207,7 @@ class FlaxRobertaSelfAttention(nn.Module):
             attention_bias = None
 
         dropout_rng = None
-        if not deterministic and self.dropout_rate > 0.0:
+        if not deterministic and self.config.attention_probs_dropout_prob > 0.0:
             dropout_rng = self.make_rng("dropout")
 
         attn_output = dot_product_attention(
@@ -301,7 +237,7 @@ class FlaxRobertaSelfOutput(nn.Module):
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
             dtype=self.dtype,
         )
-        self.LayerNorm = FlaxRobertaLayerNorm(hidden_size=self.config.hidden_size)
+        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
     def __call__(self, hidden_states, input_tensor, deterministic: bool = True):
@@ -360,7 +296,7 @@ class FlaxRobertaOutput(nn.Module):
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
-        self.LayerNorm = FlaxRobertaLayerNorm(hidden_size=self.config.hidden_size, dtype=self.dtype)
+        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
 
     def __call__(self, hidden_states, attention_output, deterministic: bool = True):
         hidden_states = self.dense(hidden_states)
@@ -397,7 +333,7 @@ class FlaxRobertaLayerCollection(nn.Module):
         ]
 
     def __call__(self, hidden_states, attention_mask, deterministic: bool = True):
-        for layer in self.layers:
+        for i, layer in enumerate(self.layers):
             hidden_states = layer(hidden_states, attention_mask, deterministic=deterministic)
         return hidden_states
 
@@ -441,40 +377,7 @@ class FlaxRobertaPreTrainedModel(FlaxPreTrainedModel):
     config_class = RobertaConfig
     base_model_prefix = "roberta"
 
-    def init(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
-        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
-            jnp.zeros(input_shape, dtype="i4"), None, None, None
-        )
-
-        params_rng, dropout_rng = jax.random.split(rng)
-        rngs = {"params": params_rng, "dropout": dropout_rng}
-
-        return self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids)["params"]
-
-    def _check_inputs(self, input_ids, attention_mask, token_type_ids, position_ids):
-        if token_type_ids is None:
-            token_type_ids = jnp.ones_like(input_ids)
-
-        if position_ids is None:
-            position_ids = create_position_ids_from_input_ids(input_ids, self.config.pad_token_id)
-
-        if attention_mask is None:
-            attention_mask = jnp.ones_like(input_ids)
-
-        return input_ids, attention_mask, token_type_ids, position_ids
-
-
-@add_start_docstrings(
-    "The bare RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
-    ROBERTA_START_DOCSTRING,
-)
-class FlaxRobertaModel(FlaxRobertaPreTrainedModel):
-    """
-    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
-    cross-attention is added between the self-attention layers, following the architecture described in `Attention is
-    all you need`_ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
-    Kaiser and Illia Polosukhin.
-    """
+    module_class: nn.Module = None
 
     def __init__(
         self,
@@ -484,23 +387,41 @@ class FlaxRobertaModel(FlaxRobertaPreTrainedModel):
         dtype: jnp.dtype = jnp.float32,
         **kwargs
     ):
-        module = FlaxRobertaModule(config, dtype=dtype, **kwargs)
+        module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+        # init input tensors
+        input_ids = jnp.zeros(input_shape, dtype="i4")
+        token_type_ids = jnp.ones_like(input_ids)
+        position_ids = create_position_ids_from_input_ids(input_ids, self.config.pad_token_id)
+        attention_mask = jnp.ones_like(input_ids)
+
+        params_rng, dropout_rng = jax.random.split(rng)
+        rngs = {"params": params_rng, "dropout": dropout_rng}
+
+        return self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids)["params"]
 
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
         self,
         input_ids,
-        token_type_ids=None,
         attention_mask=None,
+        token_type_ids=None,
         position_ids=None,
         params: dict = None,
         dropout_rng: PRNGKey = None,
         train: bool = False,
     ):
-        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
-            input_ids, attention_mask, token_type_ids, position_ids
-        )
+        # init input tensors if not passed
+        if token_type_ids is None:
+            token_type_ids = jnp.ones_like(input_ids)
+
+        if position_ids is None:
+            position_ids = create_position_ids_from_input_ids(input_ids, self.config.pad_token_id)
+
+        if attention_mask is None:
+            attention_mask = jnp.ones_like(input_ids)
 
         # Handle any PRNG if needed
         rngs = {}
@@ -530,7 +451,6 @@ class FlaxRobertaModule(nn.Module):
         self.pooler = FlaxRobertaPooler(self.config, dtype=self.dtype)
 
     def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True):
-
         hidden_states = self.embeddings(
             input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic
         )
@@ -541,3 +461,11 @@ class FlaxRobertaModule(nn.Module):
 
         pooled = self.pooler(hidden_states)
         return hidden_states, pooled
+
+
+@add_start_docstrings(
+    "The bare RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
+    ROBERTA_START_DOCSTRING,
+)
+class FlaxRobertaModel(FlaxRobertaPreTrainedModel):
+    module_class = FlaxRobertaModule
