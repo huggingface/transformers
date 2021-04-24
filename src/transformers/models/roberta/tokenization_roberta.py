@@ -81,8 +81,8 @@ class RobertaTokenizer(GPT2Tokenizer):
         When used with ``is_split_into_words=True``, this tokenizer will add a space before each word (even the first
         one).
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    Users should refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (:obj:`str`):
