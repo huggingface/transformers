@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+import itertools
 import os
 import unittest
 from pathlib import Path
@@ -87,6 +89,29 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             [SPIECE_UNDERLINE + "I", SPIECE_UNDERLINE + "was", SPIECE_UNDERLINE + "b", "or", "n", SPIECE_UNDERLINE + "in", SPIECE_UNDERLINE + "", "<unk>", "2", "0", "0", "0", ",", SPIECE_UNDERLINE + "and", SPIECE_UNDERLINE + "this", SPIECE_UNDERLINE + "is", SPIECE_UNDERLINE + "f", "al", "s", "<unk>", "."],
             # fmt: on
         )
+
+    def test_subword_regularization_tokenizer(self):
+        # Subword regularization is only available for the slow tokenizer.
+        tokenizer = self.tokenizer_class(
+            SAMPLE_SP, keep_accents=True, sp_model_kwargs={"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
+        )
+
+        # Subword regularization augments training data with subword sampling.
+        # This has a random component. We test if the tokenizer generates different
+        # results when subword regularization is enabled.
+        tokens_list = []
+        for _ in range(5):
+            tokens_list.append(tokenizer.tokenize("This is a test for subword regularization."))
+
+        # the list of different pairs of tokens_list
+        combinations = itertools.combinations(tokens_list, 2)
+
+        all_equal = True
+        for combination in combinations:
+            if combination[0] != combination[1]:
+                all_equal = False
+
+        self.assertFalse(all_equal)
 
 
 @require_sentencepiece
