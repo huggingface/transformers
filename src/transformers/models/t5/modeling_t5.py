@@ -955,10 +955,7 @@ class T5Stack(T5PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if (
-                getattr(self.config, "gradient_checkpointing", False)
-                and self.training
-            ):
+            if getattr(self.config, "gradient_checkpointing", False) and self.training:
                 if use_cache:
                     logger.warn(
                         "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
@@ -982,7 +979,7 @@ class T5Stack(T5PreTrainedModel):
                     encoder_decoder_position_bias,
                     layer_head_mask,
                     cross_attn_layer_head_mask,
-                    None  # past_key_value is always None with gradient checkpointing
+                    None,  # past_key_value is always None with gradient checkpointing
                 )
             else:
                 layer_outputs = layer_module(
