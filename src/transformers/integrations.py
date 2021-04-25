@@ -270,36 +270,73 @@ def rewrite_logs(d):
 
 
 _is_deepspeed_zero3_enabled = None
+_deepspeed_config = None
 
 
-def is_deepspeed_zero3_enabled():
+def deepspeed_config_get():
     """
-    This function answers to the question of whether DeepSpeed is going to be used and run using ZeRO Stage 3.
-
-    It includes an auto-discovery method, see comments in the code for details.
-
-    Returns: ``True`` if either it was explicitly enabled via ``deepspeed_zero3_enable(True)`` or the auto-detector was
-    able to derive that the ``Trainer`` will be running via DeepSpeed ZeRO stage 3.
+    Returns a global deepspeed config or ``None`` if one is not set
     """
-    global _is_deepspeed_zero3_enabled
-    if _is_deepspeed_zero3_enabled is None:
-        _is_deepspeed_zero3_enabled = False
-        # Try to auto-discover if we are about to use DeepSpeed with ZeRO3 enabled. This will only
-        # work for scripts using cli to pass --deepspeed ds_config.json. If cmd args aren't used,
-        # then to get the model efficiently loaded across multiple-gpus one has to explicitly call
-        # is_deepspeed_zero3_enabled(True) **before** instantiating a model object
+    return _deepspeed_config
+
+
+def deepspeed_config_set(ds_config=None):
+    """
+    Try to auto-discover if we are about to use DeepSpeed. This will only work for scripts using cli to
+    pass``--deepspeed ds_config.json``.
+
+    All other scripts should pass ``ds_config`` (path or dict) explicitly.
+
+    Returns: a config as a dict if ``ds_config`` was passed or it was auto-discovered, ``None`` otherwise.
+    """
+    global _deepspeed_config
+
+    # auto-discovery attempt
+    if ds_config is None:
         if "--deepspeed" in sys.argv:
             idx = sys.argv.index("--deepspeed")
             ds_config = sys.argv[idx + 1]
             if not os.path.exists(ds_config):
                 raise ValueError("--deepspeed requires a valid path to a config file")
-            config = deepspeed_parse_config(ds_config)
-            if (
-                "zero_optimization" in config
-                and "stage" in config["zero_optimization"]
-                and config["zero_optimization"]["stage"] == 3
-            ):
-                _is_deepspeed_zero3_enabled = True
+        else:
+            return None
+
+    _deepspeed_config = deepspeed_parse_config(ds_config)
+
+    return _deepspeed_config
+
+
+def is_deepspeed_zero3_enabled():
+    """
+    This function answers to the question of whether DeepSpeed is going to be used and run using ZeRO Stage 3. It can
+    be called before the Trainer was instantiated.
+
+    It includes an auto-discovery method, see comments in the code for details.
+
+    If you aren't using a pre-made example script and writing your own, best to explicitly set the config via
+    ``deepspeed_config_set(ds_config=ds_config)`` **before** instantiating a model object in order to get the model
+    efficiently loaded across multiple-gpus.
+
+    Returns: ``True`` if either it was explicitly enabled via ``deepspeed_zero3_enable(True)`` or the auto-detector was
+    able to derive that the ``Trainer`` will be running via DeepSpeed ZeRO stage 3.
+
+    """
+    global _deepspeed_config
+    global _is_deepspeed_zero3_enabled
+    if _is_deepspeed_zero3_enabled is None:
+        _is_deepspeed_zero3_enabled = False
+
+    if _deepspeed_config is None:
+        # try auto-discovery
+        _deepspeed_config = deepspeed_config_set()
+
+    if (
+        _deepspeed_config is not None
+        and "zero_optimization" in _deepspeed_config
+        and "stage" in _deepspeed_config["zero_optimization"]
+        and _deepspeed_config["zero_optimization"]["stage"] == 3
+    ):
+        _is_deepspeed_zero3_enabled = True
 
     return _is_deepspeed_zero3_enabled
 
@@ -339,42 +376,28 @@ def deepspeed_parse_config(ds_config):
     return config
 
 
-def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
-    """
-    Init DeepSpeed, after updating the DeepSpeed configuration with any relevant Trainer's args.
+def is_true(config, key):
+    if config is None:
+        return False
+    return bool(config.get(key))
 
-    If ``resume_from_checkpoint`` was passed then an attempt to resume from a previously saved checkpoint will be made.
 
-    Args:
-        trainer: Trainer object
-        num_training_steps: per single gpu
-        resume_from_checkpoint: path to a checkpoint if to resume from after normal DeepSpeedEngine load
+def is_auto(config, key):
+    if config is None:
+        return False
+    return config.get(key) == "auto"
 
-    Returns: model, optimizer, lr_scheduler
 
-    """
-    import deepspeed
+def set_if_auto(config, key, val):
+    if config is None:
+        return
+    if config.get(key) == "auto":
+        config[key] = val
 
+
+def deepspeed_config_setup(trainer):
     args = trainer.args
-    model = trainer.model
-
     config = deepspeed_parse_config(args.deepspeed)
-
-    def is_true(config, key):
-        if config is None:
-            return False
-        return bool(config.get(key))
-
-    def is_auto(config, key):
-        if config is None:
-            return False
-        return config.get(key) == "auto"
-
-    def set_if_auto(config, key, val):
-        if config is None:
-            return
-        if config.get(key) == "auto":
-            config[key] = val
 
     # The following code translates relevant trainer's cl args into the DS config
 
@@ -400,11 +423,59 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
         # now we know for sure if zero3 is enabled
         deepspeed_zero3_enable(is_zero3)
 
-        # automatically assign the optimal config values based on model config
-        hidden_size = model.config.hidden_size
-        set_if_auto(config_zero, "reduce_bucket_size", hidden_size * hidden_size)
-        set_if_auto(config_zero, "stage3_prefetch_bucket_size", 0.9 * hidden_size * hidden_size)
-        set_if_auto(config_zero, "stage3_param_persistence_threshold", 10 * hidden_size)
+    config_optim = config.get("optimizer", {})
+    if config_optim != {}:
+        config_optim_params = config_optim.get("params")
+        set_if_auto(config_optim_params, "lr", args.learning_rate)
+        set_if_auto(config_optim_params, "betas", [args.adam_beta1, args.adam_beta2])
+        set_if_auto(config_optim_params, "eps", args.adam_epsilon)
+        set_if_auto(config_optim_params, "weight_decay", args.weight_decay)
+
+    if "scheduler" in config:
+        config_sched = config.get("scheduler", {})
+        config_sched_params = config_sched.get("params")
+        set_if_auto(config_sched_params, "warmup_min_lr", 0)
+        set_if_auto(config_sched_params, "warmup_max_lr", args.learning_rate)
+        set_if_auto(config_sched_params, "warmup_num_steps", args.warmup_steps)
+        # total_num_steps - will get set in deepspeed_init
+
+    # fp16 / amp
+    # similar to the pytorch native amp - it has a bunch of optional params but we won't set any here unless the user did the work
+    config_fp16 = config.get("fp16")
+    # XXX: at the moment fp16 can't be False, but the fp32 solution is in works - once it's PR'ed and
+    # merged and a new release is made, delete the next line and uncomment the one after it
+    set_if_auto(config_fp16, "enabled", True)
+    # set_if_auto(config_fp16, "enabled", trainer.fp16_backend is not None and trainer.fp16_backend == "amp")
+
+    # fp16 / apex
+    # delegates amp work to apex (which needs to be available), but it cannot be used with any ZeRO features, so probably best to be avoided.
+    config_amp = config.get("amp")
+    set_if_auto(config_amp, "enabled", trainer.fp16_backend is not None and trainer.fp16_backend == "apex")
+    set_if_auto(config_amp, "opt_level", args.fp16_opt_level)
+
+    # XXX: this can be DeepSpeedConfig object w/ various pre-calculated attributes and self-destruct
+    trainer.deepspeed_config = config
+
+
+def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
+    """
+    Init DeepSpeed, after updating the DeepSpeed configuration with any relevant Trainer's args.
+
+    If ``resume_from_checkpoint`` was passed then an attempt to resume from a previously saved checkpoint will be made.
+
+    Args:
+        trainer: Trainer object
+        num_training_steps: per single gpu
+        resume_from_checkpoint: path to a checkpoint if to resume from after normal DeepSpeedEngine load
+
+    Returns: model, optimizer, lr_scheduler
+
+    """
+    import deepspeed
+
+    # resume config update - some bits like `model` and `num_training_steps` only become available during train
+    config = trainer.deepspeed_config
+    model = trainer.model
 
     # Optimizer + Scheduler
     # Currently supported combos:
@@ -419,16 +490,25 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
     # 3. DS scheduler + HF optimizer: No
     # 4. HF scheduler + DS optimizer: No
 
+    # XXX: duplicated code
+    is_zero2 = False
+    is_zero3 = False
+    config_zero = config.get("zero_optimization", {})
+    if config_zero != {}:
+        if config_zero.get("stage") == 2:
+            is_zero2 = True
+        if config_zero.get("stage") == 3:
+            is_zero3 = True
+
+        # automatically assign the optimal config values based on model config
+        hidden_size = model.config.hidden_size
+        set_if_auto(config_zero, "reduce_bucket_size", hidden_size * hidden_size)
+        set_if_auto(config_zero, "stage3_prefetch_bucket_size", 0.9 * hidden_size * hidden_size)
+        set_if_auto(config_zero, "stage3_param_persistence_threshold", 10 * hidden_size)
+
     optimizer = None
     config_optim = config.get("optimizer", {})
-    if config_optim != {}:
-        config_optim_params = config_optim.get("params")
-        set_if_auto(config_optim_params, "lr", args.learning_rate)
-        set_if_auto(config_optim_params, "betas", [args.adam_beta1, args.adam_beta2])
-        set_if_auto(config_optim_params, "eps", args.adam_epsilon)
-        set_if_auto(config_optim_params, "weight_decay", args.weight_decay)
-
-    else:  # override only if the ds config doesn't already have this section
+    if config_optim == {}:
         offload = False
         if is_zero2:
             offload = is_true(config_zero, "cpu_offload")
@@ -464,9 +544,6 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
     if "scheduler" in config:
         config_sched = config.get("scheduler", {})
         config_sched_params = config_sched.get("params")
-        set_if_auto(config_sched_params, "warmup_min_lr", 0)
-        set_if_auto(config_sched_params, "warmup_max_lr", args.learning_rate)
-        set_if_auto(config_sched_params, "warmup_num_steps", args.warmup_steps)
         set_if_auto(config_sched_params, "total_num_steps", num_training_steps)
 
     else:  # override only if the ds config doesn't already have this section
@@ -478,21 +555,11 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
             trainer.create_scheduler(num_training_steps=num_training_steps)
             lr_scheduler = trainer.lr_scheduler
 
-    # fp16 / amp
-    # similar to the pytorch native amp - it has a bunch of optional params but we won't set any here unless the user did the work
-    config_fp16 = config.get("fp16")
-    # XXX: at the moment fp16 can't be False, but the fp32 solution is in works - once it's PR'ed and
-    # merged and a new release is made, delete the next line and uncomment the one after it
-    set_if_auto(config_fp16, "enabled", True)
-    # set_if_auto(config_fp16, "enabled", trainer.fp16_backend is not None and trainer.fp16_backend == "amp")
-    # fp16 / apex
-    # delegates amp work to apex (which needs to be available), but it cannot be used with any ZeRO features, so probably best to be avoided.
-    config_amp = config.get("amp")
-    set_if_auto(config_amp, "enabled", trainer.fp16_backend is not None and trainer.fp16_backend == "apex")
-    set_if_auto(config_amp, "opt_level", args.fp16_opt_level)
-
     # keep for quick debug:
     # from pprint import pprint; pprint(config)
+
+    # update the global config object
+    deepspeed_config_set(ds_config=config)
 
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
 
