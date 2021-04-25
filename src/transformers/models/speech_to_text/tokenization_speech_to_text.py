@@ -260,7 +260,7 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         return (str(vocab_save_path), str(spm_save_path))
 
 
-def load_spm(path: str, sp_model_kwargs: Dict) -> sentencepiece.SentencePieceProcessor:
+def load_spm(path: str, sp_model_kwargs: Dict[str, Any]) -> sentencepiece.SentencePieceProcessor:
     spm = sentencepiece.SentencePieceProcessor(**sp_model_kwargs)
     spm.Load(str(path))
     return spm

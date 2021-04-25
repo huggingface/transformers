@@ -348,7 +348,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         return self.lang_token_to_id[lang_token]
 
 
-def load_spm(path: str, sp_model_kwargs: Dict) -> sentencepiece.SentencePieceProcessor:
+def load_spm(path: str, sp_model_kwargs: Dict[str, Any]) -> sentencepiece.SentencePieceProcessor:
     spm = sentencepiece.SentencePieceProcessor(**sp_model_kwargs)
     spm.Load(str(path))
     return spm
