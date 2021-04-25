@@ -93,7 +93,10 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def test_subword_regularization_tokenizer(self):
         # Subword regularization is only available for the slow tokenizer.
         tokenizer = self.tokenizer_class(
-            SAMPLE_SP, keep_accents=True, sp_model_kwargs={"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
+            SAMPLE_SP,
+            spm_file=self.tmpdirname,
+            keep_accents=True,
+            sp_model_kwargs={"enable_sampling": True, "alpha": 0.1, "nbest_size": -1},
         )
 
         # Subword regularization augments training data with subword sampling.
