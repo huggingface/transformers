@@ -24,7 +24,7 @@ from jax import lax
 from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, SequenceSummary, TiedDense
+from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, SequenceSummary, TiedDense, overwrite_call_docstring
 from ...utils import logging
 from .configuration_electra import ElectraConfig
 
@@ -594,6 +594,12 @@ class FlaxElectraForMultipleChoiceModule(nn.Module):
 )
 class FlaxElectraForMultipleChoice(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraForMultipleChoiceModule
+
+
+# adapt docstring slightly for FlaxElectraForMultipleChoice
+overwrite_call_docstring(
+    FlaxElectraForMultipleChoice, ELECTRA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+)
 
 
 class FlaxElectraForQuestionAnsweringModule(nn.Module):
