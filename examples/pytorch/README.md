@@ -119,7 +119,7 @@ When using PyTorch, we support TPUs thanks to `pytorch/xla`. For more context an
 very detailed [pytorch/xla README](https://github.com/pytorch/xla/blob/master/README.md).
 
 In this repo, we provide a very simple launcher script named
-[xla_spawn.py](https://github.com/huggingface/transformers/tree/master/examples/xla_spawn.py) that lets you run our
+[xla_spawn.py](https://github.com/huggingface/transformers/tree/master/examples/pytorch/xla_spawn.py) that lets you run our
 example scripts on multiple TPU cores without any boilerplate. Just pass a `--num_cores` flag to this script, then your
 regular training script with its arguments (this is similar to the `torch.distributed.launch` helper for
 `torch.distributed`):
