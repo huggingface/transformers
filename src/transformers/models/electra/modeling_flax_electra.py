@@ -26,7 +26,13 @@ from jax import lax
 from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, overwrite_call_docstring
+from ...modeling_flax_utils import (
+    ACT2FN, 
+    FlaxPreTrainedModel, 
+    SequenceSummary, 
+    TiedDense,
+    overwrite_call_docstring
+)
 from ...utils import logging
 from .configuration_electra import ElectraConfig
 
@@ -326,30 +332,13 @@ class FlaxElectraEncoder(nn.Module):
         return self.layer(hidden_states, attention_mask, deterministic=deterministic)
 
 
-class FlaxElectraPooler(nn.Module):
-    config: ElectraConfig
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-
-    def setup(self):
-        self.dense = nn.Dense(
-            self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
-            dtype=self.dtype,
-        )
-
-    def __call__(self, hidden_states):
-        cls_hidden_state = hidden_states[:, 0]
-        cls_hidden_state = self.dense(cls_hidden_state)
-        return nn.gelu(cls_hidden_state)
-
-
 class FlaxElectraGeneratorPredictions(nn.Module):
     config: ElectraConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.dense = nn.Dense(self.config.embedding_size, dtype=self.dtype)
         self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.dense = nn.Dense(self.config.embedding_size, dtype=self.dtype)
 
     def __call__(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -443,14 +432,12 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
 class FlaxElectraModule(nn.Module):
     config: ElectraConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    add_pooling_layer: bool = True
 
     def setup(self):
         self.embeddings = FlaxElectraEmbeddings(self.config, dtype=self.dtype)
         if self.config.embedding_size != self.config.hidden_size:
             self.embeddings_project = nn.Dense(self.config.hidden_size)
         self.encoder = FlaxElectraEncoder(self.config, dtype=self.dtype)
-        self.pooler = FlaxElectraPooler(self.config, dtype=self.dtype)
 
     def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True):
         embeddings = self.embeddings(
@@ -460,12 +447,8 @@ class FlaxElectraModule(nn.Module):
             embeddings = self.embeddings_project(embeddings)
 
         hidden_states = self.encoder(embeddings, attention_mask, deterministic=deterministic)
+        return (hidden_states,)
 
-        if not self.add_pooling_layer:
-            return hidden_states
-
-        pooled = self.pooler(hidden_states)
-        return hidden_states, pooled
 
 @add_start_docstrings(
     "The bare Electra Model transformer outputting raw hidden-states without any specific head on top.",
@@ -474,25 +457,35 @@ class FlaxElectraModule(nn.Module):
 class FlaxElectraModel(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraModule
 
+
 class FlaxElectraForMaskedLMModule(nn.Module):
     config: ElectraConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.electra = FlaxElectraModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
+        self.electra = FlaxElectraModule(config=self.config, dtype=self.dtype)
         self.generator_predictions = FlaxElectraGeneratorPredictions(config=self.config)
-        # TODO: should we have the option to include shared embeddings here
-        self.generator_lm_head = nn.Dense(self.config.vocab_size, dtype=self.dtype)
+        if self.config.tie_word_embeddings:
+            self.generator_lm_head = TiedDense(self.config.vocab_size, dtype=self.dtype)
+        else:
+            self.generator_lm_head = nn.Dense(self.config.vocab_size, dtype=self.dtype)
 
     def __call__(
         self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
     ):
         hidden_states = self.electra(
             input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
-        )
+        )[0]
         prediction_scores = self.generator_predictions(hidden_states)
-        prediction_scores = self.generator_lm_head(prediction_scores)
-        return prediction_scores
+
+        if self.config.tie_word_embeddings:
+            shared_embedding = self.electra.variables["params"]["embeddings"]["word_embeddings"]["embedding"]
+            prediction_scores = self.generator_lm_head(prediction_scores, shared_embedding.T)
+        else:
+            prediction_scores = self.generator_lm_head(prediction_scores)
+
+        return (prediction_scores,)
+
 
 @add_start_docstrings("""Electra Model with a `language modeling` head on top. """, ELECTRA_START_DOCSTRING)
 class FlaxElectraForMaskedLM(FlaxElectraPreTrainedModel):
@@ -504,7 +497,7 @@ class FlaxElectraForPreTrainingModule(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.electra = FlaxElectraModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
+        self.electra = FlaxElectraModule(config=self.config, dtype=self.dtype)
         self.discriminator_predictions = FlaxElectraDiscriminatorPredictions(config=self.config, dtype=self.dtype)
 
     def __call__(
@@ -513,10 +506,11 @@ class FlaxElectraForPreTrainingModule(nn.Module):
         # Model
         hidden_states = self.electra(
             input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
-        )
+        )[0]
 
         logits = self.discriminator_predictions(hidden_states)
-        return logits
+        return (logits,)
+
 
 @add_start_docstrings(
     """
@@ -535,7 +529,7 @@ class FlaxElectraForTokenClassificationModule(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.electra = FlaxElectraModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
+        self.electra = FlaxElectraModule(config=self.config, dtype=self.dtype)
         self.dropout = nn.Dropout(self.config.hidden_dropout_prob)
         self.classifier = nn.Dense(self.config.num_labels)
     
@@ -545,11 +539,12 @@ class FlaxElectraForTokenClassificationModule(nn.Module):
         # Model
         hidden_states = self.electra(
             input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
-        )
+        )[0]
 
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         logits = self.classifier(hidden_states)
-        return logits
+        return (logits,)
+
 
 @add_start_docstrings(
     """
@@ -569,7 +564,7 @@ class FlaxElectraForMultipleChoiceModule(nn.Module):
 
     def setup(self):
         self.electra = FlaxElectraModule(config=self.config, dtype=self.dtype)
-        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+        self.sequence_summary = SequenceSummary(config=self.config, dtype=self.dtype)
         self.classifier = nn.Dense(1, dtype=self.dtype)
     
     def __call__(
@@ -582,11 +577,10 @@ class FlaxElectraForMultipleChoiceModule(nn.Module):
         position_ids = position_ids.reshape(-1, position_ids.shape[-1]) if position_ids is not None else None
 
         # Model
-        _, pooled_output = self.electra(
+        hidden_states = self.electra(
             input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
-        )
-
-        pooled_output = self.dropout(pooled_output, deterministic=deterministic)
+        )[0]
+        pooled_output = self.sequence_summary(hidden_states, deterministic=deterministic)
         logits = self.classifier(pooled_output)
 
         reshaped_logits = logits.reshape(-1, num_choices)
@@ -610,7 +604,7 @@ class FlaxElectraForQuestionAnsweringModule(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.electra = FlaxElectraModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
+        self.electra = FlaxElectraModule(config=self.config, dtype=self.dtype)
         self.qa_outputs = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
     def __call__(
@@ -626,6 +620,7 @@ class FlaxElectraForQuestionAnsweringModule(nn.Module):
 
         return (start_logits, end_logits)
 
+
 @add_start_docstrings(
     """
     ELECTRA Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
@@ -637,30 +632,45 @@ class FlaxElectraForQuestionAnswering(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraForQuestionAnsweringModule
 
 
+class FlaxElectraClassificationHead(nn.Module):
+    """Head for sentence-level classification tasks."""
+    config: ElectraConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.dense = nn.Dense(self.config.hidden_size, dtype=self.dtype)
+        self.dropout = nn.Dropout(self.config.hidden_dropout_prob)
+        self.out_proj = nn.Dense(self.config.num_labels, dtype=self.dtype)
+
+    def __call__(self, hidden_states, deterministic: bool = True):
+        x = hidden_states[:, 0, :]  # take <s> token (equiv. to [CLS])
+        x = self.dropout(x, deterministic=deterministic)
+        x = self.dense(x)
+        x = ACT2FN["gelu"](x)  # although BERT uses tanh here, it seems Electra authors used gelu here
+        x = self.dropout(x, deterministic=deterministic)
+        x = self.out_proj(x)
+        return x
+
+
 class FlaxElectraForSequenceClassificationModule(nn.Module):
     config: ElectraConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
         self.electra = FlaxElectraModule(config=self.config, dtype=self.dtype)
-        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
-        self.out_proj = nn.Dense(
-            self.config.num_labels,
-            dtype=self.dtype,
-        )
+        self.classifier = FlaxElectraClassificationHead(config=self.config, dtype=self.dtype)
 
     def __call__(
         self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
     ):
         # Model
-        _, pooled_output = self.electra(
+        hidden_states = self.electra(
             input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
-        )
-
-        pooled_output = self.dropout(pooled_output, deterministic=deterministic)
-        logits = self.out_proj(pooled_output)
+        )[0]
+        logits = self.classifier(hidden_states, deterministic=deterministic)
 
         return (logits,)
+
 
 @add_start_docstrings(
     """
