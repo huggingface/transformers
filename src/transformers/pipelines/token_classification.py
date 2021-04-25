@@ -188,29 +188,26 @@ class TokenClassificationPipeline(Pipeline):
             filtered_labels_idx = [idx for idx in range(score.shape[0]) if not special_tokens_mask[idx]]
 
             for idx in filtered_labels_idx:
+                entity = {}
                 if offset_mapping is not None:
                     start_ind, end_ind = offset_mapping[idx]
+                    entity['start'], entity['end'] = (start_ind, end_ind)
                     word_ref = sentence[start_ind:end_ind]
                     word = self.tokenizer.convert_ids_to_tokens([int(input_ids[idx])])[0]
-                    is_subword = len(word_ref) != len(word)
+                    entity['word'] = word
+                    entity['is_subword'] = len(word_ref) != len(word)
 
                     if int(input_ids[idx]) == self.tokenizer.unk_token_id:
-                        word = word_ref
-                        is_subword = False
+                        entity['word'] = word_ref
+                        entity['is_subword'] = False
                 else:
-                    word = self.tokenizer.convert_ids_to_tokens(int(input_ids[idx]))
+                    entity['word'] = self.tokenizer.convert_ids_to_tokens(int(input_ids[idx]))
 
-                    start_ind = None
-                    end_ind = None
+                    entity['start'] = None
+                    entity['end'] = None
 
-                entity = {
-                    "word": word,
-                    "score": score[idx],
-                    "index": idx,
-                    "start": start_ind,
-                    "end": end_ind,
-                    "is_subword": is_subword
-                }
+                entity['score'] = score[idx]
+                entity['index'] = idx
 
                 entities += [entity]
 
