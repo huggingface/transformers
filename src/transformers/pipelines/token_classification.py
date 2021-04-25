@@ -239,23 +239,27 @@ class TokenClassificationPipeline(Pipeline):
         strategy = self.aggregation_strategy
 
         def set_labels(sub_words: List[dict]) -> dict:
-            score = np.stack([sub["score"] for sub in sub_words])
+            scores = np.stack([sub["score"] for sub in sub_words])
             if strategy == AggregationStrategy.FIRST:
                 # get label of first sub-word
-                max_label_idx = score[0].argmax()
+                max_label_idx = scores[0].argmax()
+                score = scores[0][max_label_idx]
                 label = self.model.config.id2label[max_label_idx]
             elif strategy == AggregationStrategy.MAX:
-                max_label_idx = np.unravel_index(np.argmax(score, axis=None), score.shape)[1]
+                max_label_idx = np.unravel_index(np.argmax(scores, axis=None), scores.shape)[1]
+                score = scores.max()
                 label = self.model.config.id2label[max_label_idx]
             elif strategy == AggregationStrategy.AVERAGE:
-                max_label_idx = np.mean(score, axis=0).argmax()
+                avg_scores = np.mean(scores, axis=0)
+                max_label_idx = avg_scores.argmax()
+                score = avg_scores[max_label_idx]
                 label = self.model.config.id2label[max_label_idx]
             else:
                 raise ValueError(f"Invalid value {strategy} for option `aggregation_strategy`")
 
             for idx, sub in enumerate(sub_words):
                 sub["entity"] = label
-                sub["score"] = score[idx][max_label_idx].item()
+                sub["score"] = score.item()
 
             return sub_words
 
