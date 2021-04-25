@@ -86,6 +86,20 @@ class M2M100Tokenizer(PreTrainedTokenizer):
             token instead.
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
+        sp_model_kwargs (:obj:`dict`, `optional`, defaults to :obj:`None`):
+            Will be passed to the ``SentencePieceProcessor.__init__()`` method. The `Python wrapper for SentencePiece
+            <https://github.com/google/sentencepiece/tree/master/python>`__ can be used, among other things, to set:
+
+            - ``enable_sampling``: Enable subword regularization.
+            - ``nbest_size``: Sampling parameters for unigram. Invalid for BPE-Dropout.
+
+              - ``nbest_size = {0,1}``: No sampling is performed.
+              - ``nbest_size > 1``: samples from the nbest_size results.
+              - ``nbest_size < 0``: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+                using forward-filtering-and-backward-sampling algorithm.
+
+            - ``alpha``: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+              BPE-dropout.
 
     Examples::
 
@@ -118,8 +132,11 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         sep_token="</s>",
         pad_token="<pad>",
         unk_token="<unk>",
+        sp_model_kwargs=None,
         **kwargs,
     ):
+        sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+
         super().__init__(
             src_lang=src_lang,
             tgt_lang=tgt_lang,
@@ -128,6 +145,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
             sep_token=sep_token,
             unk_token=unk_token,
             pad_token=pad_token,
+            sp_model_kwargs=sp_model_kwargs,
             **kwargs,
         )
 
@@ -135,7 +153,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         self.encoder = load_json(vocab_file)
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.spm_file = spm_file
-        self.sp_model = load_spm(spm_file)
+        self.sp_model = load_spm(spm_file, sp_model_kwargs)
 
         self.encoder_size = len(self.encoder)
 
@@ -169,7 +187,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         self.set_src_lang_special_tokens(self._src_lang)
 
     def _tokenize(self, text: str) -> List[str]:
-        return self.sp_model.EncodeAsPieces(text)
+        return self.sp_model.encode(text, out_type=str)
 
     def _convert_token_to_id(self, token):
         if token in self.lang_token_to_id:
@@ -256,7 +274,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d: Dict) -> None:
         self.__dict__ = d
-        self.sp_model = load_spm(self.spm_file)
+        self.sp_model = load_spm(self.spm_file), self.sp_model_kwargs
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         save_dir = Path(save_directory)
@@ -330,8 +348,8 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         return self.lang_token_to_id[lang_token]
 
 
-def load_spm(path: str) -> sentencepiece.SentencePieceProcessor:
-    spm = sentencepiece.SentencePieceProcessor()
+def load_spm(path: str, sp_model_kwargs: Dict) -> sentencepiece.SentencePieceProcessor:
+    spm = sentencepiece.SentencePieceProcessor(**sp_model_kwargs)
     spm.Load(str(path))
     return spm
 
