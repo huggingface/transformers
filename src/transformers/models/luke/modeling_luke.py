@@ -1028,7 +1028,7 @@ class LukeForEntityClassification(LukePreTrainedModel):
 
         self.num_labels = config.num_labels
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.typing = nn.Linear(config.hidden_size, config.num_labels)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
 
@@ -1094,7 +1094,7 @@ class LukeForEntityClassification(LukePreTrainedModel):
 
         feature_vector = outputs.entity_last_hidden_state[:, 0, :]
         feature_vector = self.dropout(feature_vector)
-        logits = self.typing(feature_vector)
+        logits = self.classifier(feature_vector)
 
         loss = None
         if labels is not None:
