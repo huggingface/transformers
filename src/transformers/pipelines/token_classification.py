@@ -85,7 +85,7 @@ class TokenClassificationPipeline(Pipeline):
         ignore_labels=["O"],
         task: str = "",
         grouped_entities: bool = False,
-        aggregation_strategy: Union[str, AggregationStrategy] = AggregationStrategy.DEFAULT,
+        aggregation_strategy: Union[str, AggregationStrategy] = AggregationStrategy.FIRST,
         ignore_subwords: bool = False,
     ):
         super().__init__(
@@ -240,30 +240,22 @@ class TokenClassificationPipeline(Pipeline):
 
         def set_labels(sub_words: List[dict]) -> dict:
             score = np.stack([sub["score"] for sub in sub_words])
-            if strategy == AggregationStrategy.DEFAULT:
-                label_idx = score[0].argmax()
-                label = self.model.config.id2label[label_idx]
-                sub_words[0]["entity"] = label
-                sub_words[0]["score"] = score[0][label_idx]
-                for sub in sub_words[1:]:
-                    del sub["score"]
+            if strategy == AggregationStrategy.FIRST:
+                # get label of first sub-word
+                max_label_idx = score[0].argmax()
+                label = self.model.config.id2label[max_label_idx]
+            elif strategy == AggregationStrategy.MAX:
+                max_label_idx = np.unravel_index(np.argmax(score, axis=None), score.shape)[1]
+                label = self.model.config.id2label[max_label_idx]
+            elif strategy == AggregationStrategy.AVERAGE:
+                max_label_idx = np.mean(score, axis=0).argmax()
+                label = self.model.config.id2label[max_label_idx]
             else:
-                if strategy == AggregationStrategy.FIRST:
-                    # get label of first sub-word
-                    max_label_idx = score[0].argmax()
-                    label = self.model.config.id2label[max_label_idx]
-                elif strategy == AggregationStrategy.MAX:
-                    max_label_idx = np.unravel_index(np.argmax(score, axis=None), score.shape)[1]
-                    label = self.model.config.id2label[max_label_idx]
-                elif strategy == AggregationStrategy.AVERAGE:
-                    max_label_idx = np.mean(score, axis=0).argmax()
-                    label = self.model.config.id2label[max_label_idx]
-                else:
-                    raise ValueError(f"Invalid value {strategy} for option `aggregation_strategy`")
+                raise ValueError(f"Invalid value {strategy} for option `aggregation_strategy`")
 
-                for idx, sub in enumerate(sub_words):
-                    sub["entity"] = label
-                    sub["score"] = score[idx][max_label_idx].item()
+            for idx, sub in enumerate(sub_words):
+                sub["entity"] = label
+                sub["score"] = score[idx][max_label_idx].item()
 
             return sub_words
 
