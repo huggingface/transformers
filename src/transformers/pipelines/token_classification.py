@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, List, Optional, Union
 
 import numpy as np
 
-from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
+from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available, AggregationStrategy
 from ..modelcard import ModelCard
 from ..models.bert.tokenization_bert import BasicTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
@@ -22,7 +22,7 @@ if is_torch_available():
 
     from ..models.auto.modeling_auto import MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
-
+    
 class TokenClassificationArgumentHandler(ArgumentHandler):
     """
     Handles arguments for token classification.
@@ -85,7 +85,7 @@ class TokenClassificationPipeline(Pipeline):
         ignore_labels=["O"],
         task: str = "",
         grouped_entities: bool = False,
-        subword_label_re_alignment: Union[bool, str] = False,
+        aggregation_strategy: Union[str, AggregationStrategy] = AggregationStrategy.DEFAULT,
         ignore_subwords: bool = False,
     ):
         super().__init__(
@@ -108,10 +108,13 @@ class TokenClassificationPipeline(Pipeline):
         self._args_parser = args_parser
         self.ignore_labels = ignore_labels
         self.grouped_entities = grouped_entities
-        self.subword_label_re_alignment = subword_label_re_alignment
+        if isinstance(aggregation_strategy, str):
+            self.aggregation_strategy = AggregationStrategy[aggregation_strategy.upper()]
+        else:
+            self.aggregation_strategy = aggregation_strategy
         self.ignore_subwords = ignore_subwords
 
-        if (self.ignore_subwords or self.subword_label_re_alignment) and not self.tokenizer.is_fast:
+        if self.ignore_subwords and not self.tokenizer.is_fast:
             raise ValueError(
                 "Slow tokenizers cannot ignore subwords. Please set the `ignore_subwords` option"
                 "to `False` or use a fast tokenizer."
@@ -206,14 +209,12 @@ class TokenClassificationPipeline(Pipeline):
                     "index": idx,
                     "start": start_ind,
                     "end": end_ind,
+                    "is_subword": is_subword
                 }
-
-                if (self.grouped_entities and self.ignore_subwords) or self.subword_label_re_alignment:
-                    entity["is_subword"] = is_subword
 
                 entities += [entity]
 
-            if self.subword_label_re_alignment:
+            if self.ignore_subwords:
                 entities = self.set_subwords_label(entities)
             else:
                 for entity in entities:
@@ -235,31 +236,30 @@ class TokenClassificationPipeline(Pipeline):
         return answers
 
     def set_subwords_label(self, entities: List[dict]) -> List[dict]:
-        strategy = self.subword_label_re_alignment
+        strategy = self.aggregation_strategy
 
         def set_labels(sub_words: List[dict]) -> dict:
             score = np.stack([sub["score"] for sub in sub_words])
-            if strategy == "default" or strategy is True:
+            if strategy == AggregationStrategy.DEFAULT:
                 label_idx = score[0].argmax()
                 label = self.model.config.id2label[label_idx]
                 sub_words[0]["entity"] = label
                 sub_words[0]["score"] = score[0][label_idx]
                 for sub in sub_words[1:]:
-                    sub["entity"] = "O"
-                    sub["score"] = 0.0  # what score should we assign here?
+                    del sub["score"]
             else:
-                if strategy == "first":
+                if strategy == AggregationStrategy.FIRST:
                     # get label of first sub-word
                     max_label_idx = score[0].argmax()
                     label = self.model.config.id2label[max_label_idx]
-                elif strategy == "max":
+                elif strategy == AggregationStrategy.MAX:
                     max_label_idx = np.unravel_index(np.argmax(score, axis=None), score.shape)[1]
                     label = self.model.config.id2label[max_label_idx]
-                elif strategy == "average":
+                elif strategy == AggregationStrategy.AVERAGE:
                     max_label_idx = np.mean(score, axis=0).argmax()
                     label = self.model.config.id2label[max_label_idx]
                 else:
-                    raise ValueError(f"Invalid value {strategy} for option `subword_label_re_alignment`")
+                    raise ValueError(f"Invalid value {strategy} for option `aggregation_strategy`")
 
                 for idx, sub in enumerate(sub_words):
                     sub["entity"] = label
@@ -335,7 +335,7 @@ class TokenClassificationPipeline(Pipeline):
         for entity in entities:
 
             is_last_idx = entity["index"] == last_idx
-            is_subword = (self.ignore_subwords or self.subword_label_re_alignment) and entity["is_subword"]
+            is_subword = self.ignore_subwords and entity["is_subword"]
             if not entity_group_disagg:
                 entity_group_disagg += [entity]
                 if is_last_idx:
