@@ -470,7 +470,10 @@ class EncoderDecoderModel(PreTrainedModel):
         return input_dict
 
     def resize_token_embeddings(self, *args, **kwargs):
-        raise NotImplementedError("Resizing the embedding layers via the EncoderDecoderModel directly is not supported. Please use the respective methods of the wrapped objects (model.encoder.resize_token_embeddings(...) or model.decoder.resize_token_embeddings(...))")
+        raise NotImplementedError(
+            "Resizing the embedding layers via the EncoderDecoderModel directly is not supported." 
+            "Please use the respective methods of the wrapped objects (model.encoder.resize_token_embeddings(...) or model.decoder.resize_token_embeddings(...))"
+        )
 
     def _reorder_cache(self, past, beam_idx):
         # apply decoder cache reordering here
