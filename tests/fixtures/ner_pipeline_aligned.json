@@ -67,7 +67,7 @@
     "max": [
         {
             "word": "THe",
-            "score": 0.929590046,
+            "score": 0.96568632,
             "index": 1,
             "start": 0,
             "end": 1,
@@ -76,7 +76,7 @@
         },
         {
             "word": "quasiamerican",
-            "score": 0.32563004,
+            "score": 0.89459532,
             "index": 4,
             "start": 4,
             "end": 9,
@@ -132,7 +132,7 @@
     "average": [
         {
             "word": "THe",
-            "score": 0.929590046,
+            "score": 0.821620602,
             "index": 1,
             "start": 0,
             "end": 1,
@@ -141,7 +141,7 @@
         },
         {
             "word": "quasiamerican",
-            "score": 0.32563004,
+            "score": 0.49670231500000006,
             "index": 4,
             "start": 4,
             "end": 9,
@@ -159,7 +159,7 @@
         },
         {
             "word": "Musterman",
-            "score": 0.998437107,
+            "score": 0.9982705734999999,
             "index": 9,
             "start": 23,
             "end": 27,
@@ -186,7 +186,7 @@
         },
         {
             "word": "Madeuppity",
-            "score": 0.7194587,
+            "score": 0.6232144095,
             "index": 13,
             "start": 42,
             "end": 46,
