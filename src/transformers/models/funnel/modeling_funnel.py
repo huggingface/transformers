@@ -184,7 +184,7 @@ class FunnelAttentionStructure(nn.Module):
         self.sin_dropout = nn.Dropout(config.hidden_dropout)
         self.cos_dropout = nn.Dropout(config.hidden_dropout)
         # Track where we are at in terms of pooling from the original input, e.g., by how much the sequence length was
-        # dividide.
+        # divided.
         self.pooling_mult = None
 
     def init_attention_inputs(self, inputs_embeds, attention_mask=None, token_type_ids=None):
@@ -218,7 +218,7 @@ class FunnelAttentionStructure(nn.Module):
         For the factorized attention, it returns the matrices (phi, pi, psi, omega) used in the paper, appendix A.2.2,
         final formula.
 
-        For the relative shif attention, it returns all possible vectors R used in the paper, appendix A.2.1, final
+        For the relative shift attention, it returns all possible vectors R used in the paper, appendix A.2.1, final
         formula.
 
         Paper link: https://arxiv.org/abs/2006.03236

@@ -51,7 +51,7 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
     )  # '_._' is replaced by a level separation (can be used to convert TF2.0 lists in PyTorch nn.ModulesList)
     tf_name = re.sub(r"//+", "/", tf_name)  # Remove empty levels at the end
     tf_name = tf_name.split("/")  # Convert from TF2.0 '/' separators to PyTorch '.' separators
-    # Some weights have a single name withtout "/" such as final_logits_bias in BART
+    # Some weights have a single name without "/" such as final_logits_bias in BART
     if len(tf_name) > 1:
         tf_name = tf_name[1:]  # Remove level zero
 

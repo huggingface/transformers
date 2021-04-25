@@ -42,7 +42,7 @@ class TrainerState:
 
         In all this class, one step is to be understood as one update step. When using gradient accumulation, one
         update step may require several forward and backward passes: if you use :obj:`gradient_accumulation_steps=n`,
-        then one update step requires going throuch `n` batches.
+        then one update step requires going through `n` batches.
 
     Args:
         epoch (:obj:`float`, `optional`):
