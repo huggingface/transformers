@@ -1250,7 +1250,7 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
 
         self.num_labels = config.num_labels
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size * 3, config.num_labels, False)
+        self.classifier = nn.Linear(config.hidden_size * 3, config.num_labels)
 
         self.init_weights()
 
