@@ -13,9 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Tuple
-
-import numpy as np
+from typing import Tuple
 
 import flax.linen as nn
 import jax
@@ -26,13 +24,7 @@ from jax import lax
 from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_flax_utils import (
-    ACT2FN, 
-    FlaxPreTrainedModel, 
-    SequenceSummary, 
-    TiedDense,
-    overwrite_call_docstring
-)
+from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, SequenceSummary, TiedDense
 from ...utils import logging
 from .configuration_electra import ElectraConfig
 
@@ -375,7 +367,12 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
     module_class: nn.Module = None
 
     def __init__(
-        self, config: ElectraConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
+        self,
+        config: ElectraConfig,
+        input_shape: Tuple = (1, 1),
+        seed: int = 0,
+        dtype: jnp.dtype = jnp.float32,
+        **kwargs
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
@@ -532,9 +529,9 @@ class FlaxElectraForTokenClassificationModule(nn.Module):
         self.electra = FlaxElectraModule(config=self.config, dtype=self.dtype)
         self.dropout = nn.Dropout(self.config.hidden_dropout_prob)
         self.classifier = nn.Dense(self.config.num_labels)
-    
+
     def __call__(
-        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True 
+        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
     ):
         # Model
         hidden_states = self.electra(
@@ -566,9 +563,9 @@ class FlaxElectraForMultipleChoiceModule(nn.Module):
         self.electra = FlaxElectraModule(config=self.config, dtype=self.dtype)
         self.sequence_summary = SequenceSummary(config=self.config, dtype=self.dtype)
         self.classifier = nn.Dense(1, dtype=self.dtype)
-    
+
     def __call__(
-        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True 
+        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
     ):
         num_choices = input_ids.shape[1]
         input_ids = input_ids.reshape(-1, input_ids.shape[-1]) if input_ids is not None else None
@@ -611,7 +608,9 @@ class FlaxElectraForQuestionAnsweringModule(nn.Module):
         self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
     ):
         # Model
-        hidden_states = self.electra(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic)
+        hidden_states = self.electra(
+            input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
+        )
 
         logits = self.qa_outputs(hidden_states)
         start_logits, end_logits = logits.split(self.config.num_labels, axis=-1)
@@ -634,6 +633,7 @@ class FlaxElectraForQuestionAnswering(FlaxElectraPreTrainedModel):
 
 class FlaxElectraClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
+
     config: ElectraConfig
     dtype: jnp.dtype = jnp.float32
 
@@ -674,8 +674,8 @@ class FlaxElectraForSequenceClassificationModule(nn.Module):
 
 @add_start_docstrings(
     """
-    Electra Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
-    output) e.g. for GLUE tasks.
+    Electra Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
     """,
     ELECTRA_START_DOCSTRING,
 )

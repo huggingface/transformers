@@ -18,7 +18,13 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_available, is_torch_available, is_flax_available
+from ...file_utils import (
+    _BaseLazyModule,
+    is_flax_available,
+    is_tf_available,
+    is_tokenizers_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
@@ -70,50 +76,19 @@ if is_flax_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
-    from .tokenization_electra import ElectraTokenizer
+    pass
 
     if is_tokenizers_available():
-        from .tokenization_electra_fast import ElectraTokenizerFast
+        pass
 
     if is_torch_available():
-        from .modeling_electra import (
-            ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ElectraForMaskedLM,
-            ElectraForMultipleChoice,
-            ElectraForPreTraining,
-            ElectraForQuestionAnswering,
-            ElectraForSequenceClassification,
-            ElectraForTokenClassification,
-            ElectraModel,
-            ElectraPreTrainedModel,
-            load_tf_weights_in_electra,
-        )
+        pass
 
     if is_tf_available():
-        from .modeling_tf_electra import (
-            TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFElectraForMaskedLM,
-            TFElectraForMultipleChoice,
-            TFElectraForPreTraining,
-            TFElectraForQuestionAnswering,
-            TFElectraForSequenceClassification,
-            TFElectraForTokenClassification,
-            TFElectraModel,
-            TFElectraPreTrainedModel,
-        )
+        pass
 
     if is_flax_available():
-        from .modeling_flax_electra import (
-            FlaxElectraForMaskedLM,
-            FlaxElectraForMultipleChoice,
-            FlaxElectraForPreTraining,
-            FlaxElectraForQuestionAnswering,
-            FlaxElectraForSequenceClassification,
-            FlaxElectraForTokenClassification,
-            FlaxElectraModel,
-            FlaxElectraPreTrainedModel,
-        )
+        pass
 
 else:
     import importlib

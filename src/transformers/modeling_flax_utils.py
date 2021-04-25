@@ -16,17 +16,17 @@
 import os
 from functools import partial
 from pickle import UnpicklingError
-from typing import Dict, Set, Tuple, Union, Callable
+from typing import Callable, Dict, Set, Tuple, Union
 
 import numpy as np
 
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from jax import lax
 from flax.core.frozen_dict import FrozenDict, unfreeze
 from flax.serialization import from_bytes, to_bytes
 from flax.traverse_util import flatten_dict, unflatten_dict
+from jax import lax
 from jax.random import PRNGKey
 
 from .configuration_utils import PretrainedConfig
@@ -56,6 +56,10 @@ ACT2FN = {
     "swish": nn.swish,
     "gelu_new": partial(nn.gelu, approximate=True),
 }
+
+
+def identity(x, **kwargs):
+    return x
 
 
 class FlaxPreTrainedModel(PushToHubMixin):
@@ -427,6 +431,7 @@ class FlaxPreTrainedModel(PushToHubMixin):
             url = self._push_to_hub(save_files=saved_files, **kwargs)
             logger.info(f"Model pushed to the hub in this commit: {url}")
 
+
 class SequenceSummary(nn.Module):
     r"""
     Compute a single vector summary of a sequence hidden states.
@@ -458,7 +463,6 @@ class SequenceSummary(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        identity = lambda x, deterministic=True: x
 
         self.summary_type = getattr(self.config, "summary_type", "last")
         if self.summary_type == "attn":
@@ -469,14 +473,15 @@ class SequenceSummary(nn.Module):
 
         self.summary = identity
         if hasattr(self.config, "summary_use_proj") and self.config.summary_use_proj:
-            if hasattr(self.config, "summary_proj_to_labels") and self.config.summary_proj_to_labels and self.config.num_labels > 0:
+            if (
+                hasattr(self.config, "summary_proj_to_labels")
+                and self.config.summary_proj_to_labels
+                and self.config.num_labels > 0
+            ):
                 num_classes = self.config.num_labels
             else:
                 num_classes = self.config.hidden_size
-            self.summary = nn.Dense(
-                num_classes, 
-                dtype=self.dtype
-            )
+            self.summary = nn.Dense(num_classes, dtype=self.dtype)
 
         activation_string = getattr(self.config, "summary_activation", None)
         self.activation = ACT2FN[activation_string] if activation_string else lambda x: x
@@ -489,7 +494,7 @@ class SequenceSummary(nn.Module):
         if hasattr(self.config, "summary_last_dropout") and self.config.summary_last_dropout > 0:
             self.last_dropout = nn.Dropout(self.config.summary_last_dropout)
 
-    def __call__(self, hidden_states, cls_index = None, deterministic: bool = True):
+    def __call__(self, hidden_states, cls_index=None, deterministic: bool = True):
         """
         Compute a single vector summary of a sequence hidden states.
 
@@ -519,8 +524,8 @@ class SequenceSummary(nn.Module):
             else:
                 # TODO:
                 raise NotImplementedError
-                #cls_index = cls_index.unsqueeze(-1).unsqueeze(-1)
-                #cls_index = cls_index.expand((-1,) * (cls_index.dim() - 1) + (hidden_states.size(-1),))
+                # cls_index = cls_index.unsqueeze(-1).unsqueeze(-1)
+                # cls_index = cls_index.expand((-1,) * (cls_index.dim() - 1) + (hidden_states.size(-1),))
             # shape of cls_index: (bsz, XX, 1, hidden_size) where XX are optional leading dim of hidden_states
             output = hidden_states.gather(-2, cls_index).squeeze(-2)  # shape (bsz, XX, hidden_size)
         elif self.summary_type == "attn":

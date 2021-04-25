@@ -11,11 +11,11 @@ from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_
 if is_flax_available():
     from transformers.models.electra.modeling_flax_electra import (
         FlaxElectraForMaskedLM,
-        FlaxElectraForPreTraining,
         FlaxElectraForMultipleChoice,
+        FlaxElectraForPreTraining,
         FlaxElectraForQuestionAnswering,
-        FlaxElectraForTokenClassification,
         FlaxElectraForSequenceClassification,
+        FlaxElectraForTokenClassification,
         FlaxElectraModel,
     )
 
@@ -43,7 +43,7 @@ class FlaxElectraModelTester(unittest.TestCase):
         type_vocab_size=16,
         type_sequence_label_size=2,
         initializer_range=0.02,
-        num_choices=4
+        num_choices=4,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -107,14 +107,16 @@ class FlaxElectraModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            FlaxElectraModel, 
-            FlaxElectraForMaskedLM, 
-            FlaxElectraForPreTraining, 
-            FlaxElectraForTokenClassification, 
+            FlaxElectraModel,
+            FlaxElectraForMaskedLM,
+            FlaxElectraForPreTraining,
+            FlaxElectraForTokenClassification,
             FlaxElectraForQuestionAnswering,
             FlaxElectraForMultipleChoice,
-            FlaxElectraForSequenceClassification
-        ) if is_flax_available() else ()
+            FlaxElectraForSequenceClassification,
+        )
+        if is_flax_available()
+        else ()
     )
 
     def setUp(self):
