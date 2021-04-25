@@ -1823,4 +1823,3 @@ class PushToHubMixin:
                 copy_tree(save_directory, tmp_dir)
 
             return repo.push_to_hub(commit_message=commit_message)
->>>>>>> 35cd8eed887891bee60194a95adc35b884f68f55
