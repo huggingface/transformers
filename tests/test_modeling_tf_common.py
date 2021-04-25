@@ -24,8 +24,22 @@ import unittest
 from importlib import import_module
 from typing import List, Tuple
 
+from huggingface_hub import HfApi
+from requests.exceptions import HTTPError
 from transformers import is_tf_available
-from transformers.testing_utils import _tf_gpu_memory_limit, is_pt_tf_cross_test, require_onnx, require_tf, slow
+from transformers.models.auto import get_values
+from transformers.testing_utils import (
+    ENDPOINT_STAGING,
+    PASS,
+    USER,
+    _tf_gpu_memory_limit,
+    is_pt_tf_cross_test,
+    is_staging_test,
+    require_onnx,
+    require_tf,
+    slow,
+    tooslow,
+)
 
 
 if is_tf_available():
@@ -42,6 +56,8 @@ if is_tf_available():
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        BertConfig,
+        TFBertModel,
         TFSharedEmbeddings,
         tf_top_k_top_p_filtering,
     )
@@ -82,7 +98,7 @@ class TFModelTesterMixin:
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False) -> dict:
         inputs_dict = copy.deepcopy(inputs_dict)
 
-        if model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
+        if model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
             inputs_dict = {
                 k: tf.tile(tf.expand_dims(v, 1), (1, self.model_tester.num_choices) + (1,) * (v.ndim - 1))
                 if isinstance(v, tf.Tensor) and v.ndim > 0
@@ -91,21 +107,21 @@ class TFModelTesterMixin:
             }
 
         if return_labels:
-            if model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
+            if model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
                 inputs_dict["labels"] = tf.ones(self.model_tester.batch_size, dtype=tf.int32)
-            elif model_class in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
+            elif model_class in get_values(TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING):
                 inputs_dict["start_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
                 inputs_dict["end_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
-            elif model_class in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values():
+            elif model_class in get_values(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
                 inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
-            elif model_class in TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.values():
+            elif model_class in get_values(TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING):
                 inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
             elif model_class in [
-                *TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.values(),
-                *TF_MODEL_FOR_CAUSAL_LM_MAPPING.values(),
-                *TF_MODEL_FOR_MASKED_LM_MAPPING.values(),
-                *TF_MODEL_FOR_PRETRAINING_MAPPING.values(),
-                *TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.values(),
+                *get_values(TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING),
+                *get_values(TF_MODEL_FOR_CAUSAL_LM_MAPPING),
+                *get_values(TF_MODEL_FOR_MASKED_LM_MAPPING),
+                *get_values(TF_MODEL_FOR_PRETRAINING_MAPPING),
+                *get_values(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING),
             ]:
                 inputs_dict["labels"] = tf.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
@@ -129,6 +145,7 @@ class TFModelTesterMixin:
 
                 self.assert_outputs_same(after_outputs, outputs)
 
+    @tooslow
     def test_graph_mode(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
@@ -142,6 +159,7 @@ class TFModelTesterMixin:
             outputs = run_in_graph_mode()
             self.assertIsNotNone(outputs)
 
+    @tooslow
     def test_xla_mode(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
@@ -182,6 +200,7 @@ class TFModelTesterMixin:
                 expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    @tooslow
     def test_saved_model_creation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = False
@@ -202,7 +221,7 @@ class TFModelTesterMixin:
             saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
             self.assertTrue(os.path.exists(saved_model_dir))
 
-    @slow
+    @tooslow
     def test_saved_model_creation_extended(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
@@ -311,6 +330,7 @@ class TFModelTesterMixin:
 
             onnxruntime.InferenceSession(onnx_model.SerializeToString())
 
+    @tooslow
     def test_mixed_precision(self):
         tf.keras.mixed_precision.experimental.set_policy("mixed_float16")
 
@@ -484,6 +504,7 @@ class TFModelTesterMixin:
             max_diff = np.amax(np.abs(tfo - pto))
             self.assertLessEqual(max_diff, 4e-2)
 
+    @tooslow
     def test_train_pipeline_custom_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         # head_mask and decoder_head_mask has different shapes than other input args
@@ -568,7 +589,7 @@ class TFModelTesterMixin:
                     ),
                     "input_ids": tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32"),
                 }
-            elif model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
+            elif model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
                 input_ids = tf.keras.Input(batch_shape=(4, 2, max_input), name="input_ids", dtype="int32")
             else:
                 input_ids = tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32")
@@ -784,9 +805,9 @@ class TFModelTesterMixin:
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         list_lm_models = (
-            list(TF_MODEL_FOR_CAUSAL_LM_MAPPING.values())
-            + list(TF_MODEL_FOR_MASKED_LM_MAPPING.values())
-            + list(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.values())
+            get_values(TF_MODEL_FOR_CAUSAL_LM_MAPPING)
+            + get_values(TF_MODEL_FOR_MASKED_LM_MAPPING)
+            + get_values(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING)
         )
 
         for model_class in self.all_model_classes:
@@ -904,6 +925,7 @@ class TFModelTesterMixin:
 
             model(inputs)
 
+    @tooslow
     def test_graph_mode_with_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -1115,7 +1137,7 @@ class TFModelTesterMixin:
                 ]
                 loss_size = tf.size(added_label)
 
-                if model.__class__ in TF_MODEL_FOR_CAUSAL_LM_MAPPING.values():
+                if model.__class__ in get_values(TF_MODEL_FOR_CAUSAL_LM_MAPPING):
                     # if loss is causal lm loss, labels are shift, so that one label per batch
                     # is cut
                     loss_size = loss_size - self.model_tester.batch_size
@@ -1312,3 +1334,62 @@ class UtilsFunctionsTest(unittest.TestCase):
 
         tf.debugging.assert_near(non_inf_output, non_inf_expected_output, rtol=1e-12)
         tf.debugging.assert_equal(non_inf_idx, non_inf_expected_idx)
+
+
+@require_tf
+@is_staging_test
+class TFModelPushToHubTester(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
+        cls._token = cls._api.login(username=USER, password=PASS)
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-model")
+        except HTTPError:
+            pass
+
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-model-org", organization="valid_org")
+        except HTTPError:
+            pass
+
+    def test_push_to_hub(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        model = TFBertModel(config)
+        # Make sure model is properly initialized
+        _ = model(model.dummy_inputs)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, push_to_hub=True, repo_name="test-model", use_auth_token=self._token)
+
+            new_model = TFBertModel.from_pretrained(f"{USER}/test-model")
+            models_equal = True
+            for p1, p2 in zip(model.weights, new_model.weights):
+                if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                    models_equal = False
+            self.assertTrue(models_equal)
+
+    def test_push_to_hub_in_organization(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        model = TFBertModel(config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(
+                tmp_dir,
+                push_to_hub=True,
+                repo_name="test-model-org",
+                use_auth_token=self._token,
+                organization="valid_org",
+            )
+
+            new_model = TFBertModel.from_pretrained("valid_org/test-model-org")
+            models_equal = True
+            for p1, p2 in zip(model.weights, new_model.weights):
+                if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                    models_equal = False
+            self.assertTrue(models_equal)

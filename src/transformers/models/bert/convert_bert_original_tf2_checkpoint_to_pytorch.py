@@ -38,14 +38,14 @@ logger = logging.get_logger(__name__)
 
 def load_tf2_weights_in_bert(model, tf_checkpoint_path, config):
     tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
+    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
     # Load weights from TF model
     init_vars = tf.train.list_variables(tf_path)
     names = []
     arrays = []
     layer_depth = []
     for full_name, shape in init_vars:
-        # logger.info("Loading TF weight {} with shape {}".format(name, shape))
+        # logger.info(f"Loading TF weight {name} with shape {shape}")
         name = full_name.split("/")
         if full_name == "_CHECKPOINTABLE_OBJECT_GRAPH" or name[0] in ["global_step", "save_counter"]:
             logger.info(f"Skipping non-model layer {full_name}")

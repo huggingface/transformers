@@ -24,6 +24,7 @@ import unittest
 from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
+from typing import Iterator, Union
 
 from .file_utils import (
     is_datasets_available,
@@ -38,6 +39,8 @@ from .file_utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_tpu_available,
+    is_torchaudio_available,
+    is_vision_available,
 )
 from .integrations import is_optuna_available, is_ray_available
 
@@ -46,6 +49,11 @@ SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
 DUMMY_UNKWOWN_IDENTIFIER = "julien-c/dummy-unknown"
 DUMMY_DIFF_TOKENIZER_IDENTIFIER = "julien-c/dummy-diff-tokenizer"
 # Used to test Auto{Config, Model, Tokenizer} model_type detection.
+
+# Used to test the hub
+USER = "__DUMMY_TRANSFORMERS_USER__"
+PASS = "__DUMMY_TRANSFORMERS_PASS__"
+ENDPOINT_STAGING = "https://moon-staging.huggingface.co"
 
 
 def parse_flag_from_env(key, default=False):
@@ -60,7 +68,7 @@ def parse_flag_from_env(key, default=False):
             _value = strtobool(value)
         except ValueError:
             # More values are supported, but let's keep the message simple.
-            raise ValueError("If set, {} must be yes or no.".format(key))
+            raise ValueError(f"If set, {key} must be yes or no.")
     return _value
 
 
@@ -73,13 +81,15 @@ def parse_int_from_env(key, default=None):
         try:
             _value = int(value)
         except ValueError:
-            raise ValueError("If set, {} must be a int.".format(key))
+            raise ValueError(f"If set, {key} must be a int.")
     return _value
 
 
 _run_slow_tests = parse_flag_from_env("RUN_SLOW", default=False)
 _run_pt_tf_cross_tests = parse_flag_from_env("RUN_PT_TF_CROSS_TESTS", default=False)
+_run_pt_flax_cross_tests = parse_flag_from_env("RUN_PT_FLAX_CROSS_TESTS", default=False)
 _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=False)
+_run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=False)
 _run_git_lfs_tests = parse_flag_from_env("RUN_GIT_LFS_TESTS", default=False)
 _tf_gpu_memory_limit = parse_int_from_env("TF_GPU_MEMORY_LIMIT", default=None)
@@ -104,6 +114,25 @@ def is_pt_tf_cross_test(test_case):
             return pytest.mark.is_pt_tf_cross_test()(test_case)
 
 
+def is_pt_flax_cross_test(test_case):
+    """
+    Decorator marking a test as a test that control interactions between PyTorch and Flax
+
+    PT+FLAX tests are skipped by default and we can run only them by setting RUN_PT_FLAX_CROSS_TESTS environment
+    variable to a truthy value and selecting the is_pt_flax_cross_test pytest mark.
+
+    """
+    if not _run_pt_flax_cross_tests or not is_torch_available() or not is_flax_available():
+        return unittest.skip("test is PT+FLAX test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_pt_flax_cross_test()(test_case)
+
+
 def is_pipeline_test(test_case):
     """
     Decorator marking a test as a pipeline test.
@@ -123,6 +152,23 @@ def is_pipeline_test(test_case):
             return pytest.mark.is_pipeline_test()(test_case)
 
 
+def is_staging_test(test_case):
+    """
+    Decorator marking a test as a staging test.
+
+    Those tests will run using the staging environment of huggingface.co instead of the real model hub.
+    """
+    if not _run_staging:
+        return unittest.skip("test is staging test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_staging_test()(test_case)
+
+
 def slow(test_case):
     """
     Decorator marking a test as slow.
@@ -134,6 +180,17 @@ def slow(test_case):
         return unittest.skip("test is slow")(test_case)
     else:
         return test_case
+
+
+def tooslow(test_case):
+    """
+    Decorator marking a test as too slow.
+
+    Slow tests are skipped while they're in the process of being fixed. No test should stay tagged as "tooslow" as
+    these will not be tested by the CI.
+
+    """
+    return unittest.skip("test is too slow")(test_case)
 
 
 def custom_tokenizers(test_case):
@@ -195,12 +252,19 @@ def require_torch_scatter(test_case):
         return test_case
 
 
+def require_torchaudio(test_case):
+    """
+    Decorator marking a test that requires torchaudio. These tests are skipped when torchaudio isn't installed.
+    """
+    if not is_torchaudio_available():
+        return unittest.skip("test requires torchaudio")(test_case)
+    else:
+        return test_case
+
+
 def require_tf(test_case):
     """
-    Decorator marking a test that requires TensorFlow.
-
-    These tests are skipped when TensorFlow isn't installed.
-
+    Decorator marking a test that requires TensorFlow. These tests are skipped when TensorFlow isn't installed.
     """
     if not is_tf_available():
         return unittest.skip("test requires TensorFlow")(test_case)
@@ -210,10 +274,7 @@ def require_tf(test_case):
 
 def require_flax(test_case):
     """
-    Decorator marking a test that requires JAX & Flax
-
-    These tests are skipped when one / both are not installed
-
+    Decorator marking a test that requires JAX & Flax. These tests are skipped when one / both are not installed
     """
     if not is_flax_available():
         test_case = unittest.skip("test requires JAX & Flax")(test_case)
@@ -222,10 +283,7 @@ def require_flax(test_case):
 
 def require_sentencepiece(test_case):
     """
-    Decorator marking a test that requires SentencePiece.
-
-    These tests are skipped when SentencePiece isn't installed.
-
+    Decorator marking a test that requires SentencePiece. These tests are skipped when SentencePiece isn't installed.
     """
     if not is_sentencepiece_available():
         return unittest.skip("test requires SentencePiece")(test_case)
@@ -235,10 +293,7 @@ def require_sentencepiece(test_case):
 
 def require_tokenizers(test_case):
     """
-    Decorator marking a test that requires 🤗 Tokenizers.
-
-    These tests are skipped when 🤗 Tokenizers isn't installed.
-
+    Decorator marking a test that requires 🤗 Tokenizers. These tests are skipped when 🤗 Tokenizers isn't installed.
     """
     if not is_tokenizers_available():
         return unittest.skip("test requires tokenizers")(test_case)
@@ -267,11 +322,21 @@ def require_scatter(test_case):
         return test_case
 
 
+def require_vision(test_case):
+    """
+    Decorator marking a test that requires the vision dependencies. These tests are skipped when torchaudio isn't
+    installed.
+    """
+    if not is_vision_available():
+        return unittest.skip("test requires vision")(test_case)
+    else:
+        return test_case
+
+
 def require_torch_multi_gpu(test_case):
     """
-    Decorator marking a test that requires a multi-GPU setup (in PyTorch).
-
-    These tests are skipped on a machine without multiple GPUs.
+    Decorator marking a test that requires a multi-GPU setup (in PyTorch). These tests are skipped on a machine without
+    multiple GPUs.
 
     To run *only* the multi_gpu tests, assuming all test names contain multi_gpu: $ pytest -sv ./tests -k "multi_gpu"
     """
@@ -301,12 +366,6 @@ def require_torch_non_multi_gpu(test_case):
         return test_case
 
 
-# this is a decorator identical to require_torch_non_multi_gpu, but is used as a quick band-aid to
-# allow all of examples to be run multi-gpu CI and it reminds us that tests decorated with this one
-# need to be ported and aren't so by design.
-require_torch_non_multi_gpu_but_fix_me = require_torch_non_multi_gpu
-
-
 def require_torch_tpu(test_case):
     """
     Decorator marking a test that requires a TPU (in PyTorch).
@@ -324,6 +383,9 @@ if is_torch_available():
     torch_device = "cuda" if torch.cuda.is_available() else "cpu"
 else:
     torch_device = None
+
+if is_tf_available():
+    import tensorflow as tf
 
 
 def require_torch_gpu(test_case):
@@ -452,10 +514,14 @@ def assert_screenout(out, what):
 class CaptureStd:
     """
     Context manager to capture:
-        stdout, clean it up and make it available via obj.out stderr, and make it available via obj.err
 
-        init arguments: - out - capture stdout: True/False, default True - err - capture stdout: True/False, default
-        True
+        - stdout, clean it up and make it available via obj.out
+        - stderr, and make it available via obj.err
+
+        init arguments:
+
+        - out - capture stdout: True/False, default True
+        - err - capture stdout: True/False, default True
 
         Examples::
 
@@ -580,6 +646,27 @@ class CaptureLogger:
 
     def __repr__(self):
         return f"captured: {self.out}\n"
+
+
+@contextlib.contextmanager
+# adapted from https://stackoverflow.com/a/64789046/9201239
+def ExtendSysPath(path: Union[str, os.PathLike]) -> Iterator[None]:
+    """
+    Temporary add given path to `sys.path`.
+
+    Usage ::
+
+       with ExtendSysPath('/path/to/dir'):
+           mymodule = importlib.import_module('mymodule')
+
+    """
+
+    path = os.fspath(path)
+    try:
+        sys.path.insert(0, path)
+        yield
+    finally:
+        sys.path.remove(path)
 
 
 class TestCasePlus(unittest.TestCase):
@@ -1113,3 +1200,26 @@ def execute_subprocess_async(cmd, env=None, stdin=None, timeout=180, quiet=False
         raise RuntimeError(f"'{cmd_str}' produced no output.")
 
     return result
+
+
+def nested_simplify(obj, decimals=3):
+    """
+    Simplifies an object by rounding float numbers, and downcasting tensors/numpy arrays to get simple equality test
+    within tests.
+    """
+    from transformers.tokenization_utils import BatchEncoding
+
+    if isinstance(obj, list):
+        return [nested_simplify(item, decimals) for item in obj]
+    elif isinstance(obj, (dict, BatchEncoding)):
+        return {nested_simplify(k, decimals): nested_simplify(v, decimals) for k, v in obj.items()}
+    elif isinstance(obj, (str, int)):
+        return obj
+    elif is_torch_available() and isinstance(obj, torch.Tensor):
+        return nested_simplify(obj.tolist())
+    elif is_tf_available() and tf.is_tensor(obj):
+        return nested_simplify(obj.numpy().tolist())
+    elif isinstance(obj, float):
+        return round(obj, decimals)
+    else:
+        raise Exception(f"Not supported: {type(obj)}")

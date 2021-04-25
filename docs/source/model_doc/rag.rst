@@ -43,6 +43,7 @@ outperforming parametric seq2seq models and task-specific retrieve-and-extract a
 tasks, we find that RAG models generate more specific, diverse and factual language than a state-of-the-art
 parametric-only seq2seq baseline.*
 
+This model was contributed by `ola13 <https://huggingface.co/ola13>`__.
 
 
 RagConfig
@@ -94,3 +95,24 @@ RagTokenForGeneration
 
 .. autoclass:: transformers.RagTokenForGeneration
     :members: forward, generate
+
+
+TFRagModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFRagModel
+    :members: call
+
+
+TFRagSequenceForGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFRagSequenceForGeneration
+    :members: call, generate
+
+
+TFRagTokenForGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFRagTokenForGeneration
+    :members: call, generate

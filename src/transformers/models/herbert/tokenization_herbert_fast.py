@@ -17,12 +17,7 @@ from typing import List, Optional, Tuple
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
-from .tokenization_herbert import (
-    PRETRAINED_INIT_CONFIGURATION,
-    PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES,
-    PRETRAINED_VOCAB_FILES_MAP,
-    HerbertTokenizer,
-)
+from .tokenization_herbert import HerbertTokenizer
 
 
 logger = logging.get_logger(__name__)
@@ -31,6 +26,18 @@ VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
     "merges_file": "merges.txt",
 }
+
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "allegro/herbert-base-cased": "https://huggingface.co/allegro/herbert-base-cased/resolve/main/vocab.json"
+    },
+    "merges_file": {
+        "allegro/herbert-base-cased": "https://huggingface.co/allegro/herbert-base-cased/resolve/main/merges.txt"
+    },
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"allegro/herbert-base-cased": 514}
+PRETRAINED_INIT_CONFIGURATION = {}
 
 
 class HerbertTokenizerFast(PreTrainedTokenizerFast):
@@ -119,12 +126,9 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
             :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
         if already_has_special_tokens:
-            if token_ids_1 is not None:
-                raise ValueError(
-                    "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formatted with special tokens for the model."
-                )
-            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
+            return super().get_special_tokens_mask(
+                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+            )
 
         if token_ids_1 is None:
             return [1] + ([0] * len(token_ids_0)) + [1]
