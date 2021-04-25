@@ -19,8 +19,8 @@ Overview
 The LUKE model was proposed in `LUKE: Deep Contextualized Entity Representations with Entity-aware Self-attention
 <https://arxiv.org/abs/2010.01057>`_ by Ikuya Yamada, Akari Asai, Hiroyuki Shindo, Hideaki Takeda and Yuji Matsumoto.
 It is based on RoBERTa and adds entity embeddings as well as an entity-aware self-attention mechanism, which helps
-improve performance on several downstream tasks involving reasoning about entities such as named-entity recognition,
-extractive and cloze-style question answering, entity linking and relation classification between entities.
+improve performance on various downstream tasks involving reasoning about entities such as named entity recognition,
+extractive and cloze-style question answering, entity typing, and relation classification.
 
 The abstract from the paper is the following:
 
@@ -40,22 +40,25 @@ Tips:
 
 - This implementation is the same as :class:`~transformers.RobertaModel` with the addition of entity embeddings as well
   as an entity-aware self-attention mechanism, which improves performance on tasks involving reasoning about entities.
-- LUKE adds :obj:`entity_ids`, :obj:`entity_attention_mask`, :obj:`entity_token_type_ids` and
-  :obj:`entity_position_ids` as extra input to the model. Input entities can be special entities (e.g., [MASK]) or
-  Wikipedia entities (e.g., New York City). You can obtain those using :class:`~transformers.LukeTokenizer`.
-- There are two main use cases:
+- LUKE treats entities as input tokens; therefore, it takes :obj:`entity_ids`, :obj:`entity_attention_mask`,
+  :obj:`entity_token_type_ids` and :obj:`entity_position_ids` as extra input. You can obtain those using
+  :class:`~transformers.LukeTokenizer`.
+- :class:`~transformers.LukeTokenizer` takes :obj:`entities` and :obj:`entity_spans` (character-based start and end
+  positions of the entities in the input text) as extra input. :obj:`entities` typically consist of [MASK] entities or
+  Wikipedia entities. The brief description when inputting these entities are as follows:
 
-  - **Inputting the special [MASK] entities to compute entity representations**: The [MASK] special entity is used
-    to mask entities to be predicted during pretraining. When LUKE receives the [MASK] entity, it tries to predict the
-    original entity by gathering the information about the entity from the input text. Therefore, the [MASK] entity can
-    be used as input tokens when addressing downstream tasks involving entities such as entity typing, relation
-    classification, and named entity recognition.
-  - **Inputting Wikipedia entities to compute knowledge-enhanced representations**: LUKE stores the detailed
-    information regarding Wikipedia entities in its entity embedding. By using Wikipedia entities as input tokens, LUKE
-    outputs representations enriched by the information stored in the embeddings of these entities. This is effective
-    for tasks requiring real-world knowledge, such as question answering.
+  - *Inputting [MASK] entities to compute entity representations*: The [MASK] entity is used to mask entities to be
+    predicted during pretraining. When LUKE receives the [MASK] entity, it tries to predict the original entity by
+    gathering the information about the entity from the input text. Therefore, the [MASK] entity can be used to address
+    downstream tasks requiring the information of entities in text such as entity typing, relation classification, and
+    named entity recognition.
+  - *Inputting Wikipedia entities to compute knowledge-enhanced token representations*: LUKE learns rich information
+    (or knowledge) about Wikipedia entities during pretraining and stores the information in its entity embedding.
+    By using Wikipedia entities as input tokens, LUKE outputs token representations enriched by the information stored
+    in the embeddings of these entities. This is particularly effective for tasks requiring real-world knowledge, such
+    as question answering.
 
-- There are three head models for the former use case:
+- There are three head models for the former use case.
 
   - :class:`~transformers.LukeForEntityClassification`, for tasks to classify a single entity in an input text such as
     entity typing, e.g. the `Open Entity dataset <https://www.cs.utexas.edu/~eunsol/html_pages/open_entity.html>`__.
@@ -65,7 +68,11 @@ Tips:
     model places a linear head on top of the concatenated output representation of the pair of given entities.
   - :class:`~transformers.LukeForEntitySpanClassification`, for tasks to classify the sequence of entity spans, such as
     named entity recognition (NER). This model places a linear head on top of the output entity representations. You
-    can address NER with this model by inputting all possible entity spans in the text to the model.
+    can address NER using this model by inputting all possible entity spans in the text to the model.
+
+  :class:`~transformers.LukeTokenizer` has a ``task`` argument, which enables you to easily create an input to these
+  head models by specifying ``task="entity_classification"``, ``task="entity_pair_classification"``, or
+  ``task="entity_span_classification"``. Please refer to the example code of each head models.
 
 Example:
 

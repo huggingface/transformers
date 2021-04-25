@@ -801,7 +801,7 @@ LUKE_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare LUKE Model transformer outputting raw hidden-states for both word tokens and entities without any specific head on top.",
+    "The bare LUKE model transformer outputting raw hidden-states for both word tokens and entities without any specific head on top.",
     LUKE_START_DOCSTRING,
 )
 class LukeModel(LukePreTrainedModel):
@@ -1125,7 +1125,7 @@ class LukeForEntityClassification(LukePreTrainedModel):
 
 @add_start_docstrings(
     """
-    The LUKE Model with a classification head on top (a linear layer on top of the hidden states of the two entity
+    The LUKE model with a classification head on top (a linear layer on top of the hidden states of the two entity
     tokens) for entity pair classification tasks, such as TACRED.
     """,
     LUKE_START_DOCSTRING,
@@ -1237,7 +1237,7 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
 
 @add_start_docstrings(
     """
-    The LUKE Model with a span classification head on top (a linear layer on top of the hidden states output) for tasks
+    The LUKE model with a span classification head on top (a linear layer on top of the hidden states output) for tasks
     such as named entity recognition.
     """,
     LUKE_START_DOCSTRING,
