@@ -891,7 +891,6 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
-    test_headmasking = False
     is_encoder_decoder = True
 
     def setUp(self):
@@ -1097,7 +1096,6 @@ class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMix
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
-    test_headmasking = False
     is_encoder_decoder = False
 
     def setUp(self):
@@ -1126,7 +1124,6 @@ class ProphetNetStandaloneEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
-    test_headmasking = False
     is_encoder_decoder = False
 
     def setUp(self):
