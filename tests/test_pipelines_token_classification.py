@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import unittest
-
 import json
 import os
+import unittest
+
 import numpy as np
 
 from transformers import AutoTokenizer, pipeline
@@ -563,16 +563,15 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
             ],
         ]
 
-        
         expected_aligned_results_filepath = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "fixtures/ner_pipeline_aligned.json")
+            os.path.dirname(os.path.abspath(__file__)), "fixtures/ner_pipeline_aligned.json"
+        )
         with open(expected_aligned_results_filepath) as expected_aligned_results_file:
             expected_aligned_results = json.load(expected_aligned_results_file)
 
         expected_aligned_results_w_subword_filepath = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "fixtures/ner_pipeline_aligned_w_subwords.json")
+            os.path.dirname(os.path.abspath(__file__)), "fixtures/ner_pipeline_aligned_w_subwords.json"
+        )
         with open(expected_aligned_results_w_subword_filepath) as expected_aligned_results_w_subword_file:
             expected_aligned_results_w_subword = json.load(expected_aligned_results_w_subword_file)
 

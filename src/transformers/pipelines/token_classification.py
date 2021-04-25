@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, List, Optional, Union
 
 import numpy as np
 
-from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available, AggregationStrategy
+from ..file_utils import AggregationStrategy, add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
 from ..models.bert.tokenization_bert import BasicTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
@@ -22,7 +22,7 @@ if is_torch_available():
 
     from ..models.auto.modeling_auto import MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
-    
+
 class TokenClassificationArgumentHandler(ArgumentHandler):
     """
     Handles arguments for token classification.
@@ -191,23 +191,23 @@ class TokenClassificationPipeline(Pipeline):
                 entity = {}
                 if offset_mapping is not None:
                     start_ind, end_ind = offset_mapping[idx]
-                    entity['start'], entity['end'] = (start_ind, end_ind)
+                    entity["start"], entity["end"] = (start_ind, end_ind)
                     word_ref = sentence[start_ind:end_ind]
                     word = self.tokenizer.convert_ids_to_tokens([int(input_ids[idx])])[0]
-                    entity['word'] = word
-                    entity['is_subword'] = len(word_ref) != len(word)
+                    entity["word"] = word
+                    entity["is_subword"] = len(word_ref) != len(word)
 
                     if int(input_ids[idx]) == self.tokenizer.unk_token_id:
-                        entity['word'] = word_ref
-                        entity['is_subword'] = False
+                        entity["word"] = word_ref
+                        entity["is_subword"] = False
                 else:
-                    entity['word'] = self.tokenizer.convert_ids_to_tokens(int(input_ids[idx]))
+                    entity["word"] = self.tokenizer.convert_ids_to_tokens(int(input_ids[idx]))
 
-                    entity['start'] = None
-                    entity['end'] = None
+                    entity["start"] = None
+                    entity["end"] = None
 
-                entity['score'] = score[idx]
-                entity['index'] = idx
+                entity["score"] = score[idx]
+                entity["index"] = idx
 
                 entities += [entity]
 

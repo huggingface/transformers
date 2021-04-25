@@ -1816,7 +1816,8 @@ class PushToHubMixin:
 
 class AggregationStrategy(ExplicitEnum):
     """
-    Possible values for the ``aggregation_strategy`` argument in :meth:`TokenClassificationPipeline.__init__`. Useful for tab-completion in an IDE.
+    Possible values for the ``aggregation_strategy`` argument in :meth:`TokenClassificationPipeline.__init__`. Useful
+    for tab-completion in an IDE.
     """
 
     FIRST = "first"
