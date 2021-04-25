@@ -175,17 +175,21 @@ class EncoderDecoderModel(PreTrainedModel):
 
         self.encoder = encoder
         self.decoder = decoder
-        
+
         if self.encoder.config.to_dict() != self.config.encoder.to_dict():
-            logger.warning(f"Config of the encoder: {self.encoder.__class__} is overwritten by shared encoder config: {self.config.encoder}")
+            logger.warning(
+                f"Config of the encoder: {self.encoder.__class__} is overwritten by shared encoder config: {self.config.encoder}"
+            )
         if self.decoder.config.to_dict() != self.config.decoder.to_dict():
-            logger.warning(f"Config of the decoder: {self.decoder.__class__} is overwritten by shared decoder config: {self.config.decoder}")        
-        
+            logger.warning(
+                f"Config of the decoder: {self.decoder.__class__} is overwritten by shared decoder config: {self.config.decoder}"
+            )
+
         # make sure that the individual model's config refers to the shared config
         # so that the updates to the config will be synced
         self.encoder.config = self.config.encoder
         self.decoder.config = self.config.decoder
-        
+
         assert (
             self.encoder.get_output_embeddings() is None
         ), "The encoder {} should not have a LM Head. Please use a model without LM Head"
@@ -471,7 +475,7 @@ class EncoderDecoderModel(PreTrainedModel):
 
     def resize_token_embeddings(self, *args, **kwargs):
         raise NotImplementedError(
-            "Resizing the embedding layers via the EncoderDecoderModel directly is not supported." 
+            "Resizing the embedding layers via the EncoderDecoderModel directly is not supported."
             "Please use the respective methods of the wrapped objects (model.encoder.resize_token_embeddings(...) or model.decoder.resize_token_embeddings(...))"
         )
 
