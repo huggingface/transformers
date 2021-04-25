@@ -303,6 +303,11 @@ class SPMTokenizer:
 
     def __setstate__(self, d):
         self.__dict__ = d
+
+        # for backward compatibility
+        if not hasattr(self, "sp_model_kwargs"):
+            self.sp_model_kwargs = {}
+
         self.spm = sp.SentencePieceProcessor(**self.sp_model_kwargs)
         self.spm.Load(self.vocab_file)
 
