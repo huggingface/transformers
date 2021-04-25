@@ -1394,7 +1394,6 @@ if is_flax_available():
         [
             "FlaxElectraForMaskedLM",
             "FlaxElectraForMultipleChoice",
-            "FlaxElectraForNextSentencePrediction",
             "FlaxElectraForPreTraining",
             "FlaxElectraForQuestionAnswering",
             "FlaxElectraForSequenceClassification",
