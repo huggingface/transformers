@@ -76,19 +76,50 @@ if is_flax_available():
 
 
 if TYPE_CHECKING:
-    pass
+    from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
+    from .tokenization_electra import ElectraTokenizer
 
     if is_tokenizers_available():
-        pass
+        from .tokenization_electra_fast import ElectraTokenizerFast
 
     if is_torch_available():
-        pass
+        from .modeling_electra import (
+            ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ElectraForMaskedLM,
+            ElectraForMultipleChoice,
+            ElectraForPreTraining,
+            ElectraForQuestionAnswering,
+            ElectraForSequenceClassification,
+            ElectraForTokenClassification,
+            ElectraModel,
+            ElectraPreTrainedModel,
+            load_tf_weights_in_electra,
+        )
 
     if is_tf_available():
-        pass
+        from .modeling_tf_electra import (
+            TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFElectraForMaskedLM,
+            TFElectraForMultipleChoice,
+            TFElectraForPreTraining,
+            TFElectraForQuestionAnswering,
+            TFElectraForSequenceClassification,
+            TFElectraForTokenClassification,
+            TFElectraModel,
+            TFElectraPreTrainedModel,
+        )
 
     if is_flax_available():
-        pass
+        from .modeling_flax_electra import (
+            FlaxElectraForMaskedLM,
+            FlaxElectraForMultipleChoice,
+            FlaxElectraForPreTraining,
+            FlaxElectraForQuestionAnswering,
+            FlaxElectraForSequenceClassification,
+            FlaxElectraForTokenClassification,
+            FlaxElectraModel,
+            FlaxElectraPreTrainedModel,
+        )
 
 else:
     import importlib
