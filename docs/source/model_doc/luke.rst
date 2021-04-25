@@ -78,12 +78,12 @@ Example:
 
 .. code-block::
 
-    >>> from transformers import LukeTokenizer, LukeModel
+    >>> from transformers import LukeTokenizer, LukeModel, LukeForEntityClassification
 
-    >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base")
     >>> model = LukeModel.from_pretrained("studio-ousia/luke-base")
+    >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base")
 
-    # Compute the contextualized entity representation corresponding to the entity mention "Beyoncé"
+    # Example 1: Computing the contextualized entity representation corresponding to the entity mention "Beyoncé"
     >>> text = "Beyoncé lives in New York."
     >>> entity_spans = [(0, 7)]  # character-based entity span corresponding to "Beyoncé"
     >>> encoding = tokenizer(text, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
@@ -91,7 +91,7 @@ Example:
     >>> word_last_hidden_state = outputs.last_hidden_state
     >>> entity_last_hidden_state = outputs.entity_last_hidden_state
 
-    # Input Wikipedia entities to obtain enriched contextualized representations
+    # Example 2: Inputting Wikipedia entities to obtain enriched contextualized representations
     >>> text = "Beyoncé lives in New York."
     >>> entities = ["Beyoncé", "New York City"]  # Wikipedia entity titles corresponding to the entity mentions "Beyoncé" and "New York"
     >>> entity_spans = [(0, 7), (17, 25)]  # character-based entity spans corresponding to "Beyoncé" and "New York"
@@ -99,6 +99,16 @@ Example:
     >>> outputs = model(**encoding)
     >>> word_last_hidden_state = outputs.last_hidden_state
     >>> entity_last_hidden_state = outputs.entity_last_hidden_state
+
+    # Example 3: Classifying an entity using LukeForEntityClassification head model
+    >>> model = LukeForEntityClassification.from_pretrained("studio-ousia/luke-base")
+    # Instantiate LukeTokenizer with specifying task="entity_classification" to create input for LukeForEntityClassification
+    >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base", task="entity_classification")
+    >>> text = "Beyoncé lives in New York."
+    >>> entity_spans = [(0, 7)]  # character-based entity span corresponding to "Beyoncé"
+    >>> inputs = tokenizer(text, entity_spans=entity_spans, return_tensors="pt")
+    >>> outputs = model(**inputs)
+    >>> logits = outputs.logits
 
 This model was contributed by `ikuyamada <https://huggingface.co/ikuyamada>`__ and `nielsr <https://huggingface.co/nielsr>`__.
 The original code can be found `here <https://github.com/studio-ousia/luke>`__.
