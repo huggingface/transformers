@@ -348,7 +348,7 @@ XLM_INPUTS_DOCSTRING = r"""
             A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
             languages ids which can be obtained from the language names by using two conversion mappings provided in
             the configuration of the model (only provided for multilingual models). More precisely, the `language name
-            to language id` mapping is in :obj:`model.config.lang2id` (which is a dictionary strring to int) and the
+            to language id` mapping is in :obj:`model.config.lang2id` (which is a dictionary string to int) and the
             `language id to language name` mapping is in :obj:`model.config.id2lang` (dictionary int to string).
 
             See usage examples detailed in the :doc:`multilingual documentation <../multilingual>`.
@@ -1188,7 +1188,7 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, num_choicec, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,

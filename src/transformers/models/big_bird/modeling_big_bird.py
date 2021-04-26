@@ -724,7 +724,7 @@ class BigBirdBlockSparseAttention(nn.Module):
             band_product, dim=-1
         )  # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, (5+n_rand_blocks)*to_block_size]
 
-        # contibution of sliding keys
+        # contribution of sliding keys
         # [bsz, n_heads, m//from_block_size-4, from_block_size, 3*to_block_size] x [bsz, n_heads, from_seq_len//from_block_size-4, 3*to_block_size, -1]
         context_layer = self.torch_bmm_nd(
             attn_weights[:, :, :, :, to_block_size : 4 * to_block_size], exp_blocked_value_matrix, ndim=5
@@ -876,7 +876,7 @@ class BigBirdBlockSparseAttention(nn.Module):
                 attn_probs_view[:, :, q_idx, :, q_idx : q_idx + 3, :] = right_slice.view(
                     bsz, n_heads, from_block_size, 3, to_block_size
                 )  # inner_band_product
-            # global keys (correspomding to 1st key block)
+            # global keys (corresponding to 1st key block)
             attention_probs[:, :, 2 * from_block_size : -2 * from_block_size, :to_block_size] = attn_weights[
                 :, :, :, :, :to_block_size
             ].view(
@@ -946,7 +946,7 @@ class BigBirdBlockSparseAttention(nn.Module):
 
     @staticmethod
     def torch_gather_b2(params, indices):
-        # this operation is equilvalent to tf.gather when batch_dims=2
+        # this operation is equivalent to tf.gather when batch_dims=2
 
         if params.shape[:2] != indices.shape[:2]:
             raise ValueError(
@@ -1054,7 +1054,7 @@ class BigBirdBlockSparseAttention(nn.Module):
             to_block_size: int. size of block in to sequence.
             num_rand_blocks: int. Number of random chunks per row.
             last_idx: if -1 then num_rand_blocks blocks chosen anywhere in to sequence,
-            if positive then num_rand_blocks blocks choosen only upto last_idx.
+            if positive then num_rand_blocks blocks chosen only up to last_idx.
 
         Returns:
             adjacency list of size from_seq_length//from_block_size-2 by num_rand_blocks
@@ -1149,7 +1149,7 @@ class BigBirdBlockSparseAttention(nn.Module):
         plan_block_length = np.array(plan_from_length) // from_block_size
         # till when to follow plan
         max_plan_idx = plan_from_length.index(from_seq_length)
-        # Random Attention adjajency list
+        # Random Attention adjacency list
         rand_attn = [
             np.zeros((num_blocks, np.sum(plan_num_rand_blocks[: max_plan_idx + 1])), dtype=np.int32)
             for i in range(num_heads)
@@ -1246,8 +1246,8 @@ class BigBirdBlockSparseAttention(nn.Module):
 
         Args:
             block_id: int. block id of row.
-            to_start_block_id: int. random attention coloum start id.
-            to_end_block_id: int. random attention coloum end id.
+            to_start_block_id: int. random attention column start id.
+            to_end_block_id: int. random attention column end id.
             num_rand_blocks: int. number of random blocks to be selected.
             window_block_left: int. number of blocks of window to left of a block.
             window_block_right: int. number of blocks of window to right of a block.
@@ -1825,7 +1825,7 @@ BIG_BIRD_INPUTS_DOCSTRING = r"""
 @dataclass
 class BigBirdForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.BigBirdtForPreTraining`.
+    Output type of :class:`~transformers.BigBirdForPreTraining`.
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
@@ -2941,7 +2941,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
 
         logits_mask = None
         if question_lengths is not None:
-            # setting lengths logits to `-infi`
+            # setting lengths logits to `-inf`
             logits_mask = self.prepare_question_mask(question_lengths, seqlen)
             if token_type_ids is None:
                 token_type_ids = (~logits_mask).long()

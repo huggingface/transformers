@@ -612,7 +612,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         if isinstance(self.num_buckets, int):
             assert (
                 self.num_buckets % 2 == 0
-            ), f"There should be an even number of bucktes, but `self.num_bucktes`: {self.num_buckets}"
+            ), f"There should be an even number of buckets, but `self.num_buckets`: {self.num_buckets}"
             rotation_size = self.num_buckets
             num_buckets = self.num_buckets
         else:
