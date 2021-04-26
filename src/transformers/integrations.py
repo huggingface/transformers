@@ -856,8 +856,8 @@ class MLflowCallback(TrainerCallback):
                 Whether to use MLflow .log_artifact() facility to log artifacts.
 
                 This only makes sense if logging to a remote server, e.g. s3 or GCS. If set to `True` or `1`, will copy
-                whatever is in TrainerArgument's output_dir to the local or remote artifact storage. Using it without a
-                remote storage will just copy the files to your artifact location.
+                whatever is in :class:`~transformers.TrainingArguments`'s ``output_dir`` to the local or remote
+                artifact storage. Using it without a remote storage will just copy the files to your artifact location.
         """
         log_artifacts = os.getenv("HF_MLFLOW_LOG_ARTIFACTS", "FALSE").upper()
         if log_artifacts in {"TRUE", "1"}:
