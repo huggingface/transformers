@@ -42,7 +42,7 @@ with ExtendSysPath(f"{bindir}/.."):
     from test_trainer import TrainerIntegrationCommon  # noqa
 
     if is_torch_available():
-        from test_trainer import get_regression_trainer  # noqa
+        from test_trainer import RegressionModelConfig, RegressionPreTrainedModel, get_regression_trainer  # noqa
 
 
 set_seed(42)
@@ -65,6 +65,10 @@ def require_deepspeed(test_case):
     else:
         return test_case
 
+
+if is_deepspeed_available():
+    from deepspeed.utils import logger as deepspeed_logger  # noqa
+    from transformers.integrations import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
 
 ZERO2 = "zero2"
 ZERO3 = "zero3"
@@ -114,12 +118,6 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             self.ds_config_dict[ZERO2] = json.load(f)
         with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
             self.ds_config_dict[ZERO3] = json.load(f)
-
-    def tearDown(self):
-        # XXX: Fixme - this is a temporary band-aid since this global variable impacts other tests
-        import transformers
-
-        transformers.integrations._is_deepspeed_zero3_enabled = None
 
     def get_config_dict(self, stage):
         """As the tests modify the dict, always make a copy"""
@@ -173,25 +171,65 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_zero2_dict)
             with self.assertRaises(Exception) as context:
                 trainer.train()
-        self.assertTrue("HF scheduler + DeepSpeed optimizer combination is not possible" in str(context.exception))
+        self.assertTrue(
+            "HF scheduler + DeepSpeed optimizer combination is not possible" in str(context.exception),
+            f"got exception: {context.exception}",
+        )
 
-    def test_hf_optimizer_with_offload(self):
-        # must not allow non-DS optimizer when using ZERO-offload
+    def test_stage3_nvme_offload(self):
         with mockenv_context(**self.dist_env_1_gpu):
-            ds_config_zero2_dict = self.get_config_dict(ZERO2)
-            del ds_config_zero2_dict["optimizer"]  # force default HF Trainer optimizer
-            ds_config_zero2_dict["zero_optimization"]["cpu_offload"] = True
-            # sanity check - should the default config change
-            assert (
-                "cpu_offload" in ds_config_zero2_dict["zero_optimization"]
-                and ds_config_zero2_dict["zero_optimization"]["cpu_offload"] is True
-            ), "ensure the config is set up correctly"
-            trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_zero2_dict)
-            with self.assertRaises(Exception) as context:
+            # this actually doesn't have to be on NVMe, any storage will do since this test only
+            # runs a simple check that we can use some directory as if it were NVMe
+            nvme_path = self.get_auto_remove_tmp_dir()
+            nvme_config = dict(device="nvme", nvme_path=nvme_path)
+            ds_config_zero3_dict = self.get_config_dict(ZERO3)
+            ds_config_zero3_dict["zero_optimization"]["offload_optimizer"] = nvme_config
+            ds_config_zero3_dict["zero_optimization"]["offload_param"] = nvme_config
+            trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_zero3_dict)
+            with CaptureLogger(deepspeed_logger) as cs:
                 trainer.train()
-        self.assertTrue("ZeRO Offload can only work with DeepSpeed optimizers" in str(context.exception))
+            self.assertIn("DeepSpeed info", cs.out, "expected DeepSpeed logger output but got none")
 
     # --- These tests need to run on both zero stages --- #
+
+    @parameterized.expand(stages)
+    def test_fp32(self, stage):
+        ds_config_dict = self.get_config_dict(stage)
+        ds_config_dict["fp16"]["enabled"] = False  # force non-fp16 mode
+
+        # XXX: do we go via from_pretrained in zero 3 here? need to test zero.Init(dtype=torch.float)
+
+        # XXX: rewrite this test once fp32 is supported by DeepSpeed
+        with mockenv_context(**self.dist_env_1_gpu):
+            trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_dict)
+            with self.assertRaises(Exception) as context:
+                trainer.train()
+            self.assertIn(
+                "ZeRO is only supported if fp16 is enabled",
+                str(context.exception),
+                f"got exception: {context.exception}",
+            )
+
+    @parameterized.expand(stages)
+    def test_hf_optimizer_with_offload(self, stage):
+        # must not allow non-DS optimizer when using ZERO-offload
+        ds_config_dict = self.get_config_dict(stage)
+        del ds_config_dict["optimizer"]  # force default HF Trainer optimizer
+        # force cpu offload
+        if stage == "stage2":
+            ds_config_dict["zero_optimization"]["cpu_offload"] = True
+        elif stage == "stage3":
+            ds_config_dict["zero_optimization"]["offload_optimizer"]["device"] = "cpu"
+        with mockenv_context(**self.dist_env_1_gpu):
+            trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_dict)
+            with self.assertRaises(Exception) as context:
+                trainer.train()
+            self.assertIn(
+                "ZeRO Offload can only work with DeepSpeed optimizers",
+                str(context.exception),
+                f"got exception: {context.exception}",
+            )
+
     @parameterized.expand(stages)
     def test_fake_notebook_no_launcher(self, stage):
         # this setup emulates a notebook where a launcher needs to be emulated by hand
@@ -199,14 +237,12 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # note that unittest resets sys.stdout each test, so `CaptureStd` will work here to capture
         # DeepSpeed log if this test happens to run first in this pytest worker. But it will fail if
         # it's run not as a first test as `sys.stdout` will no longer be the same. So we either have
-        # to reset `logger.handlers[0].setStream(sys.stdout)` or directly capture from the logger.
-        from deepspeed.utils import logger
-
-        with CaptureLogger(logger) as cs:
-            with mockenv_context(**self.dist_env_1_gpu):
-                trainer = get_regression_trainer(local_rank=0, deepspeed=self.ds_config_file[stage])
+        # to reset `deepspeed_logger.handlers[0].setStream(sys.stdout)` or directly capture from the deepspeed_logger.
+        with mockenv_context(**self.dist_env_1_gpu):
+            trainer = get_regression_trainer(local_rank=0, deepspeed=self.ds_config_file[stage])
+            with CaptureLogger(deepspeed_logger) as cs:
                 trainer.train()
-        assert "DeepSpeed info" in cs.out, "expected DeepSpeed logger output but got none"
+            self.assertIn("DeepSpeed info", cs.out, "expected DeepSpeed logger output but got none")
 
     @parameterized.expand(stages)
     def test_early_get_last_lr(self, stage):
@@ -425,6 +461,38 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
 
+    def test_config_object(self):
+        # test that we can switch from zero2 to zero3 in the same process for example
+        # test is_zero, etc.
+        output_dir = self.get_auto_remove_tmp_dir()
+        kwargs = dict(output_dir=output_dir, train_len=8)
+
+        with mockenv_context(**self.dist_env_1_gpu):
+            ds_config_zero3_dict = self.get_config_dict("zero3")
+            ds_config_zero2_dict = self.get_config_dict("zero2")
+
+            trainer = get_regression_trainer(deepspeed=ds_config_zero3_dict, **kwargs)
+            self.assertTrue(is_deepspeed_zero3_enabled())
+
+            # test we can repeat that and with train this time
+            trainer = get_regression_trainer(deepspeed=ds_config_zero3_dict, **kwargs)
+            trainer.train()
+            self.assertTrue(is_deepspeed_zero3_enabled())
+
+            # test zero3 is disabled
+            trainer = get_regression_trainer(deepspeed=ds_config_zero2_dict, **kwargs)
+            self.assertFalse(is_deepspeed_zero3_enabled())
+
+            # check config obj
+            config = deepspeed_config()
+            self.assertTrue(bool(config), "Deepspeed config should be accessible")
+
+            del trainer
+            # now weakref should gc the global and we shouldn't get anything here
+            config = deepspeed_config()
+            self.assertFalse(is_deepspeed_zero3_enabled())
+            self.assertFalse(bool(config), "Deepspeed config should not be accessible")
+
 
 @slow
 @require_deepspeed
@@ -557,6 +625,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --adafactor
             --source_lang en
             --target_lang ro
+            --report_to none
         """.split()
         args.extend(["--source_prefix", '"translate English to Romanian: "'])
 
@@ -626,6 +695,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --num_train_epochs 1
             --warmup_steps 8
             --block_size 128
+            --report_to none
             """.split()
 
         ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}.json".split()
