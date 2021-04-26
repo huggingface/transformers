@@ -294,14 +294,14 @@ def get_tpu_sampler(dataset: torch.utils.data.dataset.Dataset, bach_size: int):
 
 
 def nested_new_like(arrays, num_samples, padding_index=-100):
-    """ Create the same nested structure as `arrays` with a first dimension always at `num_samples`."""
+    """Create the same nested structure as `arrays` with a first dimension always at `num_samples`."""
     if isinstance(arrays, (list, tuple)):
         return type(arrays)(nested_new_like(x, num_samples) for x in arrays)
     return np.full_like(arrays, padding_index, shape=(num_samples, *arrays.shape[1:]))
 
 
 def expand_like(arrays, new_seq_length, padding_index=-100):
-    """ Expand the `arrays` so that the second dimension grows to `new_seq_length`. Uses `padding_index` for padding."""
+    """Expand the `arrays` so that the second dimension grows to `new_seq_length`. Uses `padding_index` for padding."""
     result = np.full_like(arrays, padding_index, shape=(arrays.shape[0], new_seq_length) + arrays.shape[2:])
     result[:, : arrays.shape[1]] = arrays
     return result

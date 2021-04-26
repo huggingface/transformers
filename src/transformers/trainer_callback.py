@@ -92,14 +92,14 @@ class TrainerState:
             self.log_history = []
 
     def save_to_json(self, json_path: str):
-        """ Save the content of this instance in JSON format inside :obj:`json_path`."""
+        """Save the content of this instance in JSON format inside :obj:`json_path`."""
         json_string = json.dumps(dataclasses.asdict(self), indent=2, sort_keys=True) + "\n"
         with open(json_path, "w", encoding="utf-8") as f:
             f.write(json_string)
 
     @classmethod
     def load_from_json(cls, json_path: str):
-        """ Create an instance from the content of :obj:`json_path`."""
+        """Create an instance from the content of :obj:`json_path`."""
         with open(json_path, "r", encoding="utf-8") as f:
             text = f.read()
         return cls(**json.loads(text))
@@ -141,15 +141,15 @@ class TrainerControl:
     should_log: bool = False
 
     def _new_training(self):
-        """ Internal method that resets the variable for a new training. """
+        """Internal method that resets the variable for a new training."""
         self.should_training_stop = False
 
     def _new_epoch(self):
-        """ Internal method that resets the variable for a new epoch. """
+        """Internal method that resets the variable for a new epoch."""
         self.should_epoch_stop = False
 
     def _new_step(self):
-        """ Internal method that resets the variable for a new step. """
+        """Internal method that resets the variable for a new step."""
         self.should_save = False
         self.should_evaluate = False
         self.should_log = False
@@ -275,7 +275,7 @@ class TrainerCallback:
 
 
 class CallbackHandler(TrainerCallback):
-    """ Internal class that just calls the list of callbacks in order. """
+    """Internal class that just calls the list of callbacks in order."""
 
     def __init__(self, callbacks, model, tokenizer, optimizer, lr_scheduler):
         self.callbacks = []
