@@ -19,8 +19,8 @@ import io
 import json
 import numbers
 import os
-import sys
 import tempfile
+import weakref
 from copy import deepcopy
 from pathlib import Path
 
@@ -269,74 +269,180 @@ def rewrite_logs(d):
     return new_d
 
 
-_is_deepspeed_zero3_enabled = None
+def _is_true(config, key):
+    if config is None:
+        return False
+    return bool(config.get(key))
+
+
+def _set_if_auto(config, key, val):
+    if config is None:
+        return
+    if config.get(key) == "auto":
+        config[key] = val
+
+
+class DeepSpeedConfigHF:
+    """
+    This object contains Deepspeed configuration and can be quickly queried for things like zero stage.
+
+    We store a ``weakref`` of this object in the module's global to be able to access the config from areas where the
+    Trainer is not available (e.g. `from_pretrained` and `_get_resized_embeddings`).
+
+    The ``DeepSpeedConfigHF`` object is meant to be created during ``TrainingArguments`` object creation and has the
+    same lifespan as the latter.
+    """
+
+    def __init__(self, args):
+        self.config = None
+        self.stage = 0
+        self.offload = False
+
+        dep_version_check("deepspeed")
+
+        self.config_process(args)
+
+        # set global weakref object
+        deepspeed_config_hf_set(self)
+
+    def is_zero2(self):
+        return self.stage == 2
+
+    def is_zero3(self):
+        return self.stage == 3
+
+    def is_offload(self):
+        return self.offload
+
+    def config_process(self, args):
+        """
+        1. load json if the ``args.deepspeed`` is a path
+        2. replace any ``auto`` values in the config with the correct or recommended value
+
+        This is done as early as possible, before model is created, to allow ``is_deepspeed_zero3_enabled`` query and
+        getting to the early deepspeed config object during ``zero.Init()`` which needs whether fp16 is enabled, dtype,
+        etc.
+
+        """
+        config_file_or_dict = args.deepspeed
+        if isinstance(config_file_or_dict, dict):
+            # Don't modify user's data should they want to reuse it (e.g. in tests), because once we
+            # modified it, it will not be accepted here again, since `auto` values would have been overriden
+            config = deepcopy(config_file_or_dict)
+        elif isinstance(config_file_or_dict, str):
+            with io.open(config_file_or_dict, "r", encoding="utf-8") as f:
+                config = json.load(f)
+        else:
+            raise ValueError("expecting either a path to a config file or a pre-populated dict")
+
+        self.config = config
+
+        # DeepSpeed does:
+        # train_batch_size = world_size * train_micro_batch_size_per_gpu * gradient_accumulation_steps
+        train_batch_size = args.world_size * args.per_device_train_batch_size * args.gradient_accumulation_steps
+        _set_if_auto(config, "train_micro_batch_size_per_gpu", args.per_device_train_batch_size)
+        _set_if_auto(config, "gradient_accumulation_steps", args.gradient_accumulation_steps)
+        _set_if_auto(config, "train_batch_size", train_batch_size)
+        _set_if_auto(config, "gradient_clipping", args.max_grad_norm)
+
+        # zero
+        config_zero = config.get("zero_optimization", {})
+        self.stage = config_zero.get("stage", 0)
+
+        config_optim = config.get("optimizer", {})
+        if config_optim != {}:
+            config_optim_params = config_optim.get("params")
+            _set_if_auto(config_optim_params, "lr", args.learning_rate)
+            _set_if_auto(config_optim_params, "betas", [args.adam_beta1, args.adam_beta2])
+            _set_if_auto(config_optim_params, "eps", args.adam_epsilon)
+            _set_if_auto(config_optim_params, "weight_decay", args.weight_decay)
+
+        config_sched = config.get("scheduler", {})
+        if config_sched != {}:
+            config_sched_params = config_sched.get("params")
+            _set_if_auto(config_sched_params, "warmup_min_lr", 0)
+            _set_if_auto(config_sched_params, "warmup_max_lr", args.learning_rate)
+            _set_if_auto(config_sched_params, "warmup_num_steps", args.warmup_steps)
+            # total_num_steps - will get set in deepspeed_init
+
+        # fp16
+        if args.fp16:
+            fp16_backend = "apex" if args.fp16_backend == "apex" else "amp"
+        else:
+            fp16_backend = None
+
+        # amp: similar to the pytorch native amp - it has a bunch of optional params but we won't set
+        # any here unless the user did the work
+        config_fp16 = config.get("fp16")
+        # XXX: at the moment fp16 can't be False, but the fp32 solution is in works - once it's PR'ed and
+        # merged and a new release is made, delete the next line and uncomment the one after it
+        _set_if_auto(config_fp16, "enabled", True)
+        # _set_if_auto(config_fp16, "enabled", fp16_backend == "amp")
+
+        # apex: delegates amp work to apex (which needs to be available), but it cannot be used with any
+        # ZeRO features, so probably best to be avoided.
+        config_amp = config.get("amp")
+        _set_if_auto(config_amp, "enabled", fp16_backend == "apex")
+        _set_if_auto(config_amp, "opt_level", args.fp16_opt_level)
+
+        config_zero = config.get("zero_optimization", {})
+        if self.is_zero2():
+            self.offload = _is_true(config_zero, "cpu_offload")
+        elif self.is_zero3():
+            offload_devices = ["cpu", "nvme"]
+            if config_zero.get("offload_optimizer", {}).get("device") in offload_devices:
+                self.offload = True
+            if config_zero.get("offload_param", {}).get("device") in offload_devices:
+                self.offload = True
+
+    def config_finalize(self, args, model, num_training_steps):
+        """
+        This stage is run after we have the model and know num_training_steps.
+
+        Now we we can complete the configuration process.
+
+        """
+        config = self.config
+
+        # zero
+        config_zero = config.get("zero_optimization", {})
+        if self.is_zero3():
+            # automatically assign the optimal config values based on model config
+            hidden_size = model.config.hidden_size
+            _set_if_auto(config_zero, "reduce_bucket_size", hidden_size * hidden_size)
+            _set_if_auto(config_zero, "stage3_prefetch_bucket_size", 0.9 * hidden_size * hidden_size)
+            _set_if_auto(config_zero, "stage3_param_persistence_threshold", 10 * hidden_size)
+
+        # scheduler
+        config_sched = config.get("scheduler", {})
+        config_sched_params = config_sched.get("params", {})
+        _set_if_auto(config_sched_params, "total_num_steps", num_training_steps)
+
+
+# keep the config object global to be able to access it anywhere during TrainingArguments life-cycle
+_deepspeed_config_hf_weak_ref = None
+
+
+def deepspeed_config_hf_set(deepspeed_config_hf_obj):
+    # this is a special weakref global object to allow us to get to Deepspeed config from APIs
+    # that don't have an easy way to get to the Deepspeed config outside of the Trainer domain.
+    global _deepspeed_config_hf_weak_ref
+    # will go away automatically when DeepSpeedConfigHF is destroyed (when TrainingArguments is destroyed)
+    _deepspeed_config_hf_weak_ref = weakref.ref(deepspeed_config_hf_obj)
 
 
 def is_deepspeed_zero3_enabled():
-    """
-    This function answers to the question of whether DeepSpeed is going to be used and run using ZeRO Stage 3.
-
-    It includes an auto-discovery method, see comments in the code for details.
-
-    Returns: ``True`` if either it was explicitly enabled via ``deepspeed_zero3_enable(True)`` or the auto-detector was
-    able to derive that the ``Trainer`` will be running via DeepSpeed ZeRO stage 3.
-    """
-    global _is_deepspeed_zero3_enabled
-    if _is_deepspeed_zero3_enabled is None:
-        _is_deepspeed_zero3_enabled = False
-        # Try to auto-discover if we are about to use DeepSpeed with ZeRO3 enabled. This will only
-        # work for scripts using cli to pass --deepspeed ds_config.json. If cmd args aren't used,
-        # then to get the model efficiently loaded across multiple-gpus one has to explicitly call
-        # is_deepspeed_zero3_enabled(True) **before** instantiating a model object
-        if "--deepspeed" in sys.argv:
-            idx = sys.argv.index("--deepspeed")
-            ds_config = sys.argv[idx + 1]
-            if not os.path.exists(ds_config):
-                raise ValueError("--deepspeed requires a valid path to a config file")
-            config = deepspeed_parse_config(ds_config)
-            if (
-                "zero_optimization" in config
-                and "stage" in config["zero_optimization"]
-                and config["zero_optimization"]["stage"] == 3
-            ):
-                _is_deepspeed_zero3_enabled = True
-
-    return _is_deepspeed_zero3_enabled
-
-
-def deepspeed_zero3_enable(enable=True):
-    """
-    ``is_deepspeed_zero3_enabled()`` tries to derive automatically if DeepSpeed ZeRO 3 is going to be used by looking
-    at ``sys.argv`` which may or may contain information about where to find the DeepSpeed config if any.
-
-    This function allows for explicit enabling/disabling of this global flag.
-
-    Args:
-        enable: if set to ``True`` will make ``is_deepspeed_zero3_enabled()`` return ``True``
-    """
-    global _is_deepspeed_zero3_enabled
-    _is_deepspeed_zero3_enabled = enable
-
-
-def deepspeed_parse_config(ds_config):
-    """
-    If ``ds_config`` isn't already a dict, read it from the config file.
-
-    If it's already a dict, return a copy of it, so that we can freely modify it.
-    """
-    dep_version_check("deepspeed")
-
-    if isinstance(ds_config, dict):
-        # Don't modify user's data should they want to reuse it (e.g. in tests), because once we
-        # modified it, it will not be accepted here again, since some config params must be not set by users
-        config = deepcopy(ds_config)
-    elif isinstance(ds_config, str):
-        with io.open(ds_config, "r", encoding="utf-8") as f:
-            config = json.load(f)
+    if _deepspeed_config_hf_weak_ref is not None and _deepspeed_config_hf_weak_ref() is not None:
+        return _deepspeed_config_hf_weak_ref().is_zero3()
     else:
-        raise ValueError("expecting either a path to a config file or a pre-populated dict")
+        return False
 
-    return config
+
+def deepspeed_config():
+    if _deepspeed_config_hf_weak_ref is not None and _deepspeed_config_hf_weak_ref() is not None:
+        return _deepspeed_config_hf_weak_ref().config
+    else:
+        return None
 
 
 def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
@@ -355,41 +461,16 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
     """
     import deepspeed
 
-    args = trainer.args
     model = trainer.model
 
-    config = deepspeed_parse_config(args.deepspeed)
+    deepspeed_config_hf = trainer.args.deepspeed_config_hf
+    deepspeed_config_hf.config_finalize(trainer.args, model, num_training_steps)
 
-    # The following code translates relevant trainer's cl args into the DS config
-
-    # First to ensure that there is no mismatch between cl args values and presets in the config
-    # file, ask to not set in ds config file:
-    # - "train_batch_size",
-    # - "train_micro_batch_size_per_gpu",
-    # - "gradient_accumulation_steps"
-    bs_keys = ["train_batch_size", "train_micro_batch_size_per_gpu"]
-    if len([x for x in bs_keys if x in config.keys()]):
-        raise ValueError(
-            f"Do not include {bs_keys} entries in the ds config file, as they will be set via --per_device_train_batch_size or its default"
-        )
-    if "gradient_accumulation_steps" in config.keys():
-        raise ValueError(
-            "Do not include gradient_accumulation_steps entries in the ds config file, as they will be set via --gradient_accumulation_steps or its default"
-        )
-
-    # DeepSpeed does:
-    #   train_batch_size = n_gpus * train_micro_batch_size_per_gpu * gradient_accumulation_steps
-    # therefore we just need to set:
-    config["train_micro_batch_size_per_gpu"] = args.per_device_train_batch_size
-    config["gradient_accumulation_steps"] = args.gradient_accumulation_steps
-
-    if "gradient_clipping" in config:
-        logger.info("Keeping the `gradient_clipping` config intact, ignoring any gradient clipping-specific cl args")
-    else:  # override only if the ds config doesn't already have this section
-        config["gradient_clipping"] = args.max_grad_norm
+    # resume config update - some bits like `model` and `num_training_steps` only become available during train
+    config = deepspeed_config_hf.config
 
     # Optimizer + Scheduler
-    # Currently support combos:
+    # Currently supported combos:
     # 1. DS scheduler + DS optimizer: Yes
     # 2. HF scheduler + HF optimizer: Yes
     # 3. DS scheduler + HF optimizer: Yes
@@ -402,36 +483,16 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
     # 4. HF scheduler + DS optimizer: No
 
     optimizer = None
-    if "optimizer" in config:
-        logger.info("Updating the `scheduler` config with other command line arguments")
-
-        # to avoid inconsistent values of lr and warm up steps the command line args override config
-        params = dict(
-            lr=args.learning_rate,
-            betas=[args.adam_beta1, args.adam_beta2],
-            eps=args.adam_epsilon,
-            weight_decay=args.weight_decay,
-        )
-        for k, v in params.items():
-            if k in config["optimizer"]["params"]:
-                logger.info(f"setting optimizer.params.{k} to {v}")
-                config["optimizer"]["params"][k] = v
-
-    else:  # override only if the ds config doesn't already have this section
-        if (
-            "zero_optimization" in config
-            and "cpu_offload" in config["zero_optimization"]
-            and config["zero_optimization"]["cpu_offload"] is True
-        ):
+    if "optimizer" not in config:
+        if deepspeed_config_hf.is_offload():
             raise ValueError("ZeRO Offload can only work with DeepSpeed optimizers")
-        else:
-            # ds supports Adam, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
-            # But trainer uses AdamW by default.
-            # To use other optimizers so using a different scheduler requires voiding warranty with: `zero_allow_untested_optimizer`
-            trainer.create_optimizer()
-            optimizer = trainer.optimizer
-            # flag that this is non-native optimizer
-            config["zero_allow_untested_optimizer"] = True
+
+        # ds supports Adam, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
+        # But trainer uses AdamW by default.
+        trainer.create_optimizer()
+        optimizer = trainer.optimizer
+        # To use other optimizers requires voiding warranty with: `zero_allow_untested_optimizer`
+        config["zero_allow_untested_optimizer"] = True
 
     # DS schedulers (deepspeed/runtime/lr_schedules.py):
     #
@@ -442,25 +503,7 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
     # WarmupLR     | constant_with_warmup | get_constant_schedule_with_warmup | w/ warmup_min_lr=0
     # WarmupDecayLR| linear               | get_linear_schedule_with_warmup   |
     lr_scheduler = None
-    if "scheduler" in config:
-        logger.info("Updating the `scheduler` config with other command line arguments")
-        # the user won't easily know the correct num_training_steps should they use WarmupDecayLR,
-        # so let's set it to the correct value
-        if config["scheduler"]["type"] == "WarmupDecayLR":
-            logger.info(f"setting scheduler.params.total_num_steps to {num_training_steps}")
-            config["scheduler"]["params"]["total_num_steps"] = num_training_steps
-
-        # to avoid inconsistent values of lr and warmup steps the command line args override config
-        params = dict(
-            warmup_max_lr=args.learning_rate,
-            warmup_num_steps=args.warmup_steps,
-        )
-        for k, v in params.items():
-            if k in config["scheduler"]["params"]:
-                logger.info(f"setting scheduler.params.{k} to {v}")
-                config["scheduler"]["params"][k] = v
-
-    else:  # override only if the ds config doesn't already have this section
+    if "scheduler" not in config:
         if "optimizer" in config:
             # to make this option work, we need to init DS optimizer first, then init HS scheduler,
             # then pass the HS scheduler to DS init, which is not possible at the moment
@@ -468,43 +511,6 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
         else:
             trainer.create_scheduler(num_training_steps=num_training_steps)
             lr_scheduler = trainer.lr_scheduler
-
-    # fp16
-    if trainer.fp16_backend is not None:
-        # Deepspeed has 2 possible fp16 config entries:
-        # - `fp16`: for the native amp - it has a bunch of optional params but we won't set any here unless the user did the work
-        # - `amp`: which delegates amp work to apex (which needs to be available), but it cannot be used with any ZeRO features, so probably best to be avoided.
-        if trainer.fp16_backend == "apex":
-            if "amp" in config:
-                logger.info("Keeping the `amp` config intact, ignoring any amp-specific cl args")
-            else:
-                config["amp"] = {
-                    "enabled": True,
-                    "opt_level": args.fp16_opt_level,
-                }
-        elif trainer.fp16_backend == "amp":
-            if "fp16" in config:
-                logger.info("Keeping the `fp16` config intact, ignoring any fp16-specific cl args")
-            else:
-                config["fp16"] = {
-                    "enabled": True,
-                }
-
-    # zero
-    if "zero_optimization" in config:
-        zero = config["zero_optimization"]
-
-        # now we know for sure if zero3 is enabled
-        deepspeed_zero3_enable(zero.get("stage") == 3)
-
-        # automatically assign the optimal config values based on model config
-        hidden_size = model.config.hidden_size
-        if zero.get("reduce_bucket_size") == 0:
-            zero["reduce_bucket_size"] = hidden_size * hidden_size
-        if zero.get("stage3_prefetch_bucket_size") == 0:
-            zero["stage3_prefetch_bucket_size"] = 0.9 * hidden_size * hidden_size
-        if zero.get("stage3_param_persistence_threshold") == 0:
-            zero["stage3_param_persistence_threshold"] = 10 * hidden_size
 
     # keep for quick debug:
     # from pprint import pprint; pprint(config)

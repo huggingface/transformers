@@ -1122,7 +1122,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-            # this immediately partitions the model to avoid the overhead in time and memory copying it on CPU or each GPU first
+            # this immediately partitions the model across all gpus, to avoid the overhead in time
+            # and memory copying it on CPU or each GPU first
+
+            # XXX: param_dict will be added in deepspeed==0.3.16 and probably replaced by deepspeed_config
+            # with deepspeed.zero.Init(param_dict=deepspeed_config()):
             with deepspeed.zero.Init():
                 model = cls(config, *model_args, **model_kwargs)
         else:
