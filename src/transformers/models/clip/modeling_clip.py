@@ -103,9 +103,9 @@ class ClipVisionEmbeddings(nn.Module):
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
-        class_embeds = self.class_embedding.expand(batch_size, -1, -1)
-        embeddings = torch.cat([class_embeds, patch_embeds])
-        embeddings = embeddings + self.position_embedding
+        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
+        embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
+        embeddings = embeddings + self.position_embedding(self.position_ids)
         return embeddings
 
 
@@ -116,7 +116,7 @@ class ClipTextEmbeddings(nn.Module):
         embed_dim = config.d_model
 
         self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
-        self.positional_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
+        self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
@@ -135,7 +135,7 @@ class ClipTextEmbeddings(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.token_embedding(input_ids)
 
-        position_embeddings = self.position_embeddings(position_ids)
+        position_embeddings = self.position_embedding(position_ids)
         embeddings = inputs_embeds + position_embeddings
 
         return embeddings
@@ -671,7 +671,7 @@ class ClipModel(ClipPreTrainedModel):
         self.text_model = ClipTextModel(text_config)
         self.vision_model = ClipVisionModel(vision_config)
 
-        self.visiual_projection = nn.Linear(
+        self.visual_projection = nn.Linear(
             self.vision_embed_dim, self.output_dim, bias=False
         )  # TODO (PS): Copy init logic from CLIP repo
         self.text_projection = nn.Linear(
@@ -722,7 +722,7 @@ class ClipModel(ClipPreTrainedModel):
         )
 
         image_embeds = vision_outputs[0]
-        image_features = self.visiual_projection(image_embeds)
+        image_features = self.visual_projection(image_embeds)
 
         return image_features
 
@@ -755,7 +755,7 @@ class ClipModel(ClipPreTrainedModel):
         )
 
         image_embeds = vision_outputs[0]
-        image_features = self.visiual_projection(image_embeds)
+        image_features = self.visual_projection(image_embeds)
 
         text_embeds = text_outputs[0]
         # text_embeds.shape = [batch_size, n_ctx, transformer.width]
@@ -768,7 +768,8 @@ class ClipModel(ClipPreTrainedModel):
         text_features = text_features / text_features.norm(dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        similarity = torch.dot(text_features, image_features.t()) * self.logit_scale
+        logit_scale = self.logit_scale.exp()
+        similarity = torch.matmul(text_features, image_features.t()) * logit_scale
 
         loss = clip_loss(similarity)
 
