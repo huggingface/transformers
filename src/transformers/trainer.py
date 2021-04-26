@@ -43,7 +43,6 @@ from .integrations import (  # isort: split
     run_hp_search_optuna,
     run_hp_search_ray,
     deepspeed_init,
-    deepspeed_config_setup,
     is_deepspeed_zero3_enabled,
 )
 
@@ -55,8 +54,6 @@ from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import Dataset, IterableDataset
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
-
-import transformers
 
 from . import __version__
 from .configuration_utils import PretrainedConfig
@@ -290,32 +287,6 @@ class Trainer:
         # force device and distributed setup init explicitly
         args._setup_devices
 
-        # Mixed precision setup
-        self.use_apex = False
-        self.use_amp = False
-        self.fp16_backend = None
-
-        if args.fp16:
-            if args.fp16_backend == "auto":
-                self.fp16_backend = "amp" if _is_native_amp_available else "apex"
-            else:
-                self.fp16_backend = args.fp16_backend
-            logger.info(f"Using {self.fp16_backend} fp16 backend")
-
-        if args.fp16 and not args.deepspeed:  # deepspeed manages its own fp16
-            if self.fp16_backend == "amp":
-                self.use_amp = True
-                self.scaler = ShardedGradScaler() if self.sharded_ddp is not None else torch.cuda.amp.GradScaler()
-            else:
-                if not is_apex_available():
-                    raise ImportError(
-                        "Using FP16 with APEX but APEX is not installed, please refer to https://www.github.com/nvidia/apex."
-                    )
-                self.use_apex = True
-
-        if args.deepspeed:
-            deepspeed_config_setup(self)
-
         if model is None:
             if model_init is not None:
                 self.model_init = model_init
@@ -424,6 +395,30 @@ class Trainer:
 
         self._signature_columns = None
 
+        # XXX: can move this back to where it was
+        # Mixed precision setup
+        self.use_apex = False
+        self.use_amp = False
+        self.fp16_backend = None
+
+        if args.fp16:
+            if args.fp16_backend == "auto":
+                self.fp16_backend = "amp" if _is_native_amp_available else "apex"
+            else:
+                self.fp16_backend = args.fp16_backend
+            logger.info(f"Using {self.fp16_backend} fp16 backend")
+
+        if args.fp16 and not args.deepspeed:  # deepspeed manages its own fp16
+            if self.fp16_backend == "amp":
+                self.use_amp = True
+                self.scaler = ShardedGradScaler() if self.sharded_ddp is not None else torch.cuda.amp.GradScaler()
+            else:
+                if not is_apex_available():
+                    raise ImportError(
+                        "Using FP16 with APEX but APEX is not installed, please refer to https://www.github.com/nvidia/apex."
+                    )
+                self.use_apex = True
+
         # Label smoothing
         if self.args.label_smoothing_factor != 0:
             self.label_smoother = LabelSmoother(epsilon=self.args.label_smoothing_factor)
@@ -448,14 +443,13 @@ class Trainer:
         # very last
         self._memory_tracker.stop_and_update_metrics()
 
-    def __del__(self):
-        # in order to get various deepspeed components into the transformers framework w/o creating
-        # too many changes to the API, we use a few global variables, which aren't a problem as long
-        # as there is one Trainer per program execution. But if multiple Trainers are used we have
-        # to take care to reset these globals when Trainer is destroyed
-        if self.deepspeed:
-            transformers.integrations._is_deepspeed_zero3_enabled = None
-            transformers.integrations._deepspeed_config = None
+    # def __del__(self):
+    #     # in order to get various deepspeed components into the transformers framework w/o creating
+    #     # too many changes to the API, we use a few global variables, which aren't a problem as long
+    #     # as there is one Trainer per program execution. But if multiple Trainers are used we have
+    #     # to take care to reset these globals when Trainer is destroyed
+    #     if self.deepspeed:
+    #         transformers.integrations._deepspeed_config = None
 
     def add_callback(self, callback):
         """

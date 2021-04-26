@@ -68,6 +68,7 @@ def require_deepspeed(test_case):
 
 if is_deepspeed_available():
     from deepspeed.utils import logger as deepspeed_logger  # noqa
+    from transformers.integrations import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
 
 ZERO2 = "zero2"
 ZERO3 = "zero3"
@@ -228,25 +229,6 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 str(context.exception),
                 f"got exception: {context.exception}",
             )
-
-    @parameterized.expand(stages)
-    def test_model_init(self, stage):
-        ds_config_dict = self.get_config_dict(stage)
-
-        # XXX: not really testing anything that we actually need here
-        # need real model - move to launcher
-        def model_init(self):
-            # setup Deepspeed
-            a = 0
-            b = 0
-            double_output = False
-            config = RegressionModelConfig(a=a, b=b, double_output=double_output)
-            model = RegressionPreTrainedModel(config)
-            return model
-
-        with mockenv_context(**self.dist_env_1_gpu):
-            trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_dict, model_init=model_init)
-            trainer.train()
 
     @parameterized.expand(stages)
     def test_fake_notebook_no_launcher(self, stage):
@@ -479,6 +461,38 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
 
+    def test_config_object(self):
+        # test that we can switch from zero2 to zero3 in the same process for example
+        # test is_zero, etc.
+        output_dir = self.get_auto_remove_tmp_dir()
+        kwargs = dict(output_dir=output_dir, train_len=8)
+
+        with mockenv_context(**self.dist_env_1_gpu):
+            ds_config_zero3_dict = self.get_config_dict("zero3")
+            ds_config_zero2_dict = self.get_config_dict("zero2")
+
+            trainer = get_regression_trainer(deepspeed=ds_config_zero3_dict, **kwargs)
+            self.assertTrue(is_deepspeed_zero3_enabled())
+
+            # test we can repeat that and with train this time
+            trainer = get_regression_trainer(deepspeed=ds_config_zero3_dict, **kwargs)
+            trainer.train()
+            self.assertTrue(is_deepspeed_zero3_enabled())
+
+            # test zero3 is disabled
+            trainer = get_regression_trainer(deepspeed=ds_config_zero2_dict, **kwargs)
+            self.assertFalse(is_deepspeed_zero3_enabled())
+
+            # check config obj
+            config = deepspeed_config()
+            self.assertTrue(bool(config), "Deepspeed config should be accessible")
+
+            del trainer
+            # now weakref should gc the global and we shouldn't get anything here
+            config = deepspeed_config()
+            self.assertFalse(is_deepspeed_zero3_enabled())
+            self.assertFalse(bool(config), "Deepspeed config should not be accessible")
+
 
 @slow
 @require_deepspeed
@@ -611,6 +625,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --adafactor
             --source_lang en
             --target_lang ro
+            --report_to none
         """.split()
         args.extend(["--source_prefix", '"translate English to Romanian: "'])
 
@@ -680,6 +695,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --num_train_epochs 1
             --warmup_steps 8
             --block_size 128
+            --report_to none
             """.split()
 
         ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}.json".split()

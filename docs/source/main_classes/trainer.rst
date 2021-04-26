@@ -1743,18 +1743,20 @@ context manager (which is also a function decorator), like so:
 As you can see this gives you a randomly initialized model.
 
 If you want to use a pretrained model, ``model_class.from_pretrained`` will activate this feature as long as
-``is_deepspeed_zero3_enabled()`` returns ``True``, which can be set manually via ``deepspeed_zero3_enable(True)``.
-Therefore to enable this feature here is the required sequence:
+``is_deepspeed_zero3_enabled()`` returns ``True``, which currently is setup by the
+class:`~transformers.TrainingArguments` object if the passed DeepSpeed configuration file contains ZeRO-3 config
+section. Thus you must create the class:`~transformers.TrainingArguments` object **before** calling
+``from_pretrained``. Here is an example of a possible sequence:
 
 .. code-block:: python
 
-    from transformers.integrations import deepspeed_zero3_enable
-    deepspeed_zero3_enable(True)
-    model = T5ForConditionalGeneration.from_pretrained("t5-small")
+    from transformers import AutoModel, Trainer, TrainingArguments
+    training_args = TrainingArguments(..., deepspeed=ds_config)
+    model = AutoModel.from_pretrained("t5-small")
+    trainer = Trainer(model=model, args=training_args, ...)
 
-If you're using ``Trainer`` command line arguments which include ``--deepspeed ds_config.json`` with ZeRO-3 config
-enabled, then you can skip ``deepspeed_zero3_enable(True)`` as it will try to discover whether it'll be run under
-ZeRO-3 and ``from_pretrained`` will automatically activate this feature.
+If you're using the official example scripts and your command line arguments include ``--deepspeed ds_config.json``
+with ZeRO-3 config enabled, then everything is already done for you, since this is how example scripts are written.
 
 Note: If the fp16 weights of the model can't fit onto the memory of a single GPU this feature must be used.
 
