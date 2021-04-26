@@ -135,7 +135,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         sp_model_kwargs=None,
         **kwargs,
     ):
-        sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         super().__init__(
             src_lang=src_lang,
@@ -145,7 +145,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
             sep_token=sep_token,
             unk_token=unk_token,
             pad_token=pad_token,
-            sp_model_kwargs=sp_model_kwargs,
+            sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
 
@@ -153,7 +153,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         self.encoder = load_json(vocab_file)
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.spm_file = spm_file
-        self.sp_model = load_spm(spm_file, sp_model_kwargs)
+        self.sp_model = load_spm(spm_file, self.sp_model_kwargs)
 
         self.encoder_size = len(self.encoder)
 
