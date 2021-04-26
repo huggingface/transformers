@@ -58,7 +58,7 @@ Tips:
     in the embeddings of these entities. This is particularly effective for tasks requiring real-world knowledge, such
     as question answering.
 
-- There are three head models for the former use case.
+- There are three head models for the former use case:
 
   - :class:`~transformers.LukeForEntityClassification`, for tasks to classify a single entity in an input text such as
     entity typing, e.g. the `Open Entity dataset <https://www.cs.utexas.edu/~eunsol/html_pages/open_entity.html>`__.
@@ -78,7 +78,7 @@ Example:
 
 .. code-block::
 
-    >>> from transformers import LukeTokenizer, LukeModel, LukeForEntityClassification
+    >>> from transformers import LukeTokenizer, LukeModel, LukeForEntityPairClassification
 
     >>> model = LukeModel.from_pretrained("studio-ousia/luke-base")
     >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base")
@@ -86,26 +86,24 @@ Example:
     # Example 1: Computing the contextualized entity representation corresponding to the entity mention "Beyoncé"
     >>> text = "Beyoncé lives in New York."
     >>> entity_spans = [(0, 7)]  # character-based entity span corresponding to "Beyoncé"
-    >>> encoding = tokenizer(text, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
-    >>> outputs = model(**encoding)
+    >>> inputs = tokenizer(text, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
+    >>> outputs = model(**inputs)
     >>> word_last_hidden_state = outputs.last_hidden_state
     >>> entity_last_hidden_state = outputs.entity_last_hidden_state
 
     # Example 2: Inputting Wikipedia entities to obtain enriched contextualized representations
-    >>> text = "Beyoncé lives in New York."
     >>> entities = ["Beyoncé", "New York City"]  # Wikipedia entity titles corresponding to the entity mentions "Beyoncé" and "New York"
     >>> entity_spans = [(0, 7), (17, 25)]  # character-based entity spans corresponding to "Beyoncé" and "New York"
-    >>> encoding = tokenizer(text, entities=entities, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
-    >>> outputs = model(**encoding)
+    >>> inputs = tokenizer(text, entities=entities, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
+    >>> outputs = model(**inputs)
     >>> word_last_hidden_state = outputs.last_hidden_state
     >>> entity_last_hidden_state = outputs.entity_last_hidden_state
 
-    # Example 3: Classifying an entity using LukeForEntityClassification head model
-    >>> model = LukeForEntityClassification.from_pretrained("studio-ousia/luke-base")
-    # Instantiate LukeTokenizer with specifying task="entity_classification" to create input for LukeForEntityClassification
-    >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base", task="entity_classification")
-    >>> text = "Beyoncé lives in New York."
-    >>> entity_spans = [(0, 7)]  # character-based entity span corresponding to "Beyoncé"
+    # Example 3: Classifying the relationship between two entities using LukeForEntityPairClassification head model
+    >>> model = LukeForEntityPairClassification.from_pretrained("studio-ousia/luke-large-finetuned-tacred")
+    # Instantiate LukeTokenizer with specifying task="entity_pair_classification" to create input for LukeForEntityPairClassification
+    >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-tacred", task="entity_pair_classification")
+    >>> entity_spans = [(0, 7), (17, 25)]  # character-based entity spans corresponding to "Beyoncé" and "New York"
     >>> inputs = tokenizer(text, entity_spans=entity_spans, return_tensors="pt")
     >>> outputs = model(**inputs)
     >>> logits = outputs.logits

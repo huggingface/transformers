@@ -1065,8 +1065,8 @@ class LukeForEntityClassification(LukePreTrainedModel):
 
             >>> from transformers import LukeTokenizer, LukeForEntityClassification
 
-            >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base", task="entity_classification")
-            >>> model = LukeForEntityClassification.from_pretrained("studio-ousia/luke-base")
+            >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-open-entity", task="entity_classification")
+            >>> model = LukeForEntityClassification.from_pretrained("studio-ousia/luke-large-finetuned-open-entity")
 
             >>> text = "Beyoncé lives in New York."
             >>> entity_spans = [(0, 7)]  # character-based entity span corresponding to "Beyoncé"
@@ -1175,9 +1175,9 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
 
             >>> from transformers import LukeTokenizer, LukeForEntityPairClassification
 
-            >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base", task="entity_pair_classification")
-            >>> model = LukeForEntityPairClassification.from_pretrained("studio-ousia/luke-base")
-            
+            >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-tacred", task="entity_pair_classification")
+            >>> model = LukeForEntityPairClassification.from_pretrained("studio-ousia/luke-large-finetuned-tacred")
+
             >>> text = "Beyoncé lives in New York."
             >>> entity_spans = [(0, 7), (17, 25)]  # character-based entity spans corresponding to "Beyoncé" and "New York"
             >>> inputs = tokenizer(text, entity_spans=entity_spans, return_tensors="pt")
@@ -1295,8 +1295,8 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
 
             >>> from transformers import LukeTokenizer, LukeForEntitySpanClassification
 
-            >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base", task="entity_span_classification")
-            >>> model = LukeForEntitySpanClassification.from_pretrained("studio-ousia/luke-base")
+            >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-conll-2003", task="entity_span_classification")
+            >>> model = LukeForEntitySpanClassification.from_pretrained("studio-ousia/luke-large-finetuned-conll-2003")
 
             >>> text = "Beyoncé lives in New York"
 
