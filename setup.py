@@ -86,7 +86,7 @@ if stale_egg_info.exists():
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
     "Pillow",
-    "black>=20.8b1",
+    "black==20.8b1",
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
@@ -247,7 +247,17 @@ extras["vision"] = deps_list("Pillow")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
     deps_list(
-        "pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets", "pytest-sugar", "black", "sacrebleu", "rouge-score", "nltk"
+        "pytest",
+        "pytest-xdist",
+        "timeout-decorator",
+        "parameterized",
+        "psutil",
+        "datasets",
+        "pytest-sugar",
+        "black",
+        "sacrebleu",
+        "rouge-score",
+        "nltk",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
