@@ -100,7 +100,7 @@ class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(tokenizer.tgt_vocab_size, 21)
 
     def test_full_tokenizer(self):
-        """ Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt """
+        """Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt"""
         tokenizer = FSMTTokenizer(self.langs, self.src_vocab_file, self.tgt_vocab_file, self.merges_file)
 
         text = "lower"

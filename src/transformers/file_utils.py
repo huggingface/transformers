@@ -1462,7 +1462,7 @@ def tf_required(func):
 
 
 def is_tensor(x):
-    """ Tests if ``x`` is a :obj:`torch.Tensor`, :obj:`tf.Tensor` or :obj:`np.ndarray`. """
+    """Tests if ``x`` is a :obj:`torch.Tensor`, :obj:`tf.Tensor` or :obj:`np.ndarray`."""
     if is_torch_available():
         import torch
 
@@ -1684,7 +1684,7 @@ class _BaseLazyModule(ModuleType):
 
 
 def copy_func(f):
-    """ Returns a copy of a function f."""
+    """Returns a copy of a function f."""
     # Based on http://stackoverflow.com/a/6528148/190597 (Glenn Maynard)
     g = types.FunctionType(f.__code__, f.__globals__, name=f.__name__, argdefs=f.__defaults__, closure=f.__closure__)
     g = functools.update_wrapper(g, f)

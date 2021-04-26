@@ -509,7 +509,7 @@ class LEDEncoderSelfAttention(nn.Module):
 
     @staticmethod
     def _get_global_attn_indices(is_index_global_attn):
-        """ compute global attn indices required throughout forward pass """
+        """compute global attn indices required throughout forward pass"""
         # helper variable
         num_global_attn_indices = is_index_global_attn.long().sum(dim=1)
 

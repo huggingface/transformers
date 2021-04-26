@@ -680,7 +680,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617

@@ -434,7 +434,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         return self.idx2sym[idx]
 
     def _convert_token_to_id(self, sym):
-        """ Converts a token (str) in an id using the vocab. """
+        """Converts a token (str) in an id using the vocab."""
         if sym in self.sym2idx:
             return self.sym2idx[sym]
         else:

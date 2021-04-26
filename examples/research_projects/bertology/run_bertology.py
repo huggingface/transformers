@@ -49,14 +49,14 @@ logger = logging.getLogger(__name__)
 
 
 def entropy(p):
-    """ Compute the entropy of a probability distribution """
+    """Compute the entropy of a probability distribution"""
     plogp = p * torch.log(p)
     plogp[p == 0] = 0
     return -plogp.sum(dim=-1)
 
 
 def print_2d_tensor(tensor):
-    """ Print a 2D tensor """
+    """Print a 2D tensor"""
     logger.info("lv, h >\t" + "\t".join(f"{x + 1}" for x in range(len(tensor))))
     for row in range(len(tensor)):
         if tensor.dtype != torch.long:

@@ -430,7 +430,7 @@ class TFMPNetEncoder(tf.keras.layers.Layer):
         return ret
 
     def compute_position_bias(self, x, position_ids=None):
-        """ Compute binned relative position bias """
+        """Compute binned relative position bias"""
         input_shape = shape_list(x)
         qlen, klen = input_shape[1], input_shape[1]
 

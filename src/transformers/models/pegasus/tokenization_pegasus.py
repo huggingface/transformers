@@ -175,7 +175,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
         return pieces
 
     def _convert_token_to_id(self, token: str) -> int:
-        """ Converts a token (str) to an id using the vocab. """
+        """Converts a token (str) to an id using the vocab."""
         if token in self.decoder:
             return self.decoder[token]
         elif token in self.added_tokens_decoder:
@@ -194,7 +194,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
         return token
 
     def convert_tokens_to_string(self, tokens):
-        """ Converts a sequence of tokens (string) in a single string. """
+        """Converts a sequence of tokens (string) in a single string."""
         out_string = self.sp_model.decode_pieces(tokens)
         return out_string
 

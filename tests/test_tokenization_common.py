@@ -58,7 +58,7 @@ NON_ENGLISH_TAGS = ["chinese", "dutch", "french", "finnish", "german", "multilin
 
 
 def filter_non_english(_, pretrained_name: str):
-    """ Filter all the model for non-english language """
+    """Filter all the model for non-english language"""
     return not any([lang in pretrained_name for lang in NON_ENGLISH_TAGS])
 
 

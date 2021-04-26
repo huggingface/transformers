@@ -189,7 +189,7 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
 
 
 class TFAlbertAttention(tf.keras.layers.Layer):
-    """ Contains the complete attention sublayer, including both dropouts and layer norm. """
+    """Contains the complete attention sublayer, including both dropouts and layer norm."""
 
     def __init__(self, config: AlbertConfig, **kwargs):
         super().__init__(**kwargs)

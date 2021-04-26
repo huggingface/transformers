@@ -251,7 +251,7 @@ class TransformerDecoder(nn.Module):
         return output, state  # , state
 
     def init_decoder_state(self, src, memory_bank, with_cache=False):
-        """ Init decoder state """
+        """Init decoder state"""
         state = TransformerDecoderState(src)
         if with_cache:
             state._init_cache(memory_bank, self.num_layers)
@@ -479,11 +479,11 @@ class MultiHeadedAttention(nn.Module):
         head_count = self.head_count
 
         def shape(x):
-            """  projection """
+            """projection"""
             return x.view(batch_size, -1, head_count, dim_per_head).transpose(1, 2)
 
         def unshape(x):
-            """  compute context """
+            """compute context"""
             return x.transpose(1, 2).contiguous().view(batch_size, -1, head_count * dim_per_head)
 
         # 1) Project key, value, and query.
@@ -571,12 +571,12 @@ class DecoderState(object):
     """
 
     def detach(self):
-        """ Need to document this """
+        """Need to document this"""
         self.hidden = tuple([_.detach() for _ in self.hidden])
         self.input_feed = self.input_feed.detach()
 
     def beam_update(self, idx, positions, beam_size):
-        """ Need to document this """
+        """Need to document this"""
         for e in self._all:
             sizes = e.size()
             br = sizes[1]
@@ -592,7 +592,7 @@ class DecoderState(object):
 
 
 class TransformerDecoderState(DecoderState):
-    """ Transformer Decoder state base class """
+    """Transformer Decoder state base class"""
 
     def __init__(self, src):
         """
@@ -638,7 +638,7 @@ class TransformerDecoderState(DecoderState):
             self.cache["layer_{}".format(l)] = layer_cache
 
     def repeat_beam_size_times(self, beam_size):
-        """ Repeat beam_size times along batch dimension. """
+        """Repeat beam_size times along batch dimension."""
         self.src = self.src.data.repeat(1, beam_size, 1)
 
     def map_batch_fn(self, fn):

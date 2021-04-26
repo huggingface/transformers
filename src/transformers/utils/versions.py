@@ -115,12 +115,12 @@ def require_version(requirement: str, hint: Optional[str] = None) -> None:
 
 
 def require_version_core(requirement):
-    """ require_version wrapper which emits a core-specific hint on failure """
+    """require_version wrapper which emits a core-specific hint on failure"""
     hint = "Try: pip install transformers -U or pip install -e '.[dev]' if you're working with git master"
     return require_version(requirement, hint)
 
 
 def require_version_examples(requirement):
-    """ require_version wrapper which emits examples-specific hint on failure """
+    """require_version wrapper which emits examples-specific hint on failure"""
     hint = "Try: pip install -r examples/requirements.txt"
     return require_version(requirement, hint)

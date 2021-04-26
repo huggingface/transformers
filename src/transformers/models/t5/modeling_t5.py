@@ -389,7 +389,7 @@ class T5Attention(nn.Module):
         return relative_buckets
 
     def compute_bias(self, query_length, key_length):
-        """ Compute binned relative position bias """
+        """Compute binned relative position bias"""
         context_position = torch.arange(query_length, dtype=torch.long)[:, None]
         memory_position = torch.arange(key_length, dtype=torch.long)[None, :]
         relative_position = memory_position - context_position  # shape (query_length, key_length)
@@ -436,15 +436,15 @@ class T5Attention(nn.Module):
         key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
 
         def shape(states):
-            """  projection """
+            """projection"""
             return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
         def unshape(states):
-            """  reshape """
+            """reshape"""
             return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
 
         def project(hidden_states, proj_layer, key_value_states, past_key_value):
-            """ projects hidden states correctly to key/query states """
+            """projects hidden states correctly to key/query states"""
             if key_value_states is None:
                 # self-attn
                 # (batch_size, n_heads, seq_length, dim_per_head)
@@ -718,7 +718,7 @@ class T5PreTrainedModel(PreTrainedModel):
         return dummy_inputs
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, T5LayerNorm):
             module.weight.data.fill_(factor * 1.0)

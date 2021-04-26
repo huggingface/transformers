@@ -115,7 +115,7 @@ class ReformerTokenizer(PreTrainedTokenizer):
         return pieces
 
     def _convert_token_to_id(self, token):
-        """ Converts a token (str) in an id using the vocab. """
+        """Converts a token (str) in an id using the vocab."""
         return self.sp_model.piece_to_id(token)
 
     def _convert_id_to_token(self, index):
@@ -125,7 +125,7 @@ class ReformerTokenizer(PreTrainedTokenizer):
         return token
 
     def convert_tokens_to_string(self, tokens):
-        """ Converts a sequence of tokens (string) in a single string. """
+        """Converts a sequence of tokens (string) in a single string."""
         out_string = self.sp_model.decode_pieces(tokens)
         return out_string
 

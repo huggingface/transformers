@@ -134,7 +134,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         return self._tokenizer.tokenize(text)
 
     def _convert_token_to_id(self, token):
-        """ Converts a token (str) in an id using the vocab. """
+        """Converts a token (str) in an id using the vocab."""
         return self._tokenizer.spm.PieceToId(token)
 
     def _convert_id_to_token(self, index):
@@ -142,7 +142,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         return self._tokenizer.spm.IdToPiece(index) if index < self.vocab_size else self.unk_token
 
     def convert_tokens_to_string(self, tokens):
-        """ Converts a sequence of tokens (string) in a single string. """
+        """Converts a sequence of tokens (string) in a single string."""
         return self._tokenizer.decode(tokens)
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
