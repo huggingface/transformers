@@ -221,8 +221,7 @@ class ClipTokenizer(PreTrainedTokenizer):
 
         - single sequence: ``<|startoftext|> X <|endoftext|>``
 
-        Pairs of sequences are not the expected use case, but they will be handled without a
-        separator.
+        Pairs of sequences are not the expected use case, but they will be handled without a separator.
 
         Args:
             token_ids_0 (:obj:`List[int]`):

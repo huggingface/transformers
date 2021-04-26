@@ -31,40 +31,20 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_clip"] = [
         "CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "clipForMaskedLM",
-        "clipForCausalLM",
-        "clipForMultipleChoice",
-        "clipForQuestionAnswering",
-        "clipForSequenceClassification",
-        "clipForTokenClassification",
-        "clipLayer",
-        "clipModel",
-        "clipPreTrainedModel",
-        "load_tf_weights_in_clip",
+        "ClipModel",
+        "ClipPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_clip import CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, clipConfig
-    from .tokenization_clip import clipTokenizer
+    from .configuration_clip import CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, ClipConfig
+    from .tokenization_clip import ClipTokenizer
 
     if is_tokenizers_available():
-        from .tokenization_clip_fast import clipTokenizerFast
+        from .tokenization_clip_fast import ClipTokenizerFast
 
     if is_torch_available():
-        from .modeling_clip import (
-            CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            clipForCausalLM,
-            clipForMaskedLM,
-            clipForMultipleChoice,
-            clipForQuestionAnswering,
-            clipForSequenceClassification,
-            clipForTokenClassification,
-            clipLayer,
-            clipModel,
-            clipPreTrainedModel,
-            load_tf_weights_in_clip,
-        )
+        from .modeling_clip import CLIP_PRETRAINED_MODEL_ARCHIVE_LIST, ClipModel, ClipPreTrainedModel
 
 
 else:

@@ -30,7 +30,7 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_outputs import BaseModelOutput
-from ...modeling_utils import PreTrainedModel, SequenceSummary, apply_chunking_to_forward
+from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_clip import ClipConfig, ClipTextConfig, ClipVisionConfig
 
@@ -71,15 +71,15 @@ class ClipVisionEmbeddings(nn.Module):
         self.embed_dim = config.d_model
         self.image_size = config.image_resolution
         self.patch_size = config.patch_size
-        
+
         scale = self.embed_dim ** -0.5
         self.class_embedding = nn.Parameter(scale * torch.randn(self.embed_dim))
 
-        self.patch_embedding= nn.Conv2d(
+        self.patch_embedding = nn.Conv2d(
             in_channels=3, out_channels=self.embed_dim, kernel_size=self.patch_size, stride=self.patch_size, bias=False
         )
 
-        self.num_patches = (self.image_size // self.patch_size) ** 2 
+        self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         # TODO (PS): Copy init logic from CLIP repo
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
@@ -87,7 +87,7 @@ class ClipVisionEmbeddings(nn.Module):
 
     def forward(self, pixel_values):
         batch_size = pixel_values.shape[0]
-        patch_embeds = self.patch_embedding(pixel_values) # shape = [*, width, grid, grid]
+        patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
         class_embeds = self.class_embedding.expand(batch_size, -1, -1)
@@ -107,21 +107,21 @@ class ClipTextEmbeddings(nn.Module):
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-    
+
     def forward(self, input_ids=None, position_ids=None, inputs_embeds=None):
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
             input_shape = inputs_embeds.size()[:-1]
-        
+
         seq_length = input_shape[1]
 
         if position_ids is None:
-            position_ids = self.position_ids[:,  :seq_length]
-        
+            position_ids = self.position_ids[:, :seq_length]
+
         if inputs_embeds is None:
             inputs_embeds = self.token_embedding(input_ids)
-        
+
         position_embeddings = self.position_embeddings(position_ids)
         embeddings = inputs_embeds + position_embeddings
 
@@ -718,7 +718,7 @@ class ClipModel(ClipPreTrainedModel):
         input_ids=None,
         input_features=None,
         attention_mask=None,
-        logit_scale=100, # hack
+        logit_scale=100,  # hack
         position_ids=None,
         inputs_embeds=None,
         output_attentions=None,

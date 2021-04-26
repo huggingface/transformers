@@ -28,20 +28,11 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 if is_torch_available():
     import torch
 
-    from transformers import (
-        clipConfig,
-        clipForCausalLM,
-        clipForMaskedLM,
-        clipForMultipleChoice,
-        clipForQuestionAnswering,
-        clipForSequenceClassification,
-        clipForTokenClassification,
-        clipModel,
-    )
+    from transformers import ClipConfig, ClipModel
     from transformers.models.clip.modeling_clip import CLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
-class clipModelTester:
+class ClipModelTester:
     def __init__(
         self,
         parent,
@@ -109,7 +100,7 @@ class clipModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = clipConfig(
+        config = ClipConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -156,7 +147,7 @@ class clipModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = clipModel(config=config)
+        model = ClipModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
@@ -177,7 +168,7 @@ class clipModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = clipModel(config)
+        model = ClipModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -355,26 +346,13 @@ class clipModelTester:
 
 
 @require_torch
-class clipModelTest(ModelTesterMixin, unittest.TestCase):
+class ClipModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (
-        (
-            clipModel,
-            clipForMaskedLM,
-            clipForCausalLM,
-            clipForMultipleChoice,
-            clipForQuestionAnswering,
-            clipForSequenceClassification,
-            clipForTokenClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
-    all_generative_model_classes = (clipForCausalLM,) if is_torch_available() else ()
+    all_model_classes = (ClipModel,) if is_torch_available() else ()
 
     def setUp(self):
-        self.model_tester = clipModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=clipConfig, hidden_size=37)
+        self.model_tester = ClipModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ClipConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -448,12 +426,12 @@ class clipModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = clipModel.from_pretrained(model_name)
+            model = ClipModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
 @require_torch
-class clipModelIntegrationTest(unittest.TestCase):
+class ClipModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
         model = clipForMaskedLM.from_pretrained("clip-vit-b-32")

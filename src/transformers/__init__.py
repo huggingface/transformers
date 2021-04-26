@@ -130,7 +130,6 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.clip": ["CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "clipConfig", "clipTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -163,6 +162,7 @@ _import_structure = {
         "BlenderbotSmallTokenizer",
     ],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
+    "models.clip": ["CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "ClipConfig", "ClipTokenizer"],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.cpm": ["CpmTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
@@ -309,7 +309,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
-    _import_structure["models.clip"].append("clipTokenizerFast")
+    _import_structure["models.clip"].append("ClipTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
@@ -446,22 +446,6 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
     # PyTorch models structure
 
-    _import_structure["models.clip"].extend(
-        [
-            "CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "clipForMaskedLM",
-            "clipForCausalLM",
-            "clipForMultipleChoice",
-            "clipForQuestionAnswering",
-            "clipForSequenceClassification",
-            "clipForTokenClassification",
-            "clipLayer",
-            "clipModel",
-            "clipPreTrainedModel",
-            "load_tf_weights_in_clip",
-        ]
-    )
-
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -506,6 +490,7 @@ if is_torch_available():
             "AutoModelWithLMHead",
         ]
     )
+
     _import_structure["models.bart"].extend(
         [
             "BART_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -584,6 +569,13 @@ if is_torch_available():
             "CamembertForSequenceClassification",
             "CamembertForTokenClassification",
             "CamembertModel",
+        ]
+    )
+    _import_structure["models.clip"].extend(
+        [
+            "CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ClipModel",
+            "ClipPreTrainedModel",
         ]
     )
     _import_structure["models.convbert"].extend(
@@ -1531,7 +1523,7 @@ if TYPE_CHECKING:
         BlenderbotSmallTokenizer,
     )
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
-    from .models.clip import CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, clipConfig, clipTokenizer
+    from .models.clip import CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, ClipConfig, ClipTokenizer
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.cpm import CpmTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
@@ -1677,7 +1669,7 @@ if TYPE_CHECKING:
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast
         from .models.camembert import CamembertTokenizerFast
-        from .models.clip import clipTokenizerFast
+        from .models.clip import ClipTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.distilbert import DistilBertTokenizerFast
         from .models.dpr import DPRContextEncoderTokenizerFast, DPRQuestionEncoderTokenizerFast, DPRReaderTokenizerFast
@@ -1889,19 +1881,7 @@ if TYPE_CHECKING:
             CamembertForTokenClassification,
             CamembertModel,
         )
-        from .models.clip import (
-            CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            clipForCausalLM,
-            clipForMaskedLM,
-            clipForMultipleChoice,
-            clipForQuestionAnswering,
-            clipForSequenceClassification,
-            clipForTokenClassification,
-            clipLayer,
-            clipModel,
-            clipPreTrainedModel,
-            load_tf_weights_in_clip,
-        )
+        from .models.clip import CLIP_PRETRAINED_MODEL_ARCHIVE_LIST, ClipModel, ClipPreTrainedModel
         from .models.convbert import (
             CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ConvBertForMaskedLM,
