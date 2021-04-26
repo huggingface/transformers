@@ -169,8 +169,8 @@ Regarding the `TFTrainer` class:
 - The `TFTrainer` method `_setup_wandb` is deprecated in favor of `setup_wandb`.
 - The `TFTrainer` method `_run_model` is deprecated in favor of `run_model`.
 
-Regarding the `TrainerArgument` class:
-- The `TrainerArgument` argument `evaluate_during_training` is deprecated in favor of `evaluation_strategy`.
+Regarding the `TrainingArguments` class:
+- The `TrainingArguments` argument `evaluate_during_training` is deprecated in favor of `evaluation_strategy`.
 
 Regarding the Transfo-XL model:
 - The Transfo-XL configuration attribute `tie_weight` becomes `tie_words_embeddings`.
