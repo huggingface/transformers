@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import AddedToken, LukeTokenizer
-from transformers.testing_utils import slow
+from transformers.testing_utils import slow, require_torch
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -153,6 +153,7 @@ class Luke(TokenizerTesterMixin, unittest.TestCase):
                 )
 
 
+@require_torch
 class LukeTokenizerIntegrationTests(unittest.TestCase):
     tokenizer_class = LukeTokenizer
     from_pretrained_kwargs = {"cls_token": "<s>"}

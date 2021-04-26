@@ -101,7 +101,7 @@ Example:
 
     # Example 3: Classifying the relationship between two entities using LukeForEntityPairClassification head model
     >>> model = LukeForEntityPairClassification.from_pretrained("studio-ousia/luke-large-finetuned-tacred")
-    >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-tacred", task="entity_pair_classification")
+    >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-tacred")
     >>> entity_spans = [(0, 7), (17, 28)]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
     >>> inputs = tokenizer(text, entity_spans=entity_spans, return_tensors="pt")
     >>> outputs = model(**inputs)
