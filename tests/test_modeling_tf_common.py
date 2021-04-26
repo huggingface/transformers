@@ -1357,12 +1357,12 @@ class TFModelPushToHubTester(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         try:
-            cls._api.delete_repo(token=cls._token, name="test-model")
+            cls._api.delete_repo(token=cls._token, name="test-model-tf")
         except HTTPError:
             pass
 
         try:
-            cls._api.delete_repo(token=cls._token, name="test-model-org", organization="valid_org")
+            cls._api.delete_repo(token=cls._token, name="test-model-tf-org", organization="valid_org")
         except HTTPError:
             pass
 
@@ -1374,9 +1374,9 @@ class TFModelPushToHubTester(unittest.TestCase):
         # Make sure model is properly initialized
         _ = model(model.dummy_inputs)
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, push_to_hub=True, repo_name="test-model", use_auth_token=self._token)
+            model.save_pretrained(tmp_dir, push_to_hub=True, repo_name="test-model-tf", use_auth_token=self._token)
 
-            new_model = TFBertModel.from_pretrained(f"{USER}/test-model")
+            new_model = TFBertModel.from_pretrained(f"{USER}/test-model-tf")
             models_equal = True
             for p1, p2 in zip(model.weights, new_model.weights):
                 if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
@@ -1392,12 +1392,12 @@ class TFModelPushToHubTester(unittest.TestCase):
             model.save_pretrained(
                 tmp_dir,
                 push_to_hub=True,
-                repo_name="test-model-org",
+                repo_name="test-model-tf-org",
                 use_auth_token=self._token,
                 organization="valid_org",
             )
 
-            new_model = TFBertModel.from_pretrained("valid_org/test-model-org")
+            new_model = TFBertModel.from_pretrained("valid_org/test-model-tf-org")
             models_equal = True
             for p1, p2 in zip(model.weights, new_model.weights):
                 if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:

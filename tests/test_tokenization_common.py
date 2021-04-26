@@ -2874,7 +2874,7 @@ class TokenizerTesterMixin:
 
 
 @is_staging_test
-class TokenzierPushToHubTester(unittest.TestCase):
+class TokenizerPushToHubTester(unittest.TestCase):
     vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", "bla", "blou"]
 
     @classmethod
@@ -2885,12 +2885,12 @@ class TokenzierPushToHubTester(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         try:
-            cls._api.delete_repo(token=cls._token, name="test-model")
+            cls._api.delete_repo(token=cls._token, name="test-tokenizer")
         except HTTPError:
             pass
 
         try:
-            cls._api.delete_repo(token=cls._token, name="test-model-org", organization="valid_org")
+            cls._api.delete_repo(token=cls._token, name="test-tokenizer-org", organization="valid_org")
         except HTTPError:
             pass
 
@@ -2900,9 +2900,11 @@ class TokenzierPushToHubTester(unittest.TestCase):
             with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
                 vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
             tokenizer = BertTokenizer(vocab_file)
-            tokenizer.save_pretrained(tmp_dir, push_to_hub=True, repo_name="test-model", use_auth_token=self._token)
+            tokenizer.save_pretrained(
+                tmp_dir, push_to_hub=True, repo_name="test-tokenizer", use_auth_token=self._token
+            )
 
-            new_tokenizer = BertTokenizer.from_pretrained(f"{USER}/test-model")
+            new_tokenizer = BertTokenizer.from_pretrained(f"{USER}/test-tokenizer")
             self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
 
     def test_push_to_hub_in_organization(self):
@@ -2914,10 +2916,10 @@ class TokenzierPushToHubTester(unittest.TestCase):
             tokenizer.save_pretrained(
                 tmp_dir,
                 push_to_hub=True,
-                repo_name="test-model-org",
+                repo_name="test-tokenizer-org",
                 use_auth_token=self._token,
                 organization="valid_org",
             )
 
-            new_tokenizer = BertTokenizer.from_pretrained("valid_org/test-model-org")
+            new_tokenizer = BertTokenizer.from_pretrained("valid_org/test-tokenizer-org")
             self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
