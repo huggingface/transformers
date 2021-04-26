@@ -581,6 +581,9 @@ def main():
                 with open(output_prediction_file, "w") as writer:
                     writer.write("\n".join(predictions))
 
+    if training_args.push_to_hub:
+        trainer.push_to_hub()
+
     return results
 
 

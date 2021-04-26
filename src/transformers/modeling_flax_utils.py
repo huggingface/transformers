@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google Flax Team Authors and The HuggingFace Inc. team.
+# Copyright 2021 The Google Flax Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import os
-from abc import ABC
 from functools import partial
 from pickle import UnpicklingError
 from typing import Dict, Set, Tuple, Union
@@ -22,15 +21,17 @@ from typing import Dict, Set, Tuple, Union
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
+from flax.core.frozen_dict import FrozenDict, unfreeze
 from flax.serialization import from_bytes, to_bytes
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax.random import PRNGKey
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
+    CONFIG_NAME,
     FLAX_WEIGHTS_NAME,
     WEIGHTS_NAME,
+    PushToHubMixin,
     add_start_docstrings_to_model_forward,
     cached_path,
     copy_func,
@@ -46,7 +47,7 @@ logger = logging.get_logger(__name__)
 
 
 ACT2FN = {
-    "gelu": nn.gelu,
+    "gelu": partial(nn.gelu, approximate=False),
     "relu": nn.relu,
     "silu": nn.swish,
     "swish": nn.swish,
@@ -54,7 +55,7 @@ ACT2FN = {
 }
 
 
-class FlaxPreTrainedModel(ABC):
+class FlaxPreTrainedModel(PushToHubMixin):
     r"""
     Base class for all models.
 
@@ -93,7 +94,7 @@ class FlaxPreTrainedModel(ABC):
         self.key = PRNGKey(seed)
         self.dtype = dtype
 
-        # randomely initialized parameters
+        # randomly initialized parameters
         random_params = self.init_weights(self.key, input_shape)
 
         # save required_params as set
@@ -129,7 +130,7 @@ class FlaxPreTrainedModel(ABC):
                 "Some parameters are missing. Make sure that `params` include the following "
                 f"parameters {self.required_params - param_keys}"
             )
-        self._params = freeze(params)
+        self._params = params
 
     @classmethod
     def from_pretrained(
@@ -330,6 +331,10 @@ class FlaxPreTrainedModel(ABC):
                     state = from_bytes(cls, state_f.read())
                 except UnpicklingError:
                     raise EnvironmentError(f"Unable to convert {archive_file} to Flax deserializable object. ")
+            # make sure all arrays are stored as jnp.arrays
+            # NOTE: This is to prevent a bug this will be fixed in Flax >= v0.3.4:
+            # https://github.com/google/flax/issues/1261
+            state = jax.tree_util.tree_map(jnp.array, state)
 
         # if model is base model only use model_prefix key
         if cls.base_model_prefix not in dict(model.params) and cls.base_model_prefix in state:
@@ -337,6 +342,7 @@ class FlaxPreTrainedModel(ABC):
 
         # flatten dicts
         state = flatten_dict(state)
+
         random_state = flatten_dict(unfreeze(model.params))
 
         missing_keys = model.required_params - set(state.keys())
@@ -377,9 +383,10 @@ class FlaxPreTrainedModel(ABC):
 
         # set correct parameters
         model.params = unflatten_dict(state)
+
         return model
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike]):
+    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub=False, **kwargs):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
         `:func:`~transformers.FlaxPreTrainedModel.from_pretrained`` class method
@@ -387,6 +394,11 @@ class FlaxPreTrainedModel(ABC):
         Arguments:
             save_directory (:obj:`str` or :obj:`os.PathLike`):
                 Directory to which to save. Will be created if it doesn't exist.
+            push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to push your model to the Hugging Face model hub after saving it.
+            kwargs:
+                Additional key word arguments passed along to the
+                :meth:`~transformers.file_utils.PushToHubMixin.push_to_hub` method.
         """
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -400,9 +412,17 @@ class FlaxPreTrainedModel(ABC):
         self.config.save_pretrained(save_directory)
 
         # save model
-        with open(os.path.join(save_directory, FLAX_WEIGHTS_NAME), "wb") as f:
+        output_model_file = os.path.join(save_directory, FLAX_WEIGHTS_NAME)
+        with open(output_model_file, "wb") as f:
             model_bytes = to_bytes(self.params)
             f.write(model_bytes)
+
+        logger.info(f"Model weights saved in {output_model_file}")
+
+        if push_to_hub:
+            saved_files = [os.path.join(save_directory, CONFIG_NAME), output_model_file]
+            url = self._push_to_hub(save_files=saved_files, **kwargs)
+            logger.info(f"Model pushed to the hub in this commit: {url}")
 
 
 def overwrite_call_docstring(model_class, docstring):

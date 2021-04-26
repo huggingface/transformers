@@ -821,7 +821,7 @@ class GenerationMixin:
             ... "at least two people were killed in a suspected bomb attack on a passenger bus "
             ... "in the strife-torn southern philippines on monday , the military said."
             ... )
-            >>> # encode input contex
+            >>> # encode input context
             >>> input_ids = tokenizer(document, return_tensors="pt").input_ids
             >>> # generate 3 independent sequences using beam search decoding (5 beams)
             >>> # with T5 encoder-decoder model conditioned on short news article.
@@ -883,7 +883,7 @@ class GenerationMixin:
         model_kwargs["output_attentions"] = output_attentions
         model_kwargs["output_hidden_states"] = output_hidden_states
 
-        if input_ids is None:
+        if input_ids is None and "inputs_embeds" not in model_kwargs:
             # init `input_ids` with bos_token_id
             input_ids = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))
 
