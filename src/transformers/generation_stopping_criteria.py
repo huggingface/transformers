@@ -23,7 +23,7 @@ STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""
             Prediction scores of a language modeling head. These can be scores for each vocabulary token before SoftMax
             or scores for each vocabulary token after SoftMax.
         kwargs:
-            Additional stopping critera specific kwargs.
+            Additional stopping criteria specific kwargs.
 
     Return:
         :obj:`bool`. :obj:`False` indicates we should continue, :obj:`True` indicates we should stop.

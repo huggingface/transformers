@@ -451,7 +451,7 @@ Twitter-aware tokenizer, designed to be flexible and easy to adapt to new domain
    the class Tokenizer.
 
 4. When instantiating Tokenizer objects, there is a single option: preserve_case. By default, it is set to True. If it
-   is set to False, then the tokenizer will downcase everything except for emoticons.
+   is set to False, then the tokenizer will lowercase everything except for emoticons.
 
 """
 

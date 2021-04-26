@@ -469,7 +469,7 @@ TFAutoModelForPreTraining = auto_class_factory(
     "TFAutoModelForPreTraining", TF_MODEL_FOR_PRETRAINING_MAPPING, head_doc="pretraining"
 )
 
-# Private on puprose, the public class will add the deprecation warnings.
+# Private on purpose, the public class will add the deprecation warnings.
 _TFAutoModelWithLMHead = auto_class_factory(
     "TFAutoModelWithLMHead", TF_MODEL_WITH_LM_HEAD_MAPPING, head_doc="language modeling"
 )

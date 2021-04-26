@@ -179,7 +179,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         :obj:`str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while
         not having been set.
 
-        Roberta tokenizer has a special mask token to be usble in the fill-mask pipeline. The mask token will greedily
+        Roberta tokenizer has a special mask token to be usable in the fill-mask pipeline. The mask token will greedily
         comprise the space before the `<mask>`.
         """
         if self._mask_token is None and self.verbose:
