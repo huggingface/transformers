@@ -209,9 +209,6 @@ class Backbone(nn.Module):
         # send pixel_values through the body to get feature map
         feature_map = self.body.forward_features(pixel_values)
 
-        print("Shape of feature map:")
-        print(feature_map.shape)
-
         assert pixel_mask is not None
         # we downsample the pixel_mask to match the shape of the feature map
         mask = F.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
