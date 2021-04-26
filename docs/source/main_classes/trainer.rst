@@ -601,7 +601,7 @@ with DeepSpeed is to have at least the following configuration in the configurat
          "overlap_comm": true,
          "contiguous_gradients": true,
          "cpu_offload": true
-      },
+      }
     }
 
 which enables ``cpu_offload`` and some other important features. You may experiment with the buffer sizes, you will
@@ -968,7 +968,7 @@ The following is an example configuration for ZeRO stage 3:
             "stage3_max_live_parameters": 1e9,
             "stage3_max_reuse_distance": 1e9,
             "stage3_gather_fp16_weights_on_model_save": true
-        },
+        }
     }
 
 If you are getting OOMs, because your model or activations don't fit into the GPU memory and you have unutilized CPU
@@ -1380,7 +1380,7 @@ Here is an example of the auto-configured ``optimizer`` entry for ``AdamW``:
              "eps": "auto",
              "weight_decay": "auto"
            }
-         }
+       }
     }
 
 
@@ -1408,7 +1408,7 @@ You can also set the values explicitly:
              "eps": 1e-8,
              "weight_decay": 3e-7
            }
-         }
+       }
     }
 
 But then you're on your own synchronizing the :class:`~transformers.Trainer` command line arguments and the DeepSpeed
@@ -1494,11 +1494,11 @@ For example, for ``WarmupDecayLR``, you can use the following entry:
        "scheduler": {
              "type": "WarmupDecayLR",
              "params": {
+                 "last_batch_iteration": -1,
                  "total_num_steps": "auto",
                  "warmup_min_lr": "auto",
                  "warmup_max_lr": "auto",
-                 "warmup_num_steps": "auto",
-                 "last_batch_iteration": -1,
+                 "warmup_num_steps": "auto"
              }
          }
     }
@@ -1524,7 +1524,7 @@ To configure pytorch AMP-like mode set:
             "initial_scale_power": 16,
             "hysteresis": 2,
             "min_loss_scale": 1
-        },
+        }
     }
 
 and the :class:`~transformers.Trainer` will automatically enable or disable it based on the value of
@@ -1547,7 +1547,7 @@ You can also enable/disable this mode explicitly:
             "initial_scale_power": 16,
             "hysteresis": 2,
             "min_loss_scale": 1
-        },
+        }
     }
 
 But then you're on your own synchronizing the :class:`~transformers.Trainer` command line arguments and the DeepSpeed
@@ -1561,7 +1561,7 @@ To configure apex AMP-like mode set:
 
     "amp": {
         "enabled": "auto",
-        "opt_level": "auto",
+        "opt_level": "auto"
     }
 
 and the :class:`~transformers.Trainer` will automatically configure it based on the values of ``args.fp16_backend`` and
@@ -1605,7 +1605,7 @@ You can also set the value explicitly:
 .. code-block:: json
 
     {
-        "gradient_accumulation_steps": 3,
+        "gradient_accumulation_steps": 3
     }
 
 But then you're on your own synchronizing the :class:`~transformers.Trainer` command line arguments and the DeepSpeed
@@ -1630,7 +1630,7 @@ You can also set the value explicitly:
 .. code-block:: json
 
     {
-        "gradient_clipping": 1.0,
+        "gradient_clipping": 1.0
     }
 
 But then you're on your own synchronizing the :class:`~transformers.Trainer` command line arguments and the DeepSpeed
