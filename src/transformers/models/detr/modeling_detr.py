@@ -184,16 +184,18 @@ class FrozenBatchNorm2d(nn.Module):
 class Backbone(nn.Module):
     """Timm convolutional backbone.
     
-    If resnet, replace nn.BatchNorm2d by FrozenBatchNorm2d defined above.
+    If resnet, replace nn.BatchNorm2d layers by FrozenBatchNorm2d defined above.
     
     """
     def __init__(self, name: str, train_backbone: bool, dilation: bool):
         super().__init__()
         
-        #TODO add support for replace_stride_with_dilation
         kwargs = {}
         if name in ["resnet18", "resnet34", "resnet50", "resnet101"]: 
             kwargs["norm_layer"] = FrozenBatchNorm2d
+        #TODO add support for replace_stride_with_dilation
+        if dilation:
+            kwargs["output_stride"] = 16
         self.body = create_model(name, pretrained=True, num_classes=0, **kwargs)
         self.num_channels = self.body.num_features
 
@@ -204,6 +206,9 @@ class Backbone(nn.Module):
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the body to get feature map
         feature_map = self.body.forward_features(pixel_values)
+
+        print("Shape of feature map:")
+        print(feature_map.shape)
 
         assert pixel_mask is not None
         # we downsample the pixel_mask to match the shape of the feature map

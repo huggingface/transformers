@@ -458,7 +458,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 raise ValueError(
                     """
                     Annotations must of type `Dict` (single image) or `List[Dict]` (batch of images). Each dictionary should be
-                    of the format {'image_id': 39769, 'annotations': target}, with the target in COCO format.
+                    of the format {'image_id': 39769, 'annotations': target}, with the target being a list of annotations 
+                    in COCO format.
                     """
                 )
         
