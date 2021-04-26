@@ -120,7 +120,7 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         sp_model_kwargs=None,
         **kwargs,
     ):
-        sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         super().__init__(
             bos_token=bos_token,
@@ -131,7 +131,7 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
             do_lower_case=do_lower_case,
             tgt_lang=tgt_lang,
             lang_codes=lang_codes,
-            sp_model_kwargs=sp_model_kwargs,
+            sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
         self.do_upper_case = do_upper_case
@@ -140,7 +140,7 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         self.encoder = load_json(vocab_file)
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.spm_file = spm_file
-        self.sp_model = load_spm(spm_file, sp_model_kwargs)
+        self.sp_model = load_spm(spm_file, self.sp_model_kwargs)
 
         if lang_codes is not None:
             self.lang_codes = lang_codes
