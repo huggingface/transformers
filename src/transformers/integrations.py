@@ -438,11 +438,17 @@ def deepspeed_config_hf_set(deepspeed_config_hf_obj):
 
 
 def is_deepspeed_zero3_enabled():
-    return _deepspeed_config_hf_weak_ref().is_zero3() if _deepspeed_config_hf_weak_ref() is not None else False
+    if _deepspeed_config_hf_weak_ref is not None and _deepspeed_config_hf_weak_ref() is not None:
+        return _deepspeed_config_hf_weak_ref().is_zero3()
+    else:
+        return False
 
 
 def deepspeed_config():
-    return _deepspeed_config_hf_weak_ref().config if _deepspeed_config_hf_weak_ref() is not None else None
+    if _deepspeed_config_hf_weak_ref is not None and _deepspeed_config_hf_weak_ref() is not None:
+        return _deepspeed_config_hf_weak_ref().config
+    else:
+        return None
 
 
 def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
