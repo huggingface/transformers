@@ -1027,7 +1027,6 @@ class GenerationMixin:
 
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
-                max_length=stopping_criteria.max_length,
                 num_beams=num_beams,
                 device=self.device,
                 length_penalty=length_penalty,
@@ -1063,7 +1062,6 @@ class GenerationMixin:
                 raise ValueError("`max_length` needs to be a stopping_criteria for now.")
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
-                max_length=stopping_criteria.max_length,
                 num_beams=num_beams,
                 device=self.device,
                 length_penalty=length_penalty,
@@ -1700,7 +1698,6 @@ class GenerationMixin:
             >>> # instantiate beam scorer
             >>> beam_scorer = BeamSearchScorer(
             ...     batch_size=1,
-            ...     max_length=model.config.max_length,
             ...     num_beams=num_beams,
             ...     device=model.device,
             ... )
@@ -1756,7 +1753,7 @@ class GenerationMixin:
 
         assert (
             num_beams * batch_size == batch_beam_size
-        ), "Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
+        ), f"Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
 
         beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
         beam_scores[:, 1:] = -1e9
@@ -1792,10 +1789,7 @@ class GenerationMixin:
 
             # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
             # cannot be generated both before and after the `F.log_softmax` operation.
-            next_token_logits = self.adjust_logits_during_generation(
-                next_token_logits, cur_len=cur_len, max_length=None
-            )
-
+            next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
             next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
 
             next_token_scores = logits_processor(input_ids, next_token_scores)
@@ -1861,7 +1855,13 @@ class GenerationMixin:
                     this_peer_finished = True
 
         sequence_outputs = beam_scorer.finalize(
-            input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id
+            input_ids,
+            beam_scores,
+            next_tokens,
+            next_indices,
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            max_length=stopping_criteria.max_length,
         )
 
         if return_dict_in_generate:
@@ -2086,10 +2086,7 @@ class GenerationMixin:
 
             # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
             # cannot be generated both before and after the `F.log_softmax` operation.
-            next_token_logits = self.adjust_logits_during_generation(
-                next_token_logits, cur_len=cur_len, max_length=None
-            )
-
+            next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
             next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
 
             next_token_scores = logits_processor(input_ids, next_token_scores)
@@ -2160,7 +2157,13 @@ class GenerationMixin:
                     this_peer_finished = True
 
         sequence_outputs = beam_scorer.finalize(
-            input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id
+            input_ids,
+            beam_scores,
+            next_tokens,
+            next_indices,
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            max_length=stopping_criteria.max_length,
         )
 
         if return_dict_in_generate:
@@ -2411,10 +2414,7 @@ class GenerationMixin:
 
                 # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
                 # cannot be generated both before and after the `F.log_softmax` operation.
-                next_token_logits = self.adjust_logits_during_generation(
-                    next_token_logits, cur_len=cur_len, max_length=None
-                )
-
+                next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
                 next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * group_size, vocab_size)
                 vocab_size = next_token_scores.shape[-1]
 
@@ -2497,7 +2497,13 @@ class GenerationMixin:
                     this_peer_finished = True
 
         sequence_outputs = beam_scorer.finalize(
-            input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id
+            input_ids,
+            beam_scores,
+            next_tokens,
+            next_indices,
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            max_length=stopping_criteria.max_length,
         )
 
         if return_dict_in_generate:
