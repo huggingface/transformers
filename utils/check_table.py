@@ -159,7 +159,7 @@ def get_model_table_from_auto_modules():
 
 
 def check_model_table(overwrite=False):
-    """ Check the model table in the index.rst is consistent with the state of the lib and maybe `overwrite`. """
+    """Check the model table in the index.rst is consistent with the state of the lib and maybe `overwrite`."""
     current_table, start_index, end_index, lines = _find_text_in_file(
         filename=os.path.join(PATH_TO_DOCS, "index.rst"),
         start_prompt="    This table is updated automatically from the auto module",

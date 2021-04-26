@@ -188,7 +188,7 @@ class FunnelAttentionStructure(nn.Module):
         self.pooling_mult = None
 
     def init_attention_inputs(self, inputs_embeds, attention_mask=None, token_type_ids=None):
-        """ Returns the attention inputs associated to the inputs of the model. """
+        """Returns the attention inputs associated to the inputs of the model."""
         # inputs_embeds has shape batch_size x seq_len x d_model
         # attention_mask and token_type_ids have shape batch_size x seq_len
         self.pooling_mult = 1
@@ -383,7 +383,7 @@ class FunnelAttentionStructure(nn.Module):
         return tensor
 
     def pre_attention_pooling(self, output, attention_inputs):
-        """ Pool `output` and the proper parts of `attention_inputs` before the attention layer. """
+        """Pool `output` and the proper parts of `attention_inputs` before the attention layer."""
         position_embeds, token_type_mat, attention_mask, cls_mask = attention_inputs
         if self.config.pool_q_only:
             if self.config.attention_type == "factorized":
@@ -403,7 +403,7 @@ class FunnelAttentionStructure(nn.Module):
         return output, attention_inputs
 
     def post_attention_pooling(self, attention_inputs):
-        """ Pool the proper parts of `attention_inputs` after the attention layer. """
+        """Pool the proper parts of `attention_inputs` after the attention layer."""
         position_embeds, token_type_mat, attention_mask, cls_mask = attention_inputs
         if self.config.pool_q_only:
             self.pooling_mult *= 2
@@ -457,7 +457,7 @@ class FunnelRelMultiheadAttention(nn.Module):
         self.scale = 1.0 / (d_head ** 0.5)
 
     def relative_positional_attention(self, position_embeds, q_head, context_len, cls_mask=None):
-        """ Relative attention score for the positional encodings """
+        """Relative attention score for the positional encodings"""
         # q_head has shape batch_size x sea_len x n_head x d_head
         if self.config.attention_type == "factorized":
             # Notations from the paper, appending A.2.2, final formula (https://arxiv.org/abs/2006.03236)
@@ -499,7 +499,7 @@ class FunnelRelMultiheadAttention(nn.Module):
         return positional_attn
 
     def relative_token_type_attention(self, token_type_mat, q_head, cls_mask=None):
-        """ Relative attention score for the token_type_ids """
+        """Relative attention score for the token_type_ids"""
         if token_type_mat is None:
             return 0
         batch_size, seq_len, context_len = token_type_mat.shape

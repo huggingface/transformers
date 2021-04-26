@@ -122,7 +122,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         transformers.integrations._is_deepspeed_zero3_enabled = None
 
     def get_config_dict(self, stage):
-        """ As the tests modify the dict, always make a copy """
+        """As the tests modify the dict, always make a copy"""
         config = deepcopy(self.ds_config_dict[stage])
         if stage == ZERO3:
             # This setting slows things down, so don't enable it by default unless needed by a test.
@@ -430,7 +430,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
 @require_deepspeed
 @require_torch_gpu
 class TestDeepSpeedWithLauncher(TestCasePlus):
-    """ This class is for testing via an external script - can do multiple gpus """
+    """This class is for testing via an external script - can do multiple gpus"""
 
     # Tests to devise #
     #

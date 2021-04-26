@@ -1189,7 +1189,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
 
     @staticmethod
     def _get_global_attn_indices(is_index_global_attn):
-        """ compute global attn indices required throughout forward pass """
+        """compute global attn indices required throughout forward pass"""
         # helper variable
         num_global_attn_indices = tf.math.count_nonzero(is_index_global_attn, axis=1)
         num_global_attn_indices = tf.cast(num_global_attn_indices, dtype=tf.constant(1).dtype)

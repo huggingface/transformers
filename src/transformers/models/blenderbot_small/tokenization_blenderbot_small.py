@@ -183,7 +183,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         return " ".join(words)
 
     def _tokenize(self, text: str) -> List[str]:
-        """ Split a string into tokens using BPE."""
+        """Split a string into tokens using BPE."""
         split_tokens = []
 
         words = re.findall(r"\S+\n?", text)
@@ -193,7 +193,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         return split_tokens
 
     def _convert_token_to_id(self, token: str) -> int:
-        """ Converts a token to an id using the vocab. """
+        """Converts a token to an id using the vocab."""
         token = token.lower()
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
@@ -202,7 +202,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         return self.decoder.get(index, self.unk_token)
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        """ Converts a sequence of tokens  in a single string. """
+        """Converts a sequence of tokens  in a single string."""
         out_string = " ".join(tokens).replace("@@ ", "").strip()
         return out_string
 

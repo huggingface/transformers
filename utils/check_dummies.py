@@ -65,7 +65,7 @@ def find_backend(line):
 
 
 def read_init():
-    """ Read the init and extracts PyTorch, TensorFlow, SentencePiece and Tokenizers objects. """
+    """Read the init and extracts PyTorch, TensorFlow, SentencePiece and Tokenizers objects."""
     with open(os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"), "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
 
@@ -101,7 +101,7 @@ def read_init():
 
 
 def create_dummy_object(name, backend_name):
-    """ Create the code for the dummy object corresponding to `name`."""
+    """Create the code for the dummy object corresponding to `name`."""
     _pretrained = [
         "Config" "ForCausalLM",
         "ForConditionalGeneration",
@@ -130,7 +130,7 @@ def create_dummy_object(name, backend_name):
 
 
 def create_dummy_files():
-    """ Create the content of the dummy files. """
+    """Create the content of the dummy files."""
     backend_specific_objects = read_init()
     # For special correspondence backend to module name as used in the function requires_modulename
     dummy_files = {}
@@ -146,7 +146,7 @@ def create_dummy_files():
 
 
 def check_dummies(overwrite=False):
-    """ Check if the dummy files are up to date and maybe `overwrite` with the right content. """
+    """Check if the dummy files are up to date and maybe `overwrite` with the right content."""
     dummy_files = create_dummy_files()
     # For special correspondence backend to shortcut as used in utils/dummy_xxx_objects.py
     short_names = {"torch": "pt"}

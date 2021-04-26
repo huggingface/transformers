@@ -25,19 +25,19 @@ class SummarizationDataProcessingTest(unittest.TestCase):
         self.block_size = 10
 
     def test_fit_to_block_sequence_too_small(self):
-        """ Pad the sequence with 0 if the sequence is smaller than the block size."""
+        """Pad the sequence with 0 if the sequence is smaller than the block size."""
         sequence = [1, 2, 3, 4]
         expected_output = [1, 2, 3, 4, 0, 0, 0, 0, 0, 0]
         self.assertEqual(truncate_or_pad(sequence, self.block_size, 0), expected_output)
 
     def test_fit_to_block_sequence_fit_exactly(self):
-        """ Do nothing if the sequence is the right size. """
+        """Do nothing if the sequence is the right size."""
         sequence = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         expected_output = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         self.assertEqual(truncate_or_pad(sequence, self.block_size, 0), expected_output)
 
     def test_fit_to_block_sequence_too_big(self):
-        """ Truncate the sequence if it is too long. """
+        """Truncate the sequence if it is too long."""
         sequence = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
         expected_output = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         self.assertEqual(truncate_or_pad(sequence, self.block_size, 0), expected_output)

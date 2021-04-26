@@ -175,11 +175,11 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         mask_reshape = [bs, 1, 1, k_length]
 
         def shape(x):
-            """ separate heads """
+            """separate heads"""
             return tf.transpose(tf.reshape(x, (bs, -1, self.n_heads, dim_per_head)), perm=(0, 2, 1, 3))
 
         def unshape(x):
-            """ group heads """
+            """group heads"""
             return tf.reshape(tf.transpose(x, perm=(0, 2, 1, 3)), (bs, -1, self.n_heads * dim_per_head))
 
         q = shape(self.q_lin(query))  # (bs, n_heads, q_length, dim_per_head)

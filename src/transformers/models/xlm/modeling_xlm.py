@@ -159,11 +159,11 @@ class MultiHeadAttention(nn.Module):
         mask_reshape = (bs, 1, qlen, klen) if mask.dim() == 3 else (bs, 1, 1, klen)
 
         def shape(x):
-            """  projection """
+            """projection"""
             return x.view(bs, -1, self.n_heads, dim_per_head).transpose(1, 2)
 
         def unshape(x):
-            """  compute context """
+            """compute context"""
             return x.transpose(1, 2).contiguous().view(bs, -1, self.n_heads * dim_per_head)
 
         q = shape(self.q_lin(input))  # (bs, n_heads, qlen, dim_per_head)
@@ -251,7 +251,7 @@ class XLMPreTrainedModel(PreTrainedModel):
         return {"input_ids": inputs_list, "attention_mask": attns_list, "langs": langs_list}
 
     def _init_weights(self, module):
-        """ Initialize the weights. """
+        """Initialize the weights."""
         if isinstance(module, nn.Embedding):
             if self.config is not None and self.config.embed_init_std is not None:
                 nn.init.normal_(module.weight, mean=0, std=self.config.embed_init_std)

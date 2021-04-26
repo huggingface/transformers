@@ -389,7 +389,7 @@ if is_tf_available():
 
 
 def require_torch_gpu(test_case):
-    """Decorator marking a test that requires CUDA and PyTorch. """
+    """Decorator marking a test that requires CUDA and PyTorch."""
     if torch_device != "cuda":
         return unittest.skip("test requires CUDA")(test_case)
     else:
@@ -593,14 +593,14 @@ class CaptureStd:
 
 
 class CaptureStdout(CaptureStd):
-    """ Same as CaptureStd but captures only stdout """
+    """Same as CaptureStd but captures only stdout"""
 
     def __init__(self):
         super().__init__(err=False)
 
 
 class CaptureStderr(CaptureStd):
-    """ Same as CaptureStd but captures only stderr """
+    """Same as CaptureStd but captures only stderr"""
 
     def __init__(self):
         super().__init__(out=False)

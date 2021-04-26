@@ -124,7 +124,7 @@ class DataProcessor:
 
 
 class SingleSentenceClassificationProcessor(DataProcessor):
-    """ Generic processor for a single sentence classification data set."""
+    """Generic processor for a single sentence classification data set."""
 
     def __init__(self, labels=None, examples=None, mode="classification", verbose=False):
         self.labels = [] if labels is None else labels
