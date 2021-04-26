@@ -821,7 +821,7 @@ class GenerationMixin:
             ... "at least two people were killed in a suspected bomb attack on a passenger bus "
             ... "in the strife-torn southern philippines on monday , the military said."
             ... )
-            >>> # encode input contex
+            >>> # encode input context
             >>> input_ids = tokenizer(document, return_tensors="pt").input_ids
             >>> # generate 3 independent sequences using beam search decoding (5 beams)
             >>> # with T5 encoder-decoder model conditioned on short news article.

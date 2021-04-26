@@ -64,7 +64,7 @@ def set_seed(args):
 
 
 def train(args, train_dataset, model, tokenizer, criterion):
-    """ Train the model """
+    """Train the model"""
     if args.local_rank in [-1, 0]:
         tb_writer = SummaryWriter()
 

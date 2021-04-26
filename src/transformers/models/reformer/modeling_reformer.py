@@ -612,7 +612,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         if isinstance(self.num_buckets, int):
             assert (
                 self.num_buckets % 2 == 0
-            ), f"There should be an even number of bucktes, but `self.num_bucktes`: {self.num_buckets}"
+            ), f"There should be an even number of buckets, but `self.num_buckets`: {self.num_buckets}"
             rotation_size = self.num_buckets
             num_buckets = self.num_buckets
         else:
@@ -1779,7 +1779,7 @@ class ReformerPreTrainedModel(PreTrainedModel):
         return dummy_inputs
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, AxialPositionEmbeddings):
             for weight in module.weights:
                 torch.nn.init.normal_(weight, std=self.config.axial_norm_std)
