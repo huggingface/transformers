@@ -1864,7 +1864,7 @@ class GenerationMixin:
             next_indices,
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
-            max_length=max_length,
+            max_length=stopping_criteria.max_length,
         )
 
         if return_dict_in_generate:
@@ -2169,7 +2169,7 @@ class GenerationMixin:
             next_indices,
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
-            max_length=max_length,
+            max_length=stopping_criteria.max_length,
         )
 
         if return_dict_in_generate:
@@ -2512,7 +2512,7 @@ class GenerationMixin:
             next_indices,
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
-            max_length=max_length,
+            max_length=stopping_criteria.max_length,
         )
 
         if return_dict_in_generate:
