@@ -547,6 +547,7 @@ class Trainer:
                     rank=self.args.process_index,
                     lengths=lengths,
                     model_input_name=model_input_name,
+                    seed=self.args.seed,
                 )
 
         else:
@@ -562,10 +563,14 @@ class Trainer:
                     batch_size=self.args.per_device_train_batch_size,
                     num_replicas=self.args.world_size,
                     rank=self.args.process_index,
+                    seed=self.args.seed,
                 )
             else:
                 return DistributedSampler(
-                    self.train_dataset, num_replicas=self.args.world_size, rank=self.args.process_index
+                    self.train_dataset,
+                    num_replicas=self.args.world_size,
+                    rank=self.args.process_index,
+                    seed=self.args.seed,
                 )
 
     def get_train_dataloader(self) -> DataLoader:
