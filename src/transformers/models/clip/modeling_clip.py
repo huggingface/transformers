@@ -60,6 +60,19 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
+# contrastive loss function, adapted from
+# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html
+def contrastive_loss(logits: torch.Tensor, dim: int) -> torch.Tensor:
+    neg_ce = torch.diag(F.log_softmax(logits, dim=dim))
+    return -neg_ce.mean()
+
+
+def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
+    caption_loss = contrastive_loss(similarity, dim=0)
+    image_loss = contrastive_loss(similarity, dim=1)
+    return (caption_loss + image_loss) / 2.0
+
+
 class QuickGELU(nn.Module):
     def forward(self, hidden_states: torch.Tensor):
         return hidden_states * torch.sigmoid(1.702 * hidden_states)
@@ -571,7 +584,7 @@ class ClipVisionModel(ClipPreTrainedModel):
 
     def forward(
         self,
-        input_features=None,
+        pixel_values=None,
         attention_mask=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -620,7 +633,7 @@ class ClipVisionModel(ClipPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        hidden_states = self.embeddings(input_features)
+        hidden_states = self.embeddings(pixel_values)
         hidden_states = self.pre_layrnorm(hidden_states)
 
         encoder_outputs = self.encoder(
@@ -696,13 +709,13 @@ class ClipModel(ClipPreTrainedModel):
 
     def encode_image(
         self,
-        input_features=None,
+        pixel_values=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
         vision_outputs = self.vision_model(
-            input_features=input_features,
+            pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -716,9 +729,8 @@ class ClipModel(ClipPreTrainedModel):
     def forward(
         self,
         input_ids=None,
-        input_features=None,
+        pixel_values=None,
         attention_mask=None,
-        logit_scale=100,  # hack
         position_ids=None,
         inputs_embeds=None,
         output_attentions=None,
@@ -726,7 +738,7 @@ class ClipModel(ClipPreTrainedModel):
         return_dict=None,
     ):
         vision_outputs = self.vision_model(
-            input_features=input_features,
+            pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -756,8 +768,8 @@ class ClipModel(ClipPreTrainedModel):
         text_features = text_features / text_features.norm(dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        logits_per_image = logit_scale * image_features @ text_features.t()
-        logits_per_text = logit_scale * text_features @ image_features.t()
+        similarity = torch.dot(text_features, image_features.t()) * self.logit_scale
 
-        # shape = [global_batch_size, global_batch_size]
-        return logits_per_image, logits_per_text
+        loss = clip_loss(similarity)
+
+        return loss, similarity
