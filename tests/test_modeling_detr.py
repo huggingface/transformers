@@ -35,12 +35,7 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor
 if is_torch_available():
     import torch
 
-    from transformers import (
-        MODEL_MAPPING,
-        DetrConfig,
-        DetrForObjectDetection,
-        DetrModel,
-    )
+    from transformers import MODEL_MAPPING, DetrConfig, DetrForObjectDetection, DetrModel
 
 
 if is_vision_available():

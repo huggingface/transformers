@@ -26,9 +26,8 @@ import torchvision
 from torch import Tensor, nn
 from torchvision.ops.boxes import box_area
 
-from timm import create_model
-
 from scipy.optimize import linear_sum_assignment
+from timm import create_model
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -86,21 +85,22 @@ class DetrObjectDetectionOutput(ModelOutput):
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` are provided)):
-            Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a bounding box loss.
-            The latter is defined as a linear combination of the L1 loss and the generalized scale-invariant IoU loss.
+            Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+            bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
+            scale-invariant IoU loss.
         loss_dict (:obj:`Dict`, `optional`):
             A dictionary containing the individual losses.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, num_classes + 1)`):
             Classification logits (including no-object) for all queries.
         pred_boxes (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
-            values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding possible
-            padding). You can use :class:`~transformers.DetrForObjectDetection.post_process` to retrieve the unnormalized 
-            bounding boxes.
+            values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
+            possible padding). You can use :class:`~transformers.DetrForObjectDetection.post_process` to retrieve the
+            unnormalized bounding boxes.
         auxiliary_outputs (:obj:`list[Dict]`, `optional`):
-            Optional, only returned when auxilary losses are activated (i.e. :obj:`config.auxiliary_loss` is set to `True`) and
-            labels are provided. It is a list of dictionnaries containing the two above keys (:obj:`logits` and
-            :obj:`pred_boxes`) for each decoder layer.
+            Optional, only returned when auxilary losses are activated (i.e. :obj:`config.auxiliary_loss` is set to
+            `True`) and labels are provided. It is a list of dictionnaries containing the two above keys (:obj:`logits`
+            and :obj:`pred_boxes`) for each decoder layer.
         decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the decoder at the output of
@@ -182,18 +182,20 @@ class FrozenBatchNorm2d(nn.Module):
 
 
 class Backbone(nn.Module):
-    """Timm convolutional backbone.
-    
-    If resnet, replace nn.BatchNorm2d layers by FrozenBatchNorm2d defined above.
-    
     """
+    Timm convolutional backbone.
+
+    If resnet, replace nn.BatchNorm2d layers by FrozenBatchNorm2d defined above.
+
+    """
+
     def __init__(self, name: str, train_backbone: bool, dilation: bool):
         super().__init__()
-        
+
         kwargs = {}
-        if name in ["resnet18", "resnet34", "resnet50", "resnet101"]: 
+        if name in ["resnet18", "resnet34", "resnet50", "resnet101"]:
             kwargs["norm_layer"] = FrozenBatchNorm2d
-        #TODO add support for replace_stride_with_dilation
+        # TODO add support for replace_stride_with_dilation
         if dilation:
             kwargs["output_stride"] = 16
         self.body = create_model(name, pretrained=True, num_classes=0, **kwargs)
@@ -202,7 +204,7 @@ class Backbone(nn.Module):
         for name, parameter in self.body.named_parameters():
             if not train_backbone or "layer2" not in name and "layer3" not in name and "layer4" not in name:
                 parameter.requires_grad_(False)
-        
+
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the body to get feature map
         feature_map = self.body.forward_features(pixel_values)
@@ -1286,7 +1288,9 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         self.model = DetrModel(config)
 
         # Object detection heads
-        self.class_labels_classifier = nn.Linear(config.d_model, config.num_labels + 1) # We add one for the "no object" class
+        self.class_labels_classifier = nn.Linear(
+            config.d_model, config.num_labels + 1
+        )  # We add one for the "no object" class
         self.bbox_predictor = MLP(input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3)
 
         self.init_weights()
@@ -1391,7 +1395,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
                 outputs_loss["auxiliary_outputs"] = auxiliary_outputs
 
             loss_dict = criterion(outputs_loss, labels)
-            # Fourth: compute total loss, as a weighted sum of the various losses 
+            # Fourth: compute total loss, as a weighted sum of the various losses
             weight_dict = {"loss_ce": 1, "loss_bbox": self.config.bbox_loss_coefficient}
             weight_dict["loss_giou"] = self.config.giou_loss_coefficient
             if self.config.auxiliary_loss:
@@ -1423,6 +1427,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
             encoder_attentions=outputs.encoder_attentions,
         )
 
+
 class DetrForPanopticSegmentation(nn.Module):
 
     "This corresponds to DetrForObjectDetection + mask head."
@@ -1447,23 +1452,20 @@ class DetrForPanopticSegmentation(nn.Module):
 # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
 class SetCriterion(nn.Module):
     """
-    This class computes the losses for DetrForObjectDetection/DetrForPanopticSegmentation. The process happens in two steps: 
-    1) we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair of matched
-    ground-truth / prediction (supervise class and box)
+    This class computes the losses for DetrForObjectDetection/DetrForPanopticSegmentation. The process happens in two
+    steps: 1) we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise
+    each pair of matched ground-truth / prediction (supervise class and box)
     """
 
     def __init__(self, matcher, num_classes, eos_coef, losses):
         """
         Create the criterion.
 
-        A note on the num_classes parameter (copied from original repo in detr.py):
-        "the naming of the `num_classes` parameter of the criterion is somewhat misleading.
-        it indeed corresponds to `max_obj_id + 1`, where max_obj_id
-        is the maximum id for a class in your dataset. For example,
-        COCO has a max_obj_id of 90, so we pass `num_classes` to be 91.
-        As another example, for a dataset that has a single class with id 1,
-        you should pass `num_classes` to be 2 (max_obj_id + 1).
-        For more details on this, check the following discussion
+        A note on the num_classes parameter (copied from original repo in detr.py): "the naming of the `num_classes`
+        parameter of the criterion is somewhat misleading. it indeed corresponds to `max_obj_id + 1`, where max_obj_id
+        is the maximum id for a class in your dataset. For example, COCO has a max_obj_id of 90, so we pass
+        `num_classes` to be 91. As another example, for a dataset that has a single class with id 1, you should pass
+        `num_classes` to be 2 (max_obj_id + 1). For more details on this, check the following discussion
         https://github.com/facebookresearch/detr/issues/108#issuecomment-650269223"
 
         Parameters:
@@ -1507,7 +1509,7 @@ class SetCriterion(nn.Module):
     def loss_cardinality(self, outputs, targets, indices, num_boxes):
         """
         Compute the cardinality error, i.e. the absolute error in the number of predicted non-empty boxes.
-        
+
         This is not really a loss, it is intended for logging purposes only. It doesn't propagate gradients.
         """
         logits = outputs["logits"]
@@ -1522,9 +1524,9 @@ class SetCriterion(nn.Module):
     def loss_boxes(self, outputs, targets, indices, num_boxes):
         """
         Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss.
-        
-        Targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]. The target boxes are 
-        expected in format (center_x, center_y, w, h), normalized by the image size.
+
+        Targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]. The target boxes
+        are expected in format (center_x, center_y, w, h), normalized by the image size.
         """
         assert "pred_boxes" in outputs
         idx = self._get_src_permutation_idx(indices)
@@ -1544,8 +1546,8 @@ class SetCriterion(nn.Module):
 
     def loss_masks(self, outputs, targets, indices, num_boxes):
         """
-        Compute the losses related to the masks: the focal loss and the dice loss. 
-        
+        Compute the losses related to the masks: the focal loss and the dice loss.
+
         Targets dicts must contain the key "masks" containing a tensor of dim [nb_target_boxes, h, w].
         """
         assert "pred_masks" in outputs
@@ -1663,10 +1665,10 @@ class MLP(nn.Module):
 class HungarianMatcher(nn.Module):
     """
     This class computes an assignment between the targets and the predictions of the network.
-    
-    For efficiency reasons, the targets don't include the no_object. Because of this, in general, there are more predictions 
-    than targets. In this case, we do a 1-to-1 matching of the best predictions, while the others are un-matched (and thus 
-    treated as non-objects).
+
+    For efficiency reasons, the targets don't include the no_object. Because of this, in general, there are more
+    predictions than targets. In this case, we do a 1-to-1 matching of the best predictions, while the others are
+    un-matched (and thus treated as non-objects).
     """
 
     def __init__(self, class_cost: float = 1, bbox_cost: float = 1, giou_cost: float = 1):
@@ -1695,8 +1697,8 @@ class HungarianMatcher(nn.Module):
                  "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates
             targets: This is a list of targets (len(targets) = batch_size), where each target is a dict containing:
                  "class_labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of ground-truth
-                 objects in the target) containing the class labels 
-                 "boxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates
+                 objects in the target) containing the class labels "boxes": Tensor of dim [num_target_boxes, 4]
+                 containing the target box coordinates
 
         Returns:
             A list of size batch_size, containing tuples of (index_i, index_j) where:
@@ -1777,9 +1779,9 @@ def box_iou(boxes1, boxes2):
 
 def generalized_box_iou(boxes1, boxes2):
     """
-    Generalized IoU from https://giou.stanford.edu/ The boxes should be in [x0, y0, x1, y1] format. 
-    
-    Returns: 
+    Generalized IoU from https://giou.stanford.edu/ The boxes should be in [x0, y0, x1, y1] format.
+
+    Returns:
         a [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
     """
     # degenerate boxes gives inf / nan results

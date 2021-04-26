@@ -14,8 +14,8 @@
 # limitations under the License.
 
 
-import unittest
 import json
+import unittest
 
 import numpy as np
 
@@ -44,7 +44,7 @@ class DetrFeatureExtractionTester(unittest.TestCase):
         max_resolution=400,
         do_resize=True,
         size=18,
-        max_size=1333, # by setting max_size > max_resolution we're effectively not testing this :p 
+        max_size=1333,  # by setting max_size > max_resolution we're effectively not testing this :p
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
@@ -102,7 +102,7 @@ class DetrFeatureExtractionTester(unittest.TestCase):
         return image_inputs
 
     def get_expected_values(self, image_inputs, batched=False):
-        """ 
+        """
         This function computes the expected height and width when providing images to DetrFeatureExtractor,
         assuming do_resize is set to True with a scalar size.
         """
@@ -121,7 +121,7 @@ class DetrFeatureExtractionTester(unittest.TestCase):
             else:
                 expected_height = self.size
                 expected_width = self.size
-            
+
         else:
             expected_values = []
             for image in image_inputs:
@@ -131,6 +131,7 @@ class DetrFeatureExtractionTester(unittest.TestCase):
             expected_width = max(expected_values, key=lambda item: item[1])[1]
 
         return expected_height, expected_width
+
 
 @require_torch
 @require_vision
@@ -167,9 +168,9 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
 
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
-        
+
         expected_height, expected_width = self.feature_extract_tester.get_expected_values(image_inputs)
-        
+
         self.assertEqual(
             encoded_images.shape,
             (
@@ -242,7 +243,7 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
 
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
-        
+
         expected_height, expected_width = self.feature_extract_tester.get_expected_values(image_inputs)
 
         self.assertEqual(
@@ -274,44 +275,43 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
     def test_call_pytorch_with_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/cats.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", 'r') as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
             target = json.loads(f.read())
 
-        target = {'image_id': 39769, 'annotations': target}
-        
+        target = {"image_id": 39769, "annotations": target}
+
         # encode them
-        #TODO add .from_pretrained("facebook/detr-resnet-50")
+        # TODO add .from_pretrained("facebook/detr-resnet-50")
         feature_extractor = DetrFeatureExtractor()
         encoding = feature_extractor(images=image, annotations=target, return_tensors="pt")
 
         # verify pixel values
         expected_shape = torch.Size([1, 3, 800, 1066])
-        self.assertEqual(encoding['pixel_values'].shape, expected_shape)
-        
+        self.assertEqual(encoding["pixel_values"].shape, expected_shape)
+
         expected_slice = torch.tensor([0.2796, 0.3138, 0.3481])
-        assert torch.allclose(encoding['pixel_values'][0,0,0,:3], expected_slice, atol=1e-4)
-        
+        assert torch.allclose(encoding["pixel_values"][0, 0, 0, :3], expected_slice, atol=1e-4)
+
         # verify area
         expected_area = torch.tensor([5887.9600, 11250.2061, 489353.8438, 837122.7500, 147967.5156, 165732.3438])
-        assert torch.allclose(encoding['target'][0]['area'], expected_area)
+        assert torch.allclose(encoding["target"][0]["area"], expected_area)
         # verify boxes
         expected_boxes_shape = torch.Size([6, 4])
-        self.assertEqual(encoding['target'][0]['boxes'].shape, expected_boxes_shape)
+        self.assertEqual(encoding["target"][0]["boxes"].shape, expected_boxes_shape)
         expected_boxes_slice = torch.tensor([0.5503, 0.2765, 0.0604, 0.2215])
-        assert torch.allclose(encoding['target'][0]['boxes'][0], expected_boxes_slice, atol=1e-3)
+        assert torch.allclose(encoding["target"][0]["boxes"][0], expected_boxes_slice, atol=1e-3)
         # verify image_id
         expected_image_id = torch.tensor([39769])
-        assert torch.allclose(encoding['target'][0]['image_id'], expected_image_id)
+        assert torch.allclose(encoding["target"][0]["image_id"], expected_image_id)
         # verify is_crowd
         expected_is_crowd = torch.tensor([0, 0, 0, 0, 0, 0])
-        assert torch.allclose(encoding['target'][0]['iscrowd'], expected_is_crowd)
+        assert torch.allclose(encoding["target"][0]["iscrowd"], expected_is_crowd)
         # verify class_labels
         expected_class_labels = torch.tensor([75, 75, 63, 65, 17, 17])
-        assert torch.allclose(encoding['target'][0]['class_labels'], expected_class_labels)
+        assert torch.allclose(encoding["target"][0]["class_labels"], expected_class_labels)
         # verify orig_size
         expected_orig_size = torch.tensor([480, 640])
-        assert torch.allclose(encoding['target'][0]['orig_size'], expected_orig_size)
+        assert torch.allclose(encoding["target"][0]["orig_size"], expected_orig_size)
         # verify size
-        expected_size = torch.tensor([ 800, 1066])
-        assert torch.allclose(encoding['target'][0]['size'], expected_size)
-    
+        expected_size = torch.tensor([800, 1066])
+        assert torch.allclose(encoding["target"][0]["size"], expected_size)

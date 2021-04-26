@@ -47,8 +47,8 @@ from .file_utils import (
     is_sentencepiece_available,
     is_speech_available,
     is_tf_available,
-    is_tokenizers_available,
     is_timm_available,
+    is_tokenizers_available,
     is_torch_available,
     is_vision_available,
 )
