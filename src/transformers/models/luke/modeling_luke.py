@@ -689,7 +689,7 @@ class LukePreTrainedModel(PreTrainedModel):
     base_model_prefix = "luke"
 
     def _init_weights(self, module: nn.Module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
@@ -1074,7 +1074,7 @@ class LukeForEntityClassification(LukePreTrainedModel):
             >>> outputs = model(**inputs)
             >>> logits = outputs.logits
             >>> predicted_class_idx = logits.argmax(-1).item()
-            >>> print("Predicted class:", model.config.id2label[predicted_class_idx]) 
+            >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
