@@ -21,12 +21,12 @@ from ...file_utils import _BaseLazyModule, is_tokenizers_available, is_torch_ava
 
 
 _import_structure = {
-    "configuration_clip": ["CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "clipConfig"],
-    "tokenization_clip": ["clipTokenizer"],
+    "configuration_clip": ["CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "ClipConfig"],
+    "tokenization_clip": ["ClipTokenizer"],
 }
 
 if is_tokenizers_available():
-    _import_structure["tokenization_clip_fast"] = ["clipTokenizerFast"]
+    _import_structure["tokenization_clip_fast"] = ["ClipTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_clip"] = [
