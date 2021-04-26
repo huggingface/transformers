@@ -643,7 +643,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             text (:obj:`str`):
                 The text to prepare.
             is_split_into_words (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the text has been pretokenized.
+                Whether or not the input is already pre-tokenized (e.g., split into words). If set to :obj:`True`,
+                the tokenizer assumes the input is already split into words (for instance, by splitting it on
+                whitespace) which it will tokenize. This is useful for NER or token classification.
             kwargs:
                 Keyword arguments to use for the tokenization.
 
