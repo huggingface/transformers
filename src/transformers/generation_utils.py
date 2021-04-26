@@ -1789,10 +1789,7 @@ class GenerationMixin:
 
             # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
             # cannot be generated both before and after the `F.log_softmax` operation.
-            next_token_logits = self.adjust_logits_during_generation(
-                next_token_logits, cur_len=cur_len, max_length=None
-            )
-
+            next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
             next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
 
             next_token_scores = logits_processor(input_ids, next_token_scores)
@@ -2089,10 +2086,7 @@ class GenerationMixin:
 
             # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
             # cannot be generated both before and after the `F.log_softmax` operation.
-            next_token_logits = self.adjust_logits_during_generation(
-                next_token_logits, cur_len=cur_len, max_length=None
-            )
-
+            next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
             next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
 
             next_token_scores = logits_processor(input_ids, next_token_scores)
@@ -2420,10 +2414,7 @@ class GenerationMixin:
 
                 # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
                 # cannot be generated both before and after the `F.log_softmax` operation.
-                next_token_logits = self.adjust_logits_during_generation(
-                    next_token_logits, cur_len=cur_len, max_length=None
-                )
-
+                next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
                 next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * group_size, vocab_size)
                 vocab_size = next_token_scores.shape[-1]
 
