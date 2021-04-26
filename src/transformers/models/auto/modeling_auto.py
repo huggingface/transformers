@@ -716,7 +716,7 @@ AutoModelForPreTraining = auto_class_factory(
     "AutoModelForPreTraining", MODEL_FOR_PRETRAINING_MAPPING, head_doc="pretraining"
 )
 
-# Private on puprose, the public class will add the deprecation warnings.
+# Private on purpose, the public class will add the deprecation warnings.
 _AutoModelWithLMHead = auto_class_factory(
     "AutoModelWithLMHead", MODEL_WITH_LM_HEAD_MAPPING, head_doc="language modeling"
 )
