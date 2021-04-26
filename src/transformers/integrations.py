@@ -269,19 +269,13 @@ def rewrite_logs(d):
     return new_d
 
 
-def is_true(config, key):
+def _is_true(config, key):
     if config is None:
         return False
     return bool(config.get(key))
 
 
-def is_auto(config, key):
-    if config is None:
-        return False
-    return config.get(key) == "auto"
-
-
-def set_if_auto(config, key, val):
+def _set_if_auto(config, key, val):
     if config is None:
         return
     if config.get(key) == "auto":
@@ -346,10 +340,10 @@ class DeepSpeedConfigHF:
         # DeepSpeed does:
         # train_batch_size = world_size * train_micro_batch_size_per_gpu * gradient_accumulation_steps
         train_batch_size = args.world_size * args.per_device_train_batch_size * args.gradient_accumulation_steps
-        set_if_auto(config, "train_micro_batch_size_per_gpu", args.per_device_train_batch_size)
-        set_if_auto(config, "gradient_accumulation_steps", args.gradient_accumulation_steps)
-        set_if_auto(config, "train_batch_size", train_batch_size)
-        set_if_auto(config, "gradient_clipping", args.max_grad_norm)
+        _set_if_auto(config, "train_micro_batch_size_per_gpu", args.per_device_train_batch_size)
+        _set_if_auto(config, "gradient_accumulation_steps", args.gradient_accumulation_steps)
+        _set_if_auto(config, "train_batch_size", train_batch_size)
+        _set_if_auto(config, "gradient_clipping", args.max_grad_norm)
 
         # zero
         config_zero = config.get("zero_optimization", {})
@@ -358,17 +352,17 @@ class DeepSpeedConfigHF:
         config_optim = config.get("optimizer", {})
         if config_optim != {}:
             config_optim_params = config_optim.get("params")
-            set_if_auto(config_optim_params, "lr", args.learning_rate)
-            set_if_auto(config_optim_params, "betas", [args.adam_beta1, args.adam_beta2])
-            set_if_auto(config_optim_params, "eps", args.adam_epsilon)
-            set_if_auto(config_optim_params, "weight_decay", args.weight_decay)
+            _set_if_auto(config_optim_params, "lr", args.learning_rate)
+            _set_if_auto(config_optim_params, "betas", [args.adam_beta1, args.adam_beta2])
+            _set_if_auto(config_optim_params, "eps", args.adam_epsilon)
+            _set_if_auto(config_optim_params, "weight_decay", args.weight_decay)
 
         config_sched = config.get("scheduler", {})
         if config_sched != {}:
             config_sched_params = config_sched.get("params")
-            set_if_auto(config_sched_params, "warmup_min_lr", 0)
-            set_if_auto(config_sched_params, "warmup_max_lr", args.learning_rate)
-            set_if_auto(config_sched_params, "warmup_num_steps", args.warmup_steps)
+            _set_if_auto(config_sched_params, "warmup_min_lr", 0)
+            _set_if_auto(config_sched_params, "warmup_max_lr", args.learning_rate)
+            _set_if_auto(config_sched_params, "warmup_num_steps", args.warmup_steps)
             # total_num_steps - will get set in deepspeed_init
 
         # fp16
@@ -382,18 +376,18 @@ class DeepSpeedConfigHF:
         config_fp16 = config.get("fp16")
         # XXX: at the moment fp16 can't be False, but the fp32 solution is in works - once it's PR'ed and
         # merged and a new release is made, delete the next line and uncomment the one after it
-        set_if_auto(config_fp16, "enabled", True)
-        # set_if_auto(config_fp16, "enabled", fp16_backend == "amp")
+        _set_if_auto(config_fp16, "enabled", True)
+        # _set_if_auto(config_fp16, "enabled", fp16_backend == "amp")
 
         # apex: delegates amp work to apex (which needs to be available), but it cannot be used with any
         # ZeRO features, so probably best to be avoided.
         config_amp = config.get("amp")
-        set_if_auto(config_amp, "enabled", fp16_backend == "apex")
-        set_if_auto(config_amp, "opt_level", args.fp16_opt_level)
+        _set_if_auto(config_amp, "enabled", fp16_backend == "apex")
+        _set_if_auto(config_amp, "opt_level", args.fp16_opt_level)
 
         config_zero = config.get("zero_optimization", {})
         if self.is_zero2():
-            self.offload = is_true(config_zero, "cpu_offload")
+            self.offload = _is_true(config_zero, "cpu_offload")
         elif self.is_zero3():
             offload_devices = ["cpu", "nvme"]
             if config_zero.get("offload_optimizer", {}).get("device") in offload_devices:
@@ -415,14 +409,14 @@ class DeepSpeedConfigHF:
         if self.is_zero3():
             # automatically assign the optimal config values based on model config
             hidden_size = model.config.hidden_size
-            set_if_auto(config_zero, "reduce_bucket_size", hidden_size * hidden_size)
-            set_if_auto(config_zero, "stage3_prefetch_bucket_size", 0.9 * hidden_size * hidden_size)
-            set_if_auto(config_zero, "stage3_param_persistence_threshold", 10 * hidden_size)
+            _set_if_auto(config_zero, "reduce_bucket_size", hidden_size * hidden_size)
+            _set_if_auto(config_zero, "stage3_prefetch_bucket_size", 0.9 * hidden_size * hidden_size)
+            _set_if_auto(config_zero, "stage3_param_persistence_threshold", 10 * hidden_size)
 
         # scheduler
         config_sched = config.get("scheduler", {})
         config_sched_params = config_sched.get("params", {})
-        set_if_auto(config_sched_params, "total_num_steps", num_training_steps)
+        _set_if_auto(config_sched_params, "total_num_steps", num_training_steps)
 
 
 # keep the config object global to be able to access it anywhere during TrainingArguments life-cycle

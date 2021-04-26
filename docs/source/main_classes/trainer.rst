@@ -612,8 +612,8 @@ For a practical usage example of this type of deployment, please, see this `post
 
 You may also try the ZeRO-3 with CPU and NVMe offload as explained further in this document.
 
-TODO: Benchmark whether we can get better performance out of ZeRO-3 vs. ZeRO-2 on a single GPU, and then recommend
-ZeRO-3 config as starting one.
+<!--- TODO: Benchmark whether we can get better performance out of ZeRO-3 vs. ZeRO-2 on a single GPU, and then
+recommend ZeRO-3 config as starting one. -->
 
 Notes:
 
@@ -1532,8 +1532,10 @@ and the :class:`~transformers.Trainer` will automatically enable or disable it b
 
 This mode gets enabled when ``--fp16 --fp16_backend amp`` command line args are passed.
 
-XXX: However, at the moment DeepSpeed doesn't supported fp32 mode, though it will become available soon. Until then it
-will be always set to ``true``.
+.. note::
+
+   At the moment DeepSpeed doesn't supported fp32 mode, though it will become available soon. Until then it will be
+   always set to ``true``.
 
 You can also enable/disable this mode explicitly:
 

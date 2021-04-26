@@ -397,7 +397,6 @@ class Trainer:
 
         self._signature_columns = None
 
-        # XXX: can move this back to where it was
         # Mixed precision setup
         self.use_apex = False
         self.use_amp = False
