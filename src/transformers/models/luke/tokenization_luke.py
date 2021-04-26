@@ -129,14 +129,15 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
               `What are token type IDs? <../glossary.html#token-type-ids>`__
 
             - **entity_attention_mask** -- List of indices specifying which entities should be attended to by the model
-              (when :obj:`return_attention_mask=True` or if `"entity_attention_mask"` is in :obj:`self.model_input_names`).
+              (when :obj:`return_attention_mask=True` or if `"entity_attention_mask"` is in
+              :obj:`self.model_input_names`).
 
               `What are attention masks? <../glossary.html#attention-mask>`__
 
-            - **entity_start_positions** -- List of the start positions of entities in the word token sequence
-              (when :obj:`task="entity_span_classification"`).
-            - **entity_end_positions** -- List of the end positions of entities in the word token sequence
-              (when :obj:`task="entity_span_classification"`).
+            - **entity_start_positions** -- List of the start positions of entities in the word token sequence (when
+              :obj:`task="entity_span_classification"`).
+            - **entity_end_positions** -- List of the end positions of entities in the word token sequence (when
+              :obj:`task="entity_span_classification"`).
             - **overflowing_tokens** -- List of overflowing tokens sequences (when a :obj:`max_length` is specified and
               :obj:`return_overflowing_tokens=True`).
             - **num_truncated_tokens** -- Number of tokens truncated (when a :obj:`max_length` is specified and
@@ -430,8 +431,8 @@ class LukeTokenizer(RobertaTokenizer):
                 The first sequence of entity spans to be encoded. The sequence consists of tuples each with two
                 integers denoting character-based start and end positions of entities. If you specify
                 :obj:`"entity_classification"` or :obj:`"entity_pair_classification"` as the ``task`` argument in the
-                constructor, the length of each sequence must be 1 or 2, respectively. If you specify ``entities``,
-                the length of the sequence must be equal to the length of ``entities``.
+                constructor, the length of each sequence must be 1 or 2, respectively. If you specify ``entities``, the
+                length of the sequence must be equal to the length of ``entities``.
             entity_spans_pair (:obj:`List[Tuple[int, int]]`, :obj:`List[List[Tuple[int, int]]]`, `optional`)::
                 The second sequence of entity spans to be encoded. The sequence consists of tuples each with two
                 integers denoting character-based start and end positions of entities. If you specify the ``task``

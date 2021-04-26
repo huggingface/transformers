@@ -78,7 +78,7 @@ class LukeConfig(PretrainedConfig):
             <https://arxiv.org/abs/2010.01057>`__.
 
     Examples::
-    
+
         >>> from transformers import LukeConfig, LukeModel
 
         >>> # Initializing a LUKE configuration

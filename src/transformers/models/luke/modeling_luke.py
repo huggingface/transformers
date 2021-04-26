@@ -1065,7 +1065,7 @@ class LukeForEntityClassification(LukePreTrainedModel):
 
             >>> from transformers import LukeTokenizer, LukeForEntityClassification
 
-            >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-open-entity", task="entity_classification")
+            >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-open-entity")
             >>> model = LukeForEntityClassification.from_pretrained("studio-ousia/luke-large-finetuned-open-entity")
 
             >>> text = "Beyoncé lives in Los Angeles."
@@ -1073,6 +1073,8 @@ class LukeForEntityClassification(LukePreTrainedModel):
             >>> inputs = tokenizer(text, entity_spans=entity_spans, return_tensors="pt")
             >>> outputs = model(**inputs)
             >>> logits = outputs.logits
+            >>> predicted_class_idx = logits.argmax(-1).item()
+            >>> print("Predicted class:", model.config.id2label[predicted_class_idx]) 
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1175,7 +1177,7 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
 
             >>> from transformers import LukeTokenizer, LukeForEntityPairClassification
 
-            >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-tacred", task="entity_pair_classification")
+            >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-tacred")
             >>> model = LukeForEntityPairClassification.from_pretrained("studio-ousia/luke-large-finetuned-tacred")
 
             >>> text = "Beyoncé lives in Los Angeles."
@@ -1183,6 +1185,8 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
             >>> inputs = tokenizer(text, entity_spans=entity_spans, return_tensors="pt")
             >>> outputs = model(**inputs)
             >>> logits = outputs.logits
+            >>> predicted_class_idx = logits.argmax(-1).item()
+            >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1295,7 +1299,7 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
 
             >>> from transformers import LukeTokenizer, LukeForEntitySpanClassification
 
-            >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-conll-2003", task="entity_span_classification")
+            >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-conll-2003")
             >>> model = LukeForEntitySpanClassification.from_pretrained("studio-ousia/luke-large-finetuned-conll-2003")
 
             >>> text = "Beyoncé lives in Los Angeles"
@@ -1311,6 +1315,8 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
             >>> inputs = tokenizer(text, entity_spans=entity_spans, return_tensors="pt")
             >>> outputs = model(**inputs)
             >>> logits = outputs.logits
+            >>> predicted_class_idx = logits.argmax(-1).item()
+            >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

@@ -53,10 +53,10 @@ Tips:
     downstream tasks requiring the information of entities in text such as entity typing, relation classification, and
     named entity recognition.
   - *Inputting Wikipedia entities to compute knowledge-enhanced token representations*: LUKE learns rich information
-    (or knowledge) about Wikipedia entities during pretraining and stores the information in its entity embedding.
-    By using Wikipedia entities as input tokens, LUKE outputs token representations enriched by the information stored
-    in the embeddings of these entities. This is particularly effective for tasks requiring real-world knowledge, such
-    as question answering.
+    (or knowledge) about Wikipedia entities during pretraining and stores the information in its entity embedding. By
+    using Wikipedia entities as input tokens, LUKE outputs token representations enriched by the information stored in
+    the embeddings of these entities. This is particularly effective for tasks requiring real-world knowledge, such as
+    question answering.
 
 - There are three head models for the former use case:
 
@@ -101,7 +101,6 @@ Example:
 
     # Example 3: Classifying the relationship between two entities using LukeForEntityPairClassification head model
     >>> model = LukeForEntityPairClassification.from_pretrained("studio-ousia/luke-large-finetuned-tacred")
-    # Instantiate LukeTokenizer with specifying task="entity_pair_classification" to create input for LukeForEntityPairClassification
     >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-tacred", task="entity_pair_classification")
     >>> entity_spans = [(0, 7), (17, 28)]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
     >>> inputs = tokenizer(text, entity_spans=entity_spans, return_tensors="pt")
@@ -110,8 +109,8 @@ Example:
     >>> predicted_class_idx = int(logits[0].argmax())
     >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
 
-This model was contributed by `ikuyamada <https://huggingface.co/ikuyamada>`__ and `nielsr <https://huggingface.co/nielsr>`__.
-The original code can be found `here <https://github.com/studio-ousia/luke>`__.
+This model was contributed by `ikuyamada <https://huggingface.co/ikuyamada>`__ and `nielsr
+<https://huggingface.co/nielsr>`__. The original code can be found `here <https://github.com/studio-ousia/luke>`__.
 
 
 LukeConfig
