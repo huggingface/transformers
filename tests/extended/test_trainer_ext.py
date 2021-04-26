@@ -191,7 +191,7 @@ class TestTrainerExt(TestCasePlus):
             --output_dir {output_dir}
             --overwrite_output_dir
             --max_train_samples 8
-            --max_val_samples 8
+            --max_eval_samples 8
             --max_source_length {max_len}
             --max_target_length {max_len}
             --val_max_target_length {max_len}

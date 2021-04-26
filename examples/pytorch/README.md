@@ -50,8 +50,8 @@ For example here is how to truncate all three splits to just 50 samples each:
 ```
 examples/pytorch/token-classification/run_ner.py \
 --max_train_samples 50 \
---max_val_samples 50 \
---max_test_samples 50 \
+--max_eval_samples 50 \
+--max_predict_samples 50 \
 [...]
 ```
 

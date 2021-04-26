@@ -183,20 +183,20 @@ def parse_args():
         "value if set.",
     )
     parser.add_argument(
-        "--max_val_samples",
+        "--max_eval_samples",
         type=int,
         default=None,
-        help="For debugging purposes or quicker training, truncate the number of validation examples to this "
+        help="For debugging purposes or quicker training, truncate the number of evaluation examples to this "
         "value if set.",
     )
     parser.add_argument(
         "--overwrite_cache", type=bool, default=False, help="Overwrite the cached training and evaluation sets"
     )
     parser.add_argument(
-        "--max_test_samples",
+        "--max_predict_samples",
         type=int,
         default=None,
-        help="For debugging purposes or quicker training, truncate the number of test examples to this",
+        help="For debugging purposes or quicker training, truncate the number of prediction examples to this",
     )
 
     args = parser.parse_args()
@@ -481,9 +481,9 @@ def main():
     if "validation" not in raw_datasets:
         raise ValueError("--do_eval requires a validation dataset")
     eval_examples = raw_datasets["validation"]
-    if args.max_val_samples is not None:
+    if args.max_eval_samples is not None:
         # We will select sample from whole data
-        eval_examples = eval_examples.select(range(args.max_val_samples))
+        eval_examples = eval_examples.select(range(args.max_eval_samples))
     # Validation Feature Creation
     eval_dataset = eval_examples.map(
         prepare_validation_features,
@@ -493,28 +493,28 @@ def main():
         load_from_cache_file=not args.overwrite_cache,
     )
 
-    if args.max_val_samples is not None:
+    if args.max_eval_samples is not None:
         # During Feature creation dataset samples might increase, we will select required samples again
-        eval_dataset = eval_dataset.select(range(args.max_val_samples))
+        eval_dataset = eval_dataset.select(range(args.max_eval_samples))
 
     if args.do_predict:
         if "test" not in raw_datasets:
             raise ValueError("--do_predict requires a test dataset")
-        test_examples = raw_datasets["test"]
-        if args.max_test_samples is not None:
+        predict_examples = raw_datasets["test"]
+        if args.max_predict_samples is not None:
             # We will select sample from whole data
-            test_examples = test_examples.select(range(args.max_test_samples))
-        # Test Feature Creation
-        test_dataset = test_examples.map(
+            predict_examples = predict_examples.select(range(args.max_predict_samples))
+        # Predict Feature Creation
+        predict_dataset = predict_examples.map(
             prepare_validation_features,
             batched=True,
             num_proc=args.preprocessing_num_workers,
             remove_columns=column_names,
             load_from_cache_file=not args.overwrite_cache,
         )
-        if args.max_test_samples is not None:
+        if args.max_predict_samples is not None:
             # During Feature creation dataset samples might increase, we will select required samples again
-            test_dataset = test_dataset.select(range(args.max_test_samples))
+            predict_dataset = predict_dataset.select(range(args.max_predict_samples))
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 3):
@@ -539,9 +539,9 @@ def main():
     eval_dataloader = DataLoader(eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size)
 
     if args.do_predict:
-        test_dataset.set_format(type="torch", columns=["attention_mask", "input_ids", "token_type_ids"])
-        test_dataloader = DataLoader(
-            test_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
+        predict_dataset.set_format(type="torch", columns=["attention_mask", "input_ids", "token_type_ids"])
+        predict_dataloader = DataLoader(
+            predict_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
         )
 
     # Post-processing:
@@ -737,7 +737,7 @@ def main():
         all_end_top_log_probs = []
         all_end_top_index = []
         all_cls_logits = []
-        for step, batch in enumerate(test_dataloader):
+        for step, batch in enumerate(predict_dataloader):
             with torch.no_grad():
                 outputs = model(**batch)
                 start_top_log_probs = outputs.start_top_log_probs
@@ -762,10 +762,10 @@ def main():
         max_len = max([x.shape[1] for x in all_end_top_log_probs])  # Get the max_length of the tensor
 
         # concatenate all numpy arrays collected above
-        start_top_log_probs_concat = create_and_fill_np_array(all_start_top_log_probs, test_dataset, max_len)
-        start_top_index_concat = create_and_fill_np_array(all_start_top_index, test_dataset, max_len)
-        end_top_log_probs_concat = create_and_fill_np_array(all_end_top_log_probs, test_dataset, max_len)
-        end_top_index_concat = create_and_fill_np_array(all_end_top_index, test_dataset, max_len)
+        start_top_log_probs_concat = create_and_fill_np_array(all_start_top_log_probs, predict_dataset, max_len)
+        start_top_index_concat = create_and_fill_np_array(all_start_top_index, predict_dataset, max_len)
+        end_top_log_probs_concat = create_and_fill_np_array(all_end_top_log_probs, predict_dataset, max_len)
+        end_top_index_concat = create_and_fill_np_array(all_end_top_index, predict_dataset, max_len)
         all_cls_logits = np.concatenate(all_cls_logits, axis=0)
 
         # delete the list of numpy arrays
@@ -774,7 +774,7 @@ def main():
         del end_top_log_probs
         del end_top_index
 
-        test_dataset.set_format(type=None, columns=list(test_dataset.features.keys()))
+        predict_dataset.set_format(type=None, columns=list(predict_dataset.features.keys()))
         outputs_numpy = (
             start_top_log_probs_concat,
             start_top_index_concat,
@@ -783,9 +783,9 @@ def main():
             cls_logits,
         )
 
-        prediction = post_processing_function(test_examples, test_dataset, outputs_numpy)
-        test_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)
-        logger.info(f"Test metrics: {test_metric}")
+        prediction = post_processing_function(predict_examples, predict_dataset, outputs_numpy)
+        predict_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)
+        logger.info(f"Predict metrics: {predict_metric}")
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()

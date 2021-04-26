@@ -66,16 +66,16 @@ class QuestionAnsweringTrainer(Trainer):
         self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, metrics)
         return metrics
 
-    def predict(self, test_dataset, test_examples, ignore_keys=None):
-        test_dataloader = self.get_test_dataloader(test_dataset)
+    def predict(self, predict_dataset, predict_examples, ignore_keys=None):
+        predict_dataloader = self.get_test_dataloader(predict_dataset)
 
         # Temporarily disable metric computation, we will do it in the loop here.
         compute_metrics = self.compute_metrics
         self.compute_metrics = None
         try:
             output = self.prediction_loop(
-                test_dataloader,
-                description="Evaluation",
+                predict_dataloader,
+                description="Prediction",
                 # No point gathering the predictions if there are no metrics, otherwise we defer to
                 # self.args.prediction_loss_only
                 prediction_loss_only=True if compute_metrics is None else None,
@@ -87,7 +87,7 @@ class QuestionAnsweringTrainer(Trainer):
         if self.post_process_function is None or self.compute_metrics is None:
             return output
 
-        eval_preds = self.post_process_function(test_examples, test_dataset, output.predictions, "test")
-        metrics = self.compute_metrics(eval_preds)
+        predictions = self.post_process_function(predict_examples, predict_dataset, output.predictions, "predict")
+        metrics = self.compute_metrics(predictions)
 
-        return PredictionOutput(predictions=eval_preds.predictions, label_ids=eval_preds.label_ids, metrics=metrics)
+        return PredictionOutput(predictions=predictions.predictions, label_ids=predictions.label_ids, metrics=metrics)
