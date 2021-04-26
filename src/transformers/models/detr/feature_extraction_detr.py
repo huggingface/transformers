@@ -33,12 +33,14 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+# inspired by https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
 def box_xyxy_to_cxcywh(x):
     """
     Converts a NumPy array of bounding boxes of shape (number of bounding boxes, 4) of format (x_0, y_0, x_1, y_1) to
     (center_x, center_y, width, height).
     """
-    x0, y0, x1, y1 = x.T[0], x.T[1], x.T[2], x.T[3]
+    x_transposed = x.T
+    x0, y0, x1, y1 = x_transposed[0], x_transposed[1], x_transposed[2], x_transposed[3]
     b = [(x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0), (y1 - y0)]
     return np.stack(b, axis=-1)
 
