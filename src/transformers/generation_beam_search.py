@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
 from abc import ABC, abstractmethod
 from collections import UserDict
 from typing import Optional, Tuple
@@ -159,6 +160,7 @@ class BeamSearchScorer(BeamScorer):
         do_early_stopping: Optional[bool] = False,
         num_beam_hyps_to_keep: Optional[int] = 1,
         num_beam_groups: Optional[int] = 1,
+        **kwargs,
     ):
         self.num_beams = num_beams
         self.device = device
@@ -188,6 +190,13 @@ class BeamSearchScorer(BeamScorer):
             raise ValueError(
                 f"`num_beam_groups` has to be an integer smaller or equal than `num_beams` and `num_beams` "
                 f"has to be divisible by `num_beam_groups`, but is {num_beam_groups} with `num_beams` being {num_beams}."
+            )
+
+        if "max_length" in kwargs:
+            warnings.warn(
+                "Passing `max_length` to BeamSearchScorer is deprecated and has no effect."
+                "`max_length` should be passed directly to `beam_search(...)`, `beam_sample(...)`"
+                ",or `group_beam_search(...)`."
             )
 
     @property
