@@ -221,7 +221,7 @@ class GPTNeoAttentionMixin:
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, seq_length, dtype=torch.long, device=device)
 
-        # A block can also be padded becuase of the _look_back operation
+        # A block can also be padded because of the _look_back operation
         # look back into the attention_block such that it will also get padded the same way
         # and have 0s in the padded position
         attention_mask = GPTNeoAttentionMixin._look_back(attention_mask, block_length, window_size, is_key_value=False)
@@ -804,8 +804,8 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x num_headss x N x N
-        # head_mask has shape n_layer x batch x num_headss x N x N
+        # attention_probs has shape bsz x num_heads x N x N
+        # head_mask has shape n_layer x batch x num_heads x N x N
         head_mask = self.get_head_mask(head_mask, self.config.num_layers)
 
         if inputs_embeds is None:

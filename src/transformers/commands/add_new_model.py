@@ -57,14 +57,14 @@ class AddNewModelCommand(BaseTransformersCLICommand):
         if not _has_cookiecutter:
             raise ImportError(
                 "Model creation dependencies are required to use the `add_new_model` command. Install them by running "
-                "the folowing at the root of your `transformers` clone:\n\n\t$ pip install -e .[modelcreation]\n"
+                "the following at the root of your `transformers` clone:\n\n\t$ pip install -e .[modelcreation]\n"
             )
         # Ensure that there is no other `cookiecutter-template-xxx` directory in the current working directory
         directories = [directory for directory in os.listdir() if "cookiecutter-template-" == directory[:22]]
         if len(directories) > 0:
             raise ValueError(
                 "Several directories starting with `cookiecutter-template-` in current working directory. "
-                "Please clean your directory by removing all folders startign with `cookiecutter-template-` or "
+                "Please clean your directory by removing all folders starting with `cookiecutter-template-` or "
                 "change your working directory."
             )
 

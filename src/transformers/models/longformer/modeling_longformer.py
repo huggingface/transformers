@@ -393,7 +393,7 @@ class LongformerTokenClassifierOutput(ModelOutput):
 
 def _get_question_end_index(input_ids, sep_token_id):
     """
-    Computes the index of the first occurance of `sep_token_id`.
+    Computes the index of the first occurrence of `sep_token_id`.
     """
 
     sep_token_indices = (input_ids == sep_token_id).nonzero()
@@ -1428,7 +1428,7 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
-            - 0 indicates the heas is **masked**.
+            - 0 indicates the head is **masked**.
 
         decoder_head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in ``[0, 1]``:

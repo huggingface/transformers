@@ -683,7 +683,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
                 sequence_lengths = -1
                 logger.warning(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                    f"unexpected if using padding tokens in conjuction with `inputs_embeds.`"
+                    f"unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
 
         pooled_logits = logits[range(batch_size), sequence_lengths]

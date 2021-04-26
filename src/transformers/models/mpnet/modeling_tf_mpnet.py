@@ -674,7 +674,7 @@ MPNET_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare MPNet Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare MPNet Model transformer outputting raw hidden-states without any specific head on top.",
     MPNET_START_DOCSTRING,
 )
 class TFMPNetModel(TFMPNetPreTrainedModel):

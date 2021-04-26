@@ -319,9 +319,9 @@ class Speech2TextAttention(nn.Module):
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if output_attentions:
-            # this operation is a bit akward, but it's required to
+            # this operation is a bit awkward, but it's required to
             # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
+            # In order to do so, attn_weights have to be reshaped
             # twice and have to be reused in the following
             attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
@@ -559,7 +559,7 @@ class Speech2TextPreTrainedModel(PreTrainedModel):
         return input_lengths
 
     def _get_subsampled_encoder_attn_mask(self, attention_mask):
-        # generate creates 3D attention mask, becuase of the shape of input_features
+        # generate creates 3D attention mask, because of the shape of input_features
         # convert it to 2D if thats the case
         if len(attention_mask.shape) > 2:
             attention_mask = attention_mask[:, :, -1]

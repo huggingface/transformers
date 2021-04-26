@@ -446,7 +446,7 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
 
 class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     r"""
-    :class:`transformers.LogitsProcessor` that enforces contrained generation and is useful for prefix-conditioned
+    :class:`transformers.LogitsProcessor` that enforces constrained generation and is useful for prefix-conditioned
     constrained generation. See `Autoregressive Entity Retrieval <https://arxiv.org/abs/2010.00904>`__ for more
     information.
 

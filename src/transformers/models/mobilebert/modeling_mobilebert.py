@@ -1487,7 +1487,7 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    MoibleBert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
+    MobileBert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
     for Named-Entity-Recognition (NER) tasks.
     """,
     MOBILEBERT_START_DOCSTRING,

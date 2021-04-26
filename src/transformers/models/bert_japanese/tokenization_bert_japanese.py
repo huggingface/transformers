@@ -304,7 +304,7 @@ class MecabTokenizer:
 
 
 class CharacterTokenizer:
-    """Runs Character tokenziation."""
+    """Runs Character tokenization."""
 
     def __init__(self, vocab, unk_token, normalize_text=True):
         """

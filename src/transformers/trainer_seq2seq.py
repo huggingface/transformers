@@ -199,7 +199,7 @@ class Seq2SeqTrainer(Trainer):
     def _pad_tensors_to_max_len(self, tensor, max_length):
         if self.tokenizer is None:
             raise ValueError(
-                f"Tensor need to be padded to `max_length={max_length}` but no tokenzier was passed when creating "
+                f"Tensor need to be padded to `max_length={max_length}` but no tokenizer was passed when creating "
                 "this `Trainer`. Make sure to create your `Trainer` with the appropriate tokenizer."
             )
         # If PAD token is not defined at least EOS token has to be defined

@@ -182,7 +182,7 @@ class AdamWeightDecay(tf.keras.optimizers.Adam):
         name (:obj:`str`, `optional`, defaults to 'AdamWeightDecay'):
             Optional name for the operations created when applying gradients.
         kwargs:
-            Keyward arguments. Allowed to be {``clipnorm``, ``clipvalue``, ``lr``, ``decay``}. ``clipnorm`` is clip
+            Keyword arguments. Allowed to be {``clipnorm``, ``clipvalue``, ``lr``, ``decay``}. ``clipnorm`` is clip
             gradients by norm; ``clipvalue`` is clip gradients by value, ``decay`` is included for backward
             compatibility to allow time inverse decay of learning rate. ``lr`` is included for backward compatibility,
             recommended to use ``learning_rate`` instead.

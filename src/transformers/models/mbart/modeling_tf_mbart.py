@@ -118,7 +118,7 @@ class TFMBartLearnedPositionalEmbedding(TFSharedEmbeddings):
 
     def __init__(self, num_embeddings: int, embedding_dim: int, **kwargs):
         # MBart is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models dont have this hack
+        # and adjust num_embeddings appropriately. Other models don't have this hack
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim, **kwargs)
 
@@ -690,7 +690,7 @@ class TFMBartEncoder(tf.keras.layers.Layer):
                 Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
 
                 - 1 indicates the head is **not masked**,
-                - 0 indicates the heas is **masked**.
+                - 0 indicates the head is **masked**.
 
             inputs_embeds (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
                 Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded

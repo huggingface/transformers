@@ -749,8 +749,8 @@ class XLMTokenizer(PreTrainedTokenizer):
 
     def _tokenize(self, text, lang="en", bypass_tokenizer=False):
         """
-        Tokenize a string given language code. For Chinese, Japanese and Thai, we use a language specific
-        tokenizerself. Otherwise, we use Moses.
+        Tokenize a string given language code. For Chinese, Japanese and Thai, we use a language specific tokenizer.
+        Otherwise, we use Moses.
 
         Details of tokenization:
 

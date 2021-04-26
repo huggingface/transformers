@@ -2357,7 +2357,7 @@ def _get_numeric_value_from_date(date, mask):
 
 
 def _get_span_length_key(span):
-    """Sorts span by decreasing length first and incresing first index second."""
+    """Sorts span by decreasing length first and increasing first index second."""
     return span[1] - span[0], -span[0]
 
 

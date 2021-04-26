@@ -244,7 +244,7 @@ def squad_convert_example_to_features(
         cls_index = span["input_ids"].index(tokenizer.cls_token_id)
 
         # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
-        # Original TF implem also keep the classification token (set to 0)
+        # Original TF implementation also keep the classification token (set to 0)
         p_mask = np.ones_like(span["token_type_ids"])
         if tokenizer.padding_side == "right":
             p_mask[len(truncated_query) + sequence_added_tokens :] = 0

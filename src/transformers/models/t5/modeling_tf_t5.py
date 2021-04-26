@@ -637,7 +637,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             raise ValueError(f"You have to specify either {err_msg_prefix}inputs or {err_msg_prefix}inputs_embeds")
 
         if inputs["inputs_embeds"] is None:
-            assert self.embed_tokens is not None, "You have to intialize the model with valid token embeddings"
+            assert self.embed_tokens is not None, "You have to initialize the model with valid token embeddings"
             inputs["inputs_embeds"] = self.embed_tokens(inputs["input_ids"])
 
         batch_size, seq_length = input_shape
