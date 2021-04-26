@@ -547,6 +547,7 @@ class Trainer:
                     rank=self.args.process_index,
                     lengths=lengths,
                     model_input_name=model_input_name,
+                    seed=self.args.seed,
                 )
 
         else:
