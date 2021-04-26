@@ -377,7 +377,7 @@ def main():
         forced_bos_token_id = (
             tokenizer.lang_code_to_id[data_args.forced_bos_token] if data_args.forced_bos_token is not None else None
         )
-        model.config.foced_bos_token_id = forced_bos_token_id
+        model.config.forced_bos_token_id = forced_bos_token_id
 
     # Get the language codes for input/target.
     source_lang = data_args.source_lang.split("_")[0]
@@ -570,6 +570,9 @@ def main():
                 output_test_preds_file = os.path.join(training_args.output_dir, "test_generations.txt")
                 with open(output_test_preds_file, "w") as writer:
                     writer.write("\n".join(test_preds))
+
+    if training_args.push_to_hub:
+        trainer.push_to_hub()
 
     return results
 

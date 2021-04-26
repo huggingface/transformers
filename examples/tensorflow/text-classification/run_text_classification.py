@@ -492,7 +492,10 @@ def main():
 
         callbacks = [SavePretrainedCallback(output_dir=training_args.output_dir)]
         model.fit(
-            training_dataset, validation_data=eval_dataset, epochs=training_args.num_train_epochs, callbacks=callbacks
+            training_dataset,
+            validation_data=eval_dataset,
+            epochs=int(training_args.num_train_epochs),
+            callbacks=callbacks,
         )
     elif "validation" in datasets:
         # If there's a validation dataset but no training set, just evaluate the metrics
