@@ -1779,7 +1779,7 @@ class ReformerPreTrainedModel(PreTrainedModel):
         return dummy_inputs
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, AxialPositionEmbeddings):
             for weight in module.weights:
                 torch.nn.init.normal_(weight, std=self.config.axial_norm_std)

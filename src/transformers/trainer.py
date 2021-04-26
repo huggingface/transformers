@@ -805,7 +805,7 @@ class Trainer:
         return len(dataloader.dataset)
 
     def _hp_search_setup(self, trial: Union["optuna.Trial", Dict[str, Any]]):
-        """ HP search setup code """
+        """HP search setup code"""
         self._trial = trial
 
         if self.hp_search_backend is None or trial is None:
