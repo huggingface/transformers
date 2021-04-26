@@ -208,7 +208,7 @@ class Trainer:
 
             Note that if it's a :obj:`torch.utils.data.dataset.IterableDataset` with some randomization and you are
             training in a distributed fashion, your iterable dataset should either use a internal attribute
-            :obj:`generator` that is a :obj:`torch.Generator` for the randomization that must be identic on all
+            :obj:`generator` that is a :obj:`torch.Generator` for the randomization that must be identical on all
             processes (and the Trainer will manually set the seed of this :obj:`generator` at each epoch) or have a
             :obj:`set_epoch()` method that internally sets the seed of the RNGs used.
         eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
@@ -412,13 +412,25 @@ class Trainer:
         if args.fp16 and not args.deepspeed:  # deepspeed manages its own fp16
             if self.fp16_backend == "amp":
                 self.use_amp = True
-                self.scaler = ShardedGradScaler() if self.sharded_ddp is not None else torch.cuda.amp.GradScaler()
+                if is_sagemaker_mp_enabled():
+                    self.scaler = smp.amp.GradScaler()
+                elif self.sharded_ddp is not None:
+                    self.scaler = ShardedGradScaler()
+                else:
+                    self.scaler = torch.cuda.amp.GradScaler()
             else:
                 if not is_apex_available():
                     raise ImportError(
                         "Using FP16 with APEX but APEX is not installed, please refer to https://www.github.com/nvidia/apex."
                     )
                 self.use_apex = True
+
+        # FP16 + model parallelism in SageMaker: gradient clipping does not work for now so we raise a helpful error.
+        if is_sagemaker_mp_enabled() and self.use_amp and args.max_grad_norm is not None and args.max_grad_norm > 0:
+            raise ValueError(
+                "SageMaker Model Parallelism in mixed precision mode does not support gradient clipping yet. Pass "
+                "along 'max_grad_norm': 0 in your hyperparameters."
+            )
 
         # Label smoothing
         if self.args.label_smoothing_factor != 0:
@@ -535,6 +547,7 @@ class Trainer:
                     rank=self.args.process_index,
                     lengths=lengths,
                     model_input_name=model_input_name,
+                    seed=self.args.seed,
                 )
 
         else:
@@ -550,10 +563,14 @@ class Trainer:
                     batch_size=self.args.per_device_train_batch_size,
                     num_replicas=self.args.world_size,
                     rank=self.args.process_index,
+                    seed=self.args.seed,
                 )
             else:
                 return DistributedSampler(
-                    self.train_dataset, num_replicas=self.args.world_size, rank=self.args.process_index
+                    self.train_dataset,
+                    num_replicas=self.args.world_size,
+                    rank=self.args.process_index,
+                    seed=self.args.seed,
                 )
 
     def get_train_dataloader(self) -> DataLoader:
@@ -805,7 +822,7 @@ class Trainer:
         return len(dataloader.dataset)
 
     def _hp_search_setup(self, trial: Union["optuna.Trial", Dict[str, Any]]):
-        """ HP search setup code """
+        """HP search setup code"""
         self._trial = trial
 
         if self.hp_search_backend is None or trial is None:
@@ -1607,7 +1624,8 @@ class Trainer:
         inputs = self._prepare_inputs(inputs)
 
         if is_sagemaker_mp_enabled():
-            loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
+            scaler = self.scaler if self.use_amp else None
+            loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps, scaler=scaler)
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
         if self.use_amp:

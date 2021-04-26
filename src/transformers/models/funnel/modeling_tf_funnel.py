@@ -139,7 +139,7 @@ class TFFunnelAttentionStructure:
         self.pooling_mult = None
 
     def init_attention_inputs(self, inputs_embeds, attention_mask=None, token_type_ids=None, training=False):
-        """ Returns the attention inputs associated to the inputs of the model. """
+        """Returns the attention inputs associated to the inputs of the model."""
         # inputs_embeds has shape batch_size x seq_len x d_model
         # attention_mask and token_type_ids have shape batch_size x seq_len
         self.pooling_mult = 1
@@ -169,7 +169,7 @@ class TFFunnelAttentionStructure:
         For the factorized attention, it returns the matrices (phi, pi, psi, omega) used in the paper, appendix A.2.2,
         final formula.
 
-        For the relative shif attention, it returns all possible vectors R used in the paper, appendix A.2.1, final
+        For the relative shift attention, it returns all possible vectors R used in the paper, appendix A.2.1, final
         formula.
 
         Paper link: https://arxiv.org/abs/2006.03236
@@ -328,7 +328,7 @@ class TFFunnelAttentionStructure:
         return tf.squeeze(tensor, 2) if ndim == 2 else tensor
 
     def pre_attention_pooling(self, output, attention_inputs):
-        """ Pool `output` and the proper parts of `attention_inputs` before the attention layer. """
+        """Pool `output` and the proper parts of `attention_inputs` before the attention layer."""
         position_embeds, token_type_mat, attention_mask, cls_mask = attention_inputs
         if self.pool_q_only:
             if self.attention_type == "factorized":
@@ -348,7 +348,7 @@ class TFFunnelAttentionStructure:
         return output, attention_inputs
 
     def post_attention_pooling(self, attention_inputs):
-        """ Pool the proper parts of `attention_inputs` after the attention layer. """
+        """Pool the proper parts of `attention_inputs` after the attention layer."""
         position_embeds, token_type_mat, attention_mask, cls_mask = attention_inputs
         if self.pool_q_only:
             self.pooling_mult *= 2
@@ -424,7 +424,7 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def relative_positional_attention(self, position_embeds, q_head, context_len, cls_mask=None):
-        """ Relative attention score for the positional encodings """
+        """Relative attention score for the positional encodings"""
         # q_head has shape batch_size x sea_len x n_head x d_head
         if self.attention_type == "factorized":
             # Notations from the paper, appending A.2.2, final formula (https://arxiv.org/abs/2006.03236)
@@ -470,7 +470,7 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
         return positional_attn
 
     def relative_token_type_attention(self, token_type_mat, q_head, cls_mask=None):
-        """ Relative attention score for the token_type_ids """
+        """Relative attention score for the token_type_ids"""
         if token_type_mat is None:
             return 0
         batch_size, seq_len, context_len = shape_list(token_type_mat)
@@ -723,7 +723,7 @@ class TFFunnelDecoder(tf.keras.layers.Layer):
 
 @keras_serializable
 class TFFunnelBaseLayer(tf.keras.layers.Layer):
-    """ Base model without decoder """
+    """Base model without decoder"""
 
     config_class = FunnelConfig
 
@@ -807,7 +807,7 @@ class TFFunnelBaseLayer(tf.keras.layers.Layer):
 
 @keras_serializable
 class TFFunnelMainLayer(tf.keras.layers.Layer):
-    """ Base model with decoder """
+    """Base model with decoder"""
 
     config_class = FunnelConfig
 
@@ -1009,7 +1009,7 @@ class TFFunnelForPreTrainingOutput(ModelOutput):
     Args:
         logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
             Prediction scores of the head (scores for each token before SoftMax).
-        hidden_states (:obj:`tuple(tf.ensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
