@@ -292,8 +292,8 @@ class DeepSpeedConfigHF:
     """
     This object contains Deepspeed configuration and can be quickly queried for things like zero stage.
 
-    We store a ``weakref`` proxy of this object in the module's global to be able to access the config from areas where
-    Trainer is not available.
+    We store a ``weakref`` of this object in the module's global to be able to access the config from areas where the
+    Trainer is not available (e.g. `from_pretrained` and `_get_resized_embeddings`).
 
     The ``DeepSpeedConfigHF`` object is meant to be created during ``TrainingArguments`` object creation and has the
     same lifespan as the latter.

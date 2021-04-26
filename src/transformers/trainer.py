@@ -443,14 +443,6 @@ class Trainer:
         # very last
         self._memory_tracker.stop_and_update_metrics()
 
-    # def __del__(self):
-    #     # in order to get various deepspeed components into the transformers framework w/o creating
-    #     # too many changes to the API, we use a few global variables, which aren't a problem as long
-    #     # as there is one Trainer per program execution. But if multiple Trainers are used we have
-    #     # to take care to reset these globals when Trainer is destroyed
-    #     if self.deepspeed:
-    #         transformers.integrations._deepspeed_config = None
-
     def add_callback(self, callback):
         """
         Add a callback to the current list of :class:`~transformer.TrainerCallback`.

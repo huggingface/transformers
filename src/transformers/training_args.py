@@ -620,12 +620,8 @@ class TrainingArguments:
             # - must be run before the model is created.
             from transformers.integrations import DeepSpeedConfigHF
 
-            # will be used later by trainer
+            # will be used later by the Trainer (leave self.deepspeed unmodified in case a user relies on it not to be modified)
             self.deepspeed_config_hf = DeepSpeedConfigHF(self)
-        # else:
-        #     # reset the previous global state if any - mainly for tests inside the same process -
-        #     import transformers.integrations
-        #     transformers.integrations.deepspeed_config_reset()
 
     def __repr__(self):
         # We override the default repr to remove deprecated arguments from the repr. This method should be removed once
