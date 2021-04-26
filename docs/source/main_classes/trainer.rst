@@ -1318,7 +1318,7 @@ values look like, but we highly recommend using the one with multiple ``auto`` s
                 "pin_memory": true
             },
             "offload_param": {
-                "device": "cpu"
+                "device": "cpu",
                 "pin_memory": true
             },
             "overlap_comm": true,
@@ -1497,7 +1497,7 @@ For example, for ``WarmupDecayLR``, you can use the following entry:
                  "total_num_steps": "auto",
                  "warmup_min_lr": "auto",
                  "warmup_max_lr": "auto",
-                 "warmup_num_steps": "auto"
+                 "warmup_num_steps": "auto",
                  "last_batch_iteration": -1,
              }
          }
@@ -1745,7 +1745,7 @@ As you can see this gives you a randomly initialized model.
 If you want to use a pretrained model, ``model_class.from_pretrained`` will activate this feature as long as
 ``is_deepspeed_zero3_enabled()`` returns ``True``, which currently is setup by the
 class:`~transformers.TrainingArguments` object if the passed DeepSpeed configuration file contains ZeRO-3 config
-section. Thus you must create the class:`~transformers.TrainingArguments` object **before** calling
+section. Thus you must create the :class:`~transformers.TrainingArguments` object **before** calling
 ``from_pretrained``. Here is an example of a possible sequence:
 
 .. code-block:: python
