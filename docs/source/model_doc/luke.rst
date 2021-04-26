@@ -84,7 +84,7 @@ Example:
     >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base")
 
     # Example 1: Computing the contextualized entity representation corresponding to the entity mention "Beyoncé"
-    >>> text = "Beyoncé lives in New York."
+    >>> text = "Beyoncé lives in Los Angeles."
     >>> entity_spans = [(0, 7)]  # character-based entity span corresponding to "Beyoncé"
     >>> inputs = tokenizer(text, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
     >>> outputs = model(**inputs)
@@ -92,8 +92,8 @@ Example:
     >>> entity_last_hidden_state = outputs.entity_last_hidden_state
 
     # Example 2: Inputting Wikipedia entities to obtain enriched contextualized representations
-    >>> entities = ["Beyoncé", "New York City"]  # Wikipedia entity titles corresponding to the entity mentions "Beyoncé" and "New York"
-    >>> entity_spans = [(0, 7), (17, 25)]  # character-based entity spans corresponding to "Beyoncé" and "New York"
+    >>> entities = ["Beyoncé", "Los Angeles"]  # Wikipedia entity titles corresponding to the entity mentions "Beyoncé" and "Los Angeles"
+    >>> entity_spans = [(0, 7), (17, 28)]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
     >>> inputs = tokenizer(text, entities=entities, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
     >>> outputs = model(**inputs)
     >>> word_last_hidden_state = outputs.last_hidden_state
@@ -103,10 +103,12 @@ Example:
     >>> model = LukeForEntityPairClassification.from_pretrained("studio-ousia/luke-large-finetuned-tacred")
     # Instantiate LukeTokenizer with specifying task="entity_pair_classification" to create input for LukeForEntityPairClassification
     >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-tacred", task="entity_pair_classification")
-    >>> entity_spans = [(0, 7), (17, 25)]  # character-based entity spans corresponding to "Beyoncé" and "New York"
+    >>> entity_spans = [(0, 7), (17, 28)]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
     >>> inputs = tokenizer(text, entity_spans=entity_spans, return_tensors="pt")
     >>> outputs = model(**inputs)
     >>> logits = outputs.logits
+    >>> predicted_class_idx = int(logits[0].argmax())
+    >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
 
 This model was contributed by `ikuyamada <https://huggingface.co/ikuyamada>`__ and `nielsr <https://huggingface.co/nielsr>`__.
 The original code can be found `here <https://github.com/studio-ousia/luke>`__.

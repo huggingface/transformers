@@ -292,16 +292,16 @@ class LukeTokenizer(RobertaTokenizer):
                 length of each sequence must be equal to the length of each sequence of ``entities_pair``.
             entities (:obj:`List[str]`, :obj:`List[List[str]]`, `optional`):
                 The sequence or batch of sequences of entities to be encoded. Each sequence consists of strings
-                representing entities, i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., New
-                York). This argument is ignored if you specify the ``task`` argument in the constructor. The length of
-                each sequence must be equal to the length of each sequence of ``entity_spans``. If you specify
+                representing entities, i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., Los
+                Angeles). This argument is ignored if you specify the ``task`` argument in the constructor. The length
+                of each sequence must be equal to the length of each sequence of ``entity_spans``. If you specify
                 ``entity_spans`` without specifying this argument, the entity sequence or the batch of entity sequences
                 is automatically constructed by filling it with the [MASK] entity.
             entities_pair (:obj:`List[str]`, :obj:`List[List[str]]`, `optional`):
                 The sequence or batch of sequences of entities to be encoded. Each sequence consists of strings
-                representing entities, i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., New
-                York). This argument is ignored if you specify the ``task`` argument in the constructor. The length of
-                each sequence must be equal to the length of each sequence of ``entity_spans_pair``. If you specify
+                representing entities, i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., Los
+                Angeles). This argument is ignored if you specify the ``task`` argument in the constructor. The length
+                of each sequence must be equal to the length of each sequence of ``entity_spans_pair``. If you specify
                 ``entity_spans_pair`` without specifying this argument, the entity sequence or the batch of entity
                 sequences is automatically constructed by filling it with the [MASK] entity.
             max_entity_length (:obj:`int`, `optional`):
@@ -439,14 +439,14 @@ class LukeTokenizer(RobertaTokenizer):
                 the sequence must be equal to the length of ``entities_pair``.
             entities (:obj:`List[str]` `optional`)::
                 The first sequence of entities to be encoded. The sequence consists of strings representing entities,
-                i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., New York). This argument is
-                ignored if you specify the ``task`` argument in the constructor. The length of the sequence must be
+                i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., Los Angeles). This argument
+                is ignored if you specify the ``task`` argument in the constructor. The length of the sequence must be
                 equal to the length of ``entity_spans``. If you specify ``entity_spans`` without specifying this
                 argument, the entity sequence is automatically constructed by filling it with the [MASK] entity.
             entities_pair (:obj:`List[str]`, :obj:`List[List[str]]`, `optional`)::
                 The second sequence of entities to be encoded. The sequence consists of strings representing entities,
-                i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., New York). This argument is
-                ignored if you specify the ``task`` argument in the constructor. The length of the sequence must be
+                i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., Los Angeles). This argument
+                is ignored if you specify the ``task`` argument in the constructor. The length of the sequence must be
                 equal to the length of ``entity_spans_pair``. If you specify ``entity_spans_pair`` without specifying
                 this argument, the entity sequence is automatically constructed by filling it with the [MASK] entity.
             max_entity_length (:obj:`int`, `optional`):
