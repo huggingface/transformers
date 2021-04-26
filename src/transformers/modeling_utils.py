@@ -1125,8 +1125,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # this immediately partitions the model across all gpus, to avoid the overhead in time
             # and memory copying it on CPU or each GPU first
 
-            # XXX: param_dict will be shortly replaced by deepspeed_config
-            with deepspeed.zero.Init(param_dict=deepspeed_config()):
+            # XXX: param_dict will be added in deepspeed==0.3.16 and probably replaced by deepspeed_config
+            # with deepspeed.zero.Init(param_dict=deepspeed_config()):
+            with deepspeed.zero.Init():
                 model = cls(config, *model_args, **model_kwargs)
         else:
             model = cls(config, *model_args, **model_kwargs)
