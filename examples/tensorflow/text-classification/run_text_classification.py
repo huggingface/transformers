@@ -64,7 +64,7 @@ class DataSequence(tf.keras.utils.Sequence):
         data_lengths = {len(array) for array in self.data.values()}
         assert len(data_lengths) == 1, "Dataset arrays differ in length!"
         self.data_length = data_lengths.pop()
-        self.num_batches = ceil(self.data_length / batch_size)
+        self.num_batches = self.data_length // batch_size
         if labels:
             self.labels = np.array(dataset["label"])
             assert len(self.labels) == self.data_length, "Labels not the same length as input arrays!"
@@ -119,6 +119,24 @@ class SavePretrainedCallback(tf.keras.callbacks.Callback):
         self.model.save_pretrained(self.output_dir)
 
 
+def convert_dataset_for_tensorflow(dataset, non_label_column_names, batch_size, labels, return_sequence):
+    """Converts a Hugging Face dataset to a Tensorflow Dataset or Sequence object. We usually only want a Dataset when
+     we're training on TPU, as we get the nice feature of variable-length batches when we put the data in a Sequence
+     object instead.
+"""
+    if return_sequence:
+        return DataSequence(dataset, non_label_column_names, batch_size, labels)
+
+    feature_keys = set(dataset.features.keys()) - set(non_label_column_names + ['label'])
+    data = {key: tf.ragged.constant(dataset[key]).to_tensor() for key in feature_keys}
+    if labels:
+        labels = tf.convert_to_tensor(np.array(dataset['label']))
+        dataset = tf.data.Dataset.from_tensor_slices((data, labels))
+    else:
+        dataset = tf.data.Dataset.from_tensor_slices(data)
+    dataset = dataset.shuffle(buffer_size=len(dataset)).batch(batch_size=batch_size, drop_remainder=True)
+    return dataset
+
 # endregion
 
 # region Command-line arguments
@@ -155,6 +173,7 @@ class DataTrainingArguments:
         metadata={
             "help": "Whether to pad all samples to `max_seq_length`. "
             "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+            "Data will always be padded when using TPUs."
         },
     )
     max_train_samples: Optional[int] = field(
@@ -409,6 +428,9 @@ def main():
         # Padding strategy
         if data_args.pad_to_max_length:
             padding = "max_length"
+        elif isinstance(training_args.strategy, tf.distribute.TPUStrategy):
+            logger.warning("Forcing --pad_to_max_length because we're running on TPU!")
+            padding = "max_length"
         else:
             # We will pad later, dynamically at batch creation, to the max sequence length in each batch
             padding = False
@@ -464,68 +486,65 @@ def main():
             return result
 
         datasets = datasets.map(preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache)
+        # endregion
 
-        if "train" in datasets:
-            train_dataset = datasets["train"]
-            if data_args.max_train_samples is not None:
-                train_dataset = train_dataset.select(range(data_args.max_train_samples))
-            # Log a few random samples from the training set so we can see that it's working as expected:
-            for index in random.sample(range(len(train_dataset)), 3):
-                logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
+        # region Convert data to TF format
 
-        if "validation" in datasets:
-            eval_dataset = datasets["validation"]
-            if data_args.max_val_samples is not None:
-                eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
-
-        if "test" in datasets:
-            test_dataset = datasets["test"]
-            if data_args.max_test_samples is not None:
-                test_dataset = test_dataset.select(range(data_args.max_test_samples))
+        # Convert data to a tf.keras.utils.Sequence object for training if we're not using a TPU
+        # For TPU, convert to a tf.data.Dataset
+        tf_data = dict()
+        max_samples = {'train': data_args.max_train_samples,
+                       'validation': data_args.max_val_samples,
+                       'test': data_args.max_test_samples}
+        for key in ("train", "validation", "test"):
+            if key not in datasets:
+                tf_data[key] = None
+                continue
+            return_sequence = not isinstance(training_args.strategy, tf.distribute.TPUStrategy)
+            if key in ('train', 'validation'):
+                use_labels = True
+            else:
+                use_labels = False
+            if key == 'train':
+                batch_size = training_args.per_device_train_batch_size
+            else:
+                batch_size = training_args.per_device_eval_batch_size
+            samples_limit = max_samples[key]
+            dataset = datasets['key']
+            if samples_limit is not None:
+                dataset = dataset.select(range(samples_limit))
+            data = convert_dataset_for_tensorflow(dataset, non_label_column_names,
+                                                  batch_size=batch_size,
+                                                  labels=use_labels, return_sequence=return_sequence)
+            tf_data[key] = data
 
         # endregion
 
-        # region Training
-        if "train" in datasets:
-            training_dataset = DataSequence(
-                train_dataset, non_label_column_names, batch_size=training_args.per_device_train_batch_size, labels=True
-            )
-            if "validation" in datasets:
-                eval_dataset = DataSequence(
-                    eval_dataset, non_label_column_names, batch_size=training_args.per_device_eval_batch_size, labels=True
-                )
-            else:
-                eval_dataset = None
-
+        # region Training and validation
+        if tf_data['train'] is not None:
             callbacks = [SavePretrainedCallback(output_dir=training_args.output_dir)]
             model.fit(
-                training_dataset,
-                validation_data=eval_dataset,
+                tf_data['train'],
+                validation_data=tf_data['validation'],
                 epochs=int(training_args.num_train_epochs),
-                callbacks=callbacks,
+                callbacks=callbacks
             )
-        elif "validation" in datasets:
+        elif tf_data['validation'] is not None:
             # If there's a validation dataset but no training set, just evaluate the metrics
-            eval_dataset = DataSequence(
-                eval_dataset, non_label_column_names, batch_size=training_args.per_device_eval_batch_size, labels=True
-            )
             logger.info("Computing metrics on validation data...")
             if is_regression:
-                loss = model.evaluate(eval_dataset)
+                loss = model.evaluate(tf_data['validation'])
                 logger.info(f"Loss: {loss:.5f}")
             else:
-                loss, accuracy = model.evaluate(eval_dataset)
+                loss, accuracy = model.evaluate(tf_data['validation'])
                 logger.info(f"Loss: {loss:.5f}, Accuracy: {accuracy * 100:.4f}%")
         # endregion
 
         # region Prediction
-        if "test" in datasets:
+        if tf_data['test'] in datasets:
             logger.info("Doing predictions on test dataset...")
 
-            test_dataset = DataSequence(
-                test_dataset, non_label_column_names, batch_size=training_args.per_device_eval_batch_size, labels=False
-            )
-            predictions = model.predict(test_dataset)["logits"]
+            predictions = model.predict(tf_data['test'])["logits"]
             predictions = np.squeeze(predictions) if is_regression else np.argmax(predictions, axis=1)
             output_test_file = os.path.join(training_args.output_dir, "test_results.txt")
             with open(output_test_file, "w") as writer:

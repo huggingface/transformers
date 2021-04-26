@@ -213,8 +213,9 @@ class TFTrainingArguments(TrainingArguments):
                     tpu = tf.distribute.cluster_resolver.TPUClusterResolver()
             except ValueError:
                 if self.tpu_name:
-                    logger.info(f"Couldn't connect to TPU {self.tpu_name}!")
-                tpu = None
+                    raise RuntimeError(f"Couldn't connect to TPU {self.tpu_name}!")
+                else:
+                    tpu = None
 
             if tpu:
                 # Set to bfloat16 in case of TPU
