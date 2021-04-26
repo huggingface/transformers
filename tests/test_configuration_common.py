@@ -99,12 +99,12 @@ class ConfigPushToHubTester(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         try:
-            cls._api.delete_repo(token=cls._token, name="test-model")
+            cls._api.delete_repo(token=cls._token, name="test-config")
         except HTTPError:
             pass
 
         try:
-            cls._api.delete_repo(token=cls._token, name="test-model-org", organization="valid_org")
+            cls._api.delete_repo(token=cls._token, name="test-config-org", organization="valid_org")
         except HTTPError:
             pass
 
@@ -113,9 +113,9 @@ class ConfigPushToHubTester(unittest.TestCase):
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
         with tempfile.TemporaryDirectory() as tmp_dir:
-            config.save_pretrained(tmp_dir, push_to_hub=True, repo_name="test-model", use_auth_token=self._token)
+            config.save_pretrained(tmp_dir, push_to_hub=True, repo_name="test-config", use_auth_token=self._token)
 
-            new_config = BertConfig.from_pretrained(f"{USER}/test-model")
+            new_config = BertConfig.from_pretrained(f"{USER}/test-config")
             for k, v in config.__dict__.items():
                 if k != "transformers_version":
                     self.assertEqual(v, getattr(new_config, k))
@@ -129,12 +129,12 @@ class ConfigPushToHubTester(unittest.TestCase):
             config.save_pretrained(
                 tmp_dir,
                 push_to_hub=True,
-                repo_name="test-model-org",
+                repo_name="test-config-org",
                 use_auth_token=self._token,
                 organization="valid_org",
             )
 
-            new_config = BertConfig.from_pretrained("valid_org/test-model-org")
+            new_config = BertConfig.from_pretrained("valid_org/test-config-org")
             for k, v in config.__dict__.items():
                 if k != "transformers_version":
                     self.assertEqual(v, getattr(new_config, k))
