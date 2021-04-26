@@ -70,7 +70,7 @@ def bytes_to_unicode():
 
     The reversible bpe codes work on unicode strings. This means you need a large # of unicode characters in your vocab
     if you want to avoid UNKs. When you're at something like a 10B token dataset you end up needing around 5K for
-    decent coverage. This is a signficant percentage of your normal, say, 32K bpe vocab. To avoid that, we want lookup
+    decent coverage. This is a significant percentage of your normal, say, 32K bpe vocab. To avoid that, we want lookup
     tables between utf-8 bytes and unicode strings.
     """
     bs = (
@@ -189,7 +189,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         self.cache = {}
         self.add_prefix_space = add_prefix_space
 
-        # Should haved added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
+        # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
     @property
@@ -247,7 +247,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         for token in re.findall(self.pat, text):
             token = "".join(
                 self.byte_encoder[b] for b in token.encode("utf-8")
-            )  # Maps all our bytes to unicode strings, avoiding controle tokens of the BPE (spaces in our case)
+            )  # Maps all our bytes to unicode strings, avoiding control tokens of the BPE (spaces in our case)
             bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(" "))
         return bpe_tokens
 

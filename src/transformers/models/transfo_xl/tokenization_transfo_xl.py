@@ -292,7 +292,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         elif "<unk>" in self.sym2idx:
             self.unk_idx = self.sym2idx["<unk>"]
         else:
-            raise ValueError("No <unkown> token in vocabulary")
+            raise ValueError("No <unknown> token in vocabulary")
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if os.path.isdir(save_directory):

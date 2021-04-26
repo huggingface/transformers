@@ -140,7 +140,7 @@ def get_verbosity() -> int:
 
 def set_verbosity(verbosity: int) -> None:
     """
-    Set the vebosity level for the 🤗 Transformers's root logger.
+    Set the verbosity level for the 🤗 Transformers's root logger.
 
     Args:
         verbosity (:obj:`int`):

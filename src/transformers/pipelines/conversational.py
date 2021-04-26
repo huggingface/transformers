@@ -128,7 +128,7 @@ class Conversation:
         """
         Iterates over all blobs of the conversation.
 
-        Retuns: Iterator of (is_user, text_chunk) in chronological order of the conversation. ``is_user`` is a
+        Returns: Iterator of (is_user, text_chunk) in chronological order of the conversation. ``is_user`` is a
         :obj:`bool`, ``text_chunks`` is a :obj:`str`.
         """
         for user_input, generated_response in zip(self.past_user_inputs, self.generated_responses):

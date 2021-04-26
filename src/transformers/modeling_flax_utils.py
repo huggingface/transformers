@@ -94,7 +94,7 @@ class FlaxPreTrainedModel(PushToHubMixin):
         self.key = PRNGKey(seed)
         self.dtype = dtype
 
-        # randomely initialized parameters
+        # randomly initialized parameters
         random_params = self.init_weights(self.key, input_shape)
 
         # save required_params as set

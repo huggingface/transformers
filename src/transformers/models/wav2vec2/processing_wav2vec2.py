@@ -111,7 +111,7 @@ class Wav2Vec2Processor:
         When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
         :meth:`~transformers.Wav2Vec2FeatureExtractor.__call__` and returns its output. If used in the context
         :meth:`~transformers.Wav2Vec2Processor.as_target_processor` this method forwards all its arguments to
-        Wav2Vec2CTCTokenizer's :meth:`~transformers.Wav2Vec2CTCTokenizer.__call__`. Please refer to the doctsring of
+        Wav2Vec2CTCTokenizer's :meth:`~transformers.Wav2Vec2CTCTokenizer.__call__`. Please refer to the docstring of
         the above two methods for more information.
         """
         return self.current_processor(*args, **kwargs)

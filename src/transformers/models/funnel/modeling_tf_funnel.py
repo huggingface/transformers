@@ -169,7 +169,7 @@ class TFFunnelAttentionStructure:
         For the factorized attention, it returns the matrices (phi, pi, psi, omega) used in the paper, appendix A.2.2,
         final formula.
 
-        For the relative shif attention, it returns all possible vectors R used in the paper, appendix A.2.1, final
+        For the relative shift attention, it returns all possible vectors R used in the paper, appendix A.2.1, final
         formula.
 
         Paper link: https://arxiv.org/abs/2006.03236
@@ -1009,7 +1009,7 @@ class TFFunnelForPreTrainingOutput(ModelOutput):
     Args:
         logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
             Prediction scores of the head (scores for each token before SoftMax).
-        hidden_states (:obj:`tuple(tf.ensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape :obj:`(batch_size, sequence_length, hidden_size)`.
 

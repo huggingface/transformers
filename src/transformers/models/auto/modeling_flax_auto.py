@@ -103,7 +103,7 @@ FlaxAutoModelForMaskedLM = auto_class_factory(
 )
 
 FlaxAutoModelForSequenceClassification = auto_class_factory(
-    "AFlaxutoModelForSequenceClassification",
+    "FlaxAutoModelForSequenceClassification",
     FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
     head_doc="sequence classification",
 )
