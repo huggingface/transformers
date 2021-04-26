@@ -127,7 +127,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         super().__init__(
             bos_token=bos_token,
@@ -138,10 +138,10 @@ class CamembertTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             mask_token=mask_token,
             additional_special_tokens=additional_special_tokens,
-            sp_model_kwargs=sp_model_kwargs,
+            sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-        self.sp_model = spm.SentencePieceProcessor(**sp_model_kwargs)
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(str(vocab_file))
         self.vocab_file = vocab_file
         # HACK: These tokens were added by fairseq but don't seem to be actually used when duplicated in the actual
@@ -261,7 +261,12 @@ class CamembertTokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d):
         self.__dict__ = d
-        self.sp_model = spm.SentencePieceProcessor()
+
+        # for backward compatibility
+        if not hasattr(self, "sp_model_kwargs"):
+            self.sp_model_kwargs = {}
+
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
     def convert_tokens_to_string(self, tokens):
