@@ -152,7 +152,7 @@ class FlaxModelTesterMixin:
                 fx_outputs = fx_model(**prepared_inputs_dict)
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 5e-3)
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-3)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     fx_model.save_pretrained(tmpdirname)

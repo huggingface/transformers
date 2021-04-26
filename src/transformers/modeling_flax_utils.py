@@ -16,9 +16,7 @@
 import os
 from functools import partial
 from pickle import UnpicklingError
-from typing import Callable, Dict, Set, Tuple, Union
-
-import numpy as np
+from typing import Dict, Set, Tuple, Union
 
 import flax.linen as nn
 import jax
@@ -26,7 +24,6 @@ import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, unfreeze
 from flax.serialization import from_bytes, to_bytes
 from flax.traverse_util import flatten_dict, unflatten_dict
-from jax import lax
 from jax.random import PRNGKey
 
 from .configuration_utils import PretrainedConfig
@@ -537,26 +534,6 @@ class SequenceSummary(nn.Module):
         output = self.last_dropout(output, deterministic=deterministic)
 
         return output
-
-
-class TiedDense(nn.Module):
-    embedding_size: int
-    dtype: jnp.dtype = jnp.float32
-    precision = None
-    bias_init: Callable[..., np.ndarray] = jax.nn.initializers.zeros
-
-    def setup(self):
-        bias = self.param("bias", self.bias_init, (self.embedding_size,))
-        self.bias = jnp.asarray(bias, dtype=self.dtype)
-
-    def __call__(self, x, kernel):
-        y = lax.dot_general(
-            x,
-            kernel,
-            (((x.ndim - 1,), (0,)), ((), ())),
-            precision=self.precision,
-        )
-        return y + self.bias
 
 
 def overwrite_call_docstring(model_class, docstring):

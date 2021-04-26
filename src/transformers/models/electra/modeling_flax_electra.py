@@ -13,7 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Tuple
+from typing import Callable, Tuple
+
+import numpy as np
 
 import flax.linen as nn
 import jax
@@ -24,7 +26,7 @@ from jax import lax
 from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, SequenceSummary, TiedDense, overwrite_call_docstring
+from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, overwrite_call_docstring
 from ...utils import logging
 from .configuration_electra import ElectraConfig
 
@@ -136,6 +138,7 @@ class FlaxElectraEmbeddings(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertSelfAttention with Bert->Electra
 class FlaxElectraSelfAttention(nn.Module):
     config: ElectraConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -207,6 +210,7 @@ class FlaxElectraSelfAttention(nn.Module):
         return attn_output.reshape(attn_output.shape[:2] + (-1,))
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertSelfOutput with Bert->Electra
 class FlaxElectraSelfOutput(nn.Module):
     config: ElectraConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -227,6 +231,7 @@ class FlaxElectraSelfOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertAttention with Bert->Electra
 class FlaxElectraAttention(nn.Module):
     config: ElectraConfig
     dtype: jnp.dtype = jnp.float32
@@ -244,6 +249,7 @@ class FlaxElectraAttention(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertIntermediate with Bert->Electra
 class FlaxElectraIntermediate(nn.Module):
     config: ElectraConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -262,6 +268,7 @@ class FlaxElectraIntermediate(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertOutput with Bert->Electra
 class FlaxElectraOutput(nn.Module):
     config: ElectraConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -282,6 +289,7 @@ class FlaxElectraOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayer with Bert->Electra
 class FlaxElectraLayer(nn.Module):
     config: ElectraConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -298,6 +306,7 @@ class FlaxElectraLayer(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayerCollection with Bert->Electra
 class FlaxElectraLayerCollection(nn.Module):
     config: ElectraConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -313,6 +322,7 @@ class FlaxElectraLayerCollection(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEncoder with Bert->Electra
 class FlaxElectraEncoder(nn.Module):
     config: ElectraConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -455,6 +465,26 @@ class FlaxElectraModel(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraModule
 
 
+class FlaxElectraTiedDense(nn.Module):
+    embedding_size: int
+    dtype: jnp.dtype = jnp.float32
+    precision = None
+    bias_init: Callable[..., np.ndarray] = jax.nn.initializers.zeros
+
+    def setup(self):
+        bias = self.param("bias", self.bias_init, (self.embedding_size,))
+        self.bias = jnp.asarray(bias, dtype=self.dtype)
+
+    def __call__(self, x, kernel):
+        y = lax.dot_general(
+            x,
+            kernel,
+            (((x.ndim - 1,), (0,)), ((), ())),
+            precision=self.precision,
+        )
+        return y + self.bias
+
+
 class FlaxElectraForMaskedLMModule(nn.Module):
     config: ElectraConfig
     dtype: jnp.dtype = jnp.float32
@@ -463,7 +493,7 @@ class FlaxElectraForMaskedLMModule(nn.Module):
         self.electra = FlaxElectraModule(config=self.config, dtype=self.dtype)
         self.generator_predictions = FlaxElectraGeneratorPredictions(config=self.config)
         if self.config.tie_word_embeddings:
-            self.generator_lm_head = TiedDense(self.config.vocab_size, dtype=self.dtype)
+            self.generator_lm_head = FlaxElectraTiedDense(self.config.vocab_size, dtype=self.dtype)
         else:
             self.generator_lm_head = nn.Dense(self.config.vocab_size, dtype=self.dtype)
 
@@ -555,13 +585,86 @@ class FlaxElectraForTokenClassification(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraForTokenClassificationModule
 
 
+def identity(x, **kwargs):
+    return x
+
+
+class FlaxElectraSequenceSummary(nn.Module):
+    r"""
+    Compute a single vector summary of a sequence hidden states.
+
+    Args:
+        config (:class:`~transformers.PretrainedConfig`):
+            The config used by the model. Relevant arguments in the config class of the model are (refer to the actual
+            config class of your model for the default values it uses):
+
+            - **summary_use_proj** (:obj:`bool`) -- Add a projection after the vector extraction.
+            - **summary_proj_to_labels** (:obj:`bool`) -- If :obj:`True`, the projection outputs to
+              :obj:`config.num_labels` classes (otherwise to :obj:`config.hidden_size`).
+            - **summary_activation** (:obj:`Optional[str]`) -- Set to :obj:`"tanh"` to add a tanh activation to the
+              output, another string or :obj:`None` will add no activation.
+            - **summary_first_dropout** (:obj:`float`) -- Optional dropout probability before the projection and
+              activation.
+            - **summary_last_dropout** (:obj:`float`)-- Optional dropout probability after the projection and
+              activation.
+    """
+    config: ElectraConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.summary = identity
+        if hasattr(self.config, "summary_use_proj") and self.config.summary_use_proj:
+            if (
+                hasattr(self.config, "summary_proj_to_labels")
+                and self.config.summary_proj_to_labels
+                and self.config.num_labels > 0
+            ):
+                num_classes = self.config.num_labels
+            else:
+                num_classes = self.config.hidden_size
+            self.summary = nn.Dense(num_classes, dtype=self.dtype)
+
+        activation_string = getattr(self.config, "summary_activation", None)
+        self.activation = ACT2FN[activation_string] if activation_string else lambda x: x
+
+        self.first_dropout = identity
+        if hasattr(self.config, "summary_first_dropout") and self.config.summary_first_dropout > 0:
+            self.first_dropout = nn.Dropout(self.config.summary_first_dropout)
+
+        self.last_dropout = identity
+        if hasattr(self.config, "summary_last_dropout") and self.config.summary_last_dropout > 0:
+            self.last_dropout = nn.Dropout(self.config.summary_last_dropout)
+
+    def __call__(self, hidden_states, cls_index=None, deterministic: bool = True):
+        """
+        Compute a single vector summary of a sequence hidden states.
+
+        Args:
+            hidden_states (:obj:`jnp.array` of shape :obj:`[batch_size, seq_len, hidden_size]`):
+                The hidden states of the last layer.
+            cls_index (:obj:`jnp.array` of shape :obj:`[batch_size]` or :obj:`[batch_size, ...]` where ... are optional leading dimensions of :obj:`hidden_states`, `optional`):
+                Used if :obj:`summary_type == "cls_index"` and takes the last token of the sequence as classification
+                token.
+
+        Returns:
+            :obj:`jnp.array`: The summary of the sequence hidden states.
+        """
+        # NOTE: this doest "first" type summary always
+        output = hidden_states[:, 0]
+        output = self.first_dropout(output, deterministic=deterministic)
+        output = self.summary(output)
+        output = self.activation(output)
+        output = self.last_dropout(output, deterministic=deterministic)
+        return output
+
+
 class FlaxElectraForMultipleChoiceModule(nn.Module):
     config: ElectraConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
         self.electra = FlaxElectraModule(config=self.config, dtype=self.dtype)
-        self.sequence_summary = SequenceSummary(config=self.config, dtype=self.dtype)
+        self.sequence_summary = FlaxElectraSequenceSummary(config=self.config, dtype=self.dtype)
         self.classifier = nn.Dense(1, dtype=self.dtype)
 
     def __call__(
@@ -652,7 +755,7 @@ class FlaxElectraClassificationHead(nn.Module):
         x = hidden_states[:, 0, :]  # take <s> token (equiv. to [CLS])
         x = self.dropout(x, deterministic=deterministic)
         x = self.dense(x)
-        x = ACT2FN["gelu"](x)  # although BERT uses tanh here, it seems Electra authors used gelu here
+        x = ACT2FN["gelu"](x)  # although BERT uses tanh here, it seems Electra authors used gelu
         x = self.dropout(x, deterministic=deterministic)
         x = self.out_proj(x)
         return x
