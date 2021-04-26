@@ -70,9 +70,6 @@ class TrainingArguments:
     <https://docs.python.org/3/library/argparse.html#module-argparse>`__ arguments that can be specified on the command
     line.
 
-
-
-
     Parameters:
         output_dir (:obj:`str`):
             The output directory where the model predictions and checkpoints will be written.
@@ -624,6 +621,14 @@ class TrainingArguments:
             raise ValueError("`--sharded_ddp simple` is not compatible with any other option.")
         elif ShardedDDPOption.ZERO_DP_2 in self.sharded_ddp and ShardedDDPOption.ZERO_DP_3 in self.sharded_ddp:
             raise ValueError("`--sharded_ddp zero_dp_2` is not compatible with `--sharded_ddp zero_dp_3`.")
+
+        if self.deepspeed:
+            # - must be run very last in arg parsing, since it will use a lot of these settings.
+            # - must be run before the model is created.
+            from transformers.integrations import DeepSpeedConfigHF
+
+            # will be used later by the Trainer (leave self.deepspeed unmodified in case a user relies on it not to be modified)
+            self.deepspeed_config_hf = DeepSpeedConfigHF(self)
 
     def __repr__(self):
         # We override the default repr to remove deprecated arguments from the repr. This method should be removed once
