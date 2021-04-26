@@ -261,11 +261,11 @@ class DetrModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         # TODO replace by facebook/detr-resnet-50
-        return DetrFeatureExtractor() if is_vision_available() else None
+        return DetrFeatureExtractor.from_pretrained("nielsr/detr-resnet-50") if is_vision_available() else None
 
     def test_inference_no_head(self):
         # TODO replace by facebook/detr-resnet-50
-        model = DetrModel.from_pretrained("nielsr/detr-resnet-50-new").to(torch_device)
+        model = DetrModel.from_pretrained("nielsr/detr-resnet-50").to(torch_device)
         model.eval()
 
         feature_extractor = self.default_feature_extractor
@@ -284,7 +284,7 @@ class DetrModelIntegrationTests(unittest.TestCase):
 
     def test_inference_object_detection_head(self):
         # TODO replace by facebook/detr-resnet-50
-        model = DetrForObjectDetection.from_pretrained("nielsr/detr-resnet-50-new").to(torch_device)
+        model = DetrForObjectDetection.from_pretrained("nielsr/detr-resnet-50").to(torch_device)
         model.eval()
 
         feature_extractor = self.default_feature_extractor

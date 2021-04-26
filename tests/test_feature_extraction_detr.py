@@ -281,8 +281,8 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         target = {"image_id": 39769, "annotations": target}
 
         # encode them
-        # TODO add .from_pretrained("facebook/detr-resnet-50")
-        feature_extractor = DetrFeatureExtractor()
+        # TODO replace by facebook/detr-resnet-50
+        feature_extractor = DetrFeatureExtractor.from_pretrained("nielsr/detr-resnet-50")
         encoding = feature_extractor(images=image, annotations=target, return_tensors="pt")
 
         # verify pixel values
