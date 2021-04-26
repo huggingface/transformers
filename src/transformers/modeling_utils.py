@@ -44,7 +44,7 @@ from .file_utils import (
     replace_return_docstrings,
 )
 from .generation_utils import GenerationMixin
-from .integrations import deepspeed_config, is_deepspeed_zero3_enabled
+from .integrations import is_deepspeed_zero3_enabled
 from .utils import logging
 
 
