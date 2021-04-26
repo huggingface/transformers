@@ -29,6 +29,7 @@ from . import (
     blenderbot,
     blenderbot_small,
     camembert,
+    clip,
     convbert,
     cpm,
     ctrl,
