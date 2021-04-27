@@ -510,7 +510,7 @@ def main():
             else:
                 batch_size = training_args.per_device_eval_batch_size
             samples_limit = max_samples[key]
-            dataset = datasets['key']
+            dataset = datasets[key]
             if samples_limit is not None:
                 dataset = dataset.select(range(samples_limit))
             data = convert_dataset_for_tensorflow(dataset, non_label_column_names,
