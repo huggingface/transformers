@@ -128,13 +128,13 @@ def convert_dataset_for_tensorflow(dataset, non_label_column_names, batch_size, 
         return DataSequence(dataset, non_label_column_names, batch_size, labels)
 
     feature_keys = set(dataset.features.keys()) - set(non_label_column_names + ['label'])
-    data = {key: tf.ragged.constant(dataset[key]).to_tensor() for key in feature_keys}
+    data = {key: tf.ragged.constant(dataset[key]) for key in feature_keys}
     if labels:
         labels = tf.convert_to_tensor(np.array(dataset['label']))
         dataset = tf.data.Dataset.from_tensor_slices((data, labels))
     else:
         dataset = tf.data.Dataset.from_tensor_slices(data)
-    dataset = dataset.shuffle(buffer_size=len(dataset)).batch(batch_size=batch_size, drop_remainder=True)
+    dataset = dataset.shuffle(buffer_size=len(dataset)).padded_batch(batch_size=batch_size, drop_remainder=True)
     return dataset
 
 # endregion
@@ -347,40 +347,120 @@ def main():
         is_regression = None
     # endregion
 
+    # region Load model config and tokenizer
+    if checkpoint is not None:
+        config_path = training_args.output_dir
+    elif model_args.config_name:
+        config_path = model_args.config_name
+    else:
+        config_path = model_args.model_name_or_path
+    if num_labels is not None:
+        config = AutoConfig.from_pretrained(
+            config_path,
+            num_labels=num_labels,
+            cache_dir=model_args.cache_dir,
+            revision=model_args.model_revision,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
+    else:
+        config = AutoConfig.from_pretrained(
+            config_path,
+            cache_dir=model_args.cache_dir,
+            revision=model_args.model_revision,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        revision=model_args.model_revision,
+        use_auth_token=True if model_args.use_auth_token else None,
+    )
+    # endregion
+
+    # region Dataset preprocessing
+    # Again, we try to have some nice defaults but don't hesitate to tweak to your use case.
+    column_names = {col for cols in datasets.column_names.values() for col in cols}
+    non_label_column_names = [name for name in column_names if name != "label"]
+    if "sentence1" in non_label_column_names and "sentence2" in non_label_column_names:
+        sentence1_key, sentence2_key = "sentence1", "sentence2"
+    elif "sentence1" in non_label_column_names:
+        sentence1_key, sentence2_key = "sentence1", None
+    else:
+        if len(non_label_column_names) >= 2:
+            sentence1_key, sentence2_key = non_label_column_names[:2]
+        else:
+            sentence1_key, sentence2_key = non_label_column_names[0], None
+
+    # Padding strategy
+    if data_args.pad_to_max_length:
+        padding = "max_length"
+    elif isinstance(training_args.strategy, tf.distribute.TPUStrategy):
+        logger.warning("Forcing --pad_to_max_length because we're running on TPU!")
+        padding = "max_length"
+    else:
+        # We will pad later, dynamically at batch creation, to the max sequence length in each batch
+        padding = False
+
+    if data_args.max_seq_length > tokenizer.model_max_length:
+        logger.warning(
+            f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
+            f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
+        )
+    max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
+
+    # Ensure that our labels match the model's, if it has some pre-specified
+    if "train" in datasets:
+        if not is_regression and config.label2id != PretrainedConfig(num_labels=num_labels).label2id:
+            label_name_to_id = config.label2id
+            if list(sorted(label_name_to_id.keys())) == list(sorted(label_list)):
+                label_to_id = label_name_to_id  # Use the model's labels
+            else:
+                logger.warning(
+                    "Your model seems to have been trained with labels, but they don't match the dataset: ",
+                    f"model labels: {list(sorted(label_name_to_id.keys()))}, dataset labels: {list(sorted(label_list))}."
+                    "\nIgnoring the model labels as a result.",
+                )
+                label_to_id = {v: i for i, v in enumerate(label_list)}
+        elif not is_regression:
+            label_to_id = {v: i for i, v in enumerate(label_list)}
+        else:
+            label_to_id = None
+        # Now we've established our label2id, let's overwrite the model config with it.
+        config.label2id = label_to_id
+        if config.label2id is not None:
+            config.id2label = {id: label for label, id in label_to_id.items()}
+        else:
+            config.id2label = None
+    else:
+        label_to_id = config.label2id  # Just load the data from the model
+
+    if "validation" in datasets and config.label2id is not None:
+        validation_label_list = datasets["validation"].unique("label")
+        for val_label in validation_label_list:
+            assert val_label in label_to_id, f"Label {val_label} is in the validation set but not the training set!"
+
+    def preprocess_function(examples):
+        # Tokenize the texts
+        args = (
+            (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
+        )
+        result = tokenizer(*args, padding=padding, max_length=max_seq_length, truncation=True)
+
+        # Map labels to IDs
+        if config.label2id is not None and "label" in examples:
+            result["label"] = [(config.label2id[l] if l != -1 else -1) for l in examples["label"]]
+        return result
+
+    datasets = datasets.map(preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache)
+    # endregion
+
     with training_args.strategy.scope():
-        # region Load pretrained model and tokenizer
+        # region Load pretrained model
         # Set seed before initializing model
         set_seed(training_args.seed)
         #
         # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
         # download model & vocab.
-        if checkpoint is not None:
-            config_path = training_args.output_dir
-        elif model_args.config_name:
-            config_path = model_args.config_name
-        else:
-            config_path = model_args.model_name_or_path
-        if num_labels is not None:
-            config = AutoConfig.from_pretrained(
-                config_path,
-                num_labels=num_labels,
-                cache_dir=model_args.cache_dir,
-                revision=model_args.model_revision,
-                use_auth_token=True if model_args.use_auth_token else None,
-            )
-        else:
-            config = AutoConfig.from_pretrained(
-                config_path,
-                cache_dir=model_args.cache_dir,
-                revision=model_args.model_revision,
-                use_auth_token=True if model_args.use_auth_token else None,
-            )
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
-            cache_dir=model_args.cache_dir,
-            revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
-        )
         if checkpoint is None:
             model_path = model_args.model_name_or_path
         else:
@@ -409,83 +489,6 @@ def main():
             loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
             metrics = ["accuracy"]
         model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
-        # endregion
-
-        # region Dataset preprocessing
-        # Again, we try to have some nice defaults but don't hesitate to tweak to your use case.
-        column_names = {col for cols in datasets.column_names.values() for col in cols}
-        non_label_column_names = [name for name in column_names if name != "label"]
-        if "sentence1" in non_label_column_names and "sentence2" in non_label_column_names:
-            sentence1_key, sentence2_key = "sentence1", "sentence2"
-        elif "sentence1" in non_label_column_names:
-            sentence1_key, sentence2_key = "sentence1", None
-        else:
-            if len(non_label_column_names) >= 2:
-                sentence1_key, sentence2_key = non_label_column_names[:2]
-            else:
-                sentence1_key, sentence2_key = non_label_column_names[0], None
-
-        # Padding strategy
-        if data_args.pad_to_max_length:
-            padding = "max_length"
-        elif isinstance(training_args.strategy, tf.distribute.TPUStrategy):
-            logger.warning("Forcing --pad_to_max_length because we're running on TPU!")
-            padding = "max_length"
-        else:
-            # We will pad later, dynamically at batch creation, to the max sequence length in each batch
-            padding = False
-
-        if data_args.max_seq_length > tokenizer.model_max_length:
-            logger.warning(
-                f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
-                f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
-            )
-        max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
-
-        # Ensure that our labels match the model's, if it has some pre-specified
-        if "train" in datasets:
-            if not is_regression and model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id:
-                label_name_to_id = model.config.label2id
-                if list(sorted(label_name_to_id.keys())) == list(sorted(label_list)):
-                    label_to_id = label_name_to_id  # Use the model's labels
-                else:
-                    logger.warning(
-                        "Your model seems to have been trained with labels, but they don't match the dataset: ",
-                        f"model labels: {list(sorted(label_name_to_id.keys()))}, dataset labels: {list(sorted(label_list))}."
-                        "\nIgnoring the model labels as a result.",
-                    )
-                    label_to_id = {v: i for i, v in enumerate(label_list)}
-            elif not is_regression:
-                label_to_id = {v: i for i, v in enumerate(label_list)}
-            else:
-                label_to_id = None
-            # Now we've established our label2id, let's overwrite the model config with it.
-            model.config.label2id = label_to_id
-            if model.config.label2id is not None:
-                model.config.id2label = {id: label for label, id in label_to_id.items()}
-            else:
-                model.config.id2label = None
-        else:
-            label_to_id = model.config.label2id  # Just load the data from the model
-
-        if "validation" in datasets and model.config.label2id is not None:
-            validation_label_list = datasets["validation"].unique("label")
-            for val_label in validation_label_list:
-                assert val_label in label_to_id, f"Label {val_label} is in the validation set but not the training set!"
-
-        def preprocess_function(examples):
-            # Tokenize the texts
-            args = (
-                (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
-            )
-            result = tokenizer(*args, padding=padding, max_length=max_seq_length, truncation=True)
-
-            # Map labels to IDs
-            if model.config.label2id is not None and "label" in examples:
-                result["label"] = [(model.config.label2id[l] if l != -1 else -1) for l in examples["label"]]
-            return result
-
-        datasets = datasets.map(preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache)
         # endregion
 
         # region Convert data to TF format
@@ -521,6 +524,7 @@ def main():
         # endregion
 
         # region Training and validation
+        breakpoint()
         if tf_data['train'] is not None:
             callbacks = [SavePretrainedCallback(output_dir=training_args.output_dir)]
             model.fit(
@@ -544,7 +548,9 @@ def main():
         if tf_data['test'] is not None:
             logger.info("Doing predictions on test dataset...")
 
-            predictions = model.predict(tf_data['test'])["logits"]
+            predictions = model.predict(tf_data['test'])
+            breakpoint()
+            ["logits"]
             predictions = np.squeeze(predictions) if is_regression else np.argmax(predictions, axis=1)
             output_test_file = os.path.join(training_args.output_dir, "test_results.txt")
             with open(output_test_file, "w") as writer:
@@ -553,7 +559,7 @@ def main():
                     if is_regression:
                         writer.write(f"{index}\t{item:3.3f}\n")
                     else:
-                        item = model.config.id2label[item]
+                        item = config.id2label[item]
                         writer.write(f"{index}\t{item}\n")
             logger.info(f"Wrote predictions to {output_test_file}!")
         # endregion
