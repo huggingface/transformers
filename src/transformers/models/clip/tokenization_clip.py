@@ -279,7 +279,7 @@ class ClipTokenizer(PreTrainedTokenizer):
         return word
 
     def _tokenize(self, text):
-        """ Tokenize a string. """
+        """Tokenize a string."""
         bpe_tokens = []
         if self.fix_text is None:
             text = self.nlp.tokenize(text)
@@ -294,7 +294,7 @@ class ClipTokenizer(PreTrainedTokenizer):
         return bpe_tokens
 
     def _convert_token_to_id(self, token):
-        """ Converts a token (str) in an id using the vocab. """
+        """Converts a token (str) in an id using the vocab."""
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
     def _convert_id_to_token(self, index):
@@ -302,7 +302,7 @@ class ClipTokenizer(PreTrainedTokenizer):
         return self.decoder.get(index)
 
     def convert_tokens_to_string(self, tokens):
-        """ Converts a sequence of tokens (string) in a single string. """
+        """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
         text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors).replace("</w>", " ")
         return text

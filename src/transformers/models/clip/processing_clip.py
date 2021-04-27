@@ -23,18 +23,15 @@ from .tokenization_clip import ClipTokenizer
 
 class ClipProcessor:
     r"""
-    Constructs a Clip processor which wraps a Clip feature extractor and a Clip tokenizer into a
-    single processor.
+    Constructs a Clip processor which wraps a Clip feature extractor and a Clip tokenizer into a single processor.
 
-    :class:`~transformers.ClipProcessor` offers all the functionalities of
-    :class:`~transformers.ClipFeatureExtractor` and :class:`~transformers.ClipTokenizer`. See the
-    :meth:`~transformers.ClipProcessor.__call__` and :meth:`~transformers.ClipProcessor.decode` for more
-    information.
+    :class:`~transformers.ClipProcessor` offers all the functionalities of :class:`~transformers.ClipFeatureExtractor`
+    and :class:`~transformers.ClipTokenizer`. See the :meth:`~transformers.ClipProcessor.__call__` and
+    :meth:`~transformers.ClipProcessor.decode` for more information.
 
     Args:
         feature_extractor (:obj:`ClipFeatureExtractor`):
-            An instance of :class:`~transformers.ClipFeatureExtractor`. The feature extractor is a required
-            input.
+            An instance of :class:`~transformers.ClipFeatureExtractor`. The feature extractor is a required input.
         tokenizer (:obj:`ClipTokenizer`):
             An instance of :class:`~transformers.ClipTokenizer`. The tokenizer is a required input.
     """
@@ -45,9 +42,7 @@ class ClipProcessor:
                 f"`feature_extractor` has to be of type {ClipFeatureExtractor.__class__}, but is {type(feature_extractor)}"
             )
         if not isinstance(tokenizer, ClipTokenizer):
-            raise ValueError(
-                f"`tokenizer` has to be of type {ClipTokenizer.__class__}, but is {type(tokenizer)}"
-            )
+            raise ValueError(f"`tokenizer` has to be of type {ClipTokenizer.__class__}, but is {type(tokenizer)}")
 
         self.feature_extractor = feature_extractor
         self.tokenizer = tokenizer
@@ -55,9 +50,8 @@ class ClipProcessor:
 
     def save_pretrained(self, save_directory):
         """
-        Save a Clip feature extractor object and Clip tokenizer object to the directory
-        ``save_directory``, so that it can be re-loaded using the
-        :func:`~transformers.ClipProcessor.from_pretrained` class method.
+        Save a Clip feature extractor object and Clip tokenizer object to the directory ``save_directory``, so that it
+        can be re-loaded using the :func:`~transformers.ClipProcessor.from_pretrained` class method.
 
         .. note::
 
@@ -112,8 +106,8 @@ class ClipProcessor:
         When used in normal mode, this method forwards all its arguments to ClipFeatureExtractor's
         :meth:`~transformers.ClipFeatureExtractor.__call__` and returns its output. If used in the context
         :meth:`~transformers.ClipProcessor.as_target_processor` this method forwards all its arguments to
-        ClipTokenizer's :meth:`~transformers.ClipTokenizer.__call__`. Please refer to the doctsring of
-        the above two methods for more information.
+        ClipTokenizer's :meth:`~transformers.ClipTokenizer.__call__`. Please refer to the doctsring of the above two
+        methods for more information.
         """
         return self.current_processor(*args, **kwargs)
 
@@ -127,17 +121,15 @@ class ClipProcessor:
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to ClipTokenizer's
-        :meth:`~transformers.PreTrainedTokenizer.decode`. Please refer to the docstring of this method for more
-        information.
+        This method forwards all its arguments to ClipTokenizer's :meth:`~transformers.PreTrainedTokenizer.decode`.
+        Please refer to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
 
     @contextmanager
     def as_target_processor(self):
         """
-        Temporarily sets the tokenizer for processing the input. Useful for encoding the labels when fine-tuning
-        Clip.
+        Temporarily sets the tokenizer for processing the input. Useful for encoding the labels when fine-tuning Clip.
         """
         self.current_processor = self.tokenizer
         yield
