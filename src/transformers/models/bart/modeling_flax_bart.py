@@ -450,6 +450,70 @@ class FlaxBartDecoderLayer(nn.Module):
         return outputs
 
 
+class FlaxBartPretrainedModel(FlaxPreTrainedModel):
+    config_class = BartConfig
+    base_model_prefix = "bart"
+    module_class: nn.Module = None
+
+    def __init__(
+        self,
+        config: BartConfig,
+        input_shape: Tuple[int] = (1, 1),
+        seed: int = 0,
+        dtype: jnp.dtype = jnp.float32,
+        **kwargs
+    ) -> None:
+        module = self.module_class(config=config, dtype=dtype, **kwargs)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+
+     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+        # init input tensors
+        input_ids = jnp.zeros(input_shape, dtype="i4")
+        attention_mask = jnp.ones_like(input_ids)
+        decoder_input_ids = jnp.zeros(input_shape, dtype="i4")
+        decoder_attention_mask = jnp.ones_like(input_ids)
+
+        params_rng, dropout_rng = jax.random.split(rng)
+        rngs = {"params": params_rng, "dropout": dropout_rng}
+
+        return self.module.init(rngs, input_ids, attention_mask, decoder_input_ids, decoder_attention_mask)["params"]
+
+    def __call__(
+        self,
+        input_ids: jnp.ndarray,
+        attention_mask: Optional[jnp.ndarray] = None,
+        decoder_input_ids: Optional[jnp.ndarray] = None,
+        decoder_attention_mask: Optional[jnp.ndarray] = None,
+        params: dict = None,
+        dropout_rng: PRNGKey = None,
+        train: bool = False,
+    ):
+        if attention_mask is None:
+            attention_mask = jnp.ones_like(input_ids)
+        if decoder_input_ids is None:
+            decoder_input_ids = shift_tokens_right(
+                input_ids,
+                self.config.pad_token_id,
+                decoder_start_token_id=self.config.decoder_start_token_id
+            )
+        if decoder_attention_mask is None:
+            decoder_attention_mask = attention_mask
+
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
+        return self.module.apply(
+            {"params": params or self.params},
+            jnp.array(input_ids, dtype="i4"),
+            jnp.array(attention_mask, dtype="i4"),
+            jnp.array(decoder_input_ids, dtype="i4"),
+            jnp.array(decoder_input_ids, dtype="i4"),
+            not train,
+            rngs=rngs,
+        )
+
 
 BART_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
