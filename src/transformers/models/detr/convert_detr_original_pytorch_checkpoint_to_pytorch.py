@@ -22,7 +22,7 @@ import torch
 from PIL import Image
 
 import requests
-from transformers import DetrConfig, DetrFeatureExtractor, DetrForObjectDetection, DetrModel
+from transformers import DetrConfig, DetrFeatureExtractor, DetrForObjectDetection, DetrForPanopticSegmentation
 from transformers.utils import logging
 from transformers.utils.coco_classes import id2label
 
@@ -86,7 +86,7 @@ for i in range(6):
     rename_keys.append((f"transformer.decoder.layers.{i}.norm3.weight", f"decoder.layers.{i}.final_layer_norm.weight"))
     rename_keys.append((f"transformer.decoder.layers.{i}.norm3.bias", f"decoder.layers.{i}.final_layer_norm.bias"))
 
-# convolutional projection + query embeddings + layernorm of decoder
+# convolutional projection + query embeddings + layernorm of decoder + class and bounding box heads
 rename_keys.extend(
     [
         ("input_proj.weight", "input_projection.weight"),
@@ -94,6 +94,14 @@ rename_keys.extend(
         ("query_embed.weight", "query_position_embeddings.weight"),
         ("transformer.decoder.norm.weight", "decoder.layernorm.weight"),
         ("transformer.decoder.norm.bias", "decoder.layernorm.bias"),
+        ("class_embed.weight", "class_labels_classifier.weight"),
+        ("class_embed.bias", "class_labels_classifier.bias"),
+        ("bbox_embed.layers.0.weight", "bbox_predictor.layers.0.weight"),
+        ("bbox_embed.layers.0.bias", "bbox_predictor.layers.0.bias"),
+        ("bbox_embed.layers.1.weight", "bbox_predictor.layers.1.weight"),
+        ("bbox_embed.layers.1.bias", "bbox_predictor.layers.1.bias"),
+        ("bbox_embed.layers.2.weight", "bbox_predictor.layers.2.weight"),
+        ("bbox_embed.layers.2.bias", "bbox_predictor.layers.2.bias"),
     ]
 )
 
@@ -103,12 +111,16 @@ def rename_key(state_dict, old, new):
     state_dict[new] = val
 
 
-def read_in_q_k_v(state_dict):
+def read_in_q_k_v(state_dict, is_panoptic=False):
+    prefix = ""
+    if is_panoptic:
+        prefix = "detr."
+    
     # first: transformer encoder
     for i in range(6):
         # read in weights + bias of input projection layer (in PyTorch's MultiHeadAttention, this is a single matrix + bias)
-        in_proj_weight = state_dict.pop(f"transformer.encoder.layers.{i}.self_attn.in_proj_weight")
-        in_proj_bias = state_dict.pop(f"transformer.encoder.layers.{i}.self_attn.in_proj_bias")
+        in_proj_weight = state_dict.pop(f"{prefix}transformer.encoder.layers.{i}.self_attn.in_proj_weight")
+        in_proj_bias = state_dict.pop(f"{prefix}transformer.encoder.layers.{i}.self_attn.in_proj_bias")
         # next, add query, keys and values (in that order) to the state dict
         state_dict[f"encoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[:256, :]
         state_dict[f"encoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[:256]
@@ -119,8 +131,8 @@ def read_in_q_k_v(state_dict):
     # next: transformer decoder (which is a bit more complex because it also includes cross-attention)
     for i in range(6):
         # read in weights + bias of input projection layer of self-attention
-        in_proj_weight = state_dict.pop(f"transformer.decoder.layers.{i}.self_attn.in_proj_weight")
-        in_proj_bias = state_dict.pop(f"transformer.decoder.layers.{i}.self_attn.in_proj_bias")
+        in_proj_weight = state_dict.pop(f"{prefix}transformer.decoder.layers.{i}.self_attn.in_proj_weight")
+        in_proj_bias = state_dict.pop(f"{prefix}transformer.decoder.layers.{i}.self_attn.in_proj_bias")
         # next, add query, keys and values (in that order) to the state dict
         state_dict[f"decoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[:256, :]
         state_dict[f"decoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[:256]
@@ -129,8 +141,8 @@ def read_in_q_k_v(state_dict):
         state_dict[f"decoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[-256:, :]
         state_dict[f"decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-256:]
         # read in weights + bias of input projection layer of cross-attention
-        in_proj_weight_cross_attn = state_dict.pop(f"transformer.decoder.layers.{i}.multihead_attn.in_proj_weight")
-        in_proj_bias_cross_attn = state_dict.pop(f"transformer.decoder.layers.{i}.multihead_attn.in_proj_bias")
+        in_proj_weight_cross_attn = state_dict.pop(f"{prefix}transformer.decoder.layers.{i}.multihead_attn.in_proj_weight")
+        in_proj_bias_cross_attn = state_dict.pop(f"{prefix}transformer.decoder.layers.{i}.multihead_attn.in_proj_bias")
         # next, add query, keys and values (in that order) of cross-attention to the state dict
         state_dict[f"decoder.layers.{i}.encoder_attn.q_proj.weight"] = in_proj_weight_cross_attn[:256, :]
         state_dict[f"decoder.layers.{i}.encoder_attn.q_proj.bias"] = in_proj_bias_cross_attn[:256]
@@ -138,19 +150,6 @@ def read_in_q_k_v(state_dict):
         state_dict[f"decoder.layers.{i}.encoder_attn.k_proj.bias"] = in_proj_bias_cross_attn[256:512]
         state_dict[f"decoder.layers.{i}.encoder_attn.v_proj.weight"] = in_proj_weight_cross_attn[-256:, :]
         state_dict[f"decoder.layers.{i}.encoder_attn.v_proj.bias"] = in_proj_bias_cross_attn[-256:]
-
-
-# since we renamed the classification heads of the object detection model, we need to rename the original keys:
-rename_keys_object_detection_model = [
-    ("class_embed.weight", "class_labels_classifier.weight"),
-    ("class_embed.bias", "class_labels_classifier.bias"),
-    ("bbox_embed.layers.0.weight", "bbox_predictor.layers.0.weight"),
-    ("bbox_embed.layers.0.bias", "bbox_predictor.layers.0.bias"),
-    ("bbox_embed.layers.1.weight", "bbox_predictor.layers.1.weight"),
-    ("bbox_embed.layers.1.bias", "bbox_predictor.layers.1.bias"),
-    ("bbox_embed.layers.2.weight", "bbox_predictor.layers.2.weight"),
-    ("bbox_embed.layers.2.bias", "bbox_predictor.layers.2.bias"),
-]
 
 # We will verify our results on an image of cute cats
 def prepare_img():
@@ -174,56 +173,50 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
         config.backbone = "resnet101"
     if "dc5" in model_name:
         config.dilation = True
+    is_panoptic = "panoptic" in model_name
+    if is_panoptic:
+        config.num_labels = 250
+        config.masks = True
+    else: 
+        config.num_labels = 91
+        config.id2label = id2label
+        config.label2id = {v: k for k, v in id2label.items()}
+    
+    # prepare image
     img = prepare_img()
     encoding = feature_extractor(images=img, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
     pixel_mask = encoding["pixel_mask"]
 
     logger.info(f"Converting model {model_name}...")
-    
-    if not "panoptic" in model_name:
-        # we are converting an object detection model
-        # coco actually has only 80 classes, but max_obj_id is 90, and as the first index is zero we have 91 classes,
-        # excluding the "no object" class
-        config.num_labels = 91
-        config.id2label = id2label
-        config.label2id = {v: k for k, v in id2label.items()}
-        # load original model from torch hub
-        detr = torch.hub.load("facebookresearch/detr", model_name, pretrained=True).eval()
-        state_dict = detr.state_dict()
-        # rename keys
-        for src, dest in rename_keys:
-            rename_key(state_dict, src, dest)
-        # query, key and value matrices need special treatment
-        read_in_q_k_v(state_dict)
-        # rename classification heads
-        for src, dest in rename_keys_object_detection_model:
-            rename_key(state_dict, src, dest)
-        # important: we need to prepend "model." to each of the base model keys as DetrForObjectDetection calls the base model like this
-        for key in state_dict.copy().keys():
-            if not key.startswith("class_labels_classifier") and not key.startswith("bbox_predictor"):
-                val = state_dict.pop(key)
-                state_dict["model." + key] = val
-        # finally, create HuggingFace model and load state dict
-        model = DetrForObjectDetection(config).eval()
-        model.load_state_dict(state_dict)
-        # verify our conversion
-        original_outputs = detr(pixel_values)
-        outputs = model(pixel_values)
-        assert torch.allclose(outputs.logits, original_outputs["pred_logits"], atol=1e-4)
-        assert torch.allclose(outputs.pred_boxes, original_outputs["pred_boxes"], atol=1e-4)
 
-    else:
-        # First, load in original detr from torch hub
-        detr, postprocessor = torch.hub.load(
-                "facebookresearch/detr",
-                model_name,
-                pretrained=True,
-                return_postprocessor=True,
-                num_classes=250,
-            )
-        detr.eval()
-        #TODO
+    # load original model from torch hub
+    detr = torch.hub.load("facebookresearch/detr", model_name, pretrained=True).eval()
+    state_dict = detr.state_dict()
+    # rename keys
+    for src, dest in rename_keys:
+        if is_panoptic:
+            src = "detr." + src
+        rename_key(state_dict, src, dest)
+    # query, key and value matrices need special treatment
+    read_in_q_k_v(state_dict, is_panoptic=is_panoptic)
+    # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes 
+    prefix = "detr.model." if is_panoptic else "model."
+    for key in state_dict.copy().keys():
+        if not key.startswith("class_labels_classifier") and not key.startswith("bbox_predictor"):
+            val = state_dict.pop(key)
+            state_dict[prefix + key] = val
+    # finally, create HuggingFace model and load state dict
+    model = DetrForPanopticSegmentation(config) if is_panoptic else DetrForObjectDetection(config)
+    model.load_state_dict(state_dict)
+    model.eval()
+    # verify our conversion
+    original_outputs = detr(pixel_values)
+    outputs = model(pixel_values)
+    assert torch.allclose(outputs.logits, original_outputs["pred_logits"], atol=1e-4)
+    assert torch.allclose(outputs.pred_boxes, original_outputs["pred_boxes"], atol=1e-4)
+    if is_panoptic:
+        assert torch.allclose(outputs.pred_masks, original_outputs["pred_masks"], atol=1e-4)
 
     # Save model and feature extractor
     logger.info(f"Saving PyTorch model and feature extractor to {pytorch_dump_folder_path}...")

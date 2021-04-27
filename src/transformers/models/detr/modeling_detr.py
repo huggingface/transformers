@@ -1474,12 +1474,14 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
 
         assert config.masks
         if box_model is not None:
-            freeze_detr=True
+            # step-2 approach
+            freeze_detr = True
             #initialize model with weights of provided box_model, but with config.masks=True
             #this makes sure the backbone returns a list of features
             model = DetrForObjectDetection(config)
             self.detr = model.load_state_dict(box_model.state_dict())
         else:
+            # end-to-end approach
             self.detr = DetrForObjectDetection(config)
 
         if freeze_detr:
@@ -1507,18 +1509,19 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
         return_dict=None,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
+
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
-
+        
         if pixel_mask is None:
-            pixel_mask = torch.ones(((batch_size, height, width)), device=device)
+            pixel_mask = torch.ones((batch_size, height, width), device=device)
 
         # First, get list of feature maps and position embeddings
         features, position_embeddings = self.detr.model.backbone(pixel_values, pixel_mask=pixel_mask)
 
         # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
         feature_map, mask = features[-1]
+        batch_size, num_channels, height, width = feature_map.shape
         projected_feature_map = self.detr.model.input_projection(feature_map)
 
         # Third, flatten the feature map + position embeddings of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
@@ -1574,24 +1577,31 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
         pred_masks = None
         if self.config.masks:
             # FIXME h_boxes takes the last one computed, keep this in mind
-            memory = encoder_outputs[0].permute(0,2,1).view(batch_size, num_channels, height, width)
+            memory = encoder_outputs[0].permute(0,2,1).view(batch_size, self.config.d_model, height, width)
             mask = flattened_mask.view(batch_size, height, width)
-
-            print("Shape of decoder output:")
-            print(sequence_output.shape)
-            print("Shape of encoder output:")
-            print(memory.shape)
-            print("Shape of mask:")
-            print(mask.shape)
 
             bbox_mask = self.bbox_attention(sequence_output, memory, mask=mask)
 
             print("Shape of bbox_mask:")
             print(bbox_mask.shape)
 
+            print("Shape of flattened feature map:")
+            print(projected_feature_map.shape)
+
+            print(features[3][0].shape)
+            print(features[2][0].shape)
+            print(features[1][0].shape)
+
             seg_masks = self.mask_head(projected_feature_map, bbox_mask, 
                                         [features[3][0], features[2][0], features[1][0]])
-            pred_masks = seg_masks.view(bs, self.detr.config.num_queries, seg_masks.shape[-2], seg_masks.shape[-1])
+
+            print("Shape of seg_masks:")
+            print(seg_masks.shape)
+
+            pred_masks = seg_masks.view(batch_size, self.detr.config.num_queries, seg_masks.shape[-2], seg_masks.shape[-1])
+
+            print("Shape of pred_masks:")
+            print(pred_masks.shape)
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
@@ -1651,13 +1661,17 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
             pred_boxes=pred_boxes,
             pred_masks=pred_masks,
             auxiliary_outputs=auxiliary_outputs,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
         )                
+
+
+def _expand(tensor, length: int):
+    return tensor.unsqueeze(1).repeat(1, int(length), 1, 1, 1).flatten(0, 1)
 
 
 # taken from https://github.com/facebookresearch/detr/blob/master/models/segmentation.py
