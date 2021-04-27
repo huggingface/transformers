@@ -45,7 +45,7 @@ if _has_comet:
         _has_comet = False
 
 
-from .dependency_versions_check import dep_version_check
+from .dependency_versions_check import dep_version_check  # noqa: E402
 from .file_utils import ENV_VARS_TRUE_VALUES, is_torch_tpu_available  # noqa: E402
 from .trainer_callback import TrainerCallback  # noqa: E402
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy  # noqa: E402
