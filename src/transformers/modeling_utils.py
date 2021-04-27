@@ -1272,9 +1272,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
 
         # tie unintialized modules
-        import ipdb
-
-        ipdb.set_trace()
         unintialized_modules = model.retrieve_modules_from_weights(missing_keys)
         for module in unintialized_modules:
             model._init_weights(module)
