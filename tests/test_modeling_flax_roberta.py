@@ -23,7 +23,7 @@ from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_
 
 
 if is_flax_available():
-    from transformers.models.roberta.modeling_flax_roberta import FlaxRobertaModel
+    from transformers.models.roberta.modeling_flax_roberta import FlaxRobertaModel, FlaxRobertaForMaskedLM
 
 
 class FlaxRobertaModelTester(unittest.TestCase):
@@ -107,7 +107,7 @@ class FlaxRobertaModelTester(unittest.TestCase):
 @require_flax
 class FlaxRobertaModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (FlaxRobertaModel,) if is_flax_available() else ()
+    all_model_classes = (FlaxRobertaModel, FlaxRobertaForMaskedLM) if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxRobertaModelTester(self)

@@ -12,7 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Tuple
+from typing import Callable, Tuple
+
+import numpy as np
 
 import flax.linen as nn
 import jax
@@ -108,7 +110,7 @@ ROBERTA_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEmbeddings with Bert->Roberta
+# Copied from transformers.models.roberta.modeling_flax_bert.FlaxBertEmbeddings with Bert->Roberta
 class FlaxRobertaEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -154,7 +156,7 @@ class FlaxRobertaEmbeddings(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertSelfAttention with Bert->Roberta
+# Copied from transformers.models.roberta.modeling_flax_bert.FlaxBertSelfAttention with Bert->Roberta
 class FlaxRobertaSelfAttention(nn.Module):
     config: RobertaConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -226,7 +228,7 @@ class FlaxRobertaSelfAttention(nn.Module):
         return attn_output.reshape(attn_output.shape[:2] + (-1,))
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertSelfOutput with Bert->Roberta
+# Copied from transformers.models.roberta.modeling_flax_bert.FlaxBertSelfOutput with Bert->Roberta
 class FlaxRobertaSelfOutput(nn.Module):
     config: RobertaConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -247,7 +249,7 @@ class FlaxRobertaSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertAttention with Bert->Roberta
+# Copied from transformers.models.roberta.modeling_flax_bert.FlaxBertAttention with Bert->Roberta
 class FlaxRobertaAttention(nn.Module):
     config: RobertaConfig
     dtype: jnp.dtype = jnp.float32
@@ -265,7 +267,7 @@ class FlaxRobertaAttention(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertIntermediate with Bert->Roberta
+# Copied from transformers.models.roberta.modeling_flax_bert.FlaxBertIntermediate with Bert->Roberta
 class FlaxRobertaIntermediate(nn.Module):
     config: RobertaConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -284,7 +286,7 @@ class FlaxRobertaIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertOutput with Bert->Roberta
+# Copied from transformers.models.roberta.modeling_flax_bert.FlaxBertOutput with Bert->Roberta
 class FlaxRobertaOutput(nn.Module):
     config: RobertaConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -305,7 +307,7 @@ class FlaxRobertaOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayer with Bert->Roberta
+# Copied from transformers.models.roberta.modeling_flax_bert.FlaxBertLayer with Bert->Roberta
 class FlaxRobertaLayer(nn.Module):
     config: RobertaConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -322,7 +324,7 @@ class FlaxRobertaLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayerCollection with Bert->Roberta
+# Copied from transformers.models.roberta.modeling_flax_bert.FlaxBertLayerCollection with Bert->Roberta
 class FlaxRobertaLayerCollection(nn.Module):
     config: RobertaConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -338,7 +340,7 @@ class FlaxRobertaLayerCollection(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEncoder with Bert->Roberta
+# Copied from transformers.models.roberta.modeling_flax_bert.FlaxBertEncoder with Bert->Roberta
 class FlaxRobertaEncoder(nn.Module):
     config: RobertaConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -350,7 +352,7 @@ class FlaxRobertaEncoder(nn.Module):
         return self.layer(hidden_states, attention_mask, deterministic=deterministic)
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPooler with Bert->Roberta
+# Copied from transformers.models.roberta.modeling_flax_bert.FlaxBertPooler with Bert->Roberta
 class FlaxRobertaPooler(nn.Module):
     config: RobertaConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -366,6 +368,31 @@ class FlaxRobertaPooler(nn.Module):
         cls_hidden_state = hidden_states[:, 0]
         cls_hidden_state = self.dense(cls_hidden_state)
         return nn.tanh(cls_hidden_state)
+
+
+class FlaxRobertaLMHead(nn.Module):
+    config: RobertaConfig
+    dtype: jnp.dtype = jnp.float32
+    bias_init: Callable[..., np.ndarray] = jax.nn.initializers.zeros
+
+    def setup(self):
+        self.dense = nn.Dense(self.config.hidden_size, dtype=self.dtype)
+        self.layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.decoder = nn.Dense(self.config.vocab_size, dtype=self.dtype, use_bias=False)
+        self.bias = self.param("bias", self.bias_init, (self.config.vocab_size,))
+
+    def __call__(self, hidden_states, shared_embedding=None):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = ACT2FN["gelu"](hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
+
+        if shared_embedding is not None:
+            hidden_states = self.decoder.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
+        else:
+            hidden_states = self.decoder(hidden_states)
+
+        hidden_states += self.bias
+        return hidden_states
 
 
 class FlaxRobertaPreTrainedModel(FlaxPreTrainedModel):
@@ -439,7 +466,7 @@ class FlaxRobertaPreTrainedModel(FlaxPreTrainedModel):
         )
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertModule with Bert->Roberta
+# Copied from transformers.models.roberta.modeling_flax_bert.FlaxBertModule with Bert->Roberta
 class FlaxRobertaModule(nn.Module):
     config: RobertaConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -469,3 +496,34 @@ class FlaxRobertaModule(nn.Module):
 )
 class FlaxRobertaModel(FlaxRobertaPreTrainedModel):
     module_class = FlaxRobertaModule
+
+
+# HEY Copied from transformers.models.roberta.modeling_flax_bert.FlaxBertForMaskedLMModule with Bert->Roberta
+class FlaxRobertaForMaskedLMModule(nn.Module):
+    config: RobertaConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.roberta = FlaxRobertaModule(config=self.config, add_pooling_layer=False, dtype=self.dtype)
+        self.lm_head = FlaxRobertaLMHead(config=self.config, dtype=self.dtype)
+
+    def __call__(
+        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
+    ):
+        # Model
+        hidden_states = self.roberta(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic)
+
+        if self.config.tie_word_embeddings:
+            shared_embedding = self.roberta.variables["params"]["embeddings"]["word_embeddings"]["embedding"]
+        else:
+            shared_embedding = None
+
+        # Compute the prediction scores
+        logits = self.lm_head(hidden_states, shared_embedding=shared_embedding)
+
+        return (logits,)
+
+
+@add_start_docstrings("""RoBERTa Model with a `language modeling` head on top. """, ROBERTA_START_DOCSTRING)
+class FlaxRobertaForMaskedLM(FlaxRobertaPreTrainedModel):
+    module_class = FlaxRobertaForMaskedLMModule
