@@ -118,6 +118,13 @@ class SavePretrainedCallback(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         self.model.save_pretrained(self.output_dir)
 
+def densify_ragged_batch(features, labels=None):
+    features = {feature: ragged_tensor.to_tensor() for feature, ragged_tensor in features.items()}
+    if labels is None:
+        return features
+    else:
+        return features, labels
+
 
 def convert_dataset_for_tensorflow(dataset, non_label_column_names, batch_size, labels, return_sequence):
     """Converts a Hugging Face dataset to a Tensorflow Dataset or Sequence object. We usually only want a Dataset when
@@ -134,7 +141,7 @@ def convert_dataset_for_tensorflow(dataset, non_label_column_names, batch_size, 
         dataset = tf.data.Dataset.from_tensor_slices((data, labels))
     else:
         dataset = tf.data.Dataset.from_tensor_slices(data)
-    dataset = dataset.shuffle(buffer_size=len(dataset)).padded_batch(batch_size=batch_size, drop_remainder=True)
+    dataset = dataset.shuffle(buffer_size=len(dataset)).batch(batch_size=batch_size, drop_remainder=True).map(densify_ragged_batch)
     return dataset
 
 # endregion
