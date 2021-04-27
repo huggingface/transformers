@@ -582,7 +582,7 @@ MBART_INPUTS_DOCSTRING = r"""
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
+            `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
 
             MBart uses a specific language id token as the starting token for :obj:`decoder_input_ids` generation that
             varies according to source and target language, *e.g.* 25004 for `en_XX`, and 25003 for `de_DE`. If
