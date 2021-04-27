@@ -98,7 +98,7 @@ class FlaxBartAttention(nn.Module):
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
         )
 
-        self.dropout_layer = nn.Dropout(rate=self.dropout, deterministic=not self.training)
+        self.dropout_layer = nn.Dropout(rate=self.dropout)
 
     def _shape(self, x, seq_len: int, bsz: int):
         return x.reshape(bsz, seq_len, self.num_heads, self.head_dim).transpose((0, 2, 1, 3))
@@ -110,7 +110,8 @@ class FlaxBartAttention(nn.Module):
         past_key_value=None,
         attention_mask=None,
         layer_head_mask=None,
-        output_attentions: bool = False
+        output_attentions: bool = False,
+        deterministic: bool = True
     ):
         """Input shape: Batch x Time x Channel"""
 
@@ -194,7 +195,7 @@ class FlaxBartAttention(nn.Module):
         else:
             attn_weights_reshaped = None
 
-        attn_probs = self.dropout_layer(attn_weights)
+        attn_probs = self.dropout_layer(attn_weights, deterministic=deterministic)
 
         attn_output = jnp.matmul(attn_probs, value_states)
 
@@ -213,3 +214,70 @@ class FlaxBartAttention(nn.Module):
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights_reshaped, past_key_value
+
+
+class FlaxBartEncoderLayer(nn.Module):
+    config: BartConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.embed_dim = self.config.d_model
+        self.self_attn = FlaxBartAttention(
+            config=self.config,
+            embed_dim=self.embed_dim,
+            num_heads=self.config.encoder_attention_heads,
+            dropout=self.config.attention_dropout,
+        )
+        self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
+        self.dropout_layer = nn.Dropout(rate=self.config.dropout)
+        self.activation_fn = ACT2FN[self.config.activation_function]
+        self.acticvation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
+        self.fc1 = nn.Dense(self.config.encoder_ffn_dim)
+        self.fc2 = nn.Dense(self.embed_dim)
+        self.final_layer_norm = nn.LayerNorm(dtype=self.dtype)
+
+    def __call__(
+        self,
+        hidden_states: jnp.ndarray,
+        attention_mask: jnp.ndarray,
+        layer_head_mask: jnp.ndarray,
+        output_attentions: bool = True,
+        deterministic: bool = True,
+    ):
+        """
+        Args:
+            hidden_states (:obj:`jnp.ndarray`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            attention_mask (:obj:`jnp.ndarray`): attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            layer_head_mask (:obj:`jnp.ndarray`): mask for attention heads in a given layer of size
+                `(encoder_attention_heads,)`.
+            output_attentions (:obj:`bool`, `optional`):
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more detail.
+        """
+        residual = hidden_states
+        hidden_states, attn_weights, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            layer_head_mask=layer_head_mask,
+            output_attentions=output_attentions,
+        )
+
+        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
+        hidden_states = residual + hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+
+        residual = hidden_states
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = self.acticvation_dropout_layer(hidden_states, deterministic=deterministic)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
+        hidden_states = residual + hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
