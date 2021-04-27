@@ -1636,3 +1636,8 @@ class GenerationIntegrationTests(unittest.TestCase):
             outputs = bart_model.generate(decoder_input_ids=input_ids, max_new_tokens=max_new_tokens)
         # 15 + 3 new tokens
         self.assertEqual(list(outputs.shape), [1, 18])
+
+        with torch.no_grad():
+            # max_new_tokens and max_length serve the same purpose and should not be used together.
+            with self.assertWarns(UserWarning):
+                outputs = bart_model.generate(decoder_input_ids=input_ids, max_new_tokens=10, max_length=20)
