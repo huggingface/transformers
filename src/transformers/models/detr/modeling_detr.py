@@ -1514,7 +1514,7 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
         if pixel_mask is None:
             pixel_mask = torch.ones(((batch_size, height, width)), device=device)
 
-        # First, get features list and position embeddings
+        # First, get list of feature maps and position embeddings
         features, position_embeddings = self.detr.model.backbone(pixel_values, pixel_mask=pixel_mask)
 
         # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
@@ -1571,17 +1571,20 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
         logits = self.detr.class_labels_classifier(sequence_output)
         pred_boxes = self.detr.bbox_predictor(sequence_output).sigmoid()
 
-        print("Shape of decoder output:")
-        print(sequence_output.shape)
-        print("Shape of encoder output:")
-        print(encoder_outputs[0].shape)
-        print("Shape of mask:")
-        print(flattened_mask.shape)
-
         pred_masks = None
         if self.config.masks:
             # FIXME h_boxes takes the last one computed, keep this in mind
-            bbox_mask = self.bbox_attention(sequence_output, encoder_outputs[0], mask=flattened_mask)
+            memory = encoder_outputs[0].permute(0,2,1).view(batch_size, num_channels, height, width)
+            mask = flattened_mask.view(batch_size, height, width)
+
+            print("Shape of decoder output:")
+            print(sequence_output.shape)
+            print("Shape of encoder output:")
+            print(memory.shape)
+            print("Shape of mask:")
+            print(mask.shape)
+
+            bbox_mask = self.bbox_attention(sequence_output, memory, mask=mask)
 
             print("Shape of bbox_mask:")
             print(bbox_mask.shape)
