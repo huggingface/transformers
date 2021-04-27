@@ -769,10 +769,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Initializes and prunes weights if needed.
         """
         # Initialize weights
-        if not self.config.use_pretrained_weights:
-            self.apply(self._init_weights)
-        else:
+        if getattr(self.config, "use_pretrained_weights", False):
             logger.info("detected pretrained model - skipping _init_weights")
+        else:
+            self.apply(self._init_weights)
 
         # Prune heads if needed
         if self.config.pruned_heads:
