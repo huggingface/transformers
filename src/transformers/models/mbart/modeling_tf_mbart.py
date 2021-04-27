@@ -541,7 +541,7 @@ MBART_INPUTS_DOCSTRING = r"""
             :obj:`past_key_values`).
 
             For translation and summarization training, :obj:`decoder_input_ids` should be provided. If no
-            :obj:`decoder_input_ids` is provided, the model will create this tensor by shifting the :obj:`labels` to
+            :obj:`decoder_input_ids` is provided, the model will create this tensor by shifting the :obj:`input_ids` to
             the right for denoising pre-training following the paper.
         decoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             will be made by default and ignore pad tokens. It is not recommended to set this for most use cases.

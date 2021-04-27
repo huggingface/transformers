@@ -589,7 +589,7 @@ BART_INPUTS_DOCSTRING = r"""
             :obj:`past_key_values`).
 
             For translation and summarization training, :obj:`decoder_input_ids` should be provided. If no
-            :obj:`decoder_input_ids` is provided, the model will create this tensor by shifting the :obj:`labels` to
+            :obj:`decoder_input_ids` is provided, the model will create this tensor by shifting the :obj:`input_ids` to
             the right for denoising pre-training following the paper.
         decoder_attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
