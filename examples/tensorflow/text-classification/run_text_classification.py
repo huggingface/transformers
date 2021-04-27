@@ -541,7 +541,7 @@ def main():
         # endregion
 
         # region Prediction
-        if tf_data['test'] in datasets:
+        if tf_data['test'] is not None:
             logger.info("Doing predictions on test dataset...")
 
             predictions = model.predict(tf_data['test'])["logits"]
