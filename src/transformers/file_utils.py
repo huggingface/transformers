@@ -1597,8 +1597,9 @@ def is_tensor(x):
     """
     if is_torch_available():
         import torch
+        import torch.fx
 
-        if isinstance(x, torch.Tensor):
+        if isinstance(x, (torch.Tensor, torch.fx.Proxy)):
             return True
     if is_tf_available():
         import tensorflow as tf
