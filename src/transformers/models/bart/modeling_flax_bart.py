@@ -14,7 +14,7 @@
 # limitations under the License.
 """ Flax Bart model. """
 
-from typing import Callable, Tuple
+from typing import Callable, Optional, Tuple
 
 import numpy as np
 
@@ -67,7 +67,7 @@ class FlaxBartAttention(nn.Module):
     bias: bool = True
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    def setup(self):
+    def setup(self) -> None:
         self.head_dim = self.embed_dim // self.num_heads
         assert (
             self.head_dim * self.num_heads == self.embed_dim
@@ -105,14 +105,14 @@ class FlaxBartAttention(nn.Module):
 
     def __call__(
         self,
-        hidden_states,
-        key_value_states=None,
-        past_key_value=None,
-        attention_mask=None,
-        layer_head_mask=None,
+        hidden_states: jnp.ndarray,
+        key_value_states: Optional[jnp.ndarray] = None,
+        past_key_value: Optional[Tuple[jnp.ndarray]] = None,
+        attention_mask: Optional[jnp.ndarray] = None,
+        layer_head_mask: Optional[jnp.ndarray] = None,
         output_attentions: bool = False,
         deterministic: bool = True
-    ):
+    ) -> Tuple[jnp.ndarray]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -220,7 +220,7 @@ class FlaxBartEncoderLayer(nn.Module):
     config: BartConfig
     dtype: jnp.dtype = jnp.float32
 
-    def setup(self):
+    def setup(self) -> None:
         self.embed_dim = self.config.d_model
         self.self_attn = FlaxBartAttention(
             config=self.config,
@@ -243,7 +243,7 @@ class FlaxBartEncoderLayer(nn.Module):
         layer_head_mask: jnp.ndarray,
         output_attentions: bool = True,
         deterministic: bool = True,
-    ):
+    ) -> Tuple[jnp.ndarray]:
         """
         Args:
             hidden_states (:obj:`jnp.ndarray`): input to the layer of shape `(seq_len, batch, embed_dim)`
@@ -279,5 +279,121 @@ class FlaxBartEncoderLayer(nn.Module):
 
         if output_attentions:
             outputs += (attn_weights,)
+
+        return outputs
+
+
+class FlaxBartDecoderLayer(nn.Module):
+    config: BartConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self) -> None:
+        self.embed_dim = self.config.d_model
+        self.self_attn = FlaxBartAttention(
+            config=self.config,
+            embed_dim=self.embed_dim,
+            num_heads=self.config.decoder_attention_heads,
+            dropout=self.config.attention_dropout,
+            is_decoder=True,
+        )
+        self.dropout_layer = nn.Dropout(rate=self.config.dropout)
+        self.activation_fn = ACT2FN[self.config.activation_function]
+        self.acticvation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
+
+        self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
+        self.encoder_attn = FlaxBartAttention(
+            config=self.config,
+            embed_dim=self.embed_dim,
+            num_heads=self.config.decoder_attention_heads,
+            dropout=self.config.attention_dropout,
+            is_decoder=True,
+        )
+        self.encoder_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
+        self.fc1 = nn.Dense(self.config.encoder_ffn_dim)
+        self.fc2 = nn.Dense(self.embed_dim)
+        self.final_layer_norm = nn.LayerNorm(dtype=self.dtype)
+
+    def __call__(
+        self,
+        hidden_states: jnp.ndarray,
+        attention_mask: Optional[jnp.ndarray] = None,
+        encoder_hidden_states: Optional[jnp.ndarray] = None,
+        encoder_attention_mask: Optional[jnp.ndarray] = None,
+        layer_head_mask: Optional[jnp.ndarray] = None,
+        cross_attn_layer_head_mask: Optional[jnp.ndarray] = None,
+        past_key_value: Optional[Tuple[jnp.ndarray]] = None,
+        output_attentions: bool = True,
+        deterministic: bool = True,
+    ) -> Tuple[jnp.ndarray]:
+        """
+        Args:
+            hidden_states (:obj:`jnp.ndarray`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            attention_mask (:obj:`jnp.ndarray`): attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            encoder_hidden_states (:obj:`jnp.ndarray`): cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
+            encoder_attention_mask (:obj:`jnp.ndarray`): encoder attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            layer_head_mask (:obj:`jnp.ndarray`): mask for attention heads in a given layer of size
+                `(encoder_attention_heads,)`.
+            cross_attn_layer_head_mask (:obj:`jnp.ndarray`): mask for cross-attention heads in a given layer of
+                size `(decoder_attention_heads,)`.
+            past_key_value (:obj:`Tuple(jnp.ndarray)`): cached past key and value projection states
+            output_attentions (:obj:`bool`, `optional`):
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more detail.
+        """
+        residual = hidden_states
+
+        # Self Attention
+        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
+        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        # add present self-attn cache to positions 1,2 of present_key_value tuple
+        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+            hidden_states=hidden_states,
+            past_key_value=self_attn_past_key_value,
+            attention_mask=attention_mask,
+            layer_head_mask=layer_head_mask,
+            output_attentions=output_attentions,
+        )
+        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
+        hidden_states = residual + hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+
+        # Cross-Attention Block
+        cross_attn_present_key_value = None
+        cross_attn_weights = None
+        if encoder_hidden_states is not None:
+            residual = hidden_states
+
+            # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
+            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
+            hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
+                hidden_states=hidden_states,
+                key_value_states=encoder_hidden_states,
+                attention_mask=encoder_attention_mask,
+                layer_head_mask=cross_attn_layer_head_mask,
+                past_key_value=cross_attn_past_key_value,
+                output_attentions=output_attentions,
+            )
+            hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
+            hidden_states = residual + hidden_states
+            hidden_states = self.encoder_attn_layer_norm(hidden_states)
+
+            # add cross-attn to positions 3,4 of present_key_value tuple
+            present_key_value = present_key_value + cross_attn_present_key_value
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = self.acticvation_dropout_layer(hidden_states, deterministic=deterministic)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
+        hidden_states = residual + hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (self_attn_weights, cross_attn_weights)
 
         return outputs
