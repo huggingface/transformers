@@ -81,8 +81,8 @@ class QuickGELU(nn.Module):
 class ClipVisionEmbeddings(nn.Module):
     def __init__(self, config: ClipVisionConfig):
         super().__init__()
-        self.embed_dim = config.d_model
-        self.image_size = config.image_resolution
+        self.embed_dim = config.hidden_size
+        self.image_size = config.image_size
         self.patch_size = config.patch_size
 
         scale = self.embed_dim ** -0.5
@@ -113,7 +113,7 @@ class ClipTextEmbeddings(nn.Module):
     def __init__(self, config: ClipTextConfig):
         super().__init__()
 
-        embed_dim = config.d_model
+        embed_dim = config.hidden_size
 
         self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
         self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
@@ -246,8 +246,8 @@ class ClipMLP(nn.Module):
         super().__init__()
 
         self.activation_fn = QuickGELU()
-        self.fc1 = nn.Linear(config.d_model, config.ffn_dim)
-        self.fc2 = nn.Linear(config.ffn_dim, config.d_model)
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states):
         hidden_states = self.fc1(hidden_states)
@@ -259,7 +259,7 @@ class ClipMLP(nn.Module):
 class ClipEncoderLayer(nn.Module):
     def __init__(self, config: ClipConfig):
         super().__init__()
-        self.embed_dim = config.d_model
+        self.embed_dim = config.hidden_size
         self.self_attn = ClipAttention(
             embed_dim=self.embed_dim,
             num_heads=config.num_attention_heads,
@@ -455,7 +455,7 @@ class ClipTextModel(ClipPreTrainedModel):
     def __init__(self, config: ClipTextConfig):
         super().__init__(config)
 
-        embed_dim = config.d_model
+        embed_dim = config.hidden_size
 
         self.embeddings = ClipTextEmbeddings(config)
         self.encoder = ClipEncoder(config)
@@ -573,7 +573,7 @@ class ClipVisionModel(ClipPreTrainedModel):
 
     def __init__(self, config: ClipVisionConfig):
         super().__init__(config)
-        embed_dim = config.d_model
+        embed_dim = config.hidden_size
 
         self.embeddings = ClipVisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(embed_dim)
@@ -665,8 +665,8 @@ class ClipModel(ClipPreTrainedModel):
         vision_config = config.vision_config
 
         self.output_dim = config.output_dim
-        self.text_embed_dim = text_config.d_model
-        self.vision_embed_dim = vision_config.d_model
+        self.text_embed_dim = text_config.hidden_size
+        self.vision_embed_dim = vision_config.hidden_size
 
         self.text_model = ClipTextModel(text_config)
         self.vision_model = ClipVisionModel(vision_config)

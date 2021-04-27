@@ -36,8 +36,8 @@ class ClipTextConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=49408,
-        d_model=512,
-        ffn_dim=2048,
+        hidden_size=512,
+        intermediate_size=2048,
         output_dim=512,
         dropout=0.0,
         num_hidden_layers=12,
@@ -53,8 +53,8 @@ class ClipTextConfig(PretrainedConfig):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
         self.vocab_size = vocab_size
-        self.d_model = d_model
-        self.ffn_dim = ffn_dim
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
         self.output_dim = output_dim
         self.dropout = dropout
         self.num_hidden_layers = num_hidden_layers
@@ -69,28 +69,28 @@ class ClipVisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        d_model=768,
-        ffn_dim=3072,
+        hidden_size=768,
+        intermediate_size=3072,
         output_dim=512,
         dropout=0.0,
         num_hidden_layers=12,
         num_attention_heads=12,
         patch_size=32,
-        image_resolution=224,
+        image_size=224,
         initializer_range=0.02,
         attention_dropout=0.0,
         **kwargs
     ):
         super().__init__(**kwargs)
 
-        self.d_model = d_model
-        self.ffn_dim = ffn_dim
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
         self.output_dim = output_dim
         self.dropout = dropout
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.patch_size = patch_size
-        self.image_resolution = image_resolution
+        self.image_size = image_size
         self.initializer_range = initializer_range
         self.attention_dropout = attention_dropout
 
