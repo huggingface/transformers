@@ -39,6 +39,16 @@ else:
 
 from typing import TYPE_CHECKING
 
+# Integrations: import before any ML framework
+from .integrations import (
+    is_comet_available,
+    is_optuna_available,
+    is_ray_available,
+    is_ray_tune_available,
+    is_tensorboard_available,
+    is_wandb_available,
+)
+
 # Check the dependencies satisfy the minimal versions required.
 from . import dependency_versions_check
 from .file_utils import (
@@ -1459,16 +1469,6 @@ if TYPE_CHECKING:
         is_vision_available,
     )
     from .hf_argparser import HfArgumentParser
-
-    # Integrations
-    from .integrations import (
-        is_comet_available,
-        is_optuna_available,
-        is_ray_available,
-        is_ray_tune_available,
-        is_tensorboard_available,
-        is_wandb_available,
-    )
 
     # Model Cards
     from .modelcard import ModelCard

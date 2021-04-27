@@ -24,13 +24,6 @@ import weakref
 from copy import deepcopy
 from pathlib import Path
 
-from .dependency_versions_check import dep_version_check
-from .utils import logging
-
-
-logger = logging.get_logger(__name__)
-
-
 # comet_ml requires to be imported before any ML frameworks
 _has_comet = importlib.util.find_spec("comet_ml") is not None and os.getenv("COMET_MODE", "").upper() != "DISABLED"
 if _has_comet:
@@ -45,6 +38,13 @@ if _has_comet:
             _has_comet = False
     except (ImportError, ValueError):
         _has_comet = False
+
+
+from .dependency_versions_check import dep_version_check
+from .utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 from .file_utils import ENV_VARS_TRUE_VALUES, is_torch_tpu_available  # noqa: E402
 from .trainer_callback import TrainerCallback  # noqa: E402
