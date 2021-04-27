@@ -61,7 +61,7 @@ if is_tf_available():
     ]
 
 if is_flax_available():
-    _import_structure["modeling_flax_roberta"] = ["FlaxRobertaModel", "FlaxRobertaForMaskedLM"]
+    _import_structure["modeling_flax_roberta"] = ["FlaxRobertaForMaskedLM", "FlaxRobertaModel"]
 
 
 if TYPE_CHECKING:
