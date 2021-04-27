@@ -294,7 +294,7 @@ attribute:
     >>> import torch
     >>> pt_outputs = pt_model(**pt_batch, labels = torch.tensor([1, 0]))
     >>> print(pt_outputs)
-    >>> SequenceClassifierOutput(loss=tensor(0.3167, grad_fn=<NllLossBackward>), logits=tensor([[-4.0833,  4.3364],
+    SequenceClassifierOutput(loss=tensor(0.3167, grad_fn=<NllLossBackward>), logits=tensor([[-4.0833,  4.3364],
     [ 0.0818, -0.0418]], grad_fn=<AddmmBackward>), hidden_states=None, attentions=None)
     >>> ## TENSORFLOW CODE
     >>> import tensorflow as tf
