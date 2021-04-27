@@ -769,7 +769,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Initializes and prunes weights if needed.
         """
         # Initialize weights
-        self.apply(self._init_weights)
+        if not self.config.use_pretrained_weights:
+            self.apply(self._init_weights)
+        else:
+            logger.info("detected pretrained model - skipping _init_weights")
 
         # Prune heads if needed
         if self.config.pruned_heads:
@@ -1116,8 +1119,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         config.name_or_path = pretrained_model_name_or_path
 
-        # Instantiate model.
+        # weights are coming from state_dict so tell models not to init weights, since that
+        # randomization will be immediately overwritten by weights from state_dict
+        config.use_pretrained_weights = True
 
+        # Instantiate model.
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
