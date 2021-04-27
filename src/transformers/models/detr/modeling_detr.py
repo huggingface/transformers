@@ -202,16 +202,16 @@ class Backbone(nn.Module):
 
     """
 
-    def __init__(self, name: str, train_backbone: bool, dilation: bool):
+    def __init__(self, name: str, train_backbone: bool, dilation: bool, return_intermediate_layers: bool):
         super().__init__()
 
         kwargs = {}
         if name in ["resnet18", "resnet34", "resnet50", "resnet101"]:
             kwargs["norm_layer"] = FrozenBatchNorm2d
-        # TODO add support for replace_stride_with_dilation
         if dilation:
             kwargs["output_stride"] = 16
-        self.body = create_model(name, pretrained=True, num_classes=0, **kwargs)
+        self.body = create_model(name, pretrained=True, features_only=True, **kwargs)
+        self.return_intermediate_layers = return_intermediate_layers
         self.num_channels = self.body.num_features
 
         for name, parameter in self.body.named_parameters():
@@ -219,13 +219,22 @@ class Backbone(nn.Module):
                 parameter.requires_grad_(False)
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
-        # send pixel_values through the body to get feature map
-        feature_map = self.body.forward_features(pixel_values)
-
+        # send pixel_values through the body to get list of feature maps
+        feature_maps = self.body(pixel_values)
+        
+        if self.return_intermediate_layers:
+            out = {}
+            for idx, x in enumerate(feature_maps):
+                mask = pixel_mask
+                assert mask is not None
+                mask = F.interpolate(mask[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
+                out[idx] = (x, mask)
+            return out
+        
         assert pixel_mask is not None
         # we downsample the pixel_mask to match the shape of the feature map
-        mask = F.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
-        return feature_map, mask
+        mask = F.interpolate(pixel_mask[None].float(), size=feature_maps[-1].shape).to(torch.bool)[0]
+        return feature_maps[-1], mask
 
 
 class Joiner(nn.Sequential):
@@ -1149,7 +1158,7 @@ class DetrModel(DetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = Backbone(config.backbone, config.train_backbone, config.dilation)
+        backbone = Backbone(config.backbone, config.train_backbone, config.dilation, config.masks)
         position_embeddings = build_position_encoding(config)
         self.backbone = Joiner(backbone, position_embeddings)
 
@@ -1478,10 +1487,11 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
     ):
         
         batch_size, num_channels, height, width = pixel_values.shape
-        # First, get feature map, updated mask and position embeddings
-        feature_map, mask, position_embeddings = self.detr.model.backbone(pixel_values, pixel_mask=pixel_mask)
+        # First, get feature dictionary and position embeddings
+        feature_dict, position_embeddings = self.detr.model.backbone(pixel_values, pixel_mask=pixel_mask)
 
         # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
+        feature_map, mask = feature_dict[-1].decompose()
         projected_feature_map = self.detr.model.input_projection(feature_map)
 
         # Third, flatten the feature map + position embeddings of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
@@ -1540,7 +1550,7 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
             bbox_mask = self.bbox_attention(sequence_output, encoder_outputs[0], mask=flattened_mask)
 
             seg_masks = self.mask_head(projected_feature_map, bbox_mask, 
-                                        [feature_map[2].tensors, feature_map[1].tensors, feature_map[0].tensors])
+                                        [feature_dict[3][0], feature_dict[2][0], feature_dict[1][0]])
             pred_masks = seg_masks.view(bs, self.detr.config.num_queries, seg_masks.shape[-2], seg_masks.shape[-1])
 
         loss, loss_dict, auxiliary_outputs = None, None, None
