@@ -106,7 +106,7 @@ the model itself. Note that if we were using the library on an other task, the c
 .. code-block::
 
     >>> ## PYTORCH CODE
-    >>> from transformers import AutoTokenizer, AutoModel, AutoModelForSequenceClassification
+    >>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
     >>> ## TENSORFLOW CODE
     >>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
