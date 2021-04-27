@@ -50,7 +50,9 @@ def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_
     return shifted_input_ids
 
 
-def _make_causal_mask(input_ids_shape: Tuple[int, int], dtype: jnp.dtype, past_key_values_length: int = 0):
+def _make_causal_mask(
+    input_ids_shape: Tuple[int, int], dtype: jnp.dtype, past_key_values_length: int = 0
+) -> jnp.ndarray:
     """
     Make causal mask used for bi-directional self-attention.
     """
@@ -65,7 +67,7 @@ def _make_causal_mask(input_ids_shape: Tuple[int, int], dtype: jnp.dtype, past_k
     return jnp.tile(mask[None, None, :, :], (bsz, 1, 1, 1))
 
 
-def _expand_mask(mask: jnp.ndarray, dtype: jnp.dtype, tgt_len: Optional[int] = None):
+def _expand_mask(mask: jnp.ndarray, dtype: jnp.dtype, tgt_len: Optional[int] = None) -> jnp.ndarray:
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -78,24 +80,33 @@ def _expand_mask(mask: jnp.ndarray, dtype: jnp.dtype, tgt_len: Optional[int] = N
     return inverted_mask * jnp.finfo(dtype).min
 
 
-BART_START_DOCSTRING = r"""
-    This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading, saving and converting weights from
-    PyTorch models)
-    This model is also a Flax Linen `flax.nn.Module
-    <https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html>`__ subclass. Use it as a regular Flax
-    Module and refer to the Flax documentation for all matter related to general usage and behavior.
-    Finally, this model supports inherent JAX features such as:
-    - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
-    - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
-    - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
-    - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
-    Parameters:
-        config (:class:`~transformers.BartConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
-"""
+class FlaxBartLearnedPositionalEmbedding(nn.Module):
+    """
+    This module learns positional embeddings up to a fixed maximum size.
+    """
+
+    num_embeddings: int
+    embedding_dim: int
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self) -> None:
+        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # and adjust num_embeddings appropriately. Other models don't have this hack
+        self.offset = 2
+
+        self.position_embeddings = nn.Embed(
+            self.num_embeddings + self.offset,
+            self.embedding_dim,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            dtype=self.dtype
+        )
+
+    def __call__(self, input_ids_shape: Tuple[int], past_key_values_length: int = 0) -> jnp.ndarray:
+        bsz, seq_len = input_ids_shape[:2]
+        positions = jnp.arange(
+            past_key_values_length, past_key_values_length + seq_len, dtype=jnp.uint32
+        )
+        return self.position_embeddings(positions + self.offset)
 
 
 class FlaxBartAttention(nn.Module):
@@ -117,25 +128,25 @@ class FlaxBartAttention(nn.Module):
             self.embed_dim,
             use_bias=self.bias,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
         )
         self.v_proj = nn.Dense(
             self.embed_dim,
             use_bias=self.bias,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
         )
         self.q_proj = nn.Dense(
             self.embed_dim,
             use_bias=self.bias,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
         )
         self.out_proj = nn.Dense(
             self.embed_dim,
             use_bias=self.bias,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
         )
 
         self.dropout_layer = nn.Dropout(rate=self.dropout)
@@ -437,3 +448,24 @@ class FlaxBartDecoderLayer(nn.Module):
             outputs += (self_attn_weights, cross_attn_weights)
 
         return outputs
+
+
+
+BART_START_DOCSTRING = r"""
+    This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
+    generic methods the library implements for all its model (such as downloading, saving and converting weights from
+    PyTorch models)
+    This model is also a Flax Linen `flax.nn.Module
+    <https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html>`__ subclass. Use it as a regular Flax
+    Module and refer to the Flax documentation for all matter related to general usage and behavior.
+    Finally, this model supports inherent JAX features such as:
+    - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
+    - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
+    - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
+    - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
+    Parameters:
+        config (:class:`~transformers.BartConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
+"""
