@@ -238,7 +238,8 @@ keys directly to tensors, for a PyTorch model, you need to unpack the dictionary
     >>> ## TENSORFLOW CODE
     >>> tf_outputs = tf_model(tf_batch)
 
-In 🤗 Transformers, all outputs are objects that contain the model's final activations along with other metadata.  These objects are described in greater detail :doc:`here <main_classes/output>`.  For now, let's inspect the output ourselves:
+In 🤗 Transformers, all outputs are objects that contain the model's final activations along with other metadata. These
+objects are described in greater detail :doc:`here <main_classes/output>`. For now, let's inspect the output ourselves:
 
 .. code-block::
 
@@ -252,7 +253,7 @@ In 🤗 Transformers, all outputs are objects that contain the model's final act
     array([[-4.0832963 ,  4.3364143 ],
            [ 0.081807  , -0.04178282]], dtype=float32)>, hidden_states=None, attentions=None)
 
-Notice how the output object has a ``logits`` attribute.  You can use this to access the model's final activations.
+Notice how the output object has a ``logits`` attribute. You can use this to access the model's final activations.
 
 .. note::
 
