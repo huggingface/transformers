@@ -38,6 +38,46 @@ _CONFIG_FOR_DOC = "BartConfig"
 _TOKENIZER_FOR_DOC = "BartTokenizer"
 
 
+def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_token_id: int) -> jnp.ndarray:
+    """
+    Shift input ids one token to the right.
+    """
+    shifted_input_ids = jnp.roll(input_ids, 1, axis=-1)
+    shifted_input_ids = jax.ops.index_update(shifted_input_ids, (..., 0), decoder_start_token_id)
+    # replace possible -100 values in labels by `pad_token_id`
+    shifted_input_ids = jax.ops.index_update(shifted_input_ids, shifted_input_ids == -100, pad_token_id)
+
+    return shifted_input_ids
+
+
+def _make_causal_mask(input_ids_shape: Tuple[int, int], dtype: jnp.dtype, past_key_values_length: int = 0):
+    """
+    Make causal mask used for bi-directional self-attention.
+    """
+    bsz, tgt_len = input_ids_shape
+    mask = jnp.full((tgt_len, tgt_len), float("-inf"))
+    mask_cond = jnp.arange(mask.shape[-1])
+    mask = jax.ops.index_update(mask, mask_cond < (mask_cond + 1).reshape(mask.shape[-1], 1), 0)
+    mask = mask.astype(dtype)
+
+    if past_key_values_length > 0:
+        mask = jnp.concatenate([jnp.zeros((tgt_len, past_key_values_length), dtype=dtype), mask], axis=-1)
+    return jnp.tile(mask[None, None, :, :], (bsz, 1, 1, 1))
+
+
+def _expand_mask(mask: jnp.ndarray, dtype: jnp.dtype, tgt_len: Optional[int] = None):
+    """
+    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+    """
+    bsz, src_len = mask.shape
+    tgt_len = tgt_len if tgt_len is not None else src_len
+
+    expanded_mask = jnp.tile(mask[:, None, None, :], (1, 1, tgt_len, 1)).astype(dtype)
+    inverted_mask = 1.0 - expanded_mask
+
+    return inverted_mask * jnp.finfo(dtype).min
+
+
 BART_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
     generic methods the library implements for all its model (such as downloading, saving and converting weights from
