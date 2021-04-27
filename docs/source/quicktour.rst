@@ -413,7 +413,7 @@ the model from scratch. Therefore, we instantiate the model from a configuration
 
 For something that only changes the head of the model (for instance, the number of labels), you can still use a
 pretrained model for the body. For instance, let's define a classifier for 10 different labels using a pretrained body.
-Instead of creating a new configuration with all the default values except for the number of labels, we can instead
+Instead of creating a new configuration with all the default values just to change the number of labels, we can instead
 pass any argument a configuration would take to the :func:`from_pretrained` method and it will update the default
 configuration appropriately:
 
