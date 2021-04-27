@@ -138,6 +138,19 @@ class DetrObjectDetectionOutput(ModelOutput):
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
+@dataclass
+class DetrForPanopticSegmentationOutput(DetrObjectDetectionOutput):
+    """
+    This class adds one attribute to DetrObjectDetectionOutput, namely predicted masks.
+
+    Args:
+        pred_masks (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, ...)`):
+            ...
+    """
+
+    pred_masks: torch.FloatTensor = None
+
+
 ## BELOW: utilities copied from
 # https://github.com/facebookresearch/detr/blob/master/backbone.py
 
@@ -1403,7 +1416,6 @@ class DetrForObjectDetection(DetrPreTrainedModel):
             loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
 
         if not return_dict:
-            # to be verified
             if auxiliary_outputs is not None:
                 output = (logits, pred_boxes) + auxiliary_outputs + outputs
             else:
@@ -1425,25 +1437,327 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         )
 
 
-class DetrForPanopticSegmentation(nn.Module):
+class DetrForPanopticSegmentation(DetrPreTrainedModel):
 
-    "This corresponds to DetrForObjectDetection + mask head."
+    """
+    This corresponds to DetrForObjectDetection + mask head.
+    Should be trained in two stages: 
+    1) freeze_detr = False, config.masks = False
+    2) freeze_detr = True, config.masks = True
+    
+    """
 
-    def __init__(self, freeze_detr=False):
+    def __init__(self, config: DetrConfig, freeze_detr=False):
+        super().__init__(config)
+
+        self.detr = DetrForObjectDetection(config)
+
+        if freeze_detr:
+            for p in self.parameters():
+                p.requires_grad_(False)
+
+        # segmentation head
+        hidden_size, number_of_heads = config.d_model, config.encoder_attention_heads
+        self.bbox_attention = MHAttentionMap(hidden_size, hidden_size, number_of_heads, dropout=0.0)
+        self.mask_head = MaskHeadSmallConv(hidden_size + number_of_heads, [1024, 512, 256], hidden_size)
+
+    @add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=DetrForPanopticSegmentationOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values,
+        pixel_mask=None,
+        decoder_attention_mask=None,
+        encoder_outputs=None,
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        
+        batch_size, num_channels, height, width = pixel_values.shape
+        # First, get feature map, updated mask and position embeddings
+        feature_map, mask, position_embeddings = self.detr.model.backbone(pixel_values, pixel_mask=pixel_mask)
+
+        # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
+        projected_feature_map = self.detr.model.input_projection(feature_map)
+
+        # Third, flatten the feature map + position embeddings of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
+        # In other words, turn their shape into (batch_size, sequence_length, hidden_size)
+        flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
+        position_embeddings = position_embeddings.flatten(2).permute(0, 2, 1)
+
+        flattened_mask = mask.flatten(1)
+
+        # Fourth, sent flattened_features + flattened_mask + position embeddings through encoder
+        # flattened_features is a Tensor of shape (batch_size, heigth*width, hidden_size)
+        # flattened_mask is a Tensor of shape (batch_size, heigth*width)
+        if encoder_outputs is None:
+            encoder_outputs = self.detr.model.encoder(
+                inputs_embeds=flattened_features,
+                attention_mask=flattened_mask,
+                position_embeddings=position_embeddings,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+            )
+
+        # Fifth, sent query embeddings + position embeddings through the decoder (which is conditioned on the encoder output)
+        query_position_embeddings = self.detr.model.query_position_embeddings.weight.unsqueeze(0).repeat(batch_size, 1, 1)
+        queries = torch.zeros_like(query_position_embeddings)
+
+        # decoder outputs consists of (dec_features, dec_hidden, dec_attn)
+        decoder_outputs = self.detr.model.decoder(
+            inputs_embeds=queries,
+            attention_mask=None,
+            position_embeddings=position_embeddings,
+            query_position_embeddings=query_position_embeddings,
+            encoder_hidden_states=encoder_outputs[0],
+            encoder_attention_mask=flattened_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        sequence_output = decoder_outputs[0]
+        
+        # Sixth, compute logits and pred_boxes
+        logits = self.detr.class_labels_classifier(sequence_output)
+        pred_boxes = self.detr.bbox_predictor(sequence_output).sigmoid()
+
+        pred_masks = None
+        if self.config.masks:
+            # FIXME h_boxes takes the last one computed, keep this in mind
+            bbox_mask = self.bbox_attention(sequence_output, encoder_outputs[0], mask=flattened_mask)
+
+            seg_masks = self.mask_head(projected_feature_map, bbox_mask, 
+                                        [feature_map[2].tensors, feature_map[1].tensors, feature_map[0].tensors])
+            pred_masks = seg_masks.view(bs, self.detr.config.num_queries, seg_masks.shape[-2], seg_masks.shape[-1])
+
+        loss, loss_dict, auxiliary_outputs = None, None, None
+        if labels is not None:
+            # First: create the matcher
+            matcher = HungarianMatcher(
+                class_cost=self.config.class_cost, bbox_cost=self.config.bbox_cost, giou_cost=self.config.giou_cost
+            )
+            # Second: create the criterion
+            losses = ["labels", "boxes", "cardinality"]
+            if self.config.masks:
+                losses += ["masks"]
+            criterion = SetCriterion(
+                matcher=matcher,
+                num_classes=self.config.num_labels,
+                eos_coef=self.config.eos_coefficient,
+                losses=losses,
+            )
+            criterion.to(self.device)
+            # Third: compute the losses, based on outputs and labels
+            outputs_loss = {}
+            outputs_loss["logits"] = logits
+            outputs_loss["pred_boxes"] = pred_boxes
+            if self.config.masks:
+                outputs_loss["pred_masks"] = pred_masks
+            if self.config.auxiliary_loss:
+                intermediate = outputs.intermediate_hidden_states if return_dict else outputs[-1]
+                outputs_class = self.class_labels_classifier(intermediate)
+                outputs_coord = self.bbox_predictor(intermediate).sigmoid()
+                auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
+                outputs_loss["auxiliary_outputs"] = auxiliary_outputs
+
+            loss_dict = criterion(outputs_loss, labels)
+            # Fourth: compute total loss, as a weighted sum of the various losses
+            weight_dict = {"loss_ce": 1, "loss_bbox": self.config.bbox_loss_coefficient}
+            weight_dict["loss_giou"] = self.config.giou_loss_coefficient
+            if self.config.masks:
+                weight_dict["loss_mask"] = self.config.mask_loss_coef
+                weight_dict["loss_dice"] = self.config.dice_loss_coef
+            if self.config.auxiliary_loss:
+                aux_weight_dict = {}
+                for i in range(self.config.decoder_layers - 1):
+                    aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
+                weight_dict.update(aux_weight_dict)
+            loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
+
+        if not return_dict:
+            if auxiliary_outputs is not None:
+                output = (logits, pred_boxes, pred_masks) + auxiliary_outputs + outputs
+            else:
+                output = (logits, pred_boxes, pred_masks) + outputs
+            return ((loss, loss_dict) + output) if loss is not None else output
+
+        return DetrForPanopticSegmentationOutput(
+            loss=loss,
+            loss_dict=loss_dict,
+            logits=logits,
+            pred_boxes=pred_boxes,
+            pred_masks=pred_masks,
+            auxiliary_outputs=auxiliary_outputs,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+        )                
+
+
+# taken from https://github.com/facebookresearch/detr/blob/master/models/segmentation.py
+class MaskHeadSmallConv(nn.Module):
+    """
+    Simple convolutional head, using group norm.
+    Upsampling is done using a FPN approach
+    """
+
+    def __init__(self, dim, fpn_dims, context_dim):
         super().__init__()
 
-        self.detr = DetrForObjectDetection()
+        inter_dims = [dim, context_dim // 2, context_dim // 4, context_dim // 8, context_dim // 16, context_dim // 64]
+        self.lay1 = torch.nn.Conv2d(dim, dim, 3, padding=1)
+        self.gn1 = torch.nn.GroupNorm(8, dim)
+        self.lay2 = torch.nn.Conv2d(dim, inter_dims[1], 3, padding=1)
+        self.gn2 = torch.nn.GroupNorm(8, inter_dims[1])
+        self.lay3 = torch.nn.Conv2d(inter_dims[1], inter_dims[2], 3, padding=1)
+        self.gn3 = torch.nn.GroupNorm(8, inter_dims[2])
+        self.lay4 = torch.nn.Conv2d(inter_dims[2], inter_dims[3], 3, padding=1)
+        self.gn4 = torch.nn.GroupNorm(8, inter_dims[3])
+        self.lay5 = torch.nn.Conv2d(inter_dims[3], inter_dims[4], 3, padding=1)
+        self.gn5 = torch.nn.GroupNorm(8, inter_dims[4])
+        self.out_lay = torch.nn.Conv2d(inter_dims[4], 1, 3, padding=1)
 
-    def forward(self):
-        # # to do: move the following two lines to DetrForPanopticSegmentation
-        #         if self.config.masks:
-        #             losses += ["masks"]
+        self.dim = dim
 
-        # # to do: move the following three lines to DetrForPanopticSegmentation
-        # if self.config.masks:
-        #     weight_dict["loss_mask"] = self.config.mask_loss_coef
-        #     weight_dict["loss_dice"] = self.config.dice_loss_coef
-        raise NotImplementedError()
+        self.adapter1 = torch.nn.Conv2d(fpn_dims[0], inter_dims[1], 1)
+        self.adapter2 = torch.nn.Conv2d(fpn_dims[1], inter_dims[2], 1)
+        self.adapter3 = torch.nn.Conv2d(fpn_dims[2], inter_dims[3], 1)
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_uniform_(m.weight, a=1)
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x: Tensor, bbox_mask: Tensor, fpns: List[Tensor]):
+        x = torch.cat([_expand(x, bbox_mask.shape[1]), bbox_mask.flatten(0, 1)], 1)
+
+        x = self.lay1(x)
+        x = self.gn1(x)
+        x = F.relu(x)
+        x = self.lay2(x)
+        x = self.gn2(x)
+        x = F.relu(x)
+
+        cur_fpn = self.adapter1(fpns[0])
+        if cur_fpn.size(0) != x.size(0):
+            cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
+        x = cur_fpn + F.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
+        x = self.lay3(x)
+        x = self.gn3(x)
+        x = F.relu(x)
+
+        cur_fpn = self.adapter2(fpns[1])
+        if cur_fpn.size(0) != x.size(0):
+            cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
+        x = cur_fpn + F.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
+        x = self.lay4(x)
+        x = self.gn4(x)
+        x = F.relu(x)
+
+        cur_fpn = self.adapter3(fpns[2])
+        if cur_fpn.size(0) != x.size(0):
+            cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
+        x = cur_fpn + F.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
+        x = self.lay5(x)
+        x = self.gn5(x)
+        x = F.relu(x)
+
+        x = self.out_lay(x)
+        return x
+
+
+class MHAttentionMap(nn.Module):
+    """This is a 2D attention module, which only returns the attention softmax (no multiplication by value)"""
+
+    def __init__(self, query_dim, hidden_dim, num_heads, dropout=0.0, bias=True):
+        super().__init__()
+        self.num_heads = num_heads
+        self.hidden_dim = hidden_dim
+        self.dropout = nn.Dropout(dropout)
+
+        self.q_linear = nn.Linear(query_dim, hidden_dim, bias=bias)
+        self.k_linear = nn.Linear(query_dim, hidden_dim, bias=bias)
+
+        nn.init.zeros_(self.k_linear.bias)
+        nn.init.zeros_(self.q_linear.bias)
+        nn.init.xavier_uniform_(self.k_linear.weight)
+        nn.init.xavier_uniform_(self.q_linear.weight)
+        self.normalize_fact = float(hidden_dim / self.num_heads) ** -0.5
+
+    def forward(self, q, k, mask: Optional[Tensor] = None):
+        q = self.q_linear(q)
+        k = F.conv2d(k, self.k_linear.weight.unsqueeze(-1).unsqueeze(-1), self.k_linear.bias)
+        qh = q.view(q.shape[0], q.shape[1], self.num_heads, self.hidden_dim // self.num_heads)
+        kh = k.view(k.shape[0], self.num_heads, self.hidden_dim // self.num_heads, k.shape[-2], k.shape[-1])
+        weights = torch.einsum("bqnc,bnchw->bqnhw", qh * self.normalize_fact, kh)
+
+        if mask is not None:
+            weights.masked_fill_(mask.unsqueeze(1).unsqueeze(1), float("-inf"))
+        weights = F.softmax(weights.flatten(2), dim=-1).view(weights.size())
+        weights = self.dropout(weights)
+        return weights
+
+
+def dice_loss(inputs, targets, num_boxes):
+    """
+    Compute the DICE loss, similar to generalized IOU for masks
+    Args:
+        inputs: A float tensor of arbitrary shape.
+                The predictions for each example.
+        targets: A float tensor with the same shape as inputs. Stores the binary
+                 classification label for each element in inputs
+                (0 for the negative class and 1 for the positive class).
+    """
+    inputs = inputs.sigmoid()
+    inputs = inputs.flatten(1)
+    numerator = 2 * (inputs * targets).sum(1)
+    denominator = inputs.sum(-1) + targets.sum(-1)
+    loss = 1 - (numerator + 1) / (denominator + 1)
+    return loss.sum() / num_boxes
+
+
+def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: float = 2):
+    """
+    Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
+    Args:
+        inputs: A float tensor of arbitrary shape.
+                The predictions for each example.
+        targets: A float tensor with the same shape as inputs. Stores the binary
+                 classification label for each element in inputs
+                (0 for the negative class and 1 for the positive class).
+        alpha: (optional) Weighting factor in range (0,1) to balance
+                positive vs negative examples. Default = -1 (no weighting).
+        gamma: Exponent of the modulating factor (1 - p_t) to
+               balance easy vs hard examples.
+    Returns:
+        Loss tensor
+    """
+    prob = inputs.sigmoid()
+    ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+    p_t = prob * targets + (1 - prob) * (1 - targets)
+    loss = ce_loss * ((1 - p_t) ** gamma)
+
+    if alpha >= 0:
+        alpha_t = alpha * targets + (1 - alpha) * (1 - targets)
+        loss = alpha_t * loss
+
+    return loss.mean(1).sum() / num_boxes
 
 
 # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
