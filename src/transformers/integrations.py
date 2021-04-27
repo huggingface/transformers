@@ -26,6 +26,7 @@ from pathlib import Path
 
 from .utils import logging
 
+
 logger = logging.get_logger(__name__)
 
 # comet_ml requires to be imported before any ML frameworks
@@ -45,7 +46,6 @@ if _has_comet:
 
 
 from .dependency_versions_check import dep_version_check
-
 from .file_utils import ENV_VARS_TRUE_VALUES, is_torch_tpu_available  # noqa: E402
 from .trainer_callback import TrainerCallback  # noqa: E402
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy  # noqa: E402
