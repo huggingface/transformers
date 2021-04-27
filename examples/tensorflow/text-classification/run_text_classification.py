@@ -394,9 +394,9 @@ def main():
     # Padding strategy
     if data_args.pad_to_max_length:
         padding = "max_length"
-    elif isinstance(training_args.strategy, tf.distribute.TPUStrategy):
-        logger.warning("Forcing --pad_to_max_length because we're running on TPU!")
-        padding = "max_length"
+    # elif isinstance(training_args.strategy, tf.distribute.TPUStrategy):
+    #    logger.warning("Forcing --pad_to_max_length because we're running on TPU!")
+    #     padding = "max_length"
     else:
         # We will pad later, dynamically at batch creation, to the max sequence length in each batch
         padding = False
