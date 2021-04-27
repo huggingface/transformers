@@ -1118,6 +1118,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Instantiate model.
 
+        # Make sure init function is not run since weights are overwritten
+        # from pre-trained weight file
+        model_kwargs["init_weights"] = False
+
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
@@ -1266,6 +1270,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if len(error_msgs) > 0:
                 error_msg = "\n\t".join(error_msgs)
                 raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
+
+        # tie unintialized modules
+        import ipdb
+
+        ipdb.set_trace()
+        unintialized_modules = model.retrieve_modules_from_weights(missing_keys)
+        for module in unintialized_modules:
+            model._init_weights(module)
+
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
 
@@ -1281,6 +1294,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return model, loading_info
 
         return model
+
+    def retrieve_modules_from_weights(self, weight_keys):
+        retrieved_modules = set()
+        for weight_key in weight_keys:
+            module_ptr = self
+            for layer_name in weight_key.split(".")[:-1]:
+                module_ptr = module_ptr._modules[layer_name]
+            retrieved_modules.add(module_ptr)
+        # TOOD: IMPORTANT WE HAVE TO BE SURE THAT ALL WEIGHTS OF THE
+        # RETRIEVED MODULES ACTUALLY HAVE TO BE RANDOMELY INITIALIZED
+        # TEST THAT ALL WEIGHTS OF ALL MODULES ARE IN WEIGHT KEYS
+        return list(retrieved_modules)
 
 
 class Conv1D(nn.Module):
