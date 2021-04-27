@@ -40,7 +40,7 @@ if is_torch_available():
 
 
 class LxmertModelTester:
-    """You can also import this e.g from .test_modeling_bart import BartModelTester """
+    """You can also import this e.g from .test_modeling_bart import BartModelTester"""
 
     def __init__(
         self,

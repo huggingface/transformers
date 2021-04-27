@@ -3,11 +3,11 @@
 # 2. run `make deps_table_update``
 deps = {
     "Pillow": "Pillow",
-    "black": "black>=20.8b1",
+    "black": "black==21.4b0",
     "cookiecutter": "cookiecutter==1.7.2",
     "dataclasses": "dataclasses",
     "datasets": "datasets",
-    "deepspeed": "deepspeed>=0.3.14",
+    "deepspeed": "deepspeed>=0.3.15",
     "docutils": "docutils==0.16.0",
     "fairscale": "fairscale>0.3",
     "faiss-cpu": "faiss-cpu",

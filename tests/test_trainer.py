@@ -213,16 +213,21 @@ if is_torch_available():
         label_names = kwargs.get("label_names", None)
         train_dataset = RegressionDataset(length=train_len, label_names=label_names)
         eval_dataset = RegressionDataset(length=eval_len, label_names=label_names)
-        if pretrained:
-            config = RegressionModelConfig(a=a, b=b, double_output=double_output)
-            model = RegressionPreTrainedModel(config)
+
+        model_init = kwargs.pop("model_init", None)
+        if model_init is not None:
+            model = None
         else:
-            model = RegressionModel(a=a, b=b, double_output=double_output)
+            if pretrained:
+                config = RegressionModelConfig(a=a, b=b, double_output=double_output)
+                model = RegressionPreTrainedModel(config)
+            else:
+                model = RegressionModel(a=a, b=b, double_output=double_output)
+
         compute_metrics = kwargs.pop("compute_metrics", None)
         data_collator = kwargs.pop("data_collator", None)
         optimizers = kwargs.pop("optimizers", (None, None))
         output_dir = kwargs.pop("output_dir", "./regression")
-        model_init = kwargs.pop("model_init", None)
 
         args = RegressionTrainingArguments(output_dir, a=a, b=b, **kwargs)
         return Trainer(
@@ -1099,12 +1104,12 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         try:
-            cls._api.delete_repo(token=cls._token, name="test-model")
+            cls._api.delete_repo(token=cls._token, name="test-trainer")
         except HTTPError:
             pass
 
         try:
-            cls._api.delete_repo(token=cls._token, name="test-model-org", organization="valid_org")
+            cls._api.delete_repo(token=cls._token, name="test-trainer-org", organization="valid_org")
         except HTTPError:
             pass
 
@@ -1112,14 +1117,14 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(output_dir=tmp_dir)
             trainer.save_model()
-            url = trainer.push_to_hub(repo_name="test-model", use_auth_token=self._token)
+            url = trainer.push_to_hub(repo_name="test-trainer", use_auth_token=self._token)
 
             # Extract repo_name from the url
             re_search = re.search(ENDPOINT_STAGING + r"/([^/]+/[^/]+)/", url)
             self.assertTrue(re_search is not None)
             repo_name = re_search.groups()[0]
 
-            self.assertEqual(repo_name, f"{USER}/test-model")
+            self.assertEqual(repo_name, f"{USER}/test-trainer")
 
             model = RegressionPreTrainedModel.from_pretrained(repo_name)
             self.assertEqual(model.a.item(), trainer.model.a.item())
@@ -1129,15 +1134,17 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(output_dir=tmp_dir)
             trainer.save_model()
-            url = trainer.push_to_hub(repo_name="test-model-org", organization="valid_org", use_auth_token=self._token)
+            url = trainer.push_to_hub(
+                repo_name="test-trainer-org", organization="valid_org", use_auth_token=self._token
+            )
 
             # Extract repo_name from the url
             re_search = re.search(ENDPOINT_STAGING + r"/([^/]+/[^/]+)/", url)
             self.assertTrue(re_search is not None)
             repo_name = re_search.groups()[0]
-            self.assertEqual(repo_name, "valid_org/test-model-org")
+            self.assertEqual(repo_name, "valid_org/test-trainer-org")
 
-            model = RegressionPreTrainedModel.from_pretrained("valid_org/test-model-org")
+            model = RegressionPreTrainedModel.from_pretrained("valid_org/test-trainer-org")
             self.assertEqual(model.a.item(), trainer.model.a.item())
             self.assertEqual(model.b.item(), trainer.model.b.item())
 

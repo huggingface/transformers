@@ -39,7 +39,7 @@ if is_tf_available():
 
 
 class TFFunnelModelTester:
-    """You can also import this e.g, from .test_modeling_funnel import FunnelModelTester """
+    """You can also import this e.g, from .test_modeling_funnel import FunnelModelTester"""
 
     def __init__(
         self,

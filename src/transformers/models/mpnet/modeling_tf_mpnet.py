@@ -430,7 +430,7 @@ class TFMPNetEncoder(tf.keras.layers.Layer):
         return ret
 
     def compute_position_bias(self, x, position_ids=None):
-        """ Compute binned relative position bias """
+        """Compute binned relative position bias"""
         input_shape = shape_list(x)
         qlen, klen = input_shape[1], input_shape[1]
 
@@ -674,7 +674,7 @@ MPNET_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare MPNet Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare MPNet Model transformer outputting raw hidden-states without any specific head on top.",
     MPNET_START_DOCSTRING,
 )
 class TFMPNetModel(TFMPNetPreTrainedModel):
