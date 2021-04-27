@@ -19,6 +19,7 @@ import math
 import random
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
+from collections import OrderedDict
 
 import torch
 import torch.nn.functional as F
@@ -212,7 +213,7 @@ class Backbone(nn.Module):
             kwargs["output_stride"] = 16
         self.body = create_model(name, pretrained=True, features_only=True, **kwargs)
         self.return_intermediate_layers = return_intermediate_layers
-        self.num_channels = self.body.num_features
+        self.num_channels = self.body.feature_info.channels(-1)
 
         for name, parameter in self.body.named_parameters():
             if not train_backbone or "layer2" not in name and "layer3" not in name and "layer4" not in name:
@@ -223,18 +224,20 @@ class Backbone(nn.Module):
         feature_maps = self.body(pixel_values)
         
         if self.return_intermediate_layers:
-            out = {}
-            for idx, x in enumerate(feature_maps):
+            out = []
+            for x in feature_maps:
                 mask = pixel_mask
                 assert mask is not None
                 mask = F.interpolate(mask[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
-                out[idx] = (x, mask)
+                out.append((x, mask))
             return out
         
         assert pixel_mask is not None
+        # get final feature map
+        feature_map = feature_maps[-1]
         # we downsample the pixel_mask to match the shape of the feature map
-        mask = F.interpolate(pixel_mask[None].float(), size=feature_maps[-1].shape).to(torch.bool)[0]
-        return feature_maps[-1], mask
+        mask = F.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
+        return feature_map, mask
 
 
 class Joiner(nn.Sequential):
@@ -242,13 +245,21 @@ class Joiner(nn.Sequential):
         super().__init__(backbone, position_embedding)
 
     def forward(self, pixel_values, pixel_mask):
-        # first, send pixel_values and pixel_mask through backbone to obtain updated feature_map and pixel_mask
-        feature_map, pixel_mask = self[0](pixel_values, pixel_mask)
+        if self[0].return_intermediate_layers:
+            features = self[0](pixel_values, pixel_mask)
+            feature_map, pixel_mask = features[-1]
+            pos = self[1](feature_map, pixel_mask).to(feature_map.dtype)
+            
+            return features, pos
 
-        # next, create position embeddings for the outputs of the outputs_dict
-        pos = self[1](feature_map, pixel_mask).to(feature_map.dtype)
+        else:
+            # first, send pixel_values and pixel_mask through backbone to obtain updated feature_map and pixel_mask
+            feature_map, pixel_mask = self[0](pixel_values, pixel_mask)
 
-        return feature_map, pixel_mask, pos
+            # next, create position embeddings for the outputs of the outputs_dict
+            pos = self[1](feature_map, pixel_mask).to(feature_map.dtype)
+
+            return feature_map, pixel_mask, pos
 
 
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
@@ -1446,20 +1457,30 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    """
+    DETR Model (consisting of a backbone and encoder-decoder Transformer) with a segmentation head on top, for
+    tasks such as COCO panoptic. Should have config.masks = True. 
+
+    TO DO: 
+    - remove config.masks argument from this model, and rename to config.return_intermediate_layers or something like that,
+    to make sure the backbone of the DetrForObjectDetection model returns a list of feature maps 
+    """,
+    DETR_START_DOCSTRING,
+)
 class DetrForPanopticSegmentation(DetrPreTrainedModel):
-
-    """
-    This corresponds to DetrForObjectDetection + mask head.
-    Should be trained in two stages: 
-    1) freeze_detr = False, config.masks = False
-    2) freeze_detr = True, config.masks = True
-    
-    """
-
-    def __init__(self, config: DetrConfig, freeze_detr=False):
+    def __init__(self, config: DetrConfig, box_model=None, freeze_detr=False):
         super().__init__(config)
 
-        self.detr = DetrForObjectDetection(config)
+        assert config.masks
+        if box_model is not None:
+            freeze_detr=True
+            #initialize model with weights of provided box_model, but with config.masks=True
+            #this makes sure the backbone returns a list of features
+            model = DetrForObjectDetection(config)
+            self.detr = model.load_state_dict(box_model.state_dict())
+        else:
+            self.detr = DetrForObjectDetection(config)
 
         if freeze_detr:
             for p in self.parameters():
@@ -1470,8 +1491,8 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
         self.bbox_attention = MHAttentionMap(hidden_size, hidden_size, number_of_heads, dropout=0.0)
         self.mask_head = MaskHeadSmallConv(hidden_size + number_of_heads, [1024, 512, 256], hidden_size)
 
-    @add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DetrForPanopticSegmentationOutput, config_class=_CONFIG_FOR_DOC)
+    #@add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)
+    #@replace_return_docstrings(output_type=DetrForPanopticSegmentationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values,
@@ -1485,13 +1506,19 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         
         batch_size, num_channels, height, width = pixel_values.shape
-        # First, get feature dictionary and position embeddings
-        feature_dict, position_embeddings = self.detr.model.backbone(pixel_values, pixel_mask=pixel_mask)
+        device = pixel_values.device
+
+        if pixel_mask is None:
+            pixel_mask = torch.ones(((batch_size, height, width)), device=device)
+
+        # First, get features list and position embeddings
+        features, position_embeddings = self.detr.model.backbone(pixel_values, pixel_mask=pixel_mask)
 
         # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
-        feature_map, mask = feature_dict[-1].decompose()
+        feature_map, mask = features[-1]
         projected_feature_map = self.detr.model.input_projection(feature_map)
 
         # Third, flatten the feature map + position embeddings of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
@@ -1544,13 +1571,23 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
         logits = self.detr.class_labels_classifier(sequence_output)
         pred_boxes = self.detr.bbox_predictor(sequence_output).sigmoid()
 
+        print("Shape of decoder output:")
+        print(sequence_output.shape)
+        print("Shape of encoder output:")
+        print(encoder_outputs[0].shape)
+        print("Shape of mask:")
+        print(flattened_mask.shape)
+
         pred_masks = None
         if self.config.masks:
             # FIXME h_boxes takes the last one computed, keep this in mind
             bbox_mask = self.bbox_attention(sequence_output, encoder_outputs[0], mask=flattened_mask)
 
+            print("Shape of bbox_mask:")
+            print(bbox_mask.shape)
+
             seg_masks = self.mask_head(projected_feature_map, bbox_mask, 
-                                        [feature_dict[3][0], feature_dict[2][0], feature_dict[1][0]])
+                                        [features[3][0], features[2][0], features[1][0]])
             pred_masks = seg_masks.view(bs, self.detr.config.num_queries, seg_masks.shape[-2], seg_masks.shape[-1])
 
         loss, loss_dict, auxiliary_outputs = None, None, None
