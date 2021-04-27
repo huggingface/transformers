@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_tokenizers_available, is_torch_available
+from ...file_utils import _BaseLazyModule, is_tokenizers_available, is_torch_available, is_vision_available
 
 
 _import_structure = {
@@ -27,6 +27,10 @@ _import_structure = {
 
 if is_tokenizers_available():
     _import_structure["tokenization_clip_fast"] = ["ClipTokenizerFast"]
+
+if is_vision_available():
+    _import_structure["feature_extraction_clip"] = ["ClipFeatureExtractor"]
+    _import_structure["processing_clip"] = ["ClipProcessor"]
 
 if is_torch_available():
     _import_structure["modeling_clip"] = [
@@ -42,6 +46,10 @@ if TYPE_CHECKING:
 
     if is_tokenizers_available():
         from .tokenization_clip_fast import ClipTokenizerFast
+
+    if is_vision_available():
+        from .feature_extraction_clip import ClipFeatureExtractor
+        from .processing_clip import ClipProcessor
 
     if is_torch_available():
         from .modeling_clip import CLIP_PRETRAINED_MODEL_ARCHIVE_LIST, ClipModel, ClipPreTrainedModel
