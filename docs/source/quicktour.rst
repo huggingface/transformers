@@ -238,23 +238,22 @@ keys directly to tensors, for a PyTorch model, you need to unpack the dictionary
     >>> ## TENSORFLOW CODE
     >>> tf_outputs = tf_model(tf_batch)
 
-In 🤗 Transformers, all outputs are tuples (with only one element potentially). Here, we get a tuple with just the final
-activations of the model.
+In 🤗 Transformers, all outputs are objects that contain the model's final activations along with other metadata. These
+objects are described in greater detail :doc:`here <main_classes/output>`. For now, let's inspect the output ourselves:
 
 .. code-block::
 
     >>> ## PYTORCH CODE
     >>> print(pt_outputs)
-    (tensor([[-4.0833,  4.3364],
-            [ 0.0818, -0.0418]], grad_fn=<AddmmBackward>),)
+    SequenceClassifierOutput(loss=None, logits=tensor([[-4.0833,  4.3364],
+        [ 0.0818, -0.0418]], grad_fn=<AddmmBackward>), hidden_states=None, attentions=None)
     >>> ## TENSORFLOW CODE
     >>> print(tf_outputs)
-    (<tf.Tensor: shape=(2, 2), dtype=float32, numpy=
-    array([[-4.0832963 ,  4.336414  ],
-           [ 0.08181786, -0.04179301]], dtype=float32)>,)
+    TFSequenceClassifierOutput(loss=None, logits=<tf.Tensor: shape=(2, 2), dtype=float32, numpy=
+    array([[-4.0832963 ,  4.3364143 ],
+           [ 0.081807  , -0.04178282]], dtype=float32)>, hidden_states=None, attentions=None)
 
-The model can return more than just the final activations, which is why the output is a tuple. Here we only asked for
-the final activations, so we get a tuple with one element.
+Notice how the output object has a ``logits`` attribute. You can use this to access the model's final activations.
 
 .. note::
 
@@ -267,10 +266,10 @@ Let's apply the SoftMax activation to get predictions.
 
     >>> ## PYTORCH CODE
     >>> import torch.nn.functional as F
-    >>> pt_predictions = F.softmax(pt_outputs[0], dim=-1)
+    >>> pt_predictions = F.softmax(pt_outputs.logits, dim=-1)
     >>> ## TENSORFLOW CODE
     >>> import tensorflow as tf
-    >>> tf_predictions = tf.nn.softmax(tf_outputs[0], axis=-1)
+    >>> tf.nn.softmax(tf_outputs.logits, axis=-1)
 
 We can see we get the numbers from before:
 
