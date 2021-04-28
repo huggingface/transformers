@@ -95,7 +95,7 @@ PROPHETNET_INPUTS_DOCSTRING = r"""
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
+            `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
 
             ProphetNet uses the :obj:`eos_token_id` as the starting token for :obj:`decoder_input_ids` generation. If
             :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
@@ -723,9 +723,9 @@ class ProphetNetAttention(nn.Module):
             attn_weights = attn_weights + attention_mask
 
         if output_attentions:
-            # this operation is a bit akward, but it's required to
+            # this operation is a bit awkward, but it's required to
             # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
+            # In order to do so, attn_weights have to be reshaped
             # twice and have to be reused in the following
             attn_weights_reshaped = attn_weights.view(batch_size, self.num_attn_heads, tgt_len, src_len)
             attn_weights = attn_weights_reshaped.view(batch_size * self.num_attn_heads, tgt_len, src_len)
@@ -1243,7 +1243,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
     r"""
     word_embeddings  (:obj:`torch.nn.Embeddings` of shape :obj:`(config.vocab_size, config.hidden_size)`, `optional`):
         The word embedding parameters. This can be used to initialize :class:`~transformers.ProphetNetEncoder` with
-        pre-defined word embeddings instead of randomely initialized word embeddings.
+        pre-defined word embeddings instead of randomly initialized word embeddings.
     """
 
     def __init__(self, config: ProphetNetConfig, word_embeddings: nn.Embedding = None):
@@ -1380,7 +1380,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
     r"""
     word_embeddings  (:obj:`torch.nn.Embeddings` of shape :obj:`(config.vocab_size, config.hidden_size)`, `optional`):
         The word embedding parameters. This can be used to initialize :class:`~transformers.ProphetNetEncoder` with
-        pre-defined word embeddings instead of randomely initialized word embeddings.
+        pre-defined word embeddings instead of randomly initialized word embeddings.
     """
 
     def __init__(self, config: ProphetNetConfig, word_embeddings: nn.Embedding = None):

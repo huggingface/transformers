@@ -551,7 +551,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
         ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
         ("tf", (is_tf_available, TENSORFLOW_IMPORT_ERROR)),
-        ("tokenziers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
+        ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
     ]
@@ -1561,7 +1561,7 @@ def tf_required(func):
 
 
 def is_tensor(x):
-    """ Tests if ``x`` is a :obj:`torch.Tensor`, :obj:`tf.Tensor` or :obj:`np.ndarray`. """
+    """Tests if ``x`` is a :obj:`torch.Tensor`, :obj:`tf.Tensor` or :obj:`np.ndarray`."""
     if is_torch_available():
         import torch
 
@@ -1783,7 +1783,7 @@ class _BaseLazyModule(ModuleType):
 
 
 def copy_func(f):
-    """ Returns a copy of a function f."""
+    """Returns a copy of a function f."""
     # Based on http://stackoverflow.com/a/6528148/190597 (Glenn Maynard)
     g = types.FunctionType(f.__code__, f.__globals__, name=f.__name__, argdefs=f.__defaults__, closure=f.__closure__)
     g = functools.update_wrapper(g, f)

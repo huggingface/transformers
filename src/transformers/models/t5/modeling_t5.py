@@ -389,7 +389,7 @@ class T5Attention(nn.Module):
         return relative_buckets
 
     def compute_bias(self, query_length, key_length):
-        """ Compute binned relative position bias """
+        """Compute binned relative position bias"""
         context_position = torch.arange(query_length, dtype=torch.long)[:, None]
         memory_position = torch.arange(key_length, dtype=torch.long)[None, :]
         relative_position = memory_position - context_position  # shape (query_length, key_length)
@@ -436,15 +436,15 @@ class T5Attention(nn.Module):
         key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
 
         def shape(states):
-            """  projection """
+            """projection"""
             return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
         def unshape(states):
-            """  reshape """
+            """reshape"""
             return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
 
         def project(hidden_states, proj_layer, key_value_states, past_key_value):
-            """ projects hidden states correctly to key/query states """
+            """projects hidden states correctly to key/query states"""
             if key_value_states is None:
                 # self-attn
                 # (batch_size, n_heads, seq_length, dim_per_head)
@@ -718,7 +718,7 @@ class T5PreTrainedModel(PreTrainedModel):
         return dummy_inputs
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, T5LayerNorm):
             module.weight.data.fill_(factor * 1.0)
@@ -1063,7 +1063,7 @@ T5_INPUTS_DOCSTRING = r"""
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
+            `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
 
             T5 uses the :obj:`pad_token_id` as the starting token for :obj:`decoder_input_ids` generation. If
             :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
@@ -1172,7 +1172,7 @@ T5_ENCODER_INPUTS_DOCSTRING = r"""
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
-# Warning messafe for FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
+# Warning message for FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
 __HEAD_MASK_WARNING_MSG = """
 The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. Currently,
 `decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will be removed in future versions.
