@@ -89,6 +89,7 @@ class FlaxBartLearnedPositionalEmbedding(nn.Module):
 
     num_embeddings: int
     embedding_dim: int
+    config: BartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self) -> None:
@@ -537,30 +538,11 @@ BART_START_DOCSTRING = r"""
 """
 
 
-class FlaxBartModule(nn.Module):
+class FlaxBartEncoder(nn.Module):
     config: BartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    def setup(self):
-        pass
-
-    def __call__(
-        self,
-        input_ids: jnp.ndarray,
-        attention_mask: Optional[jnp.ndarray] = None,
-        decoder_input_ids: Optional[jnp.ndarray] = None,
-        decoder_attention_mask: Optional[jnp.ndarray] = None,
-    ):
-        pass
-
-
-class FlaxBartEncoder(FlaxBartPretrainedModel):
-    config: BartConfig
-    module_class = FlaxBartModule
-    embed_tokens: Optional[nn.Embed] = None
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-
-    def setup(self):
+    def setup(self, embed_tokens: Optional[nn.Embed] = None):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
         self.layerdrop = self.config.encoder_layerdrop
         self.layerdrop_layer = nn.Dropout(rate=self.config.encoder_layerdrop)
@@ -570,7 +552,9 @@ class FlaxBartEncoder(FlaxBartPretrainedModel):
         self.max_source_positions = self.config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if self.config.scale_embedding else 1.0
 
-        if self.embed_tokens is None:
+        if embed_tokens is not None:
+            self.embed_tokens = embed_tokens
+        else:
             self.embed_tokens = nn.Embed(
                 self.config.vocab_size,
                 embed_dim,
@@ -581,6 +565,7 @@ class FlaxBartEncoder(FlaxBartPretrainedModel):
         self.embed_positions = FlaxBartLearnedPositionalEmbedding(
             self.config.max_position_embeddings,
             embed_dim,
+            self.config,
         )
         self.layers = [
             FlaxBartEncoderLayer(self.config, dtype=self.dtype) for _ in range(self.config.num_hidden_layers)
@@ -595,7 +580,7 @@ class FlaxBartEncoder(FlaxBartPretrainedModel):
         inputs_embeds: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        return_dict: Optional[bool] = False,
         deterministic: bool = True,
     ):
         r"""
@@ -679,14 +664,14 @@ class FlaxBartEncoder(FlaxBartPretrainedModel):
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
-            if self.deterministic and (dropout_probability < self.layerdrop):  # skip the layer
+            if deterministic and (dropout_probability < self.layerdrop):  # skip the layer
                 hidden_states, attn = (None, None)
 
             hidden_states, attn = encoder_layer(
                 hidden_states,
                 attention_mask,
                 head_mask[idx] if head_mask is not None else None,
-                output_attentions,
+                True,  # we want to always output attentions at this step
                 deterministic
             )
 
