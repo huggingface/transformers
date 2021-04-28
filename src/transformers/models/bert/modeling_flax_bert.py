@@ -580,13 +580,6 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        # make sure that model does not return dict when in jitted mode
-        if not isinstance(input_ids, (DeviceArray, np.ndarray)) and return_dict:
-            logger.warn(
-                "Model cannot return dictionary in jitted mode. Setting `return_dict=False`... To suppress this warning, please set ``return_dict=False``."
-            )
-            return_dict = False
-
         if output_attentions:
             raise NotImplementedError(
                 "Currently attention scores cannot be returned." "Please set `output_attentions` to False for now."

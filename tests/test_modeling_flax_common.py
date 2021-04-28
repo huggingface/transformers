@@ -233,7 +233,6 @@ class FlaxModelTesterMixin:
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                config.return_dict = False
                 model = model_class(config)
 
                 @jax.jit
@@ -242,8 +241,7 @@ class FlaxModelTesterMixin:
                         input_ids=input_ids,
                         attention_mask=attention_mask,
                         token_type_ids=token_type_ids,
-                        return_dict=False,
-                    )
+                    ).to_tuple()
 
                 with self.subTest("JIT Enabled"):
                     jitted_outputs = model_jitted(**prepared_inputs_dict)
@@ -262,16 +260,11 @@ class FlaxModelTesterMixin:
                         input_ids=input_ids,
                         attention_mask=attention_mask,
                         token_type_ids=token_type_ids,
-                        return_dict=True,
                     )
 
-                # jitting with return_dict=True is possible, but throws warning
-                with self.subTest("JIT Enabled & Warning"):
-                    jitted_outputs_with_warn = model_jitted_return_dict(**prepared_inputs_dict)
-
-                self.assertEqual(len(outputs), len(jitted_outputs_with_warn))
-                for jitted_output, output in zip(jitted_outputs_with_warn, outputs):
-                    self.assertEqual(jitted_output.shape, output.shape)
+                # jitted function cannot return OrderedDict
+                with self.assertRaises(TypeError):
+                    model_jitted_return_dict(**prepared_inputs_dict)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
