@@ -39,6 +39,7 @@ from .file_utils import (
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
+    replace_return_docstrings,
 )
 from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
 from .utils import logging
@@ -442,5 +443,13 @@ def append_call_sample_docstring(model_class, tokenizer_class, checkpoint, outpu
         checkpoint=checkpoint,
         output_type=output_type,
         config_class=config_class,
-        model_cls=model_class,
+        model_cls=model_class.__name__,
+    )(model_class.__call__)
+
+
+def append_replace_return_docstrings(model_class, output_type, config_class):
+    model_class.__call__ = copy_func(model_class.__call__)
+    model_class.__call__ = replace_return_docstrings(
+        output_type=output_type,
+        config_class=config_class,
     )(model_class.__call__)

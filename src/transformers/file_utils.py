@@ -1039,6 +1039,9 @@ def add_code_sample_docstrings(
         elif "Model" in model_class or "Encoder" in model_class:
             code_sample = getattr(this_module, prefix + "BASE_MODEL_SAMPLE")
         else:
+            import ipdb
+
+            ipdb.set_trace()
             raise ValueError(f"Docstring can't be built for model {model_class}")
 
         output_doc = _prepare_output_docstrings(output_type, config_class) if output_type is not None else ""
@@ -1561,7 +1564,10 @@ def tf_required(func):
 
 
 def is_tensor(x):
-    """Tests if ``x`` is a :obj:`torch.Tensor`, :obj:`tf.Tensor`, obj:`jaxlib.xla_extension.DeviceArray` or :obj:`np.ndarray`."""
+    """
+    Tests if ``x`` is a :obj:`torch.Tensor`, :obj:`tf.Tensor`, obj:`jaxlib.xla_extension.DeviceArray` or
+    :obj:`np.ndarray`.
+    """
     if is_torch_available():
         import torch
 
