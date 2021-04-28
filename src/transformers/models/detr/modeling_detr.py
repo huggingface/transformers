@@ -1576,7 +1576,7 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
 
         pred_masks = None
         if self.config.masks:
-            # FIXME h_boxes takes the last one computed, keep this in mind
+            
             memory = encoder_outputs[0].permute(0,2,1).view(batch_size, self.config.d_model, height, width)
             mask = flattened_mask.view(batch_size, height, width)
 
@@ -1593,7 +1593,11 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
             print("Sum of sequence output:")
             print(sequence_output.sum())
 
-            bbox_mask = self.bbox_attention(sequence_output, memory, mask=mask)
+            # important: we need to reverse the mask 
+            # FIXME h_boxes takes the last one computed, keep this in mind
+            bbox_mask = self.bbox_attention(sequence_output, memory, mask=~mask)
+
+            print(bbox_mask)
 
             seg_masks = self.mask_head(projected_feature_map, bbox_mask, 
                                         [features[3][0], features[2][0], features[1][0]])
