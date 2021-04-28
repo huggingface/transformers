@@ -102,6 +102,20 @@ class AlbertTokenizer(PreTrainedTokenizer):
         mask_token (:obj:`str`, `optional`, defaults to :obj:`"[MASK]"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
+        sp_model_kwargs (:obj:`dict`, `optional`, defaults to :obj:`None`):
+            Will be passed to the ``SentencePieceProcessor.__init__()`` method. The `Python wrapper for SentencePiece
+            <https://github.com/google/sentencepiece/tree/master/python>`__ can be used, among other things, to set:
+
+            - ``enable_sampling``: Enable subword regularization.
+            - ``nbest_size``: Sampling parameters for unigram. Invalid for BPE-Dropout.
+
+              - ``nbest_size = {0,1}``: No sampling is performed.
+              - ``nbest_size > 1``: samples from the nbest_size results.
+              - ``nbest_size < 0``: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+                using forward-filtering-and-backward-sampling algorithm.
+
+            - ``alpha``: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+              BPE-dropout.
 
     Attributes:
         sp_model (:obj:`SentencePieceProcessor`):
@@ -125,10 +139,13 @@ class AlbertTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         cls_token="[CLS]",
         mask_token="[MASK]",
+        sp_model_kwargs=None,
         **kwargs
     ):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
+        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         super().__init__(
             do_lower_case=do_lower_case,
@@ -141,6 +158,7 @@ class AlbertTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             cls_token=cls_token,
             mask_token=mask_token,
+            sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
 
@@ -149,7 +167,7 @@ class AlbertTokenizer(PreTrainedTokenizer):
         self.keep_accents = keep_accents
         self.vocab_file = vocab_file
 
-        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
 
     @property
@@ -168,7 +186,12 @@ class AlbertTokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d):
         self.__dict__ = d
-        self.sp_model = spm.SentencePieceProcessor()
+
+        # for backward compatibility
+        if not hasattr(self, "sp_model_kwargs"):
+            self.sp_model_kwargs = {}
+
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
     def preprocess_text(self, inputs):
@@ -191,7 +214,7 @@ class AlbertTokenizer(PreTrainedTokenizer):
         text = self.preprocess_text(text)
 
         if not sample:
-            pieces = self.sp_model.EncodeAsPieces(text)
+            pieces = self.sp_model.encode(text, out_type=str)
         else:
             pieces = self.sp_model.SampleEncodeAsPieces(text, 64, 0.1)
         new_pieces = []
