@@ -162,7 +162,13 @@ _import_structure = {
         "BlenderbotSmallTokenizer",
     ],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
-    "models.clip": ["CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "ClipConfig", "ClipTokenizer"],
+    "models.clip": [
+        "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ClipConfig",
+        "ClipTextConfig",
+        "ClipTokenizer",
+        "ClipVisionConfig",
+    ],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.cpm": ["CpmTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
@@ -578,6 +584,8 @@ if is_torch_available():
             "CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
             "ClipModel",
             "ClipPreTrainedModel",
+            "ClipTextModel",
+            "ClipVisionModel",
         ]
     )
     _import_structure["models.convbert"].extend(
@@ -1525,7 +1533,13 @@ if TYPE_CHECKING:
         BlenderbotSmallTokenizer,
     )
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
-    from .models.clip import CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, ClipConfig, ClipTokenizer
+    from .models.clip import (
+        CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ClipConfig,
+        ClipTextConfig,
+        ClipTokenizer,
+        ClipVisionConfig,
+    )
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.cpm import CpmTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
@@ -1884,7 +1898,13 @@ if TYPE_CHECKING:
             CamembertForTokenClassification,
             CamembertModel,
         )
-        from .models.clip import CLIP_PRETRAINED_MODEL_ARCHIVE_LIST, ClipModel, ClipPreTrainedModel
+        from .models.clip import (
+            CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ClipModel,
+            ClipPreTrainedModel,
+            ClipTextModel,
+            ClipVisionModel,
+        )
         from .models.convbert import (
             CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ConvBertForMaskedLM,

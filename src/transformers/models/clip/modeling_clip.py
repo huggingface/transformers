@@ -86,7 +86,9 @@ class ClipVisionEmbeddings(nn.Module):
         self.patch_size = config.patch_size
 
         scale = self.embed_dim ** -0.5
-        self.class_embedding = nn.Parameter(scale * torch.randn(self.embed_dim))
+        class_embed_weights = torch.empty(self.embed_dim)
+        nn.init.normal_(class_embed_weights, mean=0.0, std=0.02)
+        self.class_embedding = nn.Parameter(class_embed_weights)
 
         self.patch_embedding = nn.Conv2d(
             in_channels=3, out_channels=self.embed_dim, kernel_size=self.patch_size, stride=self.patch_size, bias=False
@@ -144,27 +146,22 @@ class ClipTextEmbeddings(nn.Module):
 class ClipAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        bias: bool = True,
-    ):
+    def __init__(self, config):
         super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.head_dim = embed_dim // num_heads
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
         assert (
-            self.head_dim * num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+            self.head_dim * self.num_heads == self.embed_dim
+        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
         self.scaling = self.head_dim ** -0.5
-        self.dropout = dropout
+        self.dropout = config.attention_dropout
 
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
@@ -244,7 +241,7 @@ class ClipAttention(nn.Module):
 class ClipMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-
+        self.config = config
         self.activation_fn = QuickGELU()
         self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -260,11 +257,7 @@ class ClipEncoderLayer(nn.Module):
     def __init__(self, config: ClipConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = ClipAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.num_attention_heads,
-            dropout=config.attention_dropout,
-        )
+        self.self_attn = ClipAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim)
         self.mlp = ClipMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim)
@@ -321,11 +314,30 @@ class ClipPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Embedding)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, nn.LayerNorm):
+        if isinstance(module, ClipTextEmbeddings):
+            nn.init.normal_(module.token_embedding.weight, std=0.02)
+            nn.init.normal_(module.position_embedding.weight, std=0.01)
+        elif isinstance(module, ClipVisionEmbeddings):
+            nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim ** -0.5)
+            nn.init.normal_(module.patch_embedding.weight, std=self.config.initializer_range)
+            nn.init.normal_(module.position_embedding.weight, std=self.config.initializer_range)
+        elif isinstance(module, ClipAttention):
+            in_proj_std = (module.embed_dim ** -0.5) * ((2 * module.config.num_hidden_layers) ** -0.5)
+            out_proj_std = module.embed_dim ** -0.5
+            nn.init.normal_(module.q_proj.weight, std=in_proj_std)
+            nn.init.normal_(module.k_proj.weight, std=in_proj_std)
+            nn.init.normal_(module.v_proj.weight, std=in_proj_std)
+            nn.init.normal_(module.out_proj.weight, std=out_proj_std)
+        elif isinstance(module, ClipMLP):
+            in_proj_std = (module.config.hidden_size ** -0.5) * ((2 * module.config.num_hidden_layers) ** -0.5)
+            fc_std = (2 * module.config.hidden_size) ** -0.5
+            nn.init.normal_(module.fc1.weight, std=fc_std)
+            nn.init.normal_(module.fc2.weight, std=in_proj_std)
+        elif isinstance(module, ClipModel):
+            nn.init.normal_(module.text_projection.weight, std=module.text_embed_dim ** -0.5)
+            nn.init.normal_(module.visual_projection.weight, std=module.vision_embed_dim ** -0.5)
+
+        if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
@@ -571,6 +583,8 @@ class ClipVisionModel(ClipPreTrainedModel):
         embed_tokens (torch.nn.Embedding): output embedding
     """
 
+    config_class = ClipVisionConfig
+
     def __init__(self, config: ClipVisionConfig):
         super().__init__(config)
         embed_dim = config.hidden_size
@@ -581,6 +595,9 @@ class ClipVisionModel(ClipPreTrainedModel):
         self.post_layernorm = nn.LayerNorm(embed_dim)
 
         self.init_weights()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.embeddings.patch_embedding
 
     def forward(
         self,

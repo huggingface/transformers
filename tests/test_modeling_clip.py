@@ -74,7 +74,6 @@ class ClipVisionModelTester:
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-
         config = ClipVisionConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
@@ -278,6 +277,9 @@ class ClipModelTest(ModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_training(self):
+        pass
 
     @slow
     def test_model_from_pretrained(self):

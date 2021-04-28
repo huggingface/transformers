@@ -21,7 +21,7 @@ from ...file_utils import _BaseLazyModule, is_tokenizers_available, is_torch_ava
 
 
 _import_structure = {
-    "configuration_clip": ["CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "ClipConfig"],
+    "configuration_clip": ["CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "ClipConfig", "ClipTextConfig", "ClipVisionConfig"],
     "tokenization_clip": ["ClipTokenizer"],
 }
 
@@ -37,11 +37,13 @@ if is_torch_available():
         "CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ClipModel",
         "ClipPreTrainedModel",
+        "ClipTextModel",
+        "ClipVisionModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_clip import CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, ClipConfig
+    from .configuration_clip import CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, ClipConfig, ClipTextConfig, ClipVisionConfig
     from .tokenization_clip import ClipTokenizer
 
     if is_tokenizers_available():
@@ -52,7 +54,13 @@ if TYPE_CHECKING:
         from .processing_clip import ClipProcessor
 
     if is_torch_available():
-        from .modeling_clip import CLIP_PRETRAINED_MODEL_ARCHIVE_LIST, ClipModel, ClipPreTrainedModel
+        from .modeling_clip import (
+            CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ClipModel,
+            ClipPreTrainedModel,
+            ClipTextModel,
+            ClipVisionModel,
+        )
 
 
 else:
