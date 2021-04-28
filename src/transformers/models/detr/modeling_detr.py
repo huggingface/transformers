@@ -1506,7 +1506,7 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
         return_dict=None,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
         
@@ -1576,15 +1576,8 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
 
         # FIXME h_boxes takes the last one computed, keep this in mind
         # important: we need to reverse the mask, since in the original implementation the mask works reversed
+        # bbox_mask is of shape (batch_size, num_queries, number_of_attention_heads in bbox_attention, height/32, width/32)
         bbox_mask = self.bbox_attention(sequence_output, memory, mask=~mask)
-
-        print(len(features))
-        print(features[1][0].shape)
-        print(features[2][0].shape)
-        print(features[3][0].shape)
-
-        print("Projected feature map:")
-        print(projected_feature_map.shape)
         
         seg_masks = self.mask_head(projected_feature_map, bbox_mask, 
                                     [features[3][0], features[2][0], features[1][0]])
@@ -1667,8 +1660,11 @@ class MaskHeadSmallConv(nn.Module):
 
     def __init__(self, dim, fpn_dims, context_dim):
         super().__init__()
-
+        
+        assert dim % 8 == 0, "The hidden_size + number of attention heads must be divisible by 8 as the number of groups in GroupNorm is set to 8"
+        
         inter_dims = [dim, context_dim // 2, context_dim // 4, context_dim // 8, context_dim // 16, context_dim // 64]
+
         self.lay1 = torch.nn.Conv2d(dim, dim, 3, padding=1)
         self.gn1 = torch.nn.GroupNorm(8, dim)
         self.lay2 = torch.nn.Conv2d(dim, inter_dims[1], 3, padding=1)
@@ -1693,10 +1689,10 @@ class MaskHeadSmallConv(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x: Tensor, bbox_mask: Tensor, fpns: List[Tensor]):
+        # here we concatenate x, the projected feature map, of shape (batch_size, d_model, heigth/32, width/32) with 
+        # the bbox_mask = the attention maps of shape (batch_size, n_queries, n_heads, height/32, width/32). 
+        # We expand the projected feature map to match the number of heads.
         x = torch.cat([_expand(x, bbox_mask.shape[1]), bbox_mask.flatten(0, 1)], 1)
-
-        print("Shape of x:")
-        print(x.shape)
         
         x = self.lay1(x)
         x = self.gn1(x)

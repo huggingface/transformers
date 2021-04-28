@@ -49,19 +49,20 @@ class DetrModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=8,
         is_training=True,
         use_labels=True,
-        hidden_size=16,
+        hidden_size=256,
         num_hidden_layers=2,
-        num_attention_heads=4,
+        num_attention_heads=8,
         intermediate_size=4,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        num_queries=10,
+        num_queries=12,
         num_channels=3,
-        image_size=800,
+        min_size=200,
+        max_size=200,
         n_targets=8,
         num_labels=91,
     ):
@@ -78,18 +79,19 @@ class DetrModelTester:
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.num_queries = num_queries
         self.num_channels = num_channels
-        self.image_size = image_size
+        self.min_size = min_size
+        self.max_size = max_size
         self.n_targets = n_targets
         self.num_labels = num_labels
 
         # we can also set the expected seq length for both encoder and decoder
-        self.encoder_seq_length = math.ceil(self.image_size / 32) ** 2
+        self.encoder_seq_length = math.ceil(self.min_size / 32) * math.ceil(self.max_size / 32) 
         self.decoder_seq_length = self.num_queries
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size])
 
-        pixel_mask = torch.ones([self.batch_size, self.image_size, self.image_size])
+        pixel_mask = torch.ones([self.batch_size, self.min_size, self.max_size])
 
         labels = None
         if self.use_labels:
@@ -99,7 +101,7 @@ class DetrModelTester:
                 target = {}
                 target["class_labels"] = torch.randint(high=self.num_labels, size=(self.n_targets,))
                 target["boxes"] = torch.rand(self.n_targets, 4)
-                target["masks"] = torch.rand(self.n_targets, self.image_size, self.image_size)
+                target["masks"] = torch.rand(self.n_targets, self.min_size, self.max_size)
                 labels.append(target)
 
         config = DetrConfig(
