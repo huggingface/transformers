@@ -1577,9 +1577,10 @@ def is_tensor(x):
             return True
 
     if is_flax_available():
+        from jax.interpreters.partial_eval import DynamicJaxprTracer
         from jaxlib.xla_extension import DeviceArray
 
-        if isinstance(x, DeviceArray):
+        if isinstance(x, (DeviceArray, DynamicJaxprTracer)):
             return True
 
     return isinstance(x, np.ndarray)
