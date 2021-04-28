@@ -13,7 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Tuple
+from typing import Callable, Tuple, Optional
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -24,11 +25,21 @@ from flax.core.frozen_dict import FrozenDict
 from flax.linen import dot_product_attention
 from jax import lax
 from jax.random import PRNGKey
+from jaxlib.xla_extension import DeviceArray
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, overwrite_call_docstring, append_call_sample_docstring
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, ModelOutput
+from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, overwrite_call_docstring
 from ...utils import logging
 from .configuration_bert import BertConfig
+from ...modeling_flax_outputs import (
+    FlaxBaseModelOutputWithPooling,
+    FlaxMaskedLMOutput,
+    FlaxMultipleChoiceModelOutput,
+    FlaxNextSentencePredictorOutput,
+    FlaxQuestionAnsweringModelOutput,
+    FlaxSequenceClassifierOutput,
+    FlaxTokenClassifierOutput,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -36,6 +47,36 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "bert-base-uncased"
 _CONFIG_FOR_DOC = "BertConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
+
+
+@dataclass
+class FlaxBertForPreTrainingOutput(ModelOutput):
+    """
+    Output type of :class:`~transformers.BertForPreTraining`.
+
+    Args:
+        prediction_logits (:obj:`DeviceArray` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        seq_relationship_logits (:obj:`DeviceArray` of shape :obj:`(batch_size, 2)`):
+            Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
+            before SoftMax).
+        hidden_states (:obj:`tuple(DeviceArray)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`DeviceArray` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(DeviceArray)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`DeviceArray` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    prediction_logits: DeviceArray = None
+    seq_relationship_logits: DeviceArray = None
+    hidden_states: Optional[Tuple[DeviceArray]] = None
+    attentions: Optional[Tuple[DeviceArray]] = None
 
 
 BERT_START_DOCSTRING = r"""
@@ -249,7 +290,9 @@ class FlaxBertAttention(nn.Module):
         # Attention mask comes in as attention_mask.shape == (*batch_sizes, kv_length)
         # FLAX expects: attention_mask.shape == (*batch_sizes, 1, 1, kv_length) such that it is broadcastable
         # with attn_weights.shape == (*batch_sizes, num_heads, q_length, kv_length)
-        attn_outputs = self.self(hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions)
+        attn_outputs = self.self(
+            hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
+        )
         attn_output = attn_outputs[0]
         hidden_states = self.output(attn_output, hidden_states, deterministic=deterministic)
 
@@ -309,7 +352,9 @@ class FlaxBertLayer(nn.Module):
         self.output = FlaxBertOutput(self.config, dtype=self.dtype)
 
     def __call__(self, hidden_states, attention_mask, deterministic: bool = True, output_attentions: bool = False):
-        attention_outputs = self.attention(hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions)
+        attention_outputs = self.attention(
+            hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
+        )
         attention_output = attention_outputs[0]
 
         hidden_states = self.intermediate(attention_output)
@@ -331,7 +376,14 @@ class FlaxBertLayerCollection(nn.Module):
             FlaxBertLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
         ]
 
-    def __call__(self, hidden_states, attention_mask, deterministic: bool = True, output_attentions: bool = False, output_hidden_states: bool = False):
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+    ):
         all_attentions = ()
         all_hidden_states = ()
 
@@ -367,8 +419,8 @@ class FlaxBertEncoder(nn.Module):
     def setup(self):
         self.layer = FlaxBertLayerCollection(self.config, dtype=self.dtype)
 
-    def __call__(self, hidden_states, attention_mask, deterministic: bool = True):
-        return self.layer(hidden_states, attention_mask, deterministic=deterministic)
+    def __call__(self, hidden_states, attention_mask, deterministic: bool = True, output_attentions: bool = False, output_hidden_states: bool = False):
+        return self.layer(hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions, output_hidden_states=output_hidden_states)
 
 
 class FlaxBertPooler(nn.Module):
@@ -499,9 +551,25 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         params: dict = None,
         dropout_rng: PRNGKey = None,
         train: bool = False,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        # make sure that model does not return dict when in jitted mode
+        if not isinstance(input_ids, (DeviceArray, np.ndarray)) and return_dict:
+            logger.warn("Model cannot return dictionary in jitted mode. Setting `return_dict=False`... To suppress this warning, please set return_dict=False.")
+            return_dict = False
+
+        if output_attentions:
+            raise NotImplementedError(
+                "Currently attention scores cannot be returned."
+                "Please set `output_attentions` to False for now."
+            )
+
         # init input tensors if not passed
         if token_type_ids is None:
             token_type_ids = jnp.ones_like(input_ids)
@@ -526,6 +594,7 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
             not train,
             output_attentions,
             output_hidden_states,
+            return_dict,
             rngs=rngs,
         )
 
@@ -540,19 +609,55 @@ class FlaxBertModule(nn.Module):
         self.encoder = FlaxBertEncoder(self.config, dtype=self.dtype)
         self.pooler = FlaxBertPooler(self.config, dtype=self.dtype)
 
-    def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True, output_attentions: bool = False, output_hidden_states: bool = False):
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
         hidden_states = self.embeddings(
             input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic
         )
-        outputs = self.encoder(hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions, output_hidden_states=output_hidden_states)
-
+        outputs = self.encoder(
+            hidden_states,
+            attention_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
         hidden_states = outputs[0]
+        pooled = self.pooler(hidden_states) if self.add_pooling_layer else None
 
-        if not self.add_pooling_layer:
-            return hidden_states
+        outputs = (hidden_states, pooled,) + outputs[1:]
 
-        pooled = self.pooler(hidden_states)
-        return hidden_states, pooled
+        if not return_dict:
+            return tuple(v for v in outputs if v is not None)
+
+        # extract all attentions
+        if output_attentions:
+            all_attentions = outputs[2]
+        else:
+            all_attentions = None
+
+        # extract all hidden_states
+        if output_hidden_states and output_attentions:
+            all_hidden_states = outputs[3]
+        elif output_hidden_states and not output_attentions:
+            all_hidden_states = outputs[2]
+        else:
+            all_hidden_states = None
+
+        return FlaxBaseModelOutputWithPooling(
+            last_hidden_state=hidden_states,
+            pooler_output=pooled,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions
+        )
 
 
 @add_start_docstrings(
@@ -563,6 +668,9 @@ class FlaxBertModel(FlaxBertPreTrainedModel):
     module_class = FlaxBertModule
 
 
+append_call_sample_docstring(FlaxBertModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC)
+
+
 class FlaxBertForPreTrainingModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
@@ -571,11 +679,28 @@ class FlaxBertForPreTrainingModule(nn.Module):
         self.bert = FlaxBertModule(config=self.config, dtype=self.dtype)
         self.cls = FlaxBertPreTrainingHeads(config=self.config, dtype=self.dtype)
 
-    def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True, output_attentions: bool = False, output_hidden_states: bool = False):
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+
         # Model
-        hidden_states, pooled_output = self.bert(
-            input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
-            , output_attentions=output_attentions, output_hidden_states=output_hidden_states
+        outputs = self.bert(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
         if self.config.tie_word_embeddings:
@@ -583,11 +708,22 @@ class FlaxBertForPreTrainingModule(nn.Module):
         else:
             shared_embedding = None
 
+        hidden_states = outputs[0]
+        pooled_output = outputs[1]
+
         prediction_scores, seq_relationship_score = self.cls(
             hidden_states, pooled_output, shared_embedding=shared_embedding
         )
 
-        return (prediction_scores, seq_relationship_score)
+        if not return_dict:
+            return (prediction_scores, seq_relationship_score) + outputs[2:]
+
+        return FlaxBertForPreTrainingOutput(
+            prediction_logits=prediction_scores,
+            seq_relationship_logits=seq_relationship_score,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -601,6 +737,9 @@ class FlaxBertForPreTraining(FlaxBertPreTrainedModel):
     module_class = FlaxBertForPreTrainingModule
 
 
+append_call_sample_docstring(FlaxBertForPreTraining, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBertForPreTrainingOutput, _CONFIG_FOR_DOC)
+
+
 class FlaxBertForMaskedLMModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
@@ -609,12 +748,30 @@ class FlaxBertForMaskedLMModule(nn.Module):
         self.bert = FlaxBertModule(config=self.config, add_pooling_layer=False, dtype=self.dtype)
         self.cls = FlaxBertOnlyMLMHead(config=self.config, dtype=self.dtype)
 
-    def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True, output_attentions: bool = False, output_hidden_states: bool = False):
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
         # Model
-        hidden_states = self.bert(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
-            , output_attentions=output_attentions, output_hidden_states=output_hidden_states
+        outputs = self.bert(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
+        hidden_states = outputs[0]
         if self.config.tie_word_embeddings:
             shared_embedding = self.bert.variables["params"]["embeddings"]["word_embeddings"]["embedding"]
         else:
@@ -623,12 +780,22 @@ class FlaxBertForMaskedLMModule(nn.Module):
         # Compute the prediction scores
         logits = self.cls(hidden_states, shared_embedding=shared_embedding)
 
-        return (logits,)
+        if not return_dict:
+            return (logits,) + outputs[1:]
+
+        return FlaxMaskedLMOutput(
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings("""Bert Model with a `language modeling` head on top. """, BERT_START_DOCSTRING)
 class FlaxBertForMaskedLM(FlaxBertPreTrainedModel):
     module_class = FlaxBertForMaskedLMModule
+
+
+append_call_sample_docstring(FlaxBertForMaskedLM, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxBertForNextSentencePredictionModule(nn.Module):
@@ -639,15 +806,42 @@ class FlaxBertForNextSentencePredictionModule(nn.Module):
         self.bert = FlaxBertModule(config=self.config, dtype=self.dtype)
         self.cls = FlaxBertOnlyNSPHead(dtype=self.dtype)
 
-    def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True, output_attentions: bool = False, output_hidden_states: bool = False):
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
         # Model
-        _, pooled_output = self.bert(
-            input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
-            , output_attentions=output_attentions, output_hidden_states=output_hidden_states
+        outputs = self.bert(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
+        pooled_output = outputs[1]
         seq_relationship_scores = self.cls(pooled_output)
-        return (seq_relationship_scores,)
+
+        if not return_dict:
+            return (seq_relationship_scores,) + outputs[2:]
+
+        return FlaxNextSentencePredictorOutput(
+            logits=seq_relationship_scores,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -656,6 +850,9 @@ class FlaxBertForNextSentencePredictionModule(nn.Module):
 )
 class FlaxBertForNextSentencePrediction(FlaxBertPreTrainedModel):
     module_class = FlaxBertForNextSentencePredictionModule
+
+
+append_call_sample_docstring(FlaxBertForNextSentencePrediction, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxNextSentencePredictorOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxBertForSequenceClassificationModule(nn.Module):
@@ -670,17 +867,41 @@ class FlaxBertForSequenceClassificationModule(nn.Module):
             dtype=self.dtype,
         )
 
-    def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True, output_attentions: bool = False, output_hidden_states: bool = False):
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
         # Model
-        _, pooled_output = self.bert(
-            input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
-            , output_attentions=output_attentions, output_hidden_states=output_hidden_states
+        outputs = self.bert(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
+        pooled_output = outputs[1]
         pooled_output = self.dropout(pooled_output, deterministic=deterministic)
         logits = self.classifier(pooled_output)
 
-        return (logits,)
+        if not return_dict:
+            return (logits,) + outputs[2:]
+
+        return FlaxSequenceClassifierOutput(
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -694,6 +915,9 @@ class FlaxBertForSequenceClassification(FlaxBertPreTrainedModel):
     module_class = FlaxBertForSequenceClassificationModule
 
 
+append_call_sample_docstring(FlaxBertForSequenceClassification, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxSequenceClassifierOutput, _CONFIG_FOR_DOC)
+
+
 class FlaxBertForMultipleChoiceModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
@@ -703,7 +927,17 @@ class FlaxBertForMultipleChoiceModule(nn.Module):
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
         self.classifier = nn.Dense(1, dtype=self.dtype)
 
-    def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True, output_attentions: bool = False, output_hidden_states: bool = False):
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
         num_choices = input_ids.shape[1]
         input_ids = input_ids.reshape(-1, input_ids.shape[-1]) if input_ids is not None else None
         attention_mask = attention_mask.reshape(-1, attention_mask.shape[-1]) if attention_mask is not None else None
@@ -711,17 +945,31 @@ class FlaxBertForMultipleChoiceModule(nn.Module):
         position_ids = position_ids.reshape(-1, position_ids.shape[-1]) if position_ids is not None else None
 
         # Model
-        _, pooled_output = self.bert(
-            input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
-            , output_attentions=output_attentions, output_hidden_states=output_hidden_states
+        outputs = self.bert(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
+        pooled_output = outputs[1]
         pooled_output = self.dropout(pooled_output, deterministic=deterministic)
         logits = self.classifier(pooled_output)
 
         reshaped_logits = logits.reshape(-1, num_choices)
 
-        return (reshaped_logits,)
+        if not return_dict:
+            return (reshaped_logits,) + outputs[2:]
+
+        return FlaxMultipleChoiceModelOutput(
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -739,6 +987,7 @@ class FlaxBertForMultipleChoice(FlaxBertPreTrainedModel):
 overwrite_call_docstring(
     FlaxBertForMultipleChoice, BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
 )
+append_call_sample_docstring(FlaxBertForMultipleChoice, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxMultipleChoiceModelOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxBertForTokenClassificationModule(nn.Module):
@@ -750,16 +999,41 @@ class FlaxBertForTokenClassificationModule(nn.Module):
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
         self.classifier = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
-    def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True, output_attentions: bool = False, output_hidden_states: bool = False):
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
         # Model
-        hidden_states = self.bert(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
-            , output_attentions=output_attentions, output_hidden_states=output_hidden_states
+        outputs = self.bert(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
+        hidden_states = outputs[0]
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         logits = self.classifier(hidden_states)
 
-        return (logits,)
+        if not return_dict:
+            return (logits,) + outputs[1:]
+
+        return FlaxTokenClassifierOutput(
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -773,6 +1047,9 @@ class FlaxBertForTokenClassification(FlaxBertPreTrainedModel):
     module_class = FlaxBertForTokenClassificationModule
 
 
+append_call_sample_docstring(FlaxBertForTokenClassification, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxTokenClassifierOutput, _CONFIG_FOR_DOC)
+
+
 class FlaxBertForQuestionAnsweringModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
@@ -781,16 +1058,45 @@ class FlaxBertForQuestionAnsweringModule(nn.Module):
         self.bert = FlaxBertModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
         self.qa_outputs = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
-    def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True, output_attentions: bool = False, output_hidden_states: bool = False):
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
         # Model
-        hidden_states = self.bert(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic, output_attentions=output_attentions, output_hidden_states=output_hidden_states)
+        outputs = self.bert(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = outputs[0]
 
         logits = self.qa_outputs(hidden_states)
         start_logits, end_logits = logits.split(self.config.num_labels, axis=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
 
-        return (start_logits, end_logits)
+        if not return_dict:
+            return (start_logits, end_logits) + outputs[1:]
+
+        return FlaxQuestionAnsweringModelOutput(
+            start_logits=start_logits,
+            end_logits=end_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -802,3 +1108,6 @@ class FlaxBertForQuestionAnsweringModule(nn.Module):
 )
 class FlaxBertForQuestionAnswering(FlaxBertPreTrainedModel):
     module_class = FlaxBertForQuestionAnsweringModule
+
+
+append_call_sample_docstring(FlaxBertForQuestionAnswering, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxQuestionAnsweringModelOutput, _CONFIG_FOR_DOC)

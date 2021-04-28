@@ -108,7 +108,7 @@ class FlaxModelTesterMixin:
                 with torch.no_grad():
                     pt_outputs = pt_model(**pt_inputs).to_tuple()
 
-                fx_outputs = fx_model(**prepared_inputs_dict)
+                fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs):
                     self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-3)
@@ -117,7 +117,7 @@ class FlaxModelTesterMixin:
                     pt_model.save_pretrained(tmpdirname)
                     fx_model_loaded = model_class.from_pretrained(tmpdirname, from_pt=True)
 
-                fx_outputs_loaded = fx_model_loaded(**prepared_inputs_dict)
+                fx_outputs_loaded = fx_model_loaded(**prepared_inputs_dict).to_tuple()
                 self.assertEqual(
                     len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
                 )
@@ -149,7 +149,7 @@ class FlaxModelTesterMixin:
                 with torch.no_grad():
                     pt_outputs = pt_model(**pt_inputs).to_tuple()
 
-                fx_outputs = fx_model(**prepared_inputs_dict)
+                fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs):
                     self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-3)
@@ -175,13 +175,13 @@ class FlaxModelTesterMixin:
                 model = model_class(config)
 
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                outputs = model(**prepared_inputs_dict)
+                outputs = model(**prepared_inputs_dict).to_tuple()
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     model.save_pretrained(tmpdirname)
                     model_loaded = model_class.from_pretrained(tmpdirname)
 
-                outputs_loaded = model_loaded(**prepared_inputs_dict)
+                outputs_loaded = model_loaded(**prepared_inputs_dict).to_tuple()
                 for output_loaded, output in zip(outputs_loaded, outputs):
                     self.assert_almost_equals(output_loaded, output, 1e-3)
 
@@ -199,13 +199,22 @@ class FlaxModelTesterMixin:
 
                 with self.subTest("JIT Disabled"):
                     with jax.disable_jit():
-                        outputs = model_jitted(**prepared_inputs_dict)
+                        outputs = model_jitted(**prepared_inputs_dict).to_tuple()
 
                 with self.subTest("JIT Enabled"):
+                    prepared_inputs_dict["return_dict"] = False
                     jitted_outputs = model_jitted(**prepared_inputs_dict)
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
+                    self.assertEqual(jitted_output.shape, output.shape)
+
+                # jitting with return_dict=True throws a warning
+                with self.subTest("JIT Enabled & Warning") and self.assertWarns(Warning):
+                    jitted_outputs_with_warn = model_jitted(**prepared_inputs_dict)
+
+                self.assertEqual(len(outputs), len(jitted_outputs_with_warn))
+                for jitted_output, output in zip(jitted_outputs_with_warn, outputs):
                     self.assertEqual(jitted_output.shape, output.shape)
 
     def test_naming_convention(self):

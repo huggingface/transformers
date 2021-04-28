@@ -32,8 +32,8 @@ from .file_utils import (
     FLAX_WEIGHTS_NAME,
     WEIGHTS_NAME,
     PushToHubMixin,
-    add_start_docstrings_to_model_forward,
     add_code_sample_docstrings,
+    add_start_docstrings_to_model_forward,
     cached_path,
     copy_func,
     hf_bucket_url,
@@ -437,4 +437,10 @@ def overwrite_call_docstring(model_class, docstring):
 
 def append_call_sample_docstring(model_class, tokenizer_class, checkpoint, output_type, config_class, mask=None):
     model_class.__call__ = copy_func(model_class.__call__)
-    model_class.__call__ = add_code_sample_docstrings(tokenizer_class=tokenizer_class, checkpoint=checkpoint, output_type=output_type, config_class=config_class, model_cls=model_class)(model_class.__call__)
+    model_class.__call__ = add_code_sample_docstrings(
+        tokenizer_class=tokenizer_class,
+        checkpoint=checkpoint,
+        output_type=output_type,
+        config_class=config_class,
+        model_cls=model_class,
+    )(model_class.__call__)

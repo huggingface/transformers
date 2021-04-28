@@ -1561,7 +1561,7 @@ def tf_required(func):
 
 
 def is_tensor(x):
-    """Tests if ``x`` is a :obj:`torch.Tensor`, :obj:`tf.Tensor` or :obj:`np.ndarray`."""
+    """Tests if ``x`` is a :obj:`torch.Tensor`, :obj:`tf.Tensor`, obj:`jaxlib.xla_extension.DeviceArray` or :obj:`np.ndarray`."""
     if is_torch_available():
         import torch
 
@@ -1572,6 +1572,13 @@ def is_tensor(x):
 
         if isinstance(x, tf.Tensor):
             return True
+
+    if is_flax_available():
+        from jaxlib.xla_extension import DeviceArray
+
+        if isinstance(x, DeviceArray):
+            return True
+
     return isinstance(x, np.ndarray)
 
 
