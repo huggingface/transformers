@@ -583,7 +583,7 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         # make sure that model does not return dict when in jitted mode
         if not isinstance(input_ids, (DeviceArray, np.ndarray)) and return_dict:
             logger.warn(
-                "Model cannot return dictionary in jitted mode. Setting `return_dict=False`... To suppress this warning, please set config.return_dict=False."
+                "Model cannot return dictionary in jitted mode. Setting `return_dict=False`... To suppress this warning, please set ``return_dict=False``."
             )
             return_dict = False
 

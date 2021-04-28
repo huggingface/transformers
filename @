@@ -237,13 +237,8 @@ class FlaxModelTesterMixin:
                 model = model_class(config)
 
                 @jax.jit
-                def model_jitted(input_ids, attention_mask=None, token_type_ids=None):
-                    return model(
-                        input_ids=input_ids,
-                        attention_mask=attention_mask,
-                        token_type_ids=token_type_ids,
-                        return_dict=False,
-                    )
+                def model_jitted(input_ids, attention_mask=None, token_type_ids=None)
+                    return model(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, return_dict=False)
 
                 with self.subTest("JIT Enabled"):
                     jitted_outputs = model_jitted(**prepared_inputs_dict)
@@ -256,18 +251,9 @@ class FlaxModelTesterMixin:
                 for jitted_output, output in zip(jitted_outputs, outputs):
                     self.assertEqual(jitted_output.shape, output.shape)
 
-                @jax.jit
-                def model_jitted_return_dict(input_ids, attention_mask=None, token_type_ids=None):
-                    return model(
-                        input_ids=input_ids,
-                        attention_mask=attention_mask,
-                        token_type_ids=token_type_ids,
-                        return_dict=True,
-                    )
-
                 # jitting with return_dict=True is possible, but throws warning
                 with self.subTest("JIT Enabled & Warning"):
-                    jitted_outputs_with_warn = model_jitted_return_dict(**prepared_inputs_dict)
+                    jitted_outputs_with_warn = model_jitted(**prepared_inputs_dict)
 
                 self.assertEqual(len(outputs), len(jitted_outputs_with_warn))
                 for jitted_output, output in zip(jitted_outputs_with_warn, outputs):
