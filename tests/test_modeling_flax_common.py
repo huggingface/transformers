@@ -21,7 +21,6 @@ from typing import List, Tuple
 import numpy as np
 
 import transformers
-from jaxlib.xla_extension import DeviceArray
 from transformers import is_flax_available, is_torch_available
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax
 
@@ -31,6 +30,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
+    from jaxlib.xla_extension import DeviceArray
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,

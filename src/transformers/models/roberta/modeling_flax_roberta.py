@@ -24,13 +24,14 @@ from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_outputs import FlaxBaseModelOutputWithPooling
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel
+from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
 from ...utils import logging
 from .configuration_roberta import RobertaConfig
 
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "roberta-base"
 _CONFIG_FOR_DOC = "RobertaConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
@@ -594,3 +595,8 @@ class FlaxRobertaModule(nn.Module):
 )
 class FlaxRobertaModel(FlaxRobertaPreTrainedModel):
     module_class = FlaxRobertaModule
+
+
+append_call_sample_docstring(
+    FlaxRobertaModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
+)
