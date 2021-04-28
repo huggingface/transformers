@@ -118,45 +118,27 @@ class SavePretrainedCallback(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         self.model.save_pretrained(self.output_dir)
 
-def densify_ragged_batch(features, labels=None):
-    features = {feature: ragged_tensor.to_tensor() for feature, ragged_tensor in features.items()}
-    if labels is None:
-        return features
-    else:
-        return features, labels
-
-
-def convert_dataset_for_tensorflow(dataset, non_label_column_names, batch_size, labels, dataset_mode, pad_to_len):
+def convert_dataset_for_tensorflow(dataset, non_label_column_names, batch_size, labels, dataset_mode):
     """Converts a Hugging Face dataset to a Tensorflow Dataset or Sequence object. We usually only want a Dataset when
      we're training on TPU, as we get the nice feature of variable-length batches when we put the data in a Sequence
      object instead.
 """
-    feature_keys = list(set(dataset.features.keys()) - set(non_label_column_names + ['label']))
-    if dataset_mode == 'generator':
-        def gen():
-            permutation = np.random.permutation(len(dataset))
-            for i in permutation:
-                features_sample = {feature: dataset[feature][i] for feature in feature_keys}
-                if labels is None:
-                    yield features_sample
-                else:
-                    label_sample = dataset['label'][i]
-                    yield features_sample, label_sample
-        feature_specs = {feature: tf.TensorSpec(shape=(None,),
-                                                dtype=dataset.info.features[feature].feature.dtype)
-                         for feature in feature_keys}
+    def densify_ragged_batch(features, labels=None):
+        features = {feature: ragged_tensor.to_tensor() for feature, ragged_tensor in features.items()}
         if labels is None:
-            tf_dataset = tf.data.Dataset.from_generator(gen, output_signature=feature_specs)
+            return features
         else:
-            label_spec = tf.TensorSpec(shape=(), dtype=dataset.info.features['label'].dtype)
-            tf_dataset = tf.data.Dataset.from_generator(gen, output_signature=(feature_specs, label_spec))
-        if pad_to_len == -1:
-            padded_shapes = None
+            return features, labels
+
+    def constant_densify_ragged_batch(features, labels=None):
+        features = {feature: ragged_tensor.to_tensor(shape=(batch_size, max_len)) for feature, ragged_tensor in features.items()}
+        if labels is None:
+            return features
         else:
-            padded_shapes = ({feature: (pad_to_len,) for feature in feature_keys}, ())
-        return tf_dataset.padded_batch(batch_size=batch_size, padded_shapes=padded_shapes, drop_remainder=True)
-        # return DataSequence(dataset, non_label_column_names, batch_size, labels)
-    elif dataset_mode == 'preload':
+            return features, labels
+
+    feature_keys = list(set(dataset.features.keys()) - set(non_label_column_names + ['label']))
+    if dataset_mode == 'pad_dataset':
         data = {key: tf.ragged.constant(dataset[key]).to_tensor() for key in feature_keys}
         if labels:
             labels = tf.convert_to_tensor(np.array(dataset['label']))
@@ -165,7 +147,7 @@ def convert_dataset_for_tensorflow(dataset, non_label_column_names, batch_size, 
             tf_dataset = tf.data.Dataset.from_tensor_slices(data)
         tf_dataset = tf_dataset.shuffle(buffer_size=len(dataset)).batch(batch_size=batch_size, drop_remainder=True)
         return tf_dataset
-    elif dataset_mode == 'padded_batch':
+    elif dataset_mode == 'variable_batch':
         data = {key: tf.ragged.constant(dataset[key]) for key in feature_keys}
         if labels:
             labels = tf.convert_to_tensor(np.array(dataset['label']))
@@ -176,6 +158,21 @@ def convert_dataset_for_tensorflow(dataset, non_label_column_names, batch_size, 
             .batch(batch_size=batch_size, drop_remainder=True)\
             .map(densify_ragged_batch)
         return tf_dataset
+    elif dataset_mode == 'constant_batch':
+        # TODO Remove this constant after testing!
+        max_len = 128
+        data = {key: tf.ragged.constant(dataset[key]) for key in feature_keys}
+        if labels:
+            labels = tf.convert_to_tensor(np.array(dataset['label']))
+            tf_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
+        else:
+            tf_dataset = tf.data.Dataset.from_tensor_slices(data)
+        tf_dataset = tf_dataset.shuffle(buffer_size=len(dataset))\
+            .batch(batch_size=batch_size, drop_remainder=True)\
+            .map(constant_densify_ragged_batch)
+        return tf_dataset
+    else:
+        raise ValueError("Unknown dataset mode!")
 
 # endregion
 
@@ -558,8 +555,7 @@ def main():
                 dataset = dataset.select(range(samples_limit))
             data = convert_dataset_for_tensorflow(dataset, non_label_column_names,
                                                   batch_size=batch_size,
-                                                  labels=use_labels, dataset_mode='generator',
-                                                  pad_to_len=data_args.max_seq_length)
+                                                  labels=use_labels, dataset_mode='constant_batch')
             breakpoint()
             tf_data[key] = data
 
