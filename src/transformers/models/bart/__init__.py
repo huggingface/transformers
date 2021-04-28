@@ -44,7 +44,7 @@ if is_tf_available():
     _import_structure["modeling_tf_bart"] = ["TFBartForConditionalGeneration", "TFBartModel", "TFBartPretrainedModel"]
 
 if is_flax_available():
-    _import_structure["modeling_flax_bart"] = ["FlaxBartEncoder"]
+    _import_structure["modeling_flax_bart"] = ["FlaxBartEncoder", "FlaxBartDecoder"]
 
 if TYPE_CHECKING:
     from .configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig
