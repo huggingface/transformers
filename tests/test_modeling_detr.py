@@ -35,7 +35,7 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor
 if is_torch_available():
     import torch
 
-    from transformers import MODEL_MAPPING, DetrConfig, DetrForObjectDetection, DetrModel
+    from transformers import MODEL_MAPPING, DetrConfig, DetrForObjectDetection, DetrForPanopticSegmentation, DetrModel
 
 
 if is_vision_available():
@@ -49,7 +49,7 @@ class DetrModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         is_training=True,
         use_labels=True,
         hidden_size=16,
@@ -61,7 +61,7 @@ class DetrModelTester:
         attention_probs_dropout_prob=0.1,
         num_queries=10,
         num_channels=3,
-        image_size=200,
+        image_size=800,
         n_targets=8,
         num_labels=91,
     ):
@@ -99,6 +99,7 @@ class DetrModelTester:
                 target = {}
                 target["class_labels"] = torch.randint(high=self.num_labels, size=(self.n_targets,))
                 target["boxes"] = torch.rand(self.n_targets, 4)
+                target["masks"] = torch.rand(self.n_targets, self.image_size, self.image_size)
                 labels.append(target)
 
         config = DetrConfig(
@@ -157,6 +158,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         (
             DetrModel,
             DetrForObjectDetection,
+            DetrForPanopticSegmentation,
         )
         if is_torch_available()
         else ()
@@ -200,8 +202,8 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_detr_object_detection_head_model(*config_and_inputs)
 
+    @unittest.skip(reason="DETR does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # DETR does not use inputs_embeds
         pass
 
     def test_model_common_attributes(self):
@@ -213,12 +215,12 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
 
+    @unittest.skip(reason="DETR is not a generative model")
     def test_generate_without_input_ids(self):
-        # DETR is not a generative model
         pass
 
+    @unittest.skip(reason="DETR does not use token embeddings")
     def test_resize_tokens_embeddings(self):
-        # DETR does not use token embeddings
         pass
 
     def test_forward_signature(self):
@@ -309,3 +311,38 @@ class DetrModelIntegrationTests(unittest.TestCase):
             [[0.4433, 0.5302, 0.8853], [0.5494, 0.2517, 0.0529], [0.4998, 0.5360, 0.9956]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
+
+    def test_inference_panoptic_segmentation_head(self):
+        # TODO replace by facebook/detr-resnet-50-panoptic
+        model = DetrForPanopticSegmentation.from_pretrained("nielsr/detr-testje").to(torch_device)
+        model.eval()
+
+        feature_extractor = self.default_feature_extractor
+        image = prepare_img()
+        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        pixel_values = encoding["pixel_values"].to(torch_device)
+        pixel_mask = encoding["pixel_mask"].to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(pixel_values, pixel_mask)
+
+        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels + 1))
+        self.assertEqual(outputs.logits.shape, expected_shape_logits)
+        expected_slice_logits = torch.tensor(
+            [[-19.1194, -0.0893, -11.0154], [-17.3640, -1.8035, -14.0219], [-20.0461, -0.5837, -11.1060]]
+        ).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-4))
+
+        expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
+        self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
+        expected_slice_boxes = torch.tensor(
+            [[0.4433, 0.5302, 0.8853], [0.5494, 0.2517, 0.0529], [0.4998, 0.5360, 0.9956]]
+        ).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
+
+        expected_shape_masks = torch.Size((1, model.config.num_queries, 4))
+        self.assertEqual(outputs.pred_masks.shape, expected_shape_masks)
+        expected_slice_masks = torch.tensor(
+            [[0.4433, 0.5302, 0.8853], [0.5494, 0.2517, 0.0529], [0.4998, 0.5360, 0.9956]]
+        ).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.pred_masks[0, :3, :3], expected_slice_masks, atol=1e-4))

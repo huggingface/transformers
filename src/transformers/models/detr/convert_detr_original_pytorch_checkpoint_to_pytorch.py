@@ -228,8 +228,8 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
     outputs = model(pixel_values)
     assert torch.allclose(outputs.logits, original_outputs["pred_logits"], atol=1e-4)
     assert torch.allclose(outputs.pred_boxes, original_outputs["pred_boxes"], atol=1e-4)
-    # if is_panoptic:
-    #     assert torch.allclose(outputs.pred_masks, original_outputs["pred_masks"], atol=1e-4)
+    if is_panoptic:
+        assert torch.allclose(outputs.pred_masks, original_outputs["pred_masks"], atol=1e-4)
 
     # Save model and feature extractor
     logger.info(f"Saving PyTorch model and feature extractor to {pytorch_dump_folder_path}...")

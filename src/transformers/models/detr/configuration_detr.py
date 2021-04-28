@@ -88,8 +88,8 @@ class DetrConfig(PretrainedConfig):
             Whether to train (fine-tune) the backbone.
         dilation (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to replace stride with dilation in the last convolutional block (DC5).
-        masks (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to train the segmentation head.
+        return_intermediate_layers (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to return intermediate layers from the convolutional backbone.
         class_cost (:obj:`float`, `optional`, defaults to 1):
             Relative weight of the classification error in the Hungarian matching cost.
         bbox_cost (:obj:`float`, `optional`, defaults to 5):
@@ -150,7 +150,7 @@ class DetrConfig(PretrainedConfig):
         backbone="resnet50",
         train_backbone=True,
         dilation=False,
-        masks=False,
+        return_intermediate_layers=False,
         class_cost=1,
         bbox_cost=5,
         giou_cost=2,
@@ -190,7 +190,7 @@ class DetrConfig(PretrainedConfig):
         self.backbone = backbone
         self.train_backbone = train_backbone
         self.dilation = dilation
-        self.masks = masks
+        self.return_intermediate_layers = return_intermediate_layers
         # Hungarian matcher
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost

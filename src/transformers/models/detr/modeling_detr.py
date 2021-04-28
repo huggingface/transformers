@@ -1169,7 +1169,7 @@ class DetrModel(DetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = Backbone(config.backbone, config.train_backbone, config.dilation, config.masks)
+        backbone = Backbone(config.backbone, config.train_backbone, config.dilation, config.return_intermediate_layers)
         position_embeddings = build_position_encoding(config)
         self.backbone = Joiner(backbone, position_embeddings)
 
@@ -1460,11 +1460,8 @@ class DetrForObjectDetection(DetrPreTrainedModel):
 @add_start_docstrings(
     """
     DETR Model (consisting of a backbone and encoder-decoder Transformer) with a segmentation head on top, for
-    tasks such as COCO panoptic. Should have config.masks = True. 
+    tasks such as COCO panoptic. Should have config.return_intermediate_layers = True. 
 
-    TO DO: 
-    - remove config.masks argument from this model, and rename to config.return_intermediate_layers or something like that,
-    to make sure the backbone of the DetrForObjectDetection model returns a list of feature maps 
     """,
     DETR_START_DOCSTRING,
 )
@@ -1472,17 +1469,17 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
     def __init__(self, config: DetrConfig, box_model=None, freeze_detr=False):
         super().__init__(config)
 
-        assert config.masks
-        if box_model is not None:
+        config.return_intermediate_layers = True
+        if not box_model:
+            # end-to-end approach
+            self.detr = DetrForObjectDetection(config)
+        else: 
             # step-2 approach
             freeze_detr = True
-            #initialize model with weights of provided box_model, but with config.masks=True
+            #initialize model with weights of provided box_model, but with config.return_intermediate_layers=True
             #this makes sure the backbone returns a list of features
             model = DetrForObjectDetection(config)
             self.detr = model.load_state_dict(box_model.state_dict())
-        else:
-            # end-to-end approach
-            self.detr = DetrForObjectDetection(config)
 
         if freeze_detr:
             for p in self.parameters():
@@ -1493,7 +1490,7 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
         self.bbox_attention = MHAttentionMap(hidden_size, hidden_size, number_of_heads, dropout=0.0)
         self.mask_head = MaskHeadSmallConv(hidden_size + number_of_heads, [1024, 512, 256], hidden_size)
 
-    #@add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)
     #@replace_return_docstrings(output_type=DetrForPanopticSegmentationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1570,39 +1567,29 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
 
         sequence_output = decoder_outputs[0]
         
-        # Sixth, compute logits and pred_boxes
+        # Sixth, compute logits, pred_boxes and pred_masks
         logits = self.detr.class_labels_classifier(sequence_output)
         pred_boxes = self.detr.bbox_predictor(sequence_output).sigmoid()
 
-        pred_masks = None
-        if self.config.masks:
-            
-            memory = encoder_outputs[0].permute(0,2,1).view(batch_size, self.config.d_model, height, width)
-            mask = flattened_mask.view(batch_size, height, width)
+        memory = encoder_outputs[0].permute(0,2,1).view(batch_size, self.config.d_model, height, width)
+        mask = flattened_mask.view(batch_size, height, width)
 
-            print("Shape of memory:")
-            print(memory.shape)
-            print("First elements of memory:")
-            print(memory[0,:3,:3,:3])
-            print("Shape of mask:")
-            print(mask.shape)
-            print("Sum of mask:")
-            print(mask.sum())
-            print("Shape of sequence output:")
-            print(sequence_output.shape)
-            print("Sum of sequence output:")
-            print(sequence_output.sum())
+        # FIXME h_boxes takes the last one computed, keep this in mind
+        # important: we need to reverse the mask, since in the original implementation the mask works reversed
+        bbox_mask = self.bbox_attention(sequence_output, memory, mask=~mask)
 
-            # important: we need to reverse the mask 
-            # FIXME h_boxes takes the last one computed, keep this in mind
-            bbox_mask = self.bbox_attention(sequence_output, memory, mask=~mask)
+        print(len(features))
+        print(features[1][0].shape)
+        print(features[2][0].shape)
+        print(features[3][0].shape)
 
-            print(bbox_mask)
+        print("Projected feature map:")
+        print(projected_feature_map.shape)
+        
+        seg_masks = self.mask_head(projected_feature_map, bbox_mask, 
+                                    [features[3][0], features[2][0], features[1][0]])
 
-            seg_masks = self.mask_head(projected_feature_map, bbox_mask, 
-                                        [features[3][0], features[2][0], features[1][0]])
-
-            pred_masks = seg_masks.view(batch_size, self.detr.config.num_queries, seg_masks.shape[-2], seg_masks.shape[-1])
+        pred_masks = seg_masks.view(batch_size, self.detr.config.num_queries, seg_masks.shape[-2], seg_masks.shape[-1])
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
@@ -1611,9 +1598,7 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
                 class_cost=self.config.class_cost, bbox_cost=self.config.bbox_cost, giou_cost=self.config.giou_cost
             )
             # Second: create the criterion
-            losses = ["labels", "boxes", "cardinality"]
-            if self.config.masks:
-                losses += ["masks"]
+            losses = ["labels", "boxes", "cardinality", "masks"]
             criterion = SetCriterion(
                 matcher=matcher,
                 num_classes=self.config.num_labels,
@@ -1625,10 +1610,9 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
             outputs_loss = {}
             outputs_loss["logits"] = logits
             outputs_loss["pred_boxes"] = pred_boxes
-            if self.config.masks:
-                outputs_loss["pred_masks"] = pred_masks
+            outputs_loss["pred_masks"] = pred_masks
             if self.config.auxiliary_loss:
-                intermediate = outputs.intermediate_hidden_states if return_dict else outputs[-1]
+                intermediate = decoder_outputs.intermediate_hidden_states if return_dict else decoder_outputs[-1]
                 outputs_class = self.class_labels_classifier(intermediate)
                 outputs_coord = self.bbox_predictor(intermediate).sigmoid()
                 auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
@@ -1638,9 +1622,8 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
             # Fourth: compute total loss, as a weighted sum of the various losses
             weight_dict = {"loss_ce": 1, "loss_bbox": self.config.bbox_loss_coefficient}
             weight_dict["loss_giou"] = self.config.giou_loss_coefficient
-            if self.config.masks:
-                weight_dict["loss_mask"] = self.config.mask_loss_coef
-                weight_dict["loss_dice"] = self.config.dice_loss_coef
+            weight_dict["loss_mask"] = self.config.mask_loss_coef
+            weight_dict["loss_dice"] = self.config.dice_loss_coef
             if self.config.auxiliary_loss:
                 aux_weight_dict = {}
                 for i in range(self.config.decoder_layers - 1):
@@ -1712,6 +1695,9 @@ class MaskHeadSmallConv(nn.Module):
     def forward(self, x: Tensor, bbox_mask: Tensor, fpns: List[Tensor]):
         x = torch.cat([_expand(x, bbox_mask.shape[1]), bbox_mask.flatten(0, 1)], 1)
 
+        print("Shape of x:")
+        print(x.shape)
+        
         x = self.lay1(x)
         x = self.gn1(x)
         x = F.relu(x)
