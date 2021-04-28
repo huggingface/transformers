@@ -302,9 +302,10 @@ class TrainingArguments:
             the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
             details.
         resume_from_checkpoint (:obj:`str`, `optional`):
-            The path to a folder with a valid checkpoint for your model. This will be used as a default for the value
-            of :obj:`resume_from_checkpoint` in :meth:`~transformers.Trainer.train`. It's mostly intended to be used by
-            your training/evaluation scripts.
+            The path to a folder with a valid checkpoint for your model. This argument is not directly used by
+            :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
+            the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
+            details.
     """
 
     output_dir: str = field(
