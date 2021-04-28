@@ -48,65 +48,6 @@ logger = logging.getLogger(__name__)
 
 
 # region Helper classes
-class DataSequence(tf.keras.utils.Sequence):
-    # We use a Sequence object to load the data. Although it's completely possible to load your data as Numpy/TF arrays
-    # and pass those straight to the Model, this constrains you in a couple of ways. Most notably, it requires all
-    # the data to be padded to the length of the longest input example, and it also requires the whole dataset to be
-    # loaded into memory. If these aren't major problems for you, you can skip the sequence object in your own code!
-    def __init__(self, dataset, non_label_column_names, batch_size, labels, shuffle=True):
-        super().__init__()
-        # Retain all of the columns not present in the original data - these are the ones added by the tokenizer
-        self.data = {
-            key: dataset[key]
-            for key in dataset.features.keys()
-            if key not in non_label_column_names and key != "label"
-        }
-        data_lengths = {len(array) for array in self.data.values()}
-        assert len(data_lengths) == 1, "Dataset arrays differ in length!"
-        self.data_length = data_lengths.pop()
-        self.num_batches = self.data_length // batch_size
-        if labels:
-            self.labels = np.array(dataset["label"])
-            assert len(self.labels) == self.data_length, "Labels not the same length as input arrays!"
-        else:
-            self.labels = None
-        self.batch_size = batch_size
-        self.shuffle = shuffle
-        if self.shuffle:
-            # Shuffle the data order
-            self.permutation = np.random.permutation(self.data_length)
-        else:
-            self.permutation = None
-
-    def on_epoch_end(self):
-        # If we're shuffling, reshuffle the data order after each epoch
-        if self.shuffle:
-            self.permutation = np.random.permutation(self.data_length)
-
-    def __getitem__(self, item):
-        # Note that this yields a batch, not a single sample
-        batch_start = item * self.batch_size
-        batch_end = (item + 1) * self.batch_size
-        if self.shuffle:
-            data_indices = self.permutation[batch_start:batch_end]
-        else:
-            data_indices = np.arange(batch_start, batch_end)
-        # We want to pad the data as little as possible, so we only pad each batch
-        # to the maximum length within that batch. We do that by stacking the variable-
-        # length inputs into a ragged tensor and then densifying it.
-        batch_input = {
-            key: tf.ragged.constant([data[i] for i in data_indices]).to_tensor() for key, data in self.data.items()
-        }
-        if self.labels is None:
-            return batch_input
-        else:
-            batch_labels = self.labels[data_indices]
-            return batch_input, batch_labels
-
-    def __len__(self):
-        return self.num_batches
-
-
 class SavePretrainedCallback(tf.keras.callbacks.Callback):
     # Hugging Face models have a save_pretrained() method that saves both the weights and the necessary
     # metadata to allow them to be loaded as a pretrained model in future. This is a simple Keras callback
@@ -118,46 +59,56 @@ class SavePretrainedCallback(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         self.model.save_pretrained(self.output_dir)
 
-def convert_dataset_for_tensorflow(dataset, non_label_column_names, batch_size, labels, dataset_mode):
+
+def convert_dataset_for_tensorflow(dataset, non_label_column_names, batch_size, labels, dataset_mode, drop_remainder):
     """Converts a Hugging Face dataset to a Tensorflow Dataset or Sequence object. We usually only want a Dataset when
-     we're training on TPU, as we get the nice feature of variable-length batches when we put the data in a Sequence
-     object instead.
-"""
+    we're training on TPU, as we get the nice feature of variable-length batches when we put the data in a Sequence
+    object instead."""
+
     def densify_ragged_batch(features, labels=None):
-        features = {feature: ragged_tensor.to_tensor(shape=batch_shape[feature]) for feature, ragged_tensor in features.items()}
+        features = {
+            feature: ragged_tensor.to_tensor(shape=batch_shape[feature]) for feature, ragged_tensor in features.items()
+        }
         if labels is None:
             return features
         else:
             return features, labels
 
-    feature_keys = list(set(dataset.features.keys()) - set(non_label_column_names + ['label']))
-    if dataset_mode == 'variable_batch':
+    feature_keys = list(set(dataset.features.keys()) - set(non_label_column_names + ["label"]))
+    if dataset_mode == "variable_batch":
         batch_shape = {key: None for key in feature_keys}
         data = {key: tf.ragged.constant(dataset[key]) for key in feature_keys}
         if labels:
-            labels = tf.convert_to_tensor(np.array(dataset['label']))
+            labels = tf.convert_to_tensor(np.array(dataset["label"]))
             tf_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
         else:
             tf_dataset = tf.data.Dataset.from_tensor_slices(data)
-        tf_dataset = tf_dataset.shuffle(buffer_size=len(dataset))\
-            .batch(batch_size=batch_size, drop_remainder=True)\
+        tf_dataset = (
+            tf_dataset.shuffle(buffer_size=len(dataset))
+            .batch(batch_size=batch_size, drop_remainder=drop_remainder)
             .map(densify_ragged_batch)
+        )
         return tf_dataset
-    elif dataset_mode == 'constant_batch':
+    elif dataset_mode == "constant_batch":
         data = {key: tf.ragged.constant(dataset[key]) for key in feature_keys}
-        batch_shape = {key: tf.concat(([batch_size], ragged_tensor.bounding_shape()[1:]), axis=0)
-                       for key, ragged_tensor in data.items()}
+        batch_shape = {
+            key: tf.concat(([batch_size], ragged_tensor.bounding_shape()[1:]), axis=0)
+            for key, ragged_tensor in data.items()
+        }
         if labels:
-            labels = tf.convert_to_tensor(np.array(dataset['label']))
+            labels = tf.convert_to_tensor(np.array(dataset["label"]))
             tf_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
         else:
             tf_dataset = tf.data.Dataset.from_tensor_slices(data)
-        tf_dataset = tf_dataset.shuffle(buffer_size=len(dataset))\
-            .batch(batch_size=batch_size, drop_remainder=True)\
+        tf_dataset = (
+            tf_dataset.shuffle(buffer_size=len(dataset))
+            .batch(batch_size=batch_size, drop_remainder=drop_remainder)
             .map(densify_ragged_batch)
+        )
         return tf_dataset
     else:
         raise ValueError("Unknown dataset mode!")
+
 
 # endregion
 
@@ -264,12 +215,7 @@ class ModelArguments:
             "with private models)."
         },
     )
-    tpu: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "Name of the TPU resource to use, if available"
-        }
-    )
+    tpu: Optional[str] = field(default=None, metadata={"help": "Name of the TPU resource to use, if available"})
 
 
 # endregion
@@ -412,7 +358,6 @@ def main():
             sentence1_key, sentence2_key = non_label_column_names[:2]
         else:
             sentence1_key, sentence2_key = non_label_column_names[0], None
-
     # Padding strategy
     if data_args.pad_to_max_length:
         padding = "max_length"
@@ -518,60 +463,68 @@ def main():
         # Convert data to a tf.keras.utils.Sequence object for training if we're not using a TPU
         # For TPU, convert to a tf.data.Dataset
         tf_data = dict()
-        max_samples = {'train': data_args.max_train_samples,
-                       'validation': data_args.max_val_samples,
-                       'test': data_args.max_test_samples}
+        max_samples = {
+            "train": data_args.max_train_samples,
+            "validation": data_args.max_val_samples,
+            "test": data_args.max_test_samples,
+        }
         for key in ("train", "validation", "test"):
             if key not in datasets:
                 tf_data[key] = None
                 continue
-            if key in ('train', 'validation'):
+            if key in ("train", "validation"):
                 use_labels = True
             else:
                 use_labels = False
-            if key == 'train':
+            if key == "train":
                 batch_size = training_args.per_device_train_batch_size
+                drop_remainder = True  # Saves us worrying about scaling gradients for the last batch
             else:
                 batch_size = training_args.per_device_eval_batch_size
+                drop_remainder = False
             samples_limit = max_samples[key]
             dataset = datasets[key]
             if samples_limit is not None:
                 dataset = dataset.select(range(samples_limit))
             if isinstance(training_args.strategy, tf.distribute.TPUStrategy):
-                dataset_mode = 'constant_batch'
+                dataset_mode = "constant_batch"
             else:
-                dataset_mode = 'variable_batch'
-            data = convert_dataset_for_tensorflow(dataset, non_label_column_names,
-                                                  batch_size=batch_size,
-                                                  labels=use_labels, dataset_mode=dataset_mode)
+                dataset_mode = "variable_batch"
+            data = convert_dataset_for_tensorflow(
+                dataset,
+                non_label_column_names,
+                batch_size=batch_size,
+                labels=use_labels,
+                dataset_mode=dataset_mode,
+                drop_remainder=drop_remainder,
+            )
             tf_data[key] = data
-
         # endregion
 
         # region Training and validation
-        if tf_data['train'] is not None:
+        if tf_data["train"] is not None:
             callbacks = [SavePretrainedCallback(output_dir=training_args.output_dir)]
             model.fit(
-                tf_data['train'],
-                validation_data=tf_data['validation'],
+                tf_data["train"],
+                validation_data=tf_data["validation"],
                 epochs=int(training_args.num_train_epochs),
-                callbacks=callbacks
+                callbacks=callbacks,
             )
-        elif tf_data['validation'] is not None:
+        elif tf_data["validation"] is not None:
             # If there's a validation dataset but no training set, just evaluate the metrics
             logger.info("Computing metrics on validation data...")
             if is_regression:
-                loss = model.evaluate(tf_data['validation'])
+                loss = model.evaluate(tf_data["validation"])
                 logger.info(f"Loss: {loss:.5f}")
             else:
-                loss, accuracy = model.evaluate(tf_data['validation'])
+                loss, accuracy = model.evaluate(tf_data["validation"])
                 logger.info(f"Loss: {loss:.5f}, Accuracy: {accuracy * 100:.4f}%")
         # endregion
 
         # region Prediction
-        if tf_data['test'] is not None:
+        if tf_data["test"] is not None:
             logger.info("Doing predictions on test dataset...")
-            predictions = model.predict(tf_data['test'])["logits"]
+            predictions = model.predict(tf_data["test"])["logits"]
             predictions = np.squeeze(predictions) if is_regression else np.argmax(predictions, axis=1)
             output_test_file = os.path.join(training_args.output_dir, "test_results.txt")
             with open(output_test_file, "w") as writer:
