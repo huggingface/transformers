@@ -149,12 +149,6 @@ So if you don't have any specific environment variable set, the cache directory 
 (``PYTORCH_TRANSFORMERS_CACHE`` or ``PYTORCH_PRETRAINED_BERT_CACHE``), those will be used if there is no shell
 environment variable for ``TRANSFORMERS_CACHE``.
 
-### Note on model downloads (Continuous Integration or large-scale deployments)
-
-If you expect to be downloading large volumes of models (more than 10,000) from huggingface.co (for instance through
-your CI setup, or a large-scale production deployment), please cache the model files on your end. It will be way
-faster, and cheaper. Feel free to contact us privately, we'd love to help with this.
-
 ### Offline mode
 
 It's possible to run 🤗 Transformers in a firewalled or a no-network environment.
