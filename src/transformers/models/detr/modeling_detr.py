@@ -1491,7 +1491,7 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
         self.mask_head = MaskHeadSmallConv(hidden_size + number_of_heads, [1024, 512, 256], hidden_size)
 
     @add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)
-    #@replace_return_docstrings(output_type=DetrForPanopticSegmentationOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=DetrForPanopticSegmentationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values,
@@ -1505,6 +1505,37 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+        labels (:obj:`List[Dict]` of len :obj:`(batch_size,)`, `optional`):
+            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing 3 keys:
+            'class_labels', 'boxes' and 'masks' (the class labels, bounding boxes and segmentation masks of an image 
+            in the batch respectively). The class labels themselves should be a :obj:`torch.LongTensor` of len 
+            :obj:`(number of bounding boxes in the image,)`, the boxes a :obj:`torch.FloatTensor` of shape 
+            :obj:`(number of bounding boxes in the image, 4)` and the masks a :obj:`torch.FloatTensor` of shape 
+            :obj:`(number of bounding boxes in the image, 4)`.
+
+        Returns:
+
+        Examples::
+
+            >>> from transformers import DetrFeatureExtractor, DetrForPanopticSegmentation
+            >>> from PIL import Image
+            >>> import requests
+
+            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+            >>> image = Image.open(requests.get(url, stream=True).raw)
+
+            >>> feature_extractor = DetrFeatureExtractor.from_pretrained('facebook/detr-resnet-50-panoptic')
+            >>> model = DetrForPanopticSegmentation.from_pretrained('facebook/detr-resnet-50-panoptic')
+
+            >>> inputs = feature_extractor(images=image, return_tensors="pt")
+            >>> outputs = model(**inputs)
+            >>> # model predicts COCO classes, bounding boxes, and masks
+            >>> logits = outputs.logits
+            >>> bboxes = outputs.pred_boxes
+            >>> masks = outputs.pred_masks
+        """
+        
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         
         batch_size, num_channels, height, width = pixel_values.shape
