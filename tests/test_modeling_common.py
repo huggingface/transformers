@@ -1122,7 +1122,7 @@ class ModelTesterMixin:
 
         # a candidate for testing_utils
         def get_current_gpu_memory_use():
-            """ returns a list of cuda memory allocations per GPU in MBs"""
+            """returns a list of cuda memory allocations per GPU in MBs"""
 
             per_device_memory = []
             for id in range(torch.cuda.device_count()):

@@ -511,7 +511,9 @@ class FlaxRobertaForMaskedLMModule(nn.Module):
         self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
     ):
         # Model
-        hidden_states = self.roberta(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic)
+        hidden_states = self.roberta(
+            input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
+        )
 
         if self.config.tie_word_embeddings:
             shared_embedding = self.roberta.variables["params"]["embeddings"]["word_embeddings"]["embedding"]

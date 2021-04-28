@@ -189,7 +189,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         return outputs
 
     def _tokenize(self, text, sample=False):
-        """ Tokenize a string. """
+        """Tokenize a string."""
         text = self.preprocess_text(text)
 
         if not sample:
@@ -213,7 +213,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         return new_pieces
 
     def _convert_token_to_id(self, token):
-        """ Converts a token (str) in an id using the vocab. """
+        """Converts a token (str) in an id using the vocab."""
         return self.sp_model.PieceToId(token)
 
     def _convert_id_to_token(self, index):

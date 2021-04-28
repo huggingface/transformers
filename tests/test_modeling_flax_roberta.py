@@ -23,7 +23,7 @@ from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_
 
 
 if is_flax_available():
-    from transformers.models.roberta.modeling_flax_roberta import FlaxRobertaModel, FlaxRobertaForMaskedLM
+    from transformers.models.roberta.modeling_flax_roberta import FlaxRobertaForMaskedLM, FlaxRobertaModel
 
 
 class FlaxRobertaModelTester(unittest.TestCase):
