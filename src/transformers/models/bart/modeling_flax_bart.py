@@ -483,13 +483,23 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
 
     def __call__(
         self,
-        input_ids: jnp.ndarray,
+        input_ids: Optional[jnp.ndarray] = None,
         attention_mask: Optional[jnp.ndarray] = None,
         decoder_input_ids: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
+        head_mask: Optional[jnp.ndarray] = None,
+        decoder_head_mask: Optional[jnp.ndarray] = None,
+        cross_attn_head_mask: Optional[jnp.ndarray] = None,
+        encoder_outputs: Optional[jnp.ndarray] = None,
+        past_key_values: Optional[jnp.ndarray] = None,
+        inputs_embeds: Optional[jnp.ndarray] = None,
+        decoder_inputs_embeds: Optional[jnp.ndarray] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = False,
+        deterministic: bool = True,
         params: dict = None,
         dropout_rng: PRNGKey = None,
-        train: bool = False,
     ):
         if attention_mask is None:
             attention_mask = jnp.ones_like(input_ids)
@@ -501,6 +511,8 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
             )
         if decoder_attention_mask is None:
             decoder_attention_mask = attention_mask
+        if head_mask is None:
+            head_mask = jnp.ones((self.config.num_hidden_layers, self.config.encoder_attention_heads), dtype="i4")
 
         # Handle any PRNG if needed
         rngs = {}
@@ -512,8 +524,17 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
             jnp.array(input_ids, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),
             jnp.array(decoder_input_ids, dtype="i4"),
-            jnp.array(decoder_input_ids, dtype="i4"),
-            not train,
+            jnp.array(head_mask, dtype="i4"),
+            jnp.array(decoder_head_mask, dtype="i4"),
+            jnp.array(cross_attn_head_mask, dtype="i4"),
+            jnp.array(encoder_outputs, dtype="fp32"),
+            jnp.array(past_key_values, dtype="fp32"),
+            jnp.array(inputs_embeds, dtype="fp32"),
+            jnp.array(decoder_inputs_embeds, dtype="fp32"),
+            output_attentions,
+            output_hidden_states,
+            return_dict,
+            deterministic,
             rngs=rngs,
         )
 
@@ -758,7 +779,6 @@ class FlaxBartDecoder(nn.Module):
             combined_attention_mask = (
                 expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
             )
-
         return combined_attention_mask
 
     def __call__(
@@ -866,6 +886,11 @@ class FlaxBartDecoder(nn.Module):
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
 
+        # expand encoder attention mask
+        if encoder_hidden_states is not None and encoder_attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
+
         # embed positions
         positions = self.embed_positions(input_shape, past_key_values_length)
 
@@ -894,6 +919,7 @@ class FlaxBartDecoder(nn.Module):
                 continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
+
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask,
@@ -925,3 +951,100 @@ class FlaxBartDecoder(nn.Module):
         raise NotImplementedError(
             "TODO: Return with return_dict is not implemented yet! Please use `return_dict=False`"
         )
+
+
+class FlaxBartModule(nn.Module):
+    config: BartConfig
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self,):
+        _, vocab_size = self.config.pad_token_id, self.config.vocab_size
+        embed_dim = self.config.d_model
+
+        self.shared = nn.Embed(
+            vocab_size,
+            embed_dim,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            dtype=self.dtype
+        )  # TODO: solve missing self.padding_idx
+
+        self.encoder = FlaxBartEncoder(self.config, dtype=self.dtype)
+        self.decoder = FlaxBartDecoder(self.config, dtype=self.dtype)
+
+    def __call__(
+        self,
+        input_ids: Optional[jnp.ndarray] = None,
+        attention_mask: Optional[jnp.ndarray] = None,
+        decoder_input_ids: Optional[jnp.ndarray] = None,
+        decoder_attention_mask: Optional[jnp.ndarray] = None,
+        head_mask: Optional[jnp.ndarray] = None,
+        decoder_head_mask: Optional[jnp.ndarray] = None,
+        cross_attn_head_mask: Optional[jnp.ndarray] = None,
+        encoder_outputs: Optional[jnp.ndarray] = None,
+        past_key_values: Optional[jnp.ndarray] = None,
+        inputs_embeds: Optional[jnp.ndarray] = None,
+        decoder_inputs_embeds: Optional[jnp.ndarray] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = False,
+        deterministic: bool = True,
+    ):
+        if decoder_input_ids is None and decoder_inputs_embeds is None:
+            decoder_input_ids = shift_tokens_right(
+                input_ids, self.config.pad_token_id, self.config.decoder_start_token_id
+            )
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if encoder_outputs is None:
+            print(head_mask)
+            encoder_outputs = self.encoder(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                head_mask=head_mask,
+                inputs_embeds=inputs_embeds,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                deterministic=deterministic,
+            )
+
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=encoder_outputs[0],
+            encoder_attention_mask=attention_mask,
+            head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=decoder_inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
+        )
+
+        if not return_dict:
+            return decoder_outputs + encoder_outputs
+        raise NotImplementedError(
+            "TODO: Return with return_dict is not implemented yet! Please use `return_dict=False`"
+        )
+
+
+class FlaxBartModel(FlaxBartPretrainedModel):
+    config: BartConfig
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    module_class = FlaxBartModule
+
+    def get_input_embeddings(self):
+        return self.shared
+
+    def get_encoder(self):
+        return self.encoder
+
+    def get_decoder(self):
+        return self.decoder
