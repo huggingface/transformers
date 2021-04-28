@@ -464,7 +464,7 @@ class ClipTextModel(ClipPreTrainedModel):
         embed_tokens (torch.nn.Embedding): output embedding
     """
 
-    config_class: ClipTextConfig
+    config_class = ClipTextConfig
 
     def __init__(self, config: ClipTextConfig):
         super().__init__(config)
