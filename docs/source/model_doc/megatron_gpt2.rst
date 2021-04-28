@@ -64,7 +64,8 @@ The following command allows you to do the conversion. We assume that the folder
 
     python3 $PATH_TO_TRANSFORMERS/models/megatron_gpt2/convert_megatron_gpt2_checkpoint.py megatron_gpt2_345m_v0_0.zip
 
-The original code can be found `here <https://github.com/NVIDIA/Megatron-LM>`__. That repository contains a multi-GPU
-and multi-node implementation of the Megatron Language models. In particular, it contains a hybrid model parallel
-approach using "tensor parallel" and "pipeline parallel" techniques.
+This model was contributed by `jdemouth <https://huggingface.co/jdemouth>`__. The original code can be found `here
+<https://github.com/NVIDIA/Megatron-LM>`__. That repository contains a multi-GPU and multi-node implementation of the
+Megatron Language models. In particular, it contains a hybrid model parallel approach using "tensor parallel" and
+"pipeline parallel" techniques.
 

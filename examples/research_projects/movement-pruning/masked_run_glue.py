@@ -105,7 +105,7 @@ def regularization(model: nn.Module, mode: str):
 
 
 def train(args, train_dataset, model, tokenizer, teacher=None):
-    """ Train the model """
+    """Train the model"""
     if args.local_rank in [-1, 0]:
         tb_writer = SummaryWriter(log_dir=args.output_dir)
 
