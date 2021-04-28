@@ -464,6 +464,8 @@ class ClipTextModel(ClipPreTrainedModel):
         embed_tokens (torch.nn.Embedding): output embedding
     """
 
+    config_class: ClipTextConfig
+
     def __init__(self, config: ClipTextConfig):
         super().__init__(config)
 
@@ -474,6 +476,12 @@ class ClipTextModel(ClipPreTrainedModel):
         self.final_layer_norm = nn.LayerNorm(embed_dim)
 
         self.init_weights()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.embeddings.token_embedding
+
+    def set_input_embeddings(self, value):
+        self.embeddings.token_embedding = value
 
     def forward(
         self,

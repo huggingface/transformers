@@ -19,18 +19,18 @@ import inspect
 import unittest
 
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
-from transformers.models.clip.configuration_clip import ClipVisionConfig
+from transformers.models.clip.modeling_clip import ClipVisionEmbeddings
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
     import torch
 
-    from transformers import ClipConfig, ClipModel
-    from transformers.models.clip.modeling_clip import CLIP_PRETRAINED_MODEL_ARCHIVE_LIST, ClipVisionModel
+    from transformers import ClipConfig, ClipModel, ClipTextConfig, ClipTextModel, ClipVisionConfig, ClipVisionModel
+    from transformers.models.clip.modeling_clip import CLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -109,7 +109,7 @@ class ClipVisionModelTester:
 
 
 @require_torch
-class ClipModelTest(ModelTesterMixin, unittest.TestCase):
+class ClipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as Clip does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -284,7 +284,114 @@ class ClipModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ClipModel.from_pretrained(model_name)
+            model = ClipVisionModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+
+
+class ClipTextModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_labels=True,
+        vocab_size=99,
+        hidden_size=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        intermediate_size=37,
+        dropout=0.1,
+        attention_dropout=0.1,
+        max_position_embeddings=512,
+        initializer_range=0.02,
+        scope=None,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_input_mask = use_input_mask
+        self.use_labels = use_labels
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.dropout = dropout
+        self.attention_dropout = attention_dropout
+        self.max_position_embeddings = max_position_embeddings
+        self.initializer_range = initializer_range
+        self.scope = scope
+
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        input_mask = None
+        if self.use_input_mask:
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+
+        config = ClipTextConfig(
+            vocab_size=self.vocab_size,
+            hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            intermediate_size=self.intermediate_size,
+            dropout=self.dropout,
+            attention_dropout=self.attention_dropout,
+            max_position_embeddings=self.max_position_embeddings,
+            is_decoder=False,
+            initializer_range=self.initializer_range,
+        )
+
+        return config, input_ids, input_mask
+
+    def create_and_check_model(self, config, input_ids, input_mask):
+        model = ClipTextModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask)
+        result = model(input_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        # self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            input_mask,
+        ) = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
+        return config, inputs_dict
+
+
+@require_torch
+class ClipTextModelTest(ModelTesterMixin, unittest.TestCase):
+
+    all_model_classes = (ClipTextModel,) if is_torch_available() else ()
+    test_pruning = False
+    test_head_masking = False
+
+    def setUp(self):
+        self.model_tester = ClipTextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ClipTextConfig, hidden_size=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_training(self):
+        pass
+
+    @slow
+    def test_model_from_pretrained(self):
+        for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = ClipTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
