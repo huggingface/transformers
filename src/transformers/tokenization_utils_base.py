@@ -2281,7 +2281,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if is_batched:
             if isinstance(text_pair, str):
                 text_pair = [text_pair] * len(text)
-            else:
+            if text_pair is not None:
                 assert len(text) == len(
                     text_pair
                 ), f"batch length of `text`: {len(text)} does not match batch length of `text_pair`: {len(text_pair)}"
