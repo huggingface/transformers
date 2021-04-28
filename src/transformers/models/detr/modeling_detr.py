@@ -1580,28 +1580,25 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
             memory = encoder_outputs[0].permute(0,2,1).view(batch_size, self.config.d_model, height, width)
             mask = flattened_mask.view(batch_size, height, width)
 
+            print("Shape of memory:")
+            print(memory.shape)
+            print("First elements of memory:")
+            print(memory[0,:3,:3,:3])
+            print("Shape of mask:")
+            print(mask.shape)
+            print("Sum of mask:")
+            print(mask.sum())
+            print("Shape of sequence output:")
+            print(sequence_output.shape)
+            print("Sum of sequence output:")
+            print(sequence_output.sum())
+
             bbox_mask = self.bbox_attention(sequence_output, memory, mask=mask)
-
-            print("Shape of bbox_mask:")
-            print(bbox_mask.shape)
-
-            print("Shape of flattened feature map:")
-            print(projected_feature_map.shape)
-
-            print(features[3][0].shape)
-            print(features[2][0].shape)
-            print(features[1][0].shape)
 
             seg_masks = self.mask_head(projected_feature_map, bbox_mask, 
                                         [features[3][0], features[2][0], features[1][0]])
 
-            print("Shape of seg_masks:")
-            print(seg_masks.shape)
-
             pred_masks = seg_masks.view(batch_size, self.detr.config.num_queries, seg_masks.shape[-2], seg_masks.shape[-1])
-
-            print("Shape of pred_masks:")
-            print(pred_masks.shape)
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
