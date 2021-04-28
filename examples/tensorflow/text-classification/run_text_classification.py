@@ -124,30 +124,15 @@ def convert_dataset_for_tensorflow(dataset, non_label_column_names, batch_size, 
      object instead.
 """
     def densify_ragged_batch(features, labels=None):
-        features = {feature: ragged_tensor.to_tensor() for feature, ragged_tensor in features.items()}
-        if labels is None:
-            return features
-        else:
-            return features, labels
-
-    def constant_densify_ragged_batch(features, labels=None):
-        features = {feature: ragged_tensor.to_tensor(shape=(batch_size, max_len)) for feature, ragged_tensor in features.items()}
+        features = {feature: ragged_tensor.to_tensor(shape=batch_shape[feature]) for feature, ragged_tensor in features.items()}
         if labels is None:
             return features
         else:
             return features, labels
 
     feature_keys = list(set(dataset.features.keys()) - set(non_label_column_names + ['label']))
-    if dataset_mode == 'pad_dataset':
-        data = {key: tf.ragged.constant(dataset[key]).to_tensor() for key in feature_keys}
-        if labels:
-            labels = tf.convert_to_tensor(np.array(dataset['label']))
-            tf_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
-        else:
-            tf_dataset = tf.data.Dataset.from_tensor_slices(data)
-        tf_dataset = tf_dataset.shuffle(buffer_size=len(dataset)).batch(batch_size=batch_size, drop_remainder=True)
-        return tf_dataset
-    elif dataset_mode == 'variable_batch':
+    if dataset_mode == 'variable_batch':
+        batch_shape = {key: None for key in feature_keys}
         data = {key: tf.ragged.constant(dataset[key]) for key in feature_keys}
         if labels:
             labels = tf.convert_to_tensor(np.array(dataset['label']))
@@ -159,9 +144,9 @@ def convert_dataset_for_tensorflow(dataset, non_label_column_names, batch_size, 
             .map(densify_ragged_batch)
         return tf_dataset
     elif dataset_mode == 'constant_batch':
-        # TODO Remove this constant after testing!
-        max_len = 128
         data = {key: tf.ragged.constant(dataset[key]) for key in feature_keys}
+        batch_shape = {key: tf.concat(([batch_size], ragged_tensor.bounding_shape()[1:]), axis=0)
+                       for key, ragged_tensor in data.items()}
         if labels:
             labels = tf.convert_to_tensor(np.array(dataset['label']))
             tf_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
@@ -169,7 +154,7 @@ def convert_dataset_for_tensorflow(dataset, non_label_column_names, batch_size, 
             tf_dataset = tf.data.Dataset.from_tensor_slices(data)
         tf_dataset = tf_dataset.shuffle(buffer_size=len(dataset))\
             .batch(batch_size=batch_size, drop_remainder=True)\
-            .map(constant_densify_ragged_batch)
+            .map(densify_ragged_batch)
         return tf_dataset
     else:
         raise ValueError("Unknown dataset mode!")
@@ -540,7 +525,6 @@ def main():
             if key not in datasets:
                 tf_data[key] = None
                 continue
-            return_sequence = not isinstance(training_args.strategy, tf.distribute.TPUStrategy)
             if key in ('train', 'validation'):
                 use_labels = True
             else:
@@ -553,10 +537,13 @@ def main():
             dataset = datasets[key]
             if samples_limit is not None:
                 dataset = dataset.select(range(samples_limit))
+            if isinstance(training_args.strategy, tf.distribute.TPUStrategy):
+                dataset_mode = 'constant_batch'
+            else:
+                dataset_mode = 'variable_batch'
             data = convert_dataset_for_tensorflow(dataset, non_label_column_names,
                                                   batch_size=batch_size,
-                                                  labels=use_labels, dataset_mode='constant_batch')
-            breakpoint()
+                                                  labels=use_labels, dataset_mode=dataset_mode)
             tf_data[key] = data
 
         # endregion
@@ -584,10 +571,7 @@ def main():
         # region Prediction
         if tf_data['test'] is not None:
             logger.info("Doing predictions on test dataset...")
-
-            predictions = model.predict(tf_data['test'])
-            breakpoint()
-            ["logits"]
+            predictions = model.predict(tf_data['test'])["logits"]
             predictions = np.squeeze(predictions) if is_regression else np.argmax(predictions, axis=1)
             output_test_file = os.path.join(training_args.output_dir, "test_results.txt")
             with open(output_test_file, "w") as writer:
