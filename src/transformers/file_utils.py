@@ -940,7 +940,7 @@ FLAX_QUESTION_ANSWERING_SAMPLE = r"""
         >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
         >>> inputs = tokenizer(question, text, return_tensors='jax')
 
-        >>> outputs = model(**inputs, start_positions=start_positions, end_positions=end_positions)
+        >>> outputs = model(**inputs)
         >>> start_scores = outputs.start_logits
         >>> end_scores = outputs.end_logits
 """
@@ -1000,7 +1000,7 @@ FLAX_MULTIPLE_CHOICE_SAMPLE = r"""
         >>> choice1 = "It is eaten while held in the hand."
 
         >>> encoding = tokenizer([[prompt, prompt], [choice0, choice1]], return_tensors='jax', padding=True)
-        >>> outputs = model(**{{k: v.unsqueeze(0) for k,v in encoding.items()}})
+        >>> outputs = model(**{{k: v[None, :] for k,v in encoding.items()}})
 
         >>> logits = outputs.logits
 """
@@ -1015,7 +1015,7 @@ def add_code_sample_docstrings(
 
         if model_class[:2] == "TF":
             prefix = "TF_"
-        elif model_class[:4] == "FLAX":
+        elif model_class[:4] == "Flax":
             prefix = "FLAX_"
         else:
             prefix = "PT_"
@@ -1039,9 +1039,6 @@ def add_code_sample_docstrings(
         elif "Model" in model_class or "Encoder" in model_class:
             code_sample = getattr(this_module, prefix + "BASE_MODEL_SAMPLE")
         else:
-            import ipdb
-
-            ipdb.set_trace()
             raise ValueError(f"Docstring can't be built for model {model_class}")
 
         output_doc = _prepare_output_docstrings(output_type, config_class) if output_type is not None else ""

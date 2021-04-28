@@ -13,12 +13,15 @@
 # limitations under the License.
 
 import copy
+import inspect
 import random
 import tempfile
+from typing import List, Tuple
 
 import numpy as np
 
 import transformers
+from jaxlib.xla_extension import DeviceArray
 from transformers import is_flax_available, is_torch_available
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax
 
@@ -77,6 +80,7 @@ class FlaxModelTesterMixin:
             inputs_dict = {
                 k: jnp.broadcast_to(v[:, None], (v.shape[0], self.model_tester.num_choices, v.shape[-1]))
                 for k, v in inputs_dict.items()
+                if isinstance(v, (DeviceArray, np.ndarray))
             }
 
         return inputs_dict
@@ -84,6 +88,44 @@ class FlaxModelTesterMixin:
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
         diff = np.abs((a - b)).max()
         self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
+
+    def test_model_outputs_equivalence(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def set_nan_tensor_to_zero(t):
+            t[t != t] = 0
+            return t
+
+        def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
+            tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
+            dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+
+            def recursive_check(tuple_object, dict_object):
+                if isinstance(tuple_object, (List, Tuple)):
+                    for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                        recursive_check(tuple_iterable_value, dict_iterable_value)
+                elif tuple_object is None:
+                    return
+                else:
+                    self.assertTrue(
+                        self.assert_almost_equals(
+                            set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), 1e-5
+                        ),
+                        msg=f"Tuple and dict output are not equal. Difference: {np.max(np.abs(tuple_object - dict_object))}. Tuple has `nan`: {np.isnan(tuple_object).any()} and `inf`: {np.isinf(tuple_object)}. Dict has `nan`: {np.isnan(dict_object).any()} and `inf`: {np.isinf(dict_object)}.",
+                    )
+
+                recursive_check(tuple_output, dict_output)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
     @is_pt_flax_cross_test
     def test_equivalence_pt_to_flax(self):
@@ -191,31 +233,44 @@ class FlaxModelTesterMixin:
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                config.return_dict = False
                 model = model_class(config)
 
                 @jax.jit
                 def model_jitted(input_ids, attention_mask=None, token_type_ids=None):
                     return model(input_ids, attention_mask, token_type_ids)
 
+                with self.subTest("JIT Enabled"):
+                    jitted_outputs = model_jitted(**prepared_inputs_dict)
+
                 with self.subTest("JIT Disabled"):
                     with jax.disable_jit():
-                        outputs = model_jitted(**prepared_inputs_dict).to_tuple()
-
-                with self.subTest("JIT Enabled"):
-                    prepared_inputs_dict["return_dict"] = False
-                    jitted_outputs = model_jitted(**prepared_inputs_dict)
+                        outputs = model_jitted(**prepared_inputs_dict)
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
                     self.assertEqual(jitted_output.shape, output.shape)
 
-                # jitting with return_dict=True throws a warning
-                with self.subTest("JIT Enabled & Warning") and self.assertWarns(Warning):
+                # jitting with return_dict=True is possible, but throws warning
+                model.config.return_dict = True
+                with self.subTest("JIT Enabled & Warning"):
                     jitted_outputs_with_warn = model_jitted(**prepared_inputs_dict)
 
                 self.assertEqual(len(outputs), len(jitted_outputs_with_warn))
                 for jitted_output, output in zip(jitted_outputs_with_warn, outputs):
                     self.assertEqual(jitted_output.shape, output.shape)
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.__call__)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["input_ids", "attention_mask"]
+            self.assertListEqual(arg_names[:2], expected_arg_names)
 
     def test_naming_convention(self):
         for model_class in self.all_model_classes:
@@ -227,3 +282,30 @@ class FlaxModelTesterMixin:
             module_cls = getattr(bert_modeling_flax_module, module_class_name)
 
             self.assertIsNotNone(module_cls)
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            hidden_states = outputs.hidden_states
+
+            self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
+            seq_length = self.model_tester.seq_length
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [seq_length, self.model_tester.hidden_size],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)

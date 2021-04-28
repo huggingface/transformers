@@ -583,7 +583,7 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         # make sure that model does not return dict when in jitted mode
         if not isinstance(input_ids, (DeviceArray, np.ndarray)) and return_dict:
             logger.warn(
-                "Model cannot return dictionary in jitted mode. Setting `return_dict=False`... To suppress this warning, please set return_dict=False."
+                "Model cannot return dictionary in jitted mode. Setting `return_dict=False`... To suppress this warning, please set config.return_dict=False."
             )
             return_dict = False
 
@@ -765,21 +765,21 @@ class FlaxBertForPreTraining(FlaxBertPreTrainedModel):
 
 
 FLAX_BERT_FOR_PRETRAINING_DOCSTRING = """
-        Returns:
+    Returns:
 
-        Example::
+    Example::
 
-            >>> from transformers import BertTokenizer, BertForPreTraining
+        >>> from transformers import BertTokenizer, FlaxBertForPreTraining
 
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            >>> model = FlaxBertForPreTraining.from_pretrained('bert-base-uncased')
+        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        >>> model = FlaxBertForPreTraining.from_pretrained('bert-base-uncased')
 
-            >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
-            >>> outputs = model(**inputs)
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
+        >>> outputs = model(**inputs)
 
-            >>> prediction_logits = outputs.prediction_logits
-            >>> seq_relationship_logits = outputs.seq_relationship_logits
-        """
+        >>> prediction_logits = outputs.prediction_logits
+        >>> seq_relationship_logits = outputs.seq_relationship_logits
+"""
 
 overwrite_call_docstring(
     FlaxBertForPreTraining,
@@ -905,22 +905,22 @@ class FlaxBertForNextSentencePrediction(FlaxBertPreTrainedModel):
 
 
 FLAX_BERT_FOR_NEXT_SENT_PRED_DOCSTRING = """
-        Returns:
+    Returns:
 
-        Example::
+    Example::
 
-            >>> from transformers import BertTokenizer, FlaxBertForNextSentencePrediction
+        >>> from transformers import BertTokenizer, FlaxBertForNextSentencePrediction
 
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            >>> model = FlaxBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
+        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        >>> model = FlaxBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
 
-            >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-            >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-            >>> encoding = tokenizer(prompt, next_sentence, return_tensors='jax')
+        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
+        >>> encoding = tokenizer(prompt, next_sentence, return_tensors='jax')
 
-            >>> outputs = model(**encoding)
-            >>> logits = outputs.logits
-            >>> assert logits[0, 0] < logits[0, 1] # next sentence was random
+        >>> outputs = model(**encoding)
+        >>> logits = outputs.logits
+        >>> assert logits[0, 0] < logits[0, 1] # next sentence was random
 """
 
 
@@ -929,7 +929,7 @@ overwrite_call_docstring(
     BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length") + FLAX_BERT_FOR_NEXT_SENT_PRED_DOCSTRING,
 )
 append_replace_return_docstrings(
-    FlaxBertForPreTraining, output_type=FlaxBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC
+    FlaxBertForNextSentencePrediction, output_type=FlaxNextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC
 )
 
 
