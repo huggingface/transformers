@@ -376,9 +376,9 @@ class FlaxRobertaLMHead(nn.Module):
     bias_init: Callable[..., np.ndarray] = jax.nn.initializers.zeros
 
     def setup(self):
-        self.dense = nn.Dense(self.config.hidden_size, dtype=self.dtype)
+        self.dense = nn.Dense(self.config.hidden_size, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype))
         self.layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
-        self.decoder = nn.Dense(self.config.vocab_size, dtype=self.dtype, use_bias=False)
+        self.decoder = nn.Dense(self.config.vocab_size, dtype=self.dtype, use_bias=False, kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype))
         self.bias = self.param("bias", self.bias_init, (self.config.vocab_size,))
 
     def __call__(self, hidden_states, shared_embedding=None):
