@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_available, is_torch_available
+from ...file_utils import _BaseLazyModule, is_flax_available, is_tf_available, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -43,6 +43,8 @@ if is_torch_available():
 if is_tf_available():
     _import_structure["modeling_tf_bart"] = ["TFBartForConditionalGeneration", "TFBartModel", "TFBartPretrainedModel"]
 
+if is_flax_available():
+    _import_structure["modeling_flax_bart"] = ["FlaxBartEncoder"]
 
 if TYPE_CHECKING:
     from .configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig

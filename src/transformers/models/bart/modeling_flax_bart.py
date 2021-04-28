@@ -14,8 +14,10 @@
 # limitations under the License.
 """ Flax Bart model. """
 
+import random
 from typing import Callable, Optional, Tuple
 
+import math
 import numpy as np
 
 import flax.linen as nn
@@ -462,11 +464,11 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         **kwargs
-    ) -> None:
+    ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
-     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         attention_mask = jnp.ones_like(input_ids)
@@ -533,3 +535,169 @@ BART_START_DOCSTRING = r"""
             configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
             weights.
 """
+
+
+class FlaxBartModule(nn.Module):
+    config: BartConfig
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        pass
+
+    def __call__(
+        self,
+        input_ids: jnp.ndarray,
+        attention_mask: Optional[jnp.ndarray] = None,
+        decoder_input_ids: Optional[jnp.ndarray] = None,
+        decoder_attention_mask: Optional[jnp.ndarray] = None,
+    ):
+        pass
+
+
+class FlaxBartEncoder(FlaxBartPretrainedModel):
+    config: BartConfig
+    module_class = FlaxBartModule
+    embed_tokens: Optional[nn.Embed] = None
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        self.dropout_layer = nn.Dropout(rate=self.config.dropout)
+        self.layerdrop = self.config.encoder_layerdrop
+        self.layerdrop_layer = nn.Dropout(rate=self.config.encoder_layerdrop)
+
+        embed_dim = self.config.d_model
+        self.padding_idx = self.config.pad_token_id
+        self.max_source_positions = self.config.max_position_embeddings
+        self.embed_scale = math.sqrt(embed_dim) if self.config.scale_embedding else 1.0
+
+        if self.embed_tokens is None:
+            self.embed_tokens = nn.Embed(
+                self.config.vocab_size,
+                embed_dim,
+                embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+                dtype=self.dtype
+            )  # TODO: solve missing self.padding_idx
+
+        self.embed_positions = FlaxBartLearnedPositionalEmbedding(
+            self.config.max_position_embeddings,
+            embed_dim,
+        )
+        self.layers = [
+            FlaxBartEncoderLayer(self.config, dtype=self.dtype) for _ in range(self.config.num_hidden_layers)
+        ]
+        self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
+
+    def __call__(
+        self,
+        input_ids: Optional[jnp.ndarray] = None,
+        attention_mask: Optional[jnp.ndarray] = None,
+        head_mask: Optional[jnp.ndarray] = None,
+        inputs_embeds: Optional[jnp.ndarray] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        deterministic: bool = True,
+    ):
+        r"""
+        Args:
+            input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
+                provide it.
+
+                Indices can be obtained using :class:`~transformers.BartTokenizer`. See
+                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
+                for details.
+
+                `What are input IDs? <../glossary.html#input-ids>`__
+            attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                `What are attention masks? <../glossary.html#attention-mask>`__
+            head_mask (:obj:`jnp.ndarray` of shape :obj:`(encoder_layers, encoder_attention_heads)`, `optional`):
+                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
+
+                - 1 indicates the head is **not masked**,
+                - 0 indicates the head is **masked**.
+
+            inputs_embeds (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
+                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
+                into associated vectors than the model's internal embedding lookup matrix.
+            output_attentions (:obj:`bool`, `optional`):
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more detail.
+            output_hidden_states (:obj:`bool`, `optional`):
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
+                for more detail.
+            return_dict (:obj:`bool`, `optional`):
+                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # retrieve input_ids and inputs_embeds
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.shape
+            input_ids = input_ids.reshape(-1, input_shape[-1])
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.shape[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+
+        embed_pos = self.embed_positions(input_shape)
+
+        hidden_states = inputs_embeds + embed_pos
+        hidden_states = self.layernorm_embedding(hidden_states)
+        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
+
+        # expand attention_mask
+        if attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+
+        encoder_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
+        # check if head_mask has a correct number of layers specified if desired
+        if head_mask is not None:
+            assert head_mask.shape[0] == (
+                len(self.layers)
+            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.shape[0]}."
+        for idx, encoder_layer in enumerate(self.layers):
+            if output_hidden_states:
+                encoder_states = encoder_states + (hidden_states,)
+            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            dropout_probability = random.uniform(0, 1)
+            if self.deterministic and (dropout_probability < self.layerdrop):  # skip the layer
+                hidden_states, attn = (None, None)
+
+            hidden_states, attn = encoder_layer(
+                hidden_states,
+                attention_mask,
+                head_mask[idx] if head_mask is not None else None,
+                output_attentions,
+                deterministic
+            )
+
+            if output_attentions:
+                all_attentions = all_attentions + (attn,)
+
+            if output_hidden_states:
+                encoder_states = encoder_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
+        raise NotImplementedError(
+            "TODO: Return with return_dict is not implemented yet! Please use `return_dict=False`"
+        )
