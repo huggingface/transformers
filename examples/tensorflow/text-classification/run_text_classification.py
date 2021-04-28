@@ -126,23 +126,56 @@ def densify_ragged_batch(features, labels=None):
         return features, labels
 
 
-def convert_dataset_for_tensorflow(dataset, non_label_column_names, batch_size, labels, return_sequence):
+def convert_dataset_for_tensorflow(dataset, non_label_column_names, batch_size, labels, dataset_mode, pad_to_len):
     """Converts a Hugging Face dataset to a Tensorflow Dataset or Sequence object. We usually only want a Dataset when
      we're training on TPU, as we get the nice feature of variable-length batches when we put the data in a Sequence
      object instead.
 """
-    if return_sequence:
-        return DataSequence(dataset, non_label_column_names, batch_size, labels)
-
-    feature_keys = set(dataset.features.keys()) - set(non_label_column_names + ['label'])
-    data = {key: tf.ragged.constant(dataset[key]) for key in feature_keys}
-    if labels:
-        labels = tf.convert_to_tensor(np.array(dataset['label']))
-        dataset = tf.data.Dataset.from_tensor_slices((data, labels))
-    else:
-        dataset = tf.data.Dataset.from_tensor_slices(data)
-    dataset = dataset.shuffle(buffer_size=len(dataset)).batch(batch_size=batch_size, drop_remainder=True).map(densify_ragged_batch)
-    return dataset
+    feature_keys = list(set(dataset.features.keys()) - set(non_label_column_names + ['label']))
+    if dataset_mode == 'generator':
+        def gen():
+            permutation = np.random.permutation(len(dataset))
+            for i in permutation:
+                features_sample = {feature: dataset[feature][i] for feature in feature_keys}
+                if labels is None:
+                    yield features_sample
+                else:
+                    label_sample = dataset['label'][i]
+                    yield features_sample, label_sample
+        feature_specs = {feature: tf.TensorSpec(shape=(None,),
+                                                dtype=dataset.info.features[feature].feature.dtype)
+                         for feature in feature_keys}
+        if labels is None:
+            tf_dataset = tf.data.Dataset.from_generator(gen, output_signature=feature_specs)
+        else:
+            label_spec = tf.TensorSpec(shape=(), dtype=dataset.info.features['label'].dtype)
+            tf_dataset = tf.data.Dataset.from_generator(gen, output_signature=(feature_specs, label_spec))
+        if pad_to_len == -1:
+            padded_shapes = None
+        else:
+            padded_shapes = ({feature: (pad_to_len,) for feature in feature_keys}, ())
+        return tf_dataset.padded_batch(batch_size=batch_size, padded_shapes=padded_shapes, drop_remainder=True)
+        # return DataSequence(dataset, non_label_column_names, batch_size, labels)
+    elif dataset_mode == 'preload':
+        data = {key: tf.ragged.constant(dataset[key]).to_tensor() for key in feature_keys}
+        if labels:
+            labels = tf.convert_to_tensor(np.array(dataset['label']))
+            tf_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
+        else:
+            tf_dataset = tf.data.Dataset.from_tensor_slices(data)
+        tf_dataset = tf_dataset.shuffle(buffer_size=len(dataset)).batch(batch_size=batch_size, drop_remainder=True)
+        return tf_dataset
+    elif dataset_mode == 'padded_batch':
+        data = {key: tf.ragged.constant(dataset[key]) for key in feature_keys}
+        if labels:
+            labels = tf.convert_to_tensor(np.array(dataset['label']))
+            tf_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
+        else:
+            tf_dataset = tf.data.Dataset.from_tensor_slices(data)
+        tf_dataset = tf_dataset.shuffle(buffer_size=len(dataset))\
+            .batch(batch_size=batch_size, drop_remainder=True)\
+            .map(densify_ragged_batch)
+        return tf_dataset
 
 # endregion
 
@@ -525,13 +558,14 @@ def main():
                 dataset = dataset.select(range(samples_limit))
             data = convert_dataset_for_tensorflow(dataset, non_label_column_names,
                                                   batch_size=batch_size,
-                                                  labels=use_labels, return_sequence=return_sequence)
+                                                  labels=use_labels, dataset_mode='generator',
+                                                  pad_to_len=data_args.max_seq_length)
+            breakpoint()
             tf_data[key] = data
 
         # endregion
 
         # region Training and validation
-        breakpoint()
         if tf_data['train'] is not None:
             callbacks = [SavePretrainedCallback(output_dir=training_args.output_dir)]
             model.fit(
