@@ -301,6 +301,10 @@ class TrainingArguments:
             :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
             the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
             details.
+        resume_from_checkpoint (:obj:`str`, `optional`):
+            The path to a folder with a valid checkpoint for your model. This will be used as a default for the value
+            of :obj:`resume_from_checkpoint` in :meth:`~transformers.Trainer.train`. It's mostly intended to be used by
+            your training/evaluation scripts.
     """
 
     output_dir: str = field(
@@ -530,6 +534,10 @@ class TrainingArguments:
     )
     push_to_hub: bool = field(
         default=False, metadata={"help": "Whether or not to upload the trained model to the model hub after training."}
+    )
+    resume_from_checkpoint: Optional[str] = field(
+        default=None,
+        metadata={"help": "The path to a folder with a valid checkpoint for your model."},
     )
     _n_gpu: int = field(init=False, repr=False, default=-1)
     mp_parameters: str = field(

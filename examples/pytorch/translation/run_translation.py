@@ -512,12 +512,7 @@ def main():
 
     # Training
     if training_args.do_train:
-        if last_checkpoint is not None:
-            checkpoint = last_checkpoint
-        elif os.path.isdir(model_args.model_name_or_path):
-            checkpoint = model_args.model_name_or_path
-        else:
-            checkpoint = None
+        checkpoint = last_checkpoint if last_checkpoint is not None else None
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()  # Saves the tokenizer too for easy upload
 

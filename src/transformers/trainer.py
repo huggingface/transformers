@@ -1019,6 +1019,8 @@ class Trainer:
             resume_from_checkpoint = get_last_checkpoint(args.output_dir)
             if resume_from_checkpoint is None:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
+        elif resume_from_checkpoint is None:
+            resume_from_checkpoint = args.resume_from_checkpoint
 
         if resume_from_checkpoint is not None:
             if not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
