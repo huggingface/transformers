@@ -68,9 +68,6 @@ def eval_data_dir(
     save_path = save_dir.joinpath(f"rank_{local_rank}_output.json")
     torch.cuda.set_device(local_rank)
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name).cuda()
-    from transformers.debug_utils import DebugUnderflowOverflow
-
-    DebugUnderflowOverflow(model)
     if fp16:
         model = model.half()
     # determine if we need to increase num_beams
