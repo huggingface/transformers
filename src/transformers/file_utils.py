@@ -794,6 +794,17 @@ PT_CAUSAL_LM_SAMPLE = r"""
         >>> logits = outputs.logits
 """
 
+PT_SAMPLE_DOCSTRINGS = {
+    "SequenceClassification": PT_SEQUENCE_CLASSIFICATION_SAMPLE,
+    "QuestionAnswering": PT_QUESTION_ANSWERING_SAMPLE,
+    "TokenClassification": PT_TOKEN_CLASSIFICATION_SAMPLE,
+    "MultipleChoice": PT_MULTIPLE_CHOICE_SAMPLE,
+    "MaskedLM": PT_MASKED_LM_SAMPLE,
+    "LMHead": PT_CAUSAL_LM_SAMPLE,
+    "BaseModel": PT_BASE_MODEL_SAMPLE,
+}
+
+
 TF_TOKEN_CLASSIFICATION_SAMPLE = r"""
     Example::
 
@@ -915,6 +926,17 @@ TF_CAUSAL_LM_SAMPLE = r"""
         >>> logits = outputs.logits
 """
 
+TF_SAMPLE_DOCSTRINGS = {
+    "SequenceClassification": TF_SEQUENCE_CLASSIFICATION_SAMPLE,
+    "QuestionAnswering": TF_QUESTION_ANSWERING_SAMPLE,
+    "TokenClassification": TF_TOKEN_CLASSIFICATION_SAMPLE,
+    "MultipleChoice": TF_MULTIPLE_CHOICE_SAMPLE,
+    "MaskedLM": TF_MASKED_LM_SAMPLE,
+    "LMHead": TF_CAUSAL_LM_SAMPLE,
+    "BaseModel": TF_BASE_MODEL_SAMPLE,
+}
+
+
 FLAX_TOKEN_CLASSIFICATION_SAMPLE = r"""
     Example::
 
@@ -1005,6 +1027,15 @@ FLAX_MULTIPLE_CHOICE_SAMPLE = r"""
         >>> logits = outputs.logits
 """
 
+FLAX_SAMPLE_DOCSTRINGS = {
+    "SequenceClassification": FLAX_SEQUENCE_CLASSIFICATION_SAMPLE,
+    "QuestionAnswering": FLAX_QUESTION_ANSWERING_SAMPLE,
+    "TokenClassification": FLAX_TOKEN_CLASSIFICATION_SAMPLE,
+    "MultipleChoice": FLAX_MULTIPLE_CHOICE_SAMPLE,
+    "MaskedLM": FLAX_MASKED_LM_SAMPLE,
+    "BaseModel": FLAX_BASE_MODEL_SAMPLE,
+}
+
 
 def add_code_sample_docstrings(
     *docstr, tokenizer_class=None, checkpoint=None, output_type=None, config_class=None, mask=None, model_cls=None
@@ -1014,30 +1045,29 @@ def add_code_sample_docstrings(
         model_class = fn.__qualname__.split(".")[0] if model_cls is None else model_cls
 
         if model_class[:2] == "TF":
-            prefix = "TF_"
+            sample_docstrings = TF_SAMPLE_DOCSTRINGS
         elif model_class[:4] == "Flax":
-            prefix = "FLAX_"
+            sample_docstrings = FLAX_SAMPLE_DOCSTRINGS
         else:
-            prefix = "PT_"
+            sample_docstrings = PT_SAMPLE_DOCSTRINGS
 
         doc_kwargs = dict(model_class=model_class, tokenizer_class=tokenizer_class, checkpoint=checkpoint)
-        this_module = sys.modules[__name__]
 
         if "SequenceClassification" in model_class:
-            code_sample = getattr(this_module, prefix + "SEQUENCE_CLASSIFICATION_SAMPLE")
+            code_sample = sample_docstrings["SequenceClassification"]
         elif "QuestionAnswering" in model_class:
-            code_sample = getattr(this_module, prefix + "QUESTION_ANSWERING_SAMPLE")
+            code_sample = sample_docstrings["QuestionAnswering"]
         elif "TokenClassification" in model_class:
-            code_sample = getattr(this_module, prefix + "TOKEN_CLASSIFICATION_SAMPLE")
+            code_sample = sample_docstrings["TokenClassification"]
         elif "MultipleChoice" in model_class:
-            code_sample = getattr(this_module, prefix + "MULTIPLE_CHOICE_SAMPLE")
+            code_sample = sample_docstrings["MultipleChoice"]
         elif "MaskedLM" in model_class or model_class in ["FlaubertWithLMHeadModel", "XLMWithLMHeadModel"]:
             doc_kwargs["mask"] = "[MASK]" if mask is None else mask
-            code_sample = getattr(this_module, prefix + "MASKED_LM_SAMPLE")
+            code_sample = sample_docstrings["MaskedLM"]
         elif "LMHead" in model_class or "CausalLM" in model_class:
-            code_sample = getattr(this_module, prefix + "CAUSAL_LM_SAMPLE")
+            code_sample = sample_docstrings["LMHead"]
         elif "Model" in model_class or "Encoder" in model_class:
-            code_sample = getattr(this_module, prefix + "BASE_MODEL_SAMPLE")
+            code_sample = sample_docstrings["BaseModel"]
         else:
             raise ValueError(f"Docstring can't be built for model {model_class}")
 
@@ -1577,10 +1607,10 @@ def is_tensor(x):
             return True
 
     if is_flax_available():
+        import jaxlib.xla_extension as jax_xla
         from jax.interpreters.partial_eval import DynamicJaxprTracer
-        from jaxlib.xla_extension import DeviceArray
 
-        if isinstance(x, (DeviceArray, DynamicJaxprTracer)):
+        if isinstance(x, (jax_xla.DeviceArray, DynamicJaxprTracer)):
             return True
 
     return isinstance(x, np.ndarray)

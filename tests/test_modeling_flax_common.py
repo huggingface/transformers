@@ -30,7 +30,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
-    from jaxlib.xla_extension import DeviceArray
+    import jaxlib.xla_extension as jax_xla
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
@@ -80,7 +80,7 @@ class FlaxModelTesterMixin:
             inputs_dict = {
                 k: jnp.broadcast_to(v[:, None], (v.shape[0], self.model_tester.num_choices, v.shape[-1]))
                 for k, v in inputs_dict.items()
-                if isinstance(v, (DeviceArray, np.ndarray))
+                if isinstance(v, (jax_xla.DeviceArray, np.ndarray))
             }
 
         return inputs_dict

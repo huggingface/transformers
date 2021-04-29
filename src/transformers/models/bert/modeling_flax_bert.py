@@ -21,14 +21,15 @@ import numpy as np
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import jaxlib.xla_extension as jax_xla
 from flax.core.frozen_dict import FrozenDict
 from flax.linen import dot_product_attention
 from jax import lax
 from jax.random import PRNGKey
-from jaxlib.xla_extension import DeviceArray
 
 from ...file_utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_outputs import (
+    FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPooling,
     FlaxMaskedLMOutput,
     FlaxMultipleChoiceModelOutput,
@@ -61,28 +62,28 @@ class FlaxBertForPreTrainingOutput(ModelOutput):
     Output type of :class:`~transformers.BertForPreTraining`.
 
     Args:
-        prediction_logits (:obj:`DeviceArray` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
+        prediction_logits (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        seq_relationship_logits (:obj:`DeviceArray` of shape :obj:`(batch_size, 2)`):
+        seq_relationship_logits (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, 2)`):
             Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
             before SoftMax).
-        hidden_states (:obj:`tuple(DeviceArray)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`DeviceArray` (one for the output of the embeddings + one for the output of each layer) of
-            shape :obj:`(batch_size, sequence_length, hidden_size)`.
+        hidden_states (:obj:`tuple(jax_xla.DeviceArray)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`jax_xla.DeviceArray` (one for the output of the embeddings + one for the output of each
+            layer) of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(DeviceArray)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`DeviceArray` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
-            sequence_length)`.
+        attentions (:obj:`tuple(jax_xla.DeviceArray)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`jax_xla.DeviceArray` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
 
-    prediction_logits: DeviceArray = None
-    seq_relationship_logits: DeviceArray = None
-    hidden_states: Optional[Tuple[DeviceArray]] = None
-    attentions: Optional[Tuple[DeviceArray]] = None
+    prediction_logits: jax_xla.DeviceArray = None
+    seq_relationship_logits: jax_xla.DeviceArray = None
+    hidden_states: Optional[Tuple[jax_xla.DeviceArray]] = None
+    attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
 
 
 BERT_START_DOCSTRING = r"""
@@ -389,6 +390,7 @@ class FlaxBertLayerCollection(nn.Module):
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
+        return_dict: bool = True,
     ):
         all_attentions = ()
         all_hidden_states = ()
@@ -415,7 +417,12 @@ class FlaxBertLayerCollection(nn.Module):
         if output_hidden_states:
             outputs += (all_hidden_states,)
 
-        return outputs
+        if not return_dict:
+            return tuple(v for v in outputs if v is not None)
+
+        return FlaxBaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        )
 
 
 class FlaxBertEncoder(nn.Module):
@@ -432,6 +439,7 @@ class FlaxBertEncoder(nn.Module):
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
+        return_dict: bool = True,
     ):
         return self.layer(
             hidden_states,
@@ -439,6 +447,7 @@ class FlaxBertEncoder(nn.Module):
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
 
@@ -648,33 +657,17 @@ class FlaxBertModule(nn.Module):
         hidden_states = outputs[0]
         pooled = self.pooler(hidden_states) if self.add_pooling_layer else None
 
-        outputs = (
-            hidden_states,
-            pooled,
-        ) + outputs[1:]
-
         if not return_dict:
-            return tuple(v for v in outputs if v is not None)
-
-        # extract all attentions
-        if output_attentions:
-            all_attentions = outputs[2]
-        else:
-            all_attentions = None
-
-        # extract all hidden_states
-        if output_hidden_states and output_attentions:
-            all_hidden_states = outputs[3]
-        elif output_hidden_states and not output_attentions:
-            all_hidden_states = outputs[2]
-        else:
-            all_hidden_states = None
+            # if pooled is None, don't return it
+            if pooled is None:
+                return (hidden_states,) + outputs[1:]
+            return (hidden_states, pooled) + outputs[1:]
 
         return FlaxBaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
             pooler_output=pooled,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

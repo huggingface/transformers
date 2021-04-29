@@ -23,7 +23,7 @@ from jax import lax
 from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_flax_outputs import FlaxBaseModelOutputWithPooling
+from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxBaseModelOutputWithPooling
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
 from ...utils import logging
 from .configuration_roberta import RobertaConfig
@@ -364,6 +364,7 @@ class FlaxRobertaLayerCollection(nn.Module):
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
+        return_dict: bool = True,
     ):
         all_attentions = ()
         all_hidden_states = ()
@@ -390,7 +391,12 @@ class FlaxRobertaLayerCollection(nn.Module):
         if output_hidden_states:
             outputs += (all_hidden_states,)
 
-        return outputs
+        if not return_dict:
+            return tuple(v for v in outputs if v is not None)
+
+        return FlaxBaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        )
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEncoder with Bert->Roberta
@@ -408,6 +414,7 @@ class FlaxRobertaEncoder(nn.Module):
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
+        return_dict: bool = True,
     ):
         return self.layer(
             hidden_states,
@@ -415,6 +422,7 @@ class FlaxRobertaEncoder(nn.Module):
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
 
@@ -559,33 +567,17 @@ class FlaxRobertaModule(nn.Module):
         hidden_states = outputs[0]
         pooled = self.pooler(hidden_states) if self.add_pooling_layer else None
 
-        outputs = (
-            hidden_states,
-            pooled,
-        ) + outputs[1:]
-
         if not return_dict:
-            return tuple(v for v in outputs if v is not None)
-
-        # extract all attentions
-        if output_attentions:
-            all_attentions = outputs[2]
-        else:
-            all_attentions = None
-
-        # extract all hidden_states
-        if output_hidden_states and output_attentions:
-            all_hidden_states = outputs[3]
-        elif output_hidden_states and not output_attentions:
-            all_hidden_states = outputs[2]
-        else:
-            all_hidden_states = None
+            # if pooled is None, don't return it
+            if pooled is None:
+                return (hidden_states,) + outputs[1:]
+            return (hidden_states, pooled) + outputs[1:]
 
         return FlaxBaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
             pooler_output=pooled,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
