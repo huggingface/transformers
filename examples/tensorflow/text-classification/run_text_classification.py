@@ -88,7 +88,7 @@ def convert_dataset_for_tensorflow(
     else:
         raise ValueError("Unknown dataset mode!")
 
-    if 'label' in dataset.features:
+    if "label" in dataset.features:
         labels = tf.convert_to_tensor(np.array(dataset["label"]))
         tf_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
     else:
@@ -454,7 +454,7 @@ def main():
                 tf_data[key] = None
                 continue
             if key in ("train", "validation"):
-                assert 'label' in datasets[key].features, f"Missing labels from {key} data!"
+                assert "label" in datasets[key].features, f"Missing labels from {key} data!"
             if key == "train":
                 shuffle = True
                 batch_size = training_args.per_device_train_batch_size
@@ -478,7 +478,7 @@ def main():
                 batch_size=batch_size,
                 dataset_mode=dataset_mode,
                 drop_remainder=drop_remainder,
-                shuffle=shuffle
+                shuffle=shuffle,
             )
             tf_data[key] = data
         # endregion
@@ -522,9 +522,9 @@ def main():
 
     # region Prediction losses
     # This section is outside the scope() because it's very quick to compute, but behaves badly inside it
-    if 'label' in datasets['test'].features:
+    if "label" in datasets["test"].features:
         print("Computing prediction loss on test labels...")
-        labels = datasets['test']['label']
+        labels = datasets["test"]["label"]
         loss = float(loss_fn(labels, predictions).numpy())
         print(f"Test loss: {loss:.4f}")
     # endregion
