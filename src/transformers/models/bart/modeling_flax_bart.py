@@ -529,15 +529,15 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
             decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4") if decoder_input_ids is not None else None,
             head_mask=jnp.array(head_mask, dtype="i4") if head_mask is not None else None,
             decoder_head_mask=jnp.array(decoder_head_mask, dtype="i4") if decoder_head_mask is not None else None,
-            cross_attn_head_mask=jnp.array(cross_attn_head_mask, dtype="i4")
-            if cross_attn_head_mask is not None
-            else None,
+            cross_attn_head_mask=(
+                jnp.array(cross_attn_head_mask, dtype="i4") if cross_attn_head_mask is not None else None
+            ),
             encoder_outputs=jnp.array(encoder_outputs, dtype="fp32") if encoder_outputs is not None else None,
             past_key_values=jnp.array(past_key_values, dtype="fp32") if past_key_values is not None else None,
             inputs_embeds=jnp.array(inputs_embeds, dtype="fp32") if inputs_embeds is not None else None,
-            decoder_inputs_embeds=jnp.array(decoder_inputs_embeds, dtype="fp32")
-            if decoder_inputs_embeds is not None
-            else None,
+            decoder_inputs_embeds=(
+                jnp.array(decoder_inputs_embeds, dtype="fp32") if decoder_inputs_embeds is not None else None
+            ),
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1055,3 +1055,72 @@ class FlaxBartModel(FlaxBartPretrainedModel):
 
     def get_decoder(self):
         return self.decoder
+
+
+class FlaxBartForConditionalGenerationLMModule(nn.Module):
+    config: BartConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.model = FlaxBartModule(config=self.config, dtype=self.dtype)
+        self.lm_head = nn.Dense(
+            self.model.shared.num_embeddings,
+            use_bias=True,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+        )
+
+    def __call__(
+        self,
+        input_ids: Optional[jnp.ndarray] = None,
+        attention_mask: Optional[jnp.ndarray] = None,
+        decoder_input_ids: Optional[jnp.ndarray] = None,
+        decoder_attention_mask: Optional[jnp.ndarray] = None,
+        head_mask: Optional[jnp.ndarray] = None,
+        decoder_head_mask: Optional[jnp.ndarray] = None,
+        cross_attn_head_mask: Optional[jnp.ndarray] = None,
+        encoder_outputs: Optional[jnp.ndarray] = None,
+        past_key_values: Optional[jnp.ndarray] = None,
+        inputs_embeds: Optional[jnp.ndarray] = None,
+        decoder_inputs_embeds: Optional[jnp.ndarray] = None,
+        labels: Optional[jnp.ndarray] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = False,
+        deterministic: bool = True,
+    ):
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            head_mask=head_mask,
+            decoder_head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            encoder_outputs=encoder_outputs,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
+        )
+
+        lm_logits = self.lm_head(outputs[0])
+
+        masked_lm_loss = None
+        if labels is not None:
+            raise NotImplementedError("TODO: CrossEntropy loss calculation is not implemented yet.")
+
+        if not return_dict:
+            output = (lm_logits,) + outputs[1:]
+            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+
+        raise NotImplementedError(
+            "TODO: Return with return_dict is not implemented yet! Please use `return_dict=False`"
+        )
+
+
+class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
+    module_class = FlaxBartForConditionalGenerationLMModule

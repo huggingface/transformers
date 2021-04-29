@@ -1377,7 +1377,12 @@ if is_flax_available():
             "FlaxAutoModelForTokenClassification",
         ]
     )
-    _import_structure["models.bart"].append("FlaxBartModel")
+    _import_structure["models.bart"].extend(
+        [
+            "FlaxBartForConditionalGeneration",
+            "FlaxBartModel",
+        ]
+    )
     _import_structure["models.bert"].extend(
         [
             "FlaxBertForMaskedLM",
@@ -2541,7 +2546,7 @@ if TYPE_CHECKING:
             FlaxAutoModelForSequenceClassification,
             FlaxAutoModelForTokenClassification,
         )
-        from .models.bart import FlaxBartModel
+        from .models.bart import FlaxBartForConditionalGeneration, FlaxBartModel
         from .models.bert import (
             FlaxBertForMaskedLM,
             FlaxBertForMultipleChoice,
