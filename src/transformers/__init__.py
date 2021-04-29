@@ -1377,6 +1377,7 @@ if is_flax_available():
             "FlaxAutoModelForTokenClassification",
         ]
     )
+    _import_structure["models.bart"].append("FlaxBartModel")
     _import_structure["models.bert"].extend(
         [
             "FlaxBertForMaskedLM",
@@ -1391,7 +1392,6 @@ if is_flax_available():
         ]
     )
     _import_structure["models.roberta"].append("FlaxRobertaModel")
-    _import_structure["models.bart"].append("FlaxBartModel")
 else:
     from .utils import dummy_flax_objects
 

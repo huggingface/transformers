@@ -16,16 +16,12 @@
 
 import math
 import random
-from typing import Callable, Optional, Tuple
-
-import numpy as np
+from typing import Optional, Tuple
 
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict
-from flax.linen import dot_product_attention
-from jax import lax
 from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
@@ -553,15 +549,16 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
 BART_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
     generic methods the library implements for all its model (such as downloading, saving and converting weights from
-    PyTorch models)
-    This model is also a Flax Linen `flax.nn.Module
+    PyTorch models) This model is also a Flax Linen `flax.nn.Module
     <https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html>`__ subclass. Use it as a regular Flax
-    Module and refer to the Flax documentation for all matter related to general usage and behavior.
-    Finally, this model supports inherent JAX features such as:
+    Module and refer to the Flax documentation for all matter related to general usage and behavior. Finally, this
+    model supports inherent JAX features such as:
+
     - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
     - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
     - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
     - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
+
     Parameters:
         config (:class:`~transformers.BartConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
