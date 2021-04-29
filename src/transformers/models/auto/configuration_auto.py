@@ -199,7 +199,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
         ("deit", "DeiT"),
-        ("luke", "Luke"),
+        ("luke", "LUKE"),
         ("gpt_neo", "GPT Neo"),
         ("big_bird", "BigBird"),
         ("speech_to_text", "Speech2Text"),

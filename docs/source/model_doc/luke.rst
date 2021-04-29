@@ -74,6 +74,10 @@ Tips:
   head models by specifying ``task="entity_classification"``, ``task="entity_pair_classification"``, or
   ``task="entity_span_classification"``. Please refer to the example code of each head models.
 
+  There are also 3 notebooks available, which showcase how you can reproduce the results as reported in the paper with
+  the HuggingFace implementation of LUKE. They can be found `here
+  <https://github.com/studio-ousia/luke/tree/master/notebooks>`__.
+
 Example:
 
 .. code-block::

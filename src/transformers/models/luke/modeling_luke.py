@@ -208,7 +208,6 @@ class LukeEmbeddings(nn.Module):
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
 
-    # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.__init__
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
@@ -219,10 +218,6 @@ class LukeEmbeddings(nn.Module):
         # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
         # End copy
         self.padding_idx = config.pad_token_id
@@ -490,9 +485,8 @@ class LukeAttention(nn.Module):
         else:
             entity_attention_output = attention_output[:, word_size:, :]
 
-        outputs = (word_attention_output, entity_attention_output) + self_outputs[
-            2:
-        ]  # add attentions if we output them
+        # add attentions if we output them
+        outputs = (word_attention_output, entity_attention_output) + self_outputs[2:]
 
         return outputs
 
