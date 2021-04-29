@@ -58,7 +58,7 @@ class SavePretrainedCallback(tf.keras.callbacks.Callback):
         self.model.save_pretrained(self.output_dir)
 
 
-def convert_dataset_for_tensorflow(dataset, non_label_column_names, batch_size, labels, dataset_mode, drop_remainder):
+def convert_dataset_for_tensorflow(dataset, non_label_column_names, batch_size, labels, dataset_mode='variable_batch', drop_remainder=True):
     """Converts a Hugging Face dataset to a Tensorflow Dataset. The dataset_mode controls whether we pad all batches
     to the maximum sequence length, or whether we only pad to the maximum length within that batch. The former
     is most useful when training on TPU, as a new graph compilation is required for each sequence length.
@@ -345,15 +345,6 @@ def main():
             sentence1_key, sentence2_key = non_label_column_names[:2]
         else:
             sentence1_key, sentence2_key = non_label_column_names[0], None
-    # Padding strategy
-    if data_args.pad_to_max_length:
-        padding = "max_length"
-    # elif isinstance(training_args.strategy, tf.distribute.TPUStrategy):
-    #    logger.warning("Forcing --pad_to_max_length because we're running on TPU!")
-    #     padding = "max_length"
-    else:
-        # We will pad later, dynamically at batch creation, to the max sequence length in each batch
-        padding = False
 
     if data_args.max_seq_length > tokenizer.model_max_length:
         logger.warning(
@@ -398,7 +389,7 @@ def main():
         args = (
             (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
         )
-        result = tokenizer(*args, padding=padding, max_length=max_seq_length, truncation=True)
+        result = tokenizer(*args, max_length=max_seq_length, truncation=True)
 
         # Map labels to IDs
         if config.label2id is not None and "label" in examples:
@@ -473,7 +464,8 @@ def main():
             dataset = datasets[key]
             if samples_limit is not None:
                 dataset = dataset.select(range(samples_limit))
-            if isinstance(training_args.strategy, tf.distribute.TPUStrategy):
+            if isinstance(training_args.strategy, tf.distribute.TPUStrategy) or data_args.pad_to_max_length:
+                logger.info("Padding all batches to max length because argument was set or we're on TPU.")
                 dataset_mode = "constant_batch"
             else:
                 dataset_mode = "variable_batch"
