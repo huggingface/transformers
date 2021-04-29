@@ -1823,14 +1823,3 @@ class PushToHubMixin:
                 copy_tree(save_directory, tmp_dir)
 
             return repo.push_to_hub(commit_message=commit_message)
-
-
-class AggregationStrategy(ExplicitEnum):
-    """
-    Possible values for the ``aggregation_strategy`` argument in :meth:`TokenClassificationPipeline.__init__`. Useful
-    for tab-completion in an IDE.
-    """
-
-    FIRST = "first"
-    MAX = "max"
-    AVERAGE = "average"
