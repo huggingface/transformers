@@ -507,16 +507,11 @@ def main():
         if tf_data["test"] is not None:
             logger.info("Doing predictions on test dataset...")
             predictions = model.predict(tf_data["test"])["logits"]
-            if 'label' in datasets['test'].features:
-                print("Computing prediction loss on test labels...")
-                labels = datasets['test']['label']
-                loss = loss_fn(labels, predictions).numpy()
-                print(f"Test loss: {loss:.4f}")
-            predictions = np.squeeze(predictions) if is_regression else np.argmax(predictions, axis=1)
+            predicted_class = np.squeeze(predictions) if is_regression else np.argmax(predictions, axis=1)
             output_test_file = os.path.join(training_args.output_dir, "test_results.txt")
             with open(output_test_file, "w") as writer:
                 writer.write("index\tprediction\n")
-                for index, item in enumerate(predictions):
+                for index, item in enumerate(predicted_class):
                     if is_regression:
                         writer.write(f"{index}\t{item:3.3f}\n")
                     else:
@@ -524,6 +519,15 @@ def main():
                         writer.write(f"{index}\t{item}\n")
             logger.info(f"Wrote predictions to {output_test_file}!")
         # endregion
+
+    # region Prediction losses
+    # This section is outside the scope() because it's very quick to compute, but behaves badly inside it
+    if 'label' in datasets['test'].features:
+        print("Computing prediction loss on test labels...")
+        labels = datasets['test']['label']
+        loss = float(loss_fn(labels, predictions).numpy())
+        print(f"Test loss: {loss:.4f}")
+    # endregion
 
 
 if __name__ == "__main__":
