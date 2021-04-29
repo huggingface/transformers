@@ -998,7 +998,6 @@ class ModelTesterMixin:
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
 
     def test_model_outputs_equivalence(self):
-
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         def set_nan_tensor_to_zero(t):

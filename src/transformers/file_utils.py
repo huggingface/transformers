@@ -794,6 +794,17 @@ PT_CAUSAL_LM_SAMPLE = r"""
         >>> logits = outputs.logits
 """
 
+PT_SAMPLE_DOCSTRINGS = {
+    "SequenceClassification": PT_SEQUENCE_CLASSIFICATION_SAMPLE,
+    "QuestionAnswering": PT_QUESTION_ANSWERING_SAMPLE,
+    "TokenClassification": PT_TOKEN_CLASSIFICATION_SAMPLE,
+    "MultipleChoice": PT_MULTIPLE_CHOICE_SAMPLE,
+    "MaskedLM": PT_MASKED_LM_SAMPLE,
+    "LMHead": PT_CAUSAL_LM_SAMPLE,
+    "BaseModel": PT_BASE_MODEL_SAMPLE,
+}
+
+
 TF_TOKEN_CLASSIFICATION_SAMPLE = r"""
     Example::
 
@@ -915,30 +926,148 @@ TF_CAUSAL_LM_SAMPLE = r"""
         >>> logits = outputs.logits
 """
 
+TF_SAMPLE_DOCSTRINGS = {
+    "SequenceClassification": TF_SEQUENCE_CLASSIFICATION_SAMPLE,
+    "QuestionAnswering": TF_QUESTION_ANSWERING_SAMPLE,
+    "TokenClassification": TF_TOKEN_CLASSIFICATION_SAMPLE,
+    "MultipleChoice": TF_MULTIPLE_CHOICE_SAMPLE,
+    "MaskedLM": TF_MASKED_LM_SAMPLE,
+    "LMHead": TF_CAUSAL_LM_SAMPLE,
+    "BaseModel": TF_BASE_MODEL_SAMPLE,
+}
+
+
+FLAX_TOKEN_CLASSIFICATION_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {tokenizer_class}, {model_class}
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors='jax')
+
+        >>> outputs = model(**inputs)
+        >>> logits = outputs.logits
+"""
+
+FLAX_QUESTION_ANSWERING_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {tokenizer_class}, {model_class}
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+        >>> inputs = tokenizer(question, text, return_tensors='jax')
+
+        >>> outputs = model(**inputs)
+        >>> start_scores = outputs.start_logits
+        >>> end_scores = outputs.end_logits
+"""
+
+FLAX_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {tokenizer_class}, {model_class}
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors='jax')
+
+        >>> outputs = model(**inputs, labels=labels)
+        >>> logits = outputs.logits
+"""
+
+FLAX_MASKED_LM_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {tokenizer_class}, {model_class}
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors='jax')
+
+        >>> outputs = model(**inputs)
+        >>> logits = outputs.logits
+"""
+
+FLAX_BASE_MODEL_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {tokenizer_class}, {model_class}
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors='jax')
+        >>> outputs = model(**inputs)
+
+        >>> last_hidden_states = outputs.last_hidden_state
+"""
+
+FLAX_MULTIPLE_CHOICE_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {tokenizer_class}, {model_class}
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        >>> choice0 = "It is eaten with a fork and a knife."
+        >>> choice1 = "It is eaten while held in the hand."
+
+        >>> encoding = tokenizer([[prompt, prompt], [choice0, choice1]], return_tensors='jax', padding=True)
+        >>> outputs = model(**{{k: v[None, :] for k,v in encoding.items()}})
+
+        >>> logits = outputs.logits
+"""
+
+FLAX_SAMPLE_DOCSTRINGS = {
+    "SequenceClassification": FLAX_SEQUENCE_CLASSIFICATION_SAMPLE,
+    "QuestionAnswering": FLAX_QUESTION_ANSWERING_SAMPLE,
+    "TokenClassification": FLAX_TOKEN_CLASSIFICATION_SAMPLE,
+    "MultipleChoice": FLAX_MULTIPLE_CHOICE_SAMPLE,
+    "MaskedLM": FLAX_MASKED_LM_SAMPLE,
+    "BaseModel": FLAX_BASE_MODEL_SAMPLE,
+}
+
 
 def add_code_sample_docstrings(
-    *docstr, tokenizer_class=None, checkpoint=None, output_type=None, config_class=None, mask=None
+    *docstr, tokenizer_class=None, checkpoint=None, output_type=None, config_class=None, mask=None, model_cls=None
 ):
     def docstring_decorator(fn):
-        model_class = fn.__qualname__.split(".")[0]
-        is_tf_class = model_class[:2] == "TF"
+        # model_class defaults to function's class if not specified otherwise
+        model_class = fn.__qualname__.split(".")[0] if model_cls is None else model_cls
+
+        if model_class[:2] == "TF":
+            sample_docstrings = TF_SAMPLE_DOCSTRINGS
+        elif model_class[:4] == "Flax":
+            sample_docstrings = FLAX_SAMPLE_DOCSTRINGS
+        else:
+            sample_docstrings = PT_SAMPLE_DOCSTRINGS
+
         doc_kwargs = dict(model_class=model_class, tokenizer_class=tokenizer_class, checkpoint=checkpoint)
 
         if "SequenceClassification" in model_class:
-            code_sample = TF_SEQUENCE_CLASSIFICATION_SAMPLE if is_tf_class else PT_SEQUENCE_CLASSIFICATION_SAMPLE
+            code_sample = sample_docstrings["SequenceClassification"]
         elif "QuestionAnswering" in model_class:
-            code_sample = TF_QUESTION_ANSWERING_SAMPLE if is_tf_class else PT_QUESTION_ANSWERING_SAMPLE
+            code_sample = sample_docstrings["QuestionAnswering"]
         elif "TokenClassification" in model_class:
-            code_sample = TF_TOKEN_CLASSIFICATION_SAMPLE if is_tf_class else PT_TOKEN_CLASSIFICATION_SAMPLE
+            code_sample = sample_docstrings["TokenClassification"]
         elif "MultipleChoice" in model_class:
-            code_sample = TF_MULTIPLE_CHOICE_SAMPLE if is_tf_class else PT_MULTIPLE_CHOICE_SAMPLE
+            code_sample = sample_docstrings["MultipleChoice"]
         elif "MaskedLM" in model_class or model_class in ["FlaubertWithLMHeadModel", "XLMWithLMHeadModel"]:
             doc_kwargs["mask"] = "[MASK]" if mask is None else mask
-            code_sample = TF_MASKED_LM_SAMPLE if is_tf_class else PT_MASKED_LM_SAMPLE
+            code_sample = sample_docstrings["MaskedLM"]
         elif "LMHead" in model_class or "CausalLM" in model_class:
-            code_sample = TF_CAUSAL_LM_SAMPLE if is_tf_class else PT_CAUSAL_LM_SAMPLE
+            code_sample = sample_docstrings["LMHead"]
         elif "Model" in model_class or "Encoder" in model_class:
-            code_sample = TF_BASE_MODEL_SAMPLE if is_tf_class else PT_BASE_MODEL_SAMPLE
+            code_sample = sample_docstrings["BaseModel"]
         else:
             raise ValueError(f"Docstring can't be built for model {model_class}")
 
@@ -1462,7 +1591,10 @@ def tf_required(func):
 
 
 def is_tensor(x):
-    """Tests if ``x`` is a :obj:`torch.Tensor`, :obj:`tf.Tensor` or :obj:`np.ndarray`."""
+    """
+    Tests if ``x`` is a :obj:`torch.Tensor`, :obj:`tf.Tensor`, obj:`jaxlib.xla_extension.DeviceArray` or
+    :obj:`np.ndarray`.
+    """
     if is_torch_available():
         import torch
 
@@ -1473,6 +1605,14 @@ def is_tensor(x):
 
         if isinstance(x, tf.Tensor):
             return True
+
+    if is_flax_available():
+        import jaxlib.xla_extension as jax_xla
+        from jax.interpreters.partial_eval import DynamicJaxprTracer
+
+        if isinstance(x, (jax_xla.DeviceArray, DynamicJaxprTracer)):
+            return True
+
     return isinstance(x, np.ndarray)
 
 
