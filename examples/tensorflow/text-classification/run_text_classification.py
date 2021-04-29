@@ -58,11 +58,14 @@ class SavePretrainedCallback(tf.keras.callbacks.Callback):
         self.model.save_pretrained(self.output_dir)
 
 
-def convert_dataset_for_tensorflow(dataset, non_label_column_names, batch_size, labels, dataset_mode='variable_batch', drop_remainder=True):
+def convert_dataset_for_tensorflow(
+    dataset, non_label_column_names, batch_size, labels, dataset_mode="variable_batch", drop_remainder=True
+):
     """Converts a Hugging Face dataset to a Tensorflow Dataset. The dataset_mode controls whether we pad all batches
     to the maximum sequence length, or whether we only pad to the maximum length within that batch. The former
     is most useful when training on TPU, as a new graph compilation is required for each sequence length.
     """
+
     def densify_ragged_batch(features, labels=None):
         features = {
             feature: ragged_tensor.to_tensor(shape=batch_shape[feature]) for feature, ragged_tensor in features.items()
@@ -96,6 +99,8 @@ def convert_dataset_for_tensorflow(dataset, non_label_column_names, batch_size, 
         .map(densify_ragged_batch)
     )
     return tf_dataset
+
+
 # endregion
 
 
