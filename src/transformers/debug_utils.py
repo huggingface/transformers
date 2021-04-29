@@ -115,9 +115,9 @@ class DebugUnderflowOverflow:
             The model to debug.
         max_frames_to_save (:obj:`int`, `optional`, defaults to 21):
             How many frames back to record - a few dozens is a good number.
-        trace_batch_nums(:obj:`List(int)`, `optional`, defaults to []):
+        trace_batch_nums(:obj:`List[int]`, `optional`, defaults to ``[]``):
             How many frames back to record - a few dozens is a good number.
-        abort_after_batch_num  (:obj:`int`, `optional`, defaults to None):
+        abort_after_batch_num  (:obj:`int`, `optional`, defaults to :obj:`None`):
             Whether to abort after a certain batch number has finished
 
     """
