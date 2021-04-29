@@ -18,6 +18,7 @@
 from collections import OrderedDict
 
 from ...utils import logging
+from ..bart.modeling_flax_bart import FlaxBartModel
 from ..bert.modeling_flax_bert import (
     FlaxBertForMaskedLM,
     FlaxBertForMultipleChoice,
@@ -29,9 +30,8 @@ from ..bert.modeling_flax_bert import (
     FlaxBertModel,
 )
 from ..roberta.modeling_flax_roberta import FlaxRobertaModel
-from ..bart.modeling_flax_bart import FlaxBartModel
 from .auto_factory import auto_class_factory
-from .configuration_auto import BertConfig, RobertaConfig, BartConfig
+from .configuration_auto import BartConfig, BertConfig, RobertaConfig
 
 
 logger = logging.get_logger(__name__)

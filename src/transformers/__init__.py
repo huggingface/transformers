@@ -2541,6 +2541,7 @@ if TYPE_CHECKING:
             FlaxAutoModelForSequenceClassification,
             FlaxAutoModelForTokenClassification,
         )
+        from .models.bart import FlaxBartModel
         from .models.bert import (
             FlaxBertForMaskedLM,
             FlaxBertForMultipleChoice,
@@ -2553,7 +2554,6 @@ if TYPE_CHECKING:
             FlaxBertPreTrainedModel,
         )
         from .models.roberta import FlaxRobertaModel
-        from .models.bart import FlaxBartModel
     else:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.

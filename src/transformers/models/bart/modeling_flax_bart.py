@@ -14,10 +14,10 @@
 # limitations under the License.
 """ Flax Bart model. """
 
+import math
 import random
 from typing import Callable, Optional, Tuple
 
-import math
 import numpy as np
 
 import flax.linen as nn
@@ -101,14 +101,12 @@ class FlaxBartLearnedPositionalEmbedding(nn.Module):
             self.num_embeddings + self.offset,
             self.embedding_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-            dtype=self.dtype
+            dtype=self.dtype,
         )
 
     def __call__(self, input_ids_shape: Tuple[int], past_key_values_length: int = 0) -> jnp.ndarray:
         bsz, seq_len = input_ids_shape[:2]
-        positions = jnp.arange(
-            past_key_values_length, past_key_values_length + seq_len, dtype=jnp.uint32
-        )
+        positions = jnp.arange(past_key_values_length, past_key_values_length + seq_len, dtype=jnp.uint32)
         return self.position_embeddings(positions + self.offset)
 
 
@@ -165,7 +163,7 @@ class FlaxBartAttention(nn.Module):
         attention_mask: Optional[jnp.ndarray] = None,
         layer_head_mask: Optional[jnp.ndarray] = None,
         output_attentions: bool = False,
-        deterministic: bool = True
+        deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
         """Input shape: Batch x Time x Channel"""
 
@@ -236,7 +234,9 @@ class FlaxBartAttention(nn.Module):
             assert layer_head_mask.shape == (
                 self.num_heads,
             ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.shape}"
-            attn_weights = layer_head_mask.reshape(1, -1, 1, 1) * attn_weights.reshape(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = layer_head_mask.reshape(1, -1, 1, 1) * attn_weights.reshape(
+                bsz, self.num_heads, tgt_len, src_len
+            )
             attn_weights = attn_weights.reshape(bsz * self.num_heads, tgt_len, src_len)
 
         if output_attentions:
@@ -516,9 +516,7 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
             attention_mask = jnp.ones(input_shape)
         if decoder_input_ids is None:
             decoder_input_ids = shift_tokens_right(
-                input_ids,
-                self.config.pad_token_id,
-                decoder_start_token_id=self.config.decoder_start_token_id
+                input_ids, self.config.pad_token_id, decoder_start_token_id=self.config.decoder_start_token_id
             )
         if decoder_attention_mask is None:
             decoder_attention_mask = attention_mask
@@ -535,11 +533,15 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
             decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4") if decoder_input_ids is not None else None,
             head_mask=jnp.array(head_mask, dtype="i4") if head_mask is not None else None,
             decoder_head_mask=jnp.array(decoder_head_mask, dtype="i4") if decoder_head_mask is not None else None,
-            cross_attn_head_mask=jnp.array(cross_attn_head_mask, dtype="i4") if cross_attn_head_mask is not None else None,
+            cross_attn_head_mask=jnp.array(cross_attn_head_mask, dtype="i4")
+            if cross_attn_head_mask is not None
+            else None,
             encoder_outputs=jnp.array(encoder_outputs, dtype="fp32") if encoder_outputs is not None else None,
             past_key_values=jnp.array(past_key_values, dtype="fp32") if past_key_values is not None else None,
             inputs_embeds=jnp.array(inputs_embeds, dtype="fp32") if inputs_embeds is not None else None,
-            decoder_inputs_embeds=jnp.array(decoder_inputs_embeds, dtype="fp32") if decoder_inputs_embeds is not None else None,
+            decoder_inputs_embeds=jnp.array(decoder_inputs_embeds, dtype="fp32")
+            if decoder_inputs_embeds is not None
+            else None,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -577,6 +579,7 @@ class FlaxBartEncoder(nn.Module):
         config: BartConfig
         embed_tokens (flax.linen.Embedding): output embedding
     """
+
     config: BartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -597,7 +600,7 @@ class FlaxBartEncoder(nn.Module):
                 self.config.vocab_size,
                 embed_dim,
                 embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-                dtype=self.dtype
+                dtype=self.dtype,
             )  # TODO: solve missing self.padding_idx
 
         self.embed_positions = FlaxBartLearnedPositionalEmbedding(
@@ -710,7 +713,7 @@ class FlaxBartEncoder(nn.Module):
                 attention_mask,
                 head_mask[idx] if head_mask is not None else None,
                 True,  # we want to always output attentions at this step (at least so far for debugging purposes :) )
-                deterministic
+                deterministic,
             )
 
             if output_attentions:
@@ -734,6 +737,7 @@ class FlaxBartDecoder(nn.Module):
         config: BartConfig
         embed_tokens (flax.linen.Embedding): output embedding
     """
+
     config: BartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -754,7 +758,7 @@ class FlaxBartDecoder(nn.Module):
                 self.config.vocab_size,
                 embed_dim,
                 embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-                dtype=self.dtype
+                dtype=self.dtype,
             )  # TODO: solve missing self.padding_idx
 
         self.embed_positions = FlaxBartLearnedPositionalEmbedding(
@@ -762,9 +766,7 @@ class FlaxBartDecoder(nn.Module):
             embed_dim,
             self.config,
         )
-        self.layers = [
-            FlaxBartDecoderLayer(self.config, dtype=self.dtype) for _ in range(self.config.decoder_layers)
-        ]
+        self.layers = [FlaxBartDecoderLayer(self.config, dtype=self.dtype) for _ in range(self.config.decoder_layers)]
         self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
 
     def get_input_embeddings(self):
@@ -803,7 +805,7 @@ class FlaxBartDecoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = False,
-        deterministic: bool = True
+        deterministic: bool = True,
     ):
         r"""
         Args:
@@ -938,7 +940,7 @@ class FlaxBartDecoder(nn.Module):
                 cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
                 past_key_value,
                 True,  # we want to always output attentions at this step
-                deterministic
+                deterministic,
             )
 
             if output_attentions:
@@ -953,9 +955,7 @@ class FlaxBartDecoder(nn.Module):
 
         if not return_dict:
             return tuple(
-                v
-                for v in [hidden_states, all_hidden_states, all_self_attns, all_cross_attentions]
-                if v is not None
+                v for v in [hidden_states, all_hidden_states, all_self_attns, all_cross_attentions] if v is not None
             )
         raise NotImplementedError(
             "TODO: Return with return_dict is not implemented yet! Please use `return_dict=False`"
@@ -966,7 +966,9 @@ class FlaxBartModule(nn.Module):
     config: BartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    def setup(self,):
+    def setup(
+        self,
+    ):
         _, vocab_size = self.config.pad_token_id, self.config.vocab_size
         embed_dim = self.config.d_model
 
@@ -974,7 +976,7 @@ class FlaxBartModule(nn.Module):
             vocab_size,
             embed_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-            dtype=self.dtype
+            dtype=self.dtype,
         )  # TODO: solve missing self.padding_idx
 
         self.encoder = FlaxBartEncoder(self.config, dtype=self.dtype)
