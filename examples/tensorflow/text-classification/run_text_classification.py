@@ -18,10 +18,8 @@
 
 import logging
 import os
-import random
 import sys
 from dataclasses import dataclass, field
-from math import ceil
 from pathlib import Path
 from typing import Optional
 
@@ -61,10 +59,10 @@ class SavePretrainedCallback(tf.keras.callbacks.Callback):
 
 
 def convert_dataset_for_tensorflow(dataset, non_label_column_names, batch_size, labels, dataset_mode, drop_remainder):
-    """Converts a Hugging Face dataset to a Tensorflow Dataset or Sequence object. We usually only want a Dataset when
-    we're training on TPU, as we get the nice feature of variable-length batches when we put the data in a Sequence
-    object instead."""
-
+    """Converts a Hugging Face dataset to a Tensorflow Dataset. The dataset_mode controls whether we pad all batches
+    to the maximum sequence length, or whether we only pad to the maximum length within that batch. The former
+    is most useful when training on TPU, as a new graph compilation is required for each sequence length.
+    """
     def densify_ragged_batch(features, labels=None):
         features = {
             feature: ragged_tensor.to_tensor(shape=batch_shape[feature]) for feature, ragged_tensor in features.items()
@@ -78,39 +76,28 @@ def convert_dataset_for_tensorflow(dataset, non_label_column_names, batch_size, 
     if dataset_mode == "variable_batch":
         batch_shape = {key: None for key in feature_keys}
         data = {key: tf.ragged.constant(dataset[key]) for key in feature_keys}
-        if labels:
-            labels = tf.convert_to_tensor(np.array(dataset["label"]))
-            tf_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
-        else:
-            tf_dataset = tf.data.Dataset.from_tensor_slices(data)
-        tf_dataset = (
-            tf_dataset.shuffle(buffer_size=len(dataset))
-            .batch(batch_size=batch_size, drop_remainder=drop_remainder)
-            .map(densify_ragged_batch)
-        )
-        return tf_dataset
     elif dataset_mode == "constant_batch":
         data = {key: tf.ragged.constant(dataset[key]) for key in feature_keys}
         batch_shape = {
             key: tf.concat(([batch_size], ragged_tensor.bounding_shape()[1:]), axis=0)
             for key, ragged_tensor in data.items()
         }
-        if labels:
-            labels = tf.convert_to_tensor(np.array(dataset["label"]))
-            tf_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
-        else:
-            tf_dataset = tf.data.Dataset.from_tensor_slices(data)
-        tf_dataset = (
-            tf_dataset.shuffle(buffer_size=len(dataset))
-            .batch(batch_size=batch_size, drop_remainder=drop_remainder)
-            .map(densify_ragged_batch)
-        )
-        return tf_dataset
     else:
         raise ValueError("Unknown dataset mode!")
 
-
+    if labels:
+        labels = tf.convert_to_tensor(np.array(dataset["label"]))
+        tf_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
+    else:
+        tf_dataset = tf.data.Dataset.from_tensor_slices(data)
+    tf_dataset = (
+        tf_dataset.shuffle(buffer_size=len(dataset))
+        .batch(batch_size=batch_size, drop_remainder=drop_remainder)
+        .map(densify_ragged_batch)
+    )
+    return tf_dataset
 # endregion
+
 
 # region Command-line arguments
 @dataclass
