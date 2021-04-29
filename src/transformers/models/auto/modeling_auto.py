@@ -49,7 +49,10 @@ from ..bert.modeling_bert import (
     BertLMHeadModel,
     BertModel,
 )
-from ..bert_generation.modeling_bert_generation import BertGenerationDecoder, BertGenerationEncoder
+from ..bert_generation.modeling_bert_generation import (
+    BertGenerationDecoder,
+    BertGenerationEncoder,
+)
 from ..big_bird.modeling_big_bird import (
     BigBirdForCausalLM,
     BigBirdForMaskedLM,
@@ -60,7 +63,11 @@ from ..big_bird.modeling_big_bird import (
     BigBirdForTokenClassification,
     BigBirdModel,
 )
-from ..blenderbot.modeling_blenderbot import BlenderbotForCausalLM, BlenderbotForConditionalGeneration, BlenderbotModel
+from ..blenderbot.modeling_blenderbot import (
+    BlenderbotForCausalLM,
+    BlenderbotForConditionalGeneration,
+    BlenderbotModel,
+)
 from ..blenderbot_small.modeling_blenderbot_small import (
     BlenderbotSmallForCausalLM,
     BlenderbotSmallForConditionalGeneration,
@@ -83,7 +90,11 @@ from ..convbert.modeling_convbert import (
     ConvBertForTokenClassification,
     ConvBertModel,
 )
-from ..ctrl.modeling_ctrl import CTRLForSequenceClassification, CTRLLMHeadModel, CTRLModel
+from ..ctrl.modeling_ctrl import (
+    CTRLForSequenceClassification,
+    CTRLLMHeadModel,
+    CTRLModel,
+)
 from ..deberta.modeling_deberta import (
     DebertaForMaskedLM,
     DebertaForQuestionAnswering,
@@ -98,7 +109,11 @@ from ..deberta_v2.modeling_deberta_v2 import (
     DebertaV2ForTokenClassification,
     DebertaV2Model,
 )
-from ..deit.modeling_deit import DeiTForImageClassification, DeiTForImageClassificationWithTeacher, DeiTModel
+from ..deit.modeling_deit import (
+    DeiTForImageClassification,
+    DeiTForImageClassificationWithTeacher,
+    DeiTModel,
+)
 from ..distilbert.modeling_distilbert import (
     DistilBertForMaskedLM,
     DistilBertForMultipleChoice,
@@ -137,7 +152,11 @@ from ..funnel.modeling_funnel import (
     FunnelForTokenClassification,
     FunnelModel,
 )
-from ..gpt2.modeling_gpt2 import GPT2ForSequenceClassification, GPT2LMHeadModel, GPT2Model
+from ..gpt2.modeling_gpt2 import (
+    GPT2ForSequenceClassification,
+    GPT2LMHeadModel,
+    GPT2Model,
+)
 from ..gpt_neo.modeling_gpt_neo import GPTNeoForCausalLM, GPTNeoModel
 from ..ibert.modeling_ibert import (
     IBertForMaskedLM,
@@ -167,7 +186,11 @@ from ..longformer.modeling_longformer import (
     LongformerForTokenClassification,
     LongformerModel,
 )
-from ..lxmert.modeling_lxmert import LxmertForPreTraining, LxmertForQuestionAnswering, LxmertModel
+from ..lxmert.modeling_lxmert import (
+    LxmertForPreTraining,
+    LxmertForQuestionAnswering,
+    LxmertModel,
+)
 from ..m2m_100.modeling_m2m_100 import M2M100ForConditionalGeneration, M2M100Model
 from ..marian.modeling_marian import MarianForCausalLM, MarianModel, MarianMTModel
 from ..mbart.modeling_mbart import (
@@ -207,10 +230,23 @@ from ..mpnet.modeling_mpnet import (
     MPNetModel,
 )
 from ..mt5.modeling_mt5 import MT5ForConditionalGeneration, MT5Model
-from ..openai.modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
-from ..pegasus.modeling_pegasus import PegasusForCausalLM, PegasusForConditionalGeneration, PegasusModel
-from ..prophetnet.modeling_prophetnet import ProphetNetForCausalLM, ProphetNetForConditionalGeneration, ProphetNetModel
-if(platform.system() != 'Windows'):
+from ..openai.modeling_openai import (
+    OpenAIGPTForSequenceClassification,
+    OpenAIGPTLMHeadModel,
+    OpenAIGPTModel,
+)
+from ..pegasus.modeling_pegasus import (
+    PegasusForCausalLM,
+    PegasusForConditionalGeneration,
+    PegasusModel,
+)
+from ..prophetnet.modeling_prophetnet import (
+    ProphetNetForCausalLM,
+    ProphetNetForConditionalGeneration,
+    ProphetNetModel,
+)
+
+if platform.system() != "Windows":
     from ..rag.modeling_rag import (  # noqa: F401 - need to import all RagModels to be in globals() function
         RagModel,
         RagSequenceForGeneration,
@@ -233,7 +269,10 @@ from ..roberta.modeling_roberta import (
     RobertaForTokenClassification,
     RobertaModel,
 )
-from ..speech_to_text.modeling_speech_to_text import Speech2TextForConditionalGeneration, Speech2TextModel
+from ..speech_to_text.modeling_speech_to_text import (
+    Speech2TextForConditionalGeneration,
+    Speech2TextModel,
+)
 from ..squeezebert.modeling_squeezebert import (
     SqueezeBertForMaskedLM,
     SqueezeBertForMultipleChoice,
@@ -249,7 +288,11 @@ from ..tapas.modeling_tapas import (
     TapasForSequenceClassification,
     TapasModel,
 )
-from ..transfo_xl.modeling_transfo_xl import TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
+from ..transfo_xl.modeling_transfo_xl import (
+    TransfoXLForSequenceClassification,
+    TransfoXLLMHeadModel,
+    TransfoXLModel,
+)
 from ..vit.modeling_vit import ViTForImageClassification, ViTModel
 from ..wav2vec2.modeling_wav2vec2 import Wav2Vec2ForMaskedLM, Wav2Vec2Model
 from ..xlm.modeling_xlm import (
@@ -517,7 +560,10 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Image Classification mapping
         (ViTConfig, ViTForImageClassification),
-        (DeiTConfig, (DeiTForImageClassification, DeiTForImageClassificationWithTeacher)),
+        (
+            DeiTConfig,
+            (DeiTForImageClassification, DeiTForImageClassificationWithTeacher),
+        ),
     ]
 )
 
@@ -724,11 +770,15 @@ _AutoModelWithLMHead = auto_class_factory(
 )
 
 AutoModelForCausalLM = auto_class_factory(
-    "AutoModelForCausalLM", MODEL_FOR_CAUSAL_LM_MAPPING, head_doc="causal language modeling"
+    "AutoModelForCausalLM",
+    MODEL_FOR_CAUSAL_LM_MAPPING,
+    head_doc="causal language modeling",
 )
 
 AutoModelForMaskedLM = auto_class_factory(
-    "AutoModelForMaskedLM", MODEL_FOR_MASKED_LM_MAPPING, head_doc="masked language modeling"
+    "AutoModelForMaskedLM",
+    MODEL_FOR_MASKED_LM_MAPPING,
+    head_doc="masked language modeling",
 )
 
 AutoModelForSeq2SeqLM = auto_class_factory(
@@ -739,11 +789,15 @@ AutoModelForSeq2SeqLM = auto_class_factory(
 )
 
 AutoModelForSequenceClassification = auto_class_factory(
-    "AutoModelForSequenceClassification", MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING, head_doc="sequence classification"
+    "AutoModelForSequenceClassification",
+    MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+    head_doc="sequence classification",
 )
 
 AutoModelForQuestionAnswering = auto_class_factory(
-    "AutoModelForQuestionAnswering", MODEL_FOR_QUESTION_ANSWERING_MAPPING, head_doc="question answering"
+    "AutoModelForQuestionAnswering",
+    MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+    head_doc="question answering",
 )
 
 AutoModelForTableQuestionAnswering = auto_class_factory(
@@ -754,11 +808,15 @@ AutoModelForTableQuestionAnswering = auto_class_factory(
 )
 
 AutoModelForTokenClassification = auto_class_factory(
-    "AutoModelForTokenClassification", MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING, head_doc="token classification"
+    "AutoModelForTokenClassification",
+    MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+    head_doc="token classification",
 )
 
 AutoModelForMultipleChoice = auto_class_factory(
-    "AutoModelForMultipleChoice", MODEL_FOR_MULTIPLE_CHOICE_MAPPING, head_doc="multiple choice"
+    "AutoModelForMultipleChoice",
+    MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+    head_doc="multiple choice",
 )
 
 AutoModelForNextSentencePrediction = auto_class_factory(
@@ -768,7 +826,9 @@ AutoModelForNextSentencePrediction = auto_class_factory(
 )
 
 AutoModelForImageClassification = auto_class_factory(
-    "AutoModelForImageClassification", MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING, head_doc="image classification"
+    "AutoModelForImageClassification",
+    MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+    head_doc="image classification",
 )
 
 
@@ -791,4 +851,6 @@ class AutoModelWithLMHead(_AutoModelWithLMHead):
             "`AutoModelForSeq2SeqLM` for encoder-decoder models.",
             FutureWarning,
         )
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        return super().from_pretrained(
+            pretrained_model_name_or_path, *model_args, **kwargs
+        )
