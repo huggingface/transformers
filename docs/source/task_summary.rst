@@ -85,9 +85,8 @@ each other. The process is the following:
 
 1. Instantiate a tokenizer and a model from the checkpoint name. The model is identified as a BERT model and loads it
    with the weights stored in the checkpoint.
-2. Build a sequence from the two sentences, with the correct model-specific separators token type ids and attention
-   masks (:func:`~transformers.PreTrainedTokenizer.encode` and :func:`~transformers.PreTrainedTokenizer.__call__` take
-   care of this).
+2. Build a sequence from the two sentences, with the correct model-specific separators, token type ids and attention
+   masks (which will be created automatically by the tokenizer).
 3. Pass this sequence through the model so that it is classified in one of the two available classes: 0 (not a
    paraphrase) and 1 (is a paraphrase).
 4. Compute the softmax of the result to get probabilities over the classes.
@@ -108,6 +107,7 @@ each other. The process is the following:
     >>> sequence_1 = "Apples are especially bad for your health"
     >>> sequence_2 = "HuggingFace's headquarters are situated in Manhattan"
 
+    >>> # The tokekenizer will automatically add any model specific separators (i.e. <CLS> and <SEP>) and tokens to the sequence, as well as compute the attention masks.
     >>> paraphrase = tokenizer(sequence_0, sequence_2, return_tensors="pt")
     >>> not_paraphrase = tokenizer(sequence_0, sequence_1, return_tensors="pt")
 
@@ -141,6 +141,7 @@ each other. The process is the following:
     >>> sequence_1 = "Apples are especially bad for your health"
     >>> sequence_2 = "HuggingFace's headquarters are situated in Manhattan"
 
+    >>> # The tokekenizer will automatically add any model specific separators (i.e. <CLS> and <SEP>) and tokens to the sequence, as well as compute the attention masks.
     >>> paraphrase = tokenizer(sequence_0, sequence_2, return_tensors="tf")
     >>> not_paraphrase = tokenizer(sequence_0, sequence_1, return_tensors="tf")
 
@@ -504,8 +505,8 @@ This outputs a (hopefully) coherent next token following the original sequence, 
     >>> print(resulting_string)
     Hugging Face is based in DUMBO, New York City, and has
 
-In the next section, we show how this functionality is leveraged in :func:`~transformers.PreTrainedModel.generate` to
-generate multiple tokens up to a user-defined length.
+In the next section, we show how :func:`~transformers.PreTrainedModel.generate` can be used to generate multiple tokens
+up to a specified length instead of one token at a time.
 
 Text Generation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -526,10 +527,11 @@ As a default all models apply *Top-K* sampling when used in pipelines, as config
 
 
 Here, the model generates a random text with a total maximal length of *50* tokens from context *"As far as I am
-concerned, I will"*. The default arguments of ``PreTrainedModel.generate()`` can be directly overridden in the
-pipeline, as is shown above for the argument ``max_length``.
+concerned, I will"*. Behind the scenes, the pipeline object calls the method
+:func:`~transformers.PreTrainedModel.generate` to generate text. The default arguments for this method can be
+overridden in the pipeline, as is shown above for the arguments ``max_length`` and ``do_sample``.
 
-Here is an example of text generation using ``XLNet`` and its tokenizer.
+Below is an example of text generation using ``XLNet`` and its tokenizer, which includes calling ``generate`` directly:
 
 .. code-block::
 
@@ -627,8 +629,8 @@ It leverages a fine-tuned model on CoNLL-2003, fine-tuned by `@stefan-it <https:
 
     >>> nlp = pipeline("ner")
 
-    >>> sequence = "Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO, therefore very"
-    ...            "close to the Manhattan Bridge which is visible from the window."
+    >>> sequence = """Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO, 
+    ... therefore very close to the Manhattan Bridge which is visible from the window."""
 
 
 This outputs a list of all words that have been identified as one of the entities from the 9 classes defined above.
@@ -659,7 +661,7 @@ Here is an example of doing named entity recognition, using a model and a tokeni
 
 1. Instantiate a tokenizer and a model from the checkpoint name. The model is identified as a BERT model and loads it
    with the weights stored in the checkpoint.
-2. Define the label list with which the model was trained on.
+2. Define the label list with which the model was trained on, so that you can interpret the model's predictions.
 3. Define a sequence with known entities, such as "Hugging Face" as an organisation and "New York City" as a location.
 4. Split words into tokens so that they can be mapped to predictions. We use a small hack by, first, completely
    encoding and decoding the sequence, so that we're left with a string that contains the special tokens.
@@ -818,6 +820,12 @@ CNN / Daily Mail), it yields very good results.
     >>> # T5 uses a max_length of 512 so we cut the article to 512 tokens.
     >>> inputs = tokenizer.encode("summarize: " + ARTICLE, return_tensors="tf", max_length=512)
     >>> outputs = model.generate(inputs, max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True)
+
+.. code-block::
+
+    >>> print(tokenizer.decode(outputs[0]))
+    <pad> prosecutors say the marriages were part of an immigration scam. if convicted, barrientos faces two criminal counts of "offering a false instrument for filing in the first degree" she has been married 10 times, nine of them between 1999 and 2002.</s>
+
 
 Translation
 -----------------------------------------------------------------------------------------------------------------------
