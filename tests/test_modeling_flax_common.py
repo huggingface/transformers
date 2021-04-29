@@ -107,11 +107,8 @@ class FlaxModelTesterMixin:
                 elif tuple_object is None:
                     return
                 else:
-                    self.assertTrue(
-                        self.assert_almost_equals(
-                            set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), 1e-5
-                        ),
-                        msg=f"Tuple and dict output are not equal. Difference: {np.max(np.abs(tuple_object - dict_object))}. Tuple has `nan`: {np.isnan(tuple_object).any()} and `inf`: {np.isinf(tuple_object)}. Dict has `nan`: {np.isnan(dict_object).any()} and `inf`: {np.isinf(dict_object)}.",
+                    self.assert_almost_equals(
+                        set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), 1e-5
                     )
 
                 recursive_check(tuple_output, dict_output)
@@ -213,6 +210,9 @@ class FlaxModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
+            if model_class.__name__ != "FlaxBertModel":
+                continue
+
             with self.subTest(model_class.__name__):
                 model = model_class(config)
 

@@ -392,8 +392,8 @@ class FlaxBertLayerCollection(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-        all_attentions = ()
-        all_hidden_states = ()
+        all_attentions = () if output_attentions else None
+        all_hidden_states = () if output_hidden_states else None
 
         for i, layer in enumerate(self.layers):
             if output_hidden_states:
@@ -410,12 +410,6 @@ class FlaxBertLayerCollection(nn.Module):
             all_hidden_states += (hidden_states,)
 
         outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (all_attentions,)
-
-        if output_hidden_states:
-            outputs += (all_hidden_states,)
 
         if not return_dict:
             return tuple(v for v in outputs if v is not None)
@@ -653,6 +647,7 @@ class FlaxBertModule(nn.Module):
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
         hidden_states = outputs[0]
         pooled = self.pooler(hidden_states) if self.add_pooling_layer else None
