@@ -16,8 +16,6 @@
 
 import copy
 
-from transformers.file_utils import PRESET_MIRROR_DICT
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 

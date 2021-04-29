@@ -22,14 +22,13 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-from ...activations import ACT2FN
 from ...file_utils import (
-    add_code_sample_docstrings,
+    ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_clip import ClipConfig, ClipTextConfig, ClipVisionConfig
@@ -37,11 +36,9 @@ from .configuration_clip import ClipConfig, ClipTextConfig, ClipVisionConfig
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "ClipConfig"
-_TOKENIZER_FOR_DOC = "ClipTokenizer"
 
 CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "clip_ViT_B_32",
+    "clip_Clip_B_32",
     # See all Clip models at https://huggingface.co/models?filter=clip
 ]
 
@@ -73,6 +70,38 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
     return (caption_loss + image_loss) / 2.0
 
 
+class ClipOutput(ModelOutput):
+    """
+    Args:
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`return_loss` is :obj:`True`):
+            Contrastive loss for image-text similarity.
+        logits_per_image:(:obj:`torch.FloatTensor` of shape :obj:`(image_batch_size, text_batch_size)`):
+            The scaled dot product scores between :obj:`image_embeds` and :obj:`text_embeds`. This represents the
+            image-text similarity scores.
+        logits_per_text:(:obj:`torch.FloatTensor` of shape :obj:`(text_batch_size, image_batch_size)`):
+            The scaled dot product scores between :obj:`text_embeds` and :obj:`image_embeds`. This represents the
+            text-image similarity scores.
+        text_embeds(:obj:`torch.FloatTensor` of shape :obj:`(batch_size, output_dim`):
+            The text embeddings obtained by applying the projection layer to the pooled output of
+            :class:`~transformers.ClipTextModel`.
+        image_embeds(:obj:`torch.FloatTensor` of shape :obj:`(batch_size, output_dim`):
+            The image embeddings obtained by applying the projection layer to the pooled output of
+            :class:`~transformers.ClipVisionModel`.
+        text_model_output(:obj:`BaseModelOutputWithPooling`):
+            The output of the :class:`~transformers.ClipTextModel`.
+        vision_model_output(:obj:`BaseModelOutputWithPooling`):
+            The output of the :class:`~transformers.ClipVisionModel`.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits_per_image: torch.FloatTensor = None
+    logits_per_text: torch.FloatTensor = None
+    text_embeds: torch.FloatTensor = None
+    image_embeds: torch.FloatTensor = None
+    text_model_output: BaseModelOutput = None
+    vision_model_output: BaseModelOutput = None
+
+
 class QuickGELU(nn.Module):
     def forward(self, hidden_states: torch.Tensor):
         return hidden_states * torch.sigmoid(1.702 * hidden_states)
@@ -87,7 +116,7 @@ class ClipVisionEmbeddings(nn.Module):
 
         scale = self.embed_dim ** -0.5
         class_embed_weights = torch.empty(self.embed_dim)
-        nn.init.normal_(class_embed_weights, mean=0.0, std=0.02)
+        nn.init.normal_(class_embed_weights, mean=0.0, std=scale)
         self.class_embedding = nn.Parameter(class_embed_weights)
 
         self.patch_embedding = nn.Conv2d(
@@ -170,6 +199,7 @@ class ClipAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
+        causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -194,6 +224,17 @@ class ClipAttention(nn.Module):
             tgt_len,
             src_len,
         ), f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+
+        # apply the causal_attention_mask first
+        if causal_attention_mask is not None:
+            assert causal_attention_mask.size() == (
+                bsz,
+                1,
+                tgt_len,
+                src_len,
+            ), f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {causal_attention_mask.size()}"
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + causal_attention_mask
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if attention_mask is not None:
             assert attention_mask.size() == (
@@ -266,6 +307,7 @@ class ClipEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
+        causal_attention_mask: torch.Tensor,
         output_attentions: bool = False,
     ):
         """
@@ -285,6 +327,7 @@ class ClipEncoderLayer(nn.Module):
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
+            causal_attention_mask=causal_attention_mask,
             output_attentions=output_attentions,
         )
         hidden_states = residual + hidden_states
@@ -344,6 +387,58 @@ class ClipPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
+CLIP_START_DOCSTRING = r"""
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ subclass. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config (:class:`~transformers.ClipConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
+"""
+
+CLIP_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using :class:`~transformers.ClipTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
+        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
+
+            `What are position IDs? <../glossary.html#position-ids>`_
+        pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
+            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
+            :class:`~transformers.ClipFeatureExtractor`. See :meth:`transformers.ClipFeatureExtractor.__call__` for
+            details.
+        return_loss (:obj:`bool`, `optional`):
+            Whether or not to return the contrastive loss.
+        output_attentions (:obj:`bool`, `optional`):
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`):
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail.
+        return_dict (:obj:`bool`, `optional`):
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+"""
+
+
 class ClipEncoder(ClipPreTrainedModel):
     """
     Transformer encoder consisting of *config.num_hidden_layers* self attention layers. Each layer is a
@@ -365,6 +460,7 @@ class ClipEncoder(ClipPreTrainedModel):
         self,
         inputs_embeds,
         attention_mask=None,
+        causal_attention_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -431,11 +527,13 @@ class ClipEncoder(ClipPreTrainedModel):
                     create_custom_forward(encoder_layer),
                     hidden_states,
                     attention_mask,
+                    causal_attention_mask,
                 )
             else:
                 layer_outputs = encoder_layer(
                     hidden_states,
                     attention_mask,
+                    causal_attention_mask,
                     output_attentions=output_attentions,
                 )
 
@@ -483,12 +581,12 @@ class ClipTextModel(ClipPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.token_embedding = value
 
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ClipTextConfig)
     def forward(
         self,
         input_ids=None,
-        position_ids=None,
         attention_mask=None,
-        inputs_embeds=None,
+        position_ids=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -511,16 +609,6 @@ class ClipTextModel(ClipPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
-            head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
-                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the heas is **masked**.
-
-            inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
-                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
-                into associated vectors than the model's internal embedding lookup matrix.
             output_attentions (:obj:`bool`, `optional`):
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
                 returned tensors for more detail.
@@ -529,6 +617,8 @@ class ClipTextModel(ClipPreTrainedModel):
                 for more detail.
             return_dict (:obj:`bool`, `optional`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+
+        Returns:
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -536,25 +626,27 @@ class ClipTextModel(ClipPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
+        if input_ids is None:
+            raise ValueError("You have to specify either input_ids")
 
-        hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
+        input_shape = input_ids.size()
+        input_ids = input_ids.view(-1, input_shape[-1])
+
+        hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
         bsz, seq_len = input_shape
-        attention_mask = self._build_attention_mask(bsz, seq_len)
+        # CLIP's text model uses causal mask, prepare it here.
+        # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
+        causal_attention_mask = self._build_causal_attention_mask(bsz, seq_len)
+        # expand attention_mask
+        if attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            attention_mask = _expand_mask(attention_mask, hidden_states.dtype)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
+            causal_attention_mask=causal_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -563,15 +655,21 @@ class ClipTextModel(ClipPreTrainedModel):
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
+        # text_embeds.shape = [batch_size, n_ctx, transformer.width]
+        # take features from the eot embedding (eot_token is the highest number in each sequence)
+        pooled_output = last_hidden_state[torch.arange(last_hidden_state.shape[0]), input_ids.argmax(dim=-1)]
+
         if not return_dict:
-            return (last_hidden_state,) + encoder_outputs[1:]
-        return BaseModelOutput(
+            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
+
+        return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
 
-    def _build_attention_mask(self, bsz, seq_len):
+    def _build_causal_attention_mask(self, bsz, seq_len):
         # lazily create causal attention mask, with full attention between the vision tokens
         # pytorch uses additive attention mask; fill with -inf
         mask = torch.empty(bsz, seq_len, seq_len)
@@ -607,6 +705,7 @@ class ClipVisionModel(ClipPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.embeddings.patch_embedding
 
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ClipVisionConfig)
     def forward(
         self,
         pixel_values=None,
@@ -617,32 +716,10 @@ class ClipVisionModel(ClipPreTrainedModel):
     ):
         r"""
         Args:
-            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using :class:`~transformers.ClipTokenizer`. See
-                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
-                for details.
-
-                `What are input IDs? <../glossary.html#input-ids>`__
-            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
-                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the heas is **masked**.
-
-            inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
-                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
-                into associated vectors than the model's internal embedding lookup matrix.
+            pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
+                Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained
+                using :class:`~transformers.ClipFeatureExtractor`. See
+                :meth:`transformers.ClipFeatureExtractor.__call__` for details.
             output_attentions (:obj:`bool`, `optional`):
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
                 returned tensors for more detail.
@@ -651,12 +728,17 @@ class ClipVisionModel(ClipPreTrainedModel):
                 for more detail.
             return_dict (:obj:`bool`, `optional`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+
+        Returns:
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.embeddings(pixel_values)
         hidden_states = self.pre_layrnorm(hidden_states)
@@ -670,18 +752,21 @@ class ClipVisionModel(ClipPreTrainedModel):
         )
 
         last_hidden_state = encoder_outputs[0]
-        last_hidden_state = last_hidden_state[:, 0, :]
-        last_hidden_state = self.post_layernorm(last_hidden_state)
+        pooled_output = last_hidden_state[:, 0, :]
+        pooled_output = self.post_layernorm(pooled_output)
 
         if not return_dict:
-            return (last_hidden_state,) + encoder_outputs[1:]
-        return BaseModelOutput(
+            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
+
+        return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
 
 
+@add_start_docstrings(CLIP_START_DOCSTRING)
 class ClipModel(ClipPreTrainedModel):
     def __init__(self, config: ClipConfig):
         super().__init__(config)
@@ -709,7 +794,6 @@ class ClipModel(ClipPreTrainedModel):
         input_ids=None,
         attention_mask=None,
         position_ids=None,
-        inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -718,19 +802,15 @@ class ClipModel(ClipPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        text_embeds = text_outputs[0]
-        # text_embeds.shape = [batch_size, n_ctx, transformer.width]
-        # take features from the eot embedding (eot_token is the highest number in each sequence)
-        pooled_output = text_embeds[torch.arange(text_embeds.shape[0]), input_ids.argmax(dim=-1)]
-        text_features = self.text_projection(pooled_output)
+        pooled_output = text_outputs[1]
+        text_embeds = self.text_projection(pooled_output)
 
-        return text_features
+        return text_embeds
 
     def encode_image(
         self,
@@ -746,22 +826,28 @@ class ClipModel(ClipPreTrainedModel):
             return_dict=return_dict,
         )
 
-        image_embeds = vision_outputs[0]
-        image_features = self.visual_projection(image_embeds)
+        image_embeds = vision_outputs[1]  # pooled_output
+        image_embeds = self.visual_projection(image_embeds)
 
-        return image_features
+        return image_embeds
 
+    @add_start_docstrings_to_model_forward(CLIP_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=ClipOutput, config_class=ClipConfig)
     def forward(
         self,
         input_ids=None,
-        pixel_values=None,
         attention_mask=None,
         position_ids=None,
-        inputs_embeds=None,
+        pixel_values=None,
+        return_loss=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+        Returns:
+
+        """
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
@@ -773,29 +859,40 @@ class ClipModel(ClipPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        image_embeds = vision_outputs[0]
-        image_features = self.visual_projection(image_embeds)
+        image_embeds = vision_outputs[1]
+        image_embeds = self.visual_projection(image_embeds)
 
-        text_embeds = text_outputs[0]
-        # text_embeds.shape = [batch_size, n_ctx, transformer.width]
-        # take features from the eot embedding (eot_token is the highest number in each sequence)
-        pooled_output = text_embeds[torch.arange(text_embeds.shape[0]), input_ids.argmax(dim=-1)]
-        text_features = self.text_projection(pooled_output)
+        text_embeds = text_outputs[1]
+        text_embeds = self.text_projection(text_embeds)
 
         # normalized features
-        image_features = image_features / image_features.norm(dim=-1, keepdim=True)
-        text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+        image_embeds = image_embeds / image_embeds.norm(dim=-1, keepdim=True)
+        text_embeds = text_embeds / text_embeds.norm(dim=-1, keepdim=True)
 
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
-        similarity = torch.matmul(text_features, image_features.t()) * logit_scale
+        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
+        logits_per_image = logits_per_text.T
 
-        loss = clip_loss(similarity)
+        loss = None
+        if return_loss:
+            loss = clip_loss(logits_per_text)
 
-        return loss, similarity
+        if not return_dict:
+            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
+            return ((loss,) + output) if loss is not None else output
+
+        return ClipOutput(
+            loss=loss,
+            logits_per_image=logits_per_image,
+            logits_per_text=logits_per_text,
+            text_embeds=text_embeds,
+            image_embeds=image_embeds,
+            text_model_output=text_outputs,
+            vision_model_outputs=vision_outputs,
+        )
