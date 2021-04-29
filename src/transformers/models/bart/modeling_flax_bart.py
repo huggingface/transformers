@@ -598,7 +598,7 @@ class FlaxBartEncoder(nn.Module):
                 embed_dim,
                 embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
                 dtype=self.dtype,
-            )  # TODO: solve missing self.padding_idx
+            )
 
         self.embed_positions = FlaxBartLearnedPositionalEmbedding(
             self.config.max_position_embeddings,
@@ -756,7 +756,7 @@ class FlaxBartDecoder(nn.Module):
                 embed_dim,
                 embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
                 dtype=self.dtype,
-            )  # TODO: solve missing self.padding_idx
+            )
 
         self.embed_positions = FlaxBartLearnedPositionalEmbedding(
             self.config.max_position_embeddings,
@@ -974,7 +974,7 @@ class FlaxBartModule(nn.Module):
             embed_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
             dtype=self.dtype,
-        )  # TODO: solve missing self.padding_idx
+        )
 
         self.encoder = FlaxBartEncoder(self.config, dtype=self.dtype)
         self.decoder = FlaxBartDecoder(self.config, dtype=self.dtype)
