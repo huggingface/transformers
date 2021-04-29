@@ -59,21 +59,21 @@ class SavePretrainedCallback(tf.keras.callbacks.Callback):
 
 
 def convert_dataset_for_tensorflow(
-    dataset, non_label_column_names, batch_size, labels, dataset_mode="variable_batch", drop_remainder=True
+    dataset, non_label_column_names, batch_size, dataset_mode="variable_batch", shuffle=True, drop_remainder=True
 ):
     """Converts a Hugging Face dataset to a Tensorflow Dataset. The dataset_mode controls whether we pad all batches
     to the maximum sequence length, or whether we only pad to the maximum length within that batch. The former
     is most useful when training on TPU, as a new graph compilation is required for each sequence length.
     """
 
-    def densify_ragged_batch(features, labels=None):
+    def densify_ragged_batch(features, label=None):
         features = {
             feature: ragged_tensor.to_tensor(shape=batch_shape[feature]) for feature, ragged_tensor in features.items()
         }
-        if labels is None:
+        if label is None:
             return features
         else:
-            return features, labels
+            return features, label
 
     feature_keys = list(set(dataset.features.keys()) - set(non_label_column_names + ["label"]))
     if dataset_mode == "variable_batch":
@@ -88,16 +88,14 @@ def convert_dataset_for_tensorflow(
     else:
         raise ValueError("Unknown dataset mode!")
 
-    if labels:
+    if 'label' in dataset.features:
         labels = tf.convert_to_tensor(np.array(dataset["label"]))
         tf_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
     else:
         tf_dataset = tf.data.Dataset.from_tensor_slices(data)
-    tf_dataset = (
-        tf_dataset.shuffle(buffer_size=len(dataset))
-        .batch(batch_size=batch_size, drop_remainder=drop_remainder)
-        .map(densify_ragged_batch)
-    )
+    if shuffle:
+        tf_dataset = tf_dataset.shuffle(buffer_size=len(dataset))
+    tf_dataset = tf_dataset.batch(batch_size=batch_size, drop_remainder=drop_remainder).map(densify_ragged_batch)
     return tf_dataset
 
 
@@ -433,12 +431,12 @@ def main():
             clipnorm=training_args.max_grad_norm,
         )
         if is_regression:
-            loss = tf.keras.losses.MeanSquaredError()
+            loss_fn = tf.keras.losses.MeanSquaredError()
             metrics = []
         else:
-            loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+            loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
             metrics = ["accuracy"]
-        model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+        model.compile(optimizer=optimizer, loss=loss_fn, metrics=metrics)
         # endregion
 
         # region Convert data to TF format
@@ -456,13 +454,13 @@ def main():
                 tf_data[key] = None
                 continue
             if key in ("train", "validation"):
-                use_labels = True
-            else:
-                use_labels = False
+                assert 'label' in datasets[key].features, f"Missing labels from {key} data!"
             if key == "train":
+                shuffle = True
                 batch_size = training_args.per_device_train_batch_size
                 drop_remainder = True  # Saves us worrying about scaling gradients for the last batch
             else:
+                shuffle = False
                 batch_size = training_args.per_device_eval_batch_size
                 drop_remainder = False
             samples_limit = max_samples[key]
@@ -478,9 +476,9 @@ def main():
                 dataset,
                 non_label_column_names,
                 batch_size=batch_size,
-                labels=use_labels,
                 dataset_mode=dataset_mode,
                 drop_remainder=drop_remainder,
+                shuffle=shuffle
             )
             tf_data[key] = data
         # endregion
@@ -509,6 +507,11 @@ def main():
         if tf_data["test"] is not None:
             logger.info("Doing predictions on test dataset...")
             predictions = model.predict(tf_data["test"])["logits"]
+            if 'label' in datasets['test'].features:
+                print("Computing prediction loss on test labels...")
+                labels = datasets['test']['label']
+                loss = loss_fn(labels, predictions).numpy()
+                print(f"Test loss: {loss:.4f}")
             predictions = np.squeeze(predictions) if is_regression else np.argmax(predictions, axis=1)
             output_test_file = os.path.join(training_args.output_dir, "test_results.txt")
             with open(output_test_file, "w") as writer:
