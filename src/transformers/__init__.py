@@ -1391,9 +1391,7 @@ if is_flax_available():
         ]
     )
     _import_structure["models.roberta"].append("FlaxRobertaModel")
-    _import_structure["models.bart"].extend(
-        ["FlaxBartEncoder", "FlaxBartDecoder", "FlaxBartModel"]
-    )
+    _import_structure["models.bart"].append("FlaxBartModel")
 else:
     from .utils import dummy_flax_objects
 
@@ -2555,11 +2553,7 @@ if TYPE_CHECKING:
             FlaxBertPreTrainedModel,
         )
         from .models.roberta import FlaxRobertaModel
-        from .models.bart import (
-            FlaxBartEncoder,
-            FlaxBartDecoder,
-            FlaxBartModel,
-        )
+        from .models.bart import FlaxBartModel
     else:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.

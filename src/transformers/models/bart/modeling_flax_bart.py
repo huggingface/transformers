@@ -501,8 +501,19 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
         params: dict = None,
         dropout_rng: PRNGKey = None,
     ):
+        # Sanity check
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.shape
+            input_ids = input_ids.reshape(-1, input_shape[-1])
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.shape[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
         if attention_mask is None:
-            attention_mask = jnp.ones_like(input_ids)
+            attention_mask = jnp.ones(input_shape)
         if decoder_input_ids is None:
             decoder_input_ids = shift_tokens_right(
                 input_ids,
@@ -511,8 +522,6 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
             )
         if decoder_attention_mask is None:
             decoder_attention_mask = attention_mask
-        if head_mask is None:
-            head_mask = jnp.ones((self.config.num_hidden_layers, self.config.encoder_attention_heads), dtype="i4")
 
         # Handle any PRNG if needed
         rngs = {}
@@ -521,20 +530,20 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
 
         return self.module.apply(
             {"params": params or self.params},
-            jnp.array(input_ids, dtype="i4"),
-            jnp.array(attention_mask, dtype="i4"),
-            jnp.array(decoder_input_ids, dtype="i4"),
-            jnp.array(head_mask, dtype="i4"),
-            jnp.array(decoder_head_mask, dtype="i4"),
-            jnp.array(cross_attn_head_mask, dtype="i4"),
-            jnp.array(encoder_outputs, dtype="fp32"),
-            jnp.array(past_key_values, dtype="fp32"),
-            jnp.array(inputs_embeds, dtype="fp32"),
-            jnp.array(decoder_inputs_embeds, dtype="fp32"),
-            output_attentions,
-            output_hidden_states,
-            return_dict,
-            deterministic,
+            input_ids=jnp.array(input_ids, dtype="i4") if input_ids is not None else None,
+            attention_mask=jnp.array(attention_mask, dtype="i4") if attention_mask is not None else None,
+            decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4") if decoder_input_ids is not None else None,
+            head_mask=jnp.array(head_mask, dtype="i4") if head_mask is not None else None,
+            decoder_head_mask=jnp.array(decoder_head_mask, dtype="i4") if decoder_head_mask is not None else None,
+            cross_attn_head_mask=jnp.array(cross_attn_head_mask, dtype="i4") if cross_attn_head_mask is not None else None,
+            encoder_outputs=jnp.array(encoder_outputs, dtype="fp32") if encoder_outputs is not None else None,
+            past_key_values=jnp.array(past_key_values, dtype="fp32") if past_key_values is not None else None,
+            inputs_embeds=jnp.array(inputs_embeds, dtype="fp32") if inputs_embeds is not None else None,
+            decoder_inputs_embeds=jnp.array(decoder_inputs_embeds, dtype="fp32") if decoder_inputs_embeds is not None else None,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
             rngs=rngs,
         )
 
@@ -1001,7 +1010,6 @@ class FlaxBartModule(nn.Module):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if encoder_outputs is None:
-            print(head_mask)
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,

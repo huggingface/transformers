@@ -29,7 +29,7 @@ from ..bert.modeling_flax_bert import (
     FlaxBertModel,
 )
 from ..roberta.modeling_flax_roberta import FlaxRobertaModel
-from ..bart.modeling_flax_bart import FlaxBartEncoder, FlaxBartDecoder, FlaxBartModel
+from ..bart.modeling_flax_bart import FlaxBartModel
 from .auto_factory import auto_class_factory
 from .configuration_auto import BertConfig, RobertaConfig, BartConfig
 
@@ -42,8 +42,6 @@ FLAX_MODEL_MAPPING = OrderedDict(
         # Base model mapping
         (RobertaConfig, FlaxRobertaModel),
         (BertConfig, FlaxBertModel),
-        (BartConfig, FlaxBartEncoder),
-        (BartConfig, FlaxBartDecoder),
         (BartConfig, FlaxBartModel),
     ]
 )
