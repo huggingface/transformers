@@ -591,7 +591,7 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
 
         if output_attentions:
             raise NotImplementedError(
-                "Currently attention scores cannot be returned." "Please set `output_attentions` to False for now."
+                "Currently attention scores cannot be returned. Please set `output_attentions` to False for now."
             )
 
         # init input tensors if not passed
