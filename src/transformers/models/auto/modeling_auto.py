@@ -17,6 +17,7 @@
 
 import warnings
 from collections import OrderedDict
+import platform
 
 from ...utils import logging
 
@@ -209,11 +210,12 @@ from ..mt5.modeling_mt5 import MT5ForConditionalGeneration, MT5Model
 from ..openai.modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
 from ..pegasus.modeling_pegasus import PegasusForCausalLM, PegasusForConditionalGeneration, PegasusModel
 from ..prophetnet.modeling_prophetnet import ProphetNetForCausalLM, ProphetNetForConditionalGeneration, ProphetNetModel
-from ..rag.modeling_rag import (  # noqa: F401 - need to import all RagModels to be in globals() function
-    RagModel,
-    RagSequenceForGeneration,
-    RagTokenForGeneration,
-)
+if(platform.system() != 'Windows'):
+    from ..rag.modeling_rag import (  # noqa: F401 - need to import all RagModels to be in globals() function
+        RagModel,
+        RagSequenceForGeneration,
+        RagTokenForGeneration,
+    )
 from ..reformer.modeling_reformer import (
     ReformerForMaskedLM,
     ReformerForQuestionAnswering,
