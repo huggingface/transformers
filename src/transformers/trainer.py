@@ -23,11 +23,14 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 import time
 import warnings
 from logging import StreamHandler
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+
+from tqdm.auto import tqdm
 
 
 # Integrations must be imported before ML frameworks:
@@ -53,11 +56,15 @@ from torch.utils.data.dataset import Dataset, IterableDataset
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
 
+from . import __version__
+from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugActivationOverflow, DebugOption
 from .dependency_versions_check import dep_version_check
 from .file_utils import (
+    CONFIG_NAME,
     WEIGHTS_NAME,
+    PushToHubMixin,
     is_apex_available,
     is_datasets_available,
     is_in_notebook,
@@ -202,7 +209,7 @@ class Trainer:
 
             Note that if it's a :obj:`torch.utils.data.dataset.IterableDataset` with some randomization and you are
             training in a distributed fashion, your iterable dataset should either use a internal attribute
-            :obj:`generator` that is a :obj:`torch.Generator` for the randomization that must be identic on all
+            :obj:`generator` that is a :obj:`torch.Generator` for the randomization that must be identical on all
             processes (and the Trainer will manually set the seed of this :obj:`generator` at each epoch) or have a
             :obj:`set_epoch()` method that internally sets the seed of the RNGs used.
         eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
@@ -390,11 +397,6 @@ class Trainer:
             raise ValueError("train_dataset does not implement __len__, max_steps has to be specified")
 
         self._signature_columns = None
-        if is_datasets_available():
-            if isinstance(train_dataset, datasets.Dataset):
-                self._remove_unused_columns(self.train_dataset, description="training")
-            if isinstance(eval_dataset, datasets.Dataset):
-                self._remove_unused_columns(self.eval_dataset, description="evaluation")
 
         # Mixed precision setup
         self.use_apex = False
@@ -411,13 +413,25 @@ class Trainer:
         if args.fp16 and not args.deepspeed:  # deepspeed manages its own fp16
             if self.fp16_backend == "amp":
                 self.use_amp = True
-                self.scaler = ShardedGradScaler() if self.sharded_ddp is not None else torch.cuda.amp.GradScaler()
+                if is_sagemaker_mp_enabled():
+                    self.scaler = smp.amp.GradScaler()
+                elif self.sharded_ddp is not None:
+                    self.scaler = ShardedGradScaler()
+                else:
+                    self.scaler = torch.cuda.amp.GradScaler()
             else:
                 if not is_apex_available():
                     raise ImportError(
                         "Using FP16 with APEX but APEX is not installed, please refer to https://www.github.com/nvidia/apex."
                     )
                 self.use_apex = True
+
+        # FP16 + model parallelism in SageMaker: gradient clipping does not work for now so we raise a helpful error.
+        if is_sagemaker_mp_enabled() and self.use_amp and args.max_grad_norm is not None and args.max_grad_norm > 0:
+            raise ValueError(
+                "SageMaker Model Parallelism in mixed precision mode does not support gradient clipping yet. Pass "
+                "along 'max_grad_norm': 0 in your hyperparameters."
+            )
 
         # Label smoothing
         if self.args.label_smoothing_factor != 0:
@@ -427,9 +441,9 @@ class Trainer:
 
         self.state = TrainerState()
         self.control = TrainerControl()
-        # Internal variable for total_flos used to count as tensors (for distributed + TPU), will be sent in the
-        # state at each call to self.log.
-        self._total_flos = None
+        # Internal variable to count flos in each process, will be accumulated in `self.state.total_flos` then
+        # returned to 0 every time flos need to be logged
+        self.current_flos = 0
         self.hp_search_backend = None
         self.use_tune_checkpoints = False
         default_label_names = (
@@ -483,7 +497,7 @@ class Trainer:
 
     def _remove_unused_columns(self, dataset: "datasets.Dataset", description: Optional[str] = None):
         if not self.args.remove_unused_columns:
-            return
+            return dataset
         if self._signature_columns is None:
             # Inspect model forward signature to keep only the arguments it accepts.
             signature = inspect.signature(self.model.forward)
@@ -499,7 +513,13 @@ class Trainer:
                 f"`{self.model.__class__.__name__}.forward` and have been ignored: {', '.join(ignored_columns)}."
             )
 
-        dataset.set_format(type=dataset.format["type"], columns=columns, format_kwargs=dataset.format["format_kwargs"])
+        if version.parse(datasets.__version__) < version.parse("1.4.0"):
+            dataset.set_format(
+                type=dataset.format["type"], columns=columns, format_kwargs=dataset.format["format_kwargs"]
+            )
+            return dataset
+        else:
+            return dataset.remove_columns(ignored_columns)
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
         if not isinstance(self.train_dataset, collections.abc.Sized):
@@ -528,6 +548,7 @@ class Trainer:
                     rank=self.args.process_index,
                     lengths=lengths,
                     model_input_name=model_input_name,
+                    seed=self.args.seed,
                 )
 
         else:
@@ -543,10 +564,14 @@ class Trainer:
                     batch_size=self.args.per_device_train_batch_size,
                     num_replicas=self.args.world_size,
                     rank=self.args.process_index,
+                    seed=self.args.seed,
                 )
             else:
                 return DistributedSampler(
-                    self.train_dataset, num_replicas=self.args.world_size, rank=self.args.process_index
+                    self.train_dataset,
+                    num_replicas=self.args.world_size,
+                    rank=self.args.process_index,
+                    seed=self.args.seed,
                 )
 
     def get_train_dataloader(self) -> DataLoader:
@@ -561,17 +586,20 @@ class Trainer:
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
 
-        if isinstance(self.train_dataset, torch.utils.data.dataset.IterableDataset):
+        train_dataset = self.train_dataset
+        if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
+            train_dataset = self._remove_unused_columns(train_dataset, description="training")
+
+        if isinstance(train_dataset, torch.utils.data.dataset.IterableDataset):
             if self.args.world_size > 1:
                 train_dataset = IterableDatasetShard(
-                    self.train_dataset,
+                    train_dataset,
                     batch_size=self.args.train_batch_size,
                     drop_last=self.args.dataloader_drop_last,
                     num_processes=self.args.world_size,
                     process_index=self.args.process_index,
                 )
-            else:
-                train_dataset = self.train_dataset
+
             return DataLoader(
                 train_dataset,
                 batch_size=self.args.train_batch_size,
@@ -583,7 +611,7 @@ class Trainer:
         train_sampler = self._get_train_sampler()
 
         return DataLoader(
-            self.train_dataset,
+            train_dataset,
             batch_size=self.args.train_batch_size,
             sampler=train_sampler,
             collate_fn=self.data_collator,
@@ -634,9 +662,10 @@ class Trainer:
         """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
-        elif is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
-            self._remove_unused_columns(eval_dataset, description="evaluation")
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
+
+        if is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
+            eval_dataset = self._remove_unused_columns(eval_dataset, description="evaluation")
 
         if isinstance(eval_dataset, torch.utils.data.dataset.IterableDataset):
             if self.args.world_size > 1:
@@ -679,7 +708,7 @@ class Trainer:
                 ``model.forward()`` method are automatically removed. It must implement :obj:`__len__`.
         """
         if is_datasets_available() and isinstance(test_dataset, datasets.Dataset):
-            self._remove_unused_columns(test_dataset, description="test")
+            test_dataset = self._remove_unused_columns(test_dataset, description="test")
 
         if isinstance(test_dataset, torch.utils.data.dataset.IterableDataset):
             if self.args.world_size > 1:
@@ -794,7 +823,7 @@ class Trainer:
         return len(dataloader.dataset)
 
     def _hp_search_setup(self, trial: Union["optuna.Trial", Dict[str, Any]]):
-        """ HP search setup code """
+        """HP search setup code"""
         self._trial = trial
 
         if self.hp_search_backend is None or trial is None:
@@ -998,14 +1027,23 @@ class Trainer:
 
             logger.info(f"Loading model from {resume_from_checkpoint}).")
 
-            if self.deepspeed:
+            if os.path.isfile(os.path.join(resume_from_checkpoint, CONFIG_NAME)):
+                config = PretrainedConfig.from_json_file(os.path.join(resume_from_checkpoint, CONFIG_NAME))
+                checkpoint_version = config.transformers_version
+                if checkpoint_version is not None and checkpoint_version != __version__:
+                    logger.warn(
+                        f"You are resuming training from a checkpoint trained with {checkpoint_version} of "
+                        f"Transformers but your current version is {__version__}. This is not recommended and could "
+                        "yield to errors or unwanted behaviors."
+                    )
+
+            if args.deepspeed:
                 # will be resumed in deepspeed_init
                 pass
-            elif isinstance(self.model, PreTrainedModel):
-                self.model = self.model.from_pretrained(resume_from_checkpoint)
-                model_reloaded = True
             else:
-                state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME))
+                # We load the model state dict on the CPU to avoid an OOM error.
+                state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
+                # If the model is on the GPU, it still works!
                 self.model.load_state_dict(state_dict)
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
@@ -1101,6 +1139,7 @@ class Trainer:
         start_time = time.time()
         epochs_trained = 0
         steps_trained_in_current_epoch = 0
+        steps_trained_progress_bar = None
 
         # Check if continuing training from a checkpoint
         if resume_from_checkpoint is not None and os.path.isfile(
@@ -1120,8 +1159,12 @@ class Trainer:
             if not args.ignore_data_skip:
                 logger.info(
                     f"  Will skip the first {epochs_trained} epochs then the first {steps_trained_in_current_epoch} "
-                    "batches in the first epoch."
+                    "batches in the first epoch. If this takes a lot of time, you can add the `--ignore_data_skip` "
+                    "flag to your launch command, but you will resume the training on data already seen by your model."
                 )
+                if self.is_local_process_zero() and not args.disable_tqdm:
+                    steps_trained_progress_bar = tqdm(total=steps_trained_in_current_epoch)
+                    steps_trained_progress_bar.set_description("Skipping the first batches")
 
         # Update the references
         self.callback_handler.model = self.model
@@ -1142,7 +1185,6 @@ class Trainer:
         # _total_loss_scalar is updated everytime .item() has to be called on tr_loss and stores the sum of all losses
         self._total_loss_scalar = 0.0
         self._globalstep_last_logged = self.state.global_step
-        self._total_flos = self.state.total_flos
         model.zero_grad()
 
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
@@ -1180,7 +1222,12 @@ class Trainer:
                 # Skip past any already trained steps if resuming training
                 if steps_trained_in_current_epoch > 0:
                     steps_trained_in_current_epoch -= 1
+                    if steps_trained_progress_bar is not None:
+                        steps_trained_progress_bar.update(1)
                     continue
+                elif steps_trained_progress_bar is not None:
+                    steps_trained_progress_bar.close()
+                    steps_trained_progress_bar = None
 
                 if step % args.gradient_accumulation_steps == 0:
                     self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
@@ -1195,7 +1242,7 @@ class Trainer:
                         tr_loss += self.training_step(model, inputs)
                 else:
                     tr_loss += self.training_step(model, inputs)
-                self._total_flos += float(self.floating_point_ops(inputs))
+                self.current_flos += float(self.floating_point_ops(inputs))
 
                 # Optimizer step for deepspeed must be called on every step regardless of the value of gradient_accumulation_steps
                 if self.deepspeed:
@@ -1285,13 +1332,10 @@ class Trainer:
             logger.info(
                 f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric})."
             )
-            if isinstance(self.model, PreTrainedModel):
-                self.model = self.model.from_pretrained(self.state.best_model_checkpoint)
-                if self.place_model_on_device:
-                    self.model = self.model.to(args.device)
-            else:
-                state_dict = torch.load(os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME))
-                self.model.load_state_dict(state_dict)
+            # We load the model state dict on the CPU to avoid an OOM error.
+            state_dict = torch.load(os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME), map_location="cpu")
+            # If the model is on the GPU, it still works!
+            self.model.load_state_dict(state_dict)
 
             if self.deepspeed:
                 self.deepspeed.load_checkpoint(
@@ -1299,9 +1343,8 @@ class Trainer:
                 )
 
         metrics = speed_metrics("train", start_time, self.state.max_steps)
-        if self._total_flos is not None:
-            self.store_flos()
-            metrics["total_flos"] = self.state.total_flos
+        self.store_flos()
+        metrics["total_flos"] = self.state.total_flos
         self.log(metrics)
 
         self.control = self.callback_handler.on_train_end(args, self.state, self.control)
@@ -1585,7 +1628,8 @@ class Trainer:
         inputs = self._prepare_inputs(inputs)
 
         if is_sagemaker_mp_enabled():
-            loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
+            scaler = self.scaler if self.use_amp else None
+            loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps, scaler=scaler)
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
         if self.use_amp:
@@ -1766,11 +1810,12 @@ class Trainer:
 
     def store_flos(self):
         # Storing the number of floating-point operations that went into the model
-        if self._total_flos is not None:
-            if self.args.local_rank != -1:
-                self.state.total_flos = distributed_broadcast_scalars([self._total_flos]).sum().item()
-            else:
-                self.state.total_flos = self._total_flos
+        if self.args.local_rank != -1:
+            self.state.total_flos += distributed_broadcast_scalars([self.current_flos]).sum().item()
+            self.current_flos = 0
+        else:
+            self.state.total_flos = self.current_flos
+            self.current_flos = 0
 
     def _sorted_checkpoints(
         self, output_dir=None, checkpoint_prefix=PREFIX_CHECKPOINT_DIR, use_mtime=False
@@ -1861,6 +1906,7 @@ class Trainer:
         )
 
         output.metrics.update(speed_metrics(metric_key_prefix, start_time, output.num_samples))
+
         self.log(output.metrics)
 
         if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
@@ -2251,6 +2297,71 @@ class Trainer:
             return self.model.floating_point_ops(inputs)
         else:
             return 0
+
+    def push_to_hub(
+        self,
+        save_directory: Optional[str] = None,
+        repo_name: Optional[str] = None,
+        repo_url: Optional[str] = None,
+        commit_message: Optional[str] = "add model",
+        organization: Optional[str] = None,
+        private: bool = None,
+        use_auth_token: Optional[Union[bool, str]] = None,
+    ):
+        """
+        Upload `self.model` to the 🤗 model hub.
+
+        Parameters:
+            save_directory (:obj:`str` or :obj:`os.PathLike`):
+                Folder containing the model weights and config. Will default to :obj:`self.args.output_dir`.
+            repo_name (:obj:`str`, `optional`):
+                Repository name for your model or tokenizer in the hub. If not specified, the repository name will be
+                the stem of :obj:`save_directory`.
+            repo_url (:obj:`str`, `optional`):
+                Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
+                repository will be created in your namespace (unless you specify an :obj:`organization`) with
+                :obj:`repo_name`.
+            commit_message (:obj:`str`, `optional`, defaults to :obj:`"add model"`):
+                Message to commit while pushing.
+            organization (:obj:`str`, `optional`):
+                Organization in which you want to push your model or tokenizer (you must be a member of this
+                organization).
+            private (:obj:`bool`, `optional`):
+                Whether or not the repository created should be private (requires a paying subscription).
+            use_auth_token (:obj:`bool` or :obj:`str`, `optional`):
+                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`). Will default to
+                :obj:`True` if :obj:`repo_url` is not specified.
+
+        Returns:
+            The url of the commit of your model in the given repository.
+        """
+        if not self.is_world_process_zero():
+            return
+
+        if not isinstance(unwrap_model(self.model), PushToHubMixin):
+            raise ValueError(
+                "The `upload_model_to_hub` method only works for models that inherit from `PushToHubMixin` models."
+            )
+        if save_directory is None:
+            save_directory = self.args.output_dir
+
+        # To avoid pushing all checkpoints, we just copy all the files in save_directory in a tmp dir.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            for f in os.listdir(save_directory):
+                fname = os.path.join(save_directory, f)
+                if os.path.isfile(fname):
+                    shutil.copy(fname, os.path.join(tmp_dir, f))
+
+            return unwrap_model(self.model)._push_to_hub(
+                save_directory=tmp_dir,
+                repo_name=repo_name,
+                repo_url=repo_url,
+                commit_message=commit_message,
+                organization=organization,
+                private=private,
+                use_auth_token=use_auth_token,
+            )
 
     #
     # Deprecated code

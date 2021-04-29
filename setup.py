@@ -86,11 +86,11 @@ if stale_egg_info.exists():
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
     "Pillow",
-    "black>=20.8b1",
+    "black==21.4b0",
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
-    "deepspeed>=0.3.14",
+    "deepspeed>=0.3.15",
     "docutils==0.16.0",
     "fairscale>0.3",
     "faiss-cpu",
@@ -99,6 +99,7 @@ _deps = [
     "flake8>=3.8.3",
     "flax>=0.3.2",
     "fugashi>=1.0",
+    "huggingface-hub>=0.0.8",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -288,6 +289,7 @@ extras["dev"] = (
 
 extras["torchhub"] = deps_list(
     "filelock",
+    "huggingface-hub",
     "importlib_metadata",
     "numpy",
     "packaging",
@@ -306,6 +308,7 @@ install_requires = [
     deps["dataclasses"] + ";python_version<'3.7'",  # dataclasses for Python versions that don't have it
     deps["importlib_metadata"] + ";python_version<'3.8'",  # importlib_metadata for Python versions that don't have it
     deps["filelock"],  # filesystem locks, e.g., to prevent parallel downloads
+    deps["huggingface-hub"],
     deps["numpy"],
     deps["packaging"],  # utilities from PyPA to e.g., compare versions
     deps["regex"],  # for OpenAI GPT

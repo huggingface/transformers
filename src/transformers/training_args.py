@@ -71,9 +71,6 @@ class TrainingArguments:
     <https://docs.python.org/3/library/argparse.html#module-argparse>`__ arguments that can be specified on the command
     line.
 
-
-
-
     Parameters:
         output_dir (:obj:`str`):
             The output directory where the model predictions and checkpoints will be written.
@@ -304,11 +301,15 @@ class TrainingArguments:
             When using distributed training, the value of the flag :obj:`find_unused_parameters` passed to
             :obj:`DistributedDataParallel`. Will default to :obj:`False` if gradient checkpointing is used, :obj:`True`
             otherwise.
-        dataloader_pin_memory (:obj:`bool`, `optional`, defaults to :obj:`True`)):
+        dataloader_pin_memory (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether you want to pin memory in data loaders or not. Will default to :obj:`True`.
-        skip_memory_metrics (:obj:`bool`, `optional`, defaults to :obj:`False`)):
+        skip_memory_metrics (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to skip adding of memory profiler reports to metrics. Defaults to :obj:`False`.
-
+        push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to upload the trained model to the hub after training. This argument is not directly used by
+            :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
+            the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
+            details.
     """
 
     output_dir: str = field(
@@ -545,6 +546,9 @@ class TrainingArguments:
     use_legacy_prediction_loop: bool = field(
         default=False, metadata={"help": "Whether or not to use the legacy prediction_loop in the Trainer."}
     )
+    push_to_hub: bool = field(
+        default=False, metadata={"help": "Whether or not to upload the trained model to the model hub after training."}
+    )
     _n_gpu: int = field(init=False, repr=False, default=-1)
     mp_parameters: str = field(
         default="",
@@ -636,6 +640,7 @@ class TrainingArguments:
         elif ShardedDDPOption.ZERO_DP_2 in self.sharded_ddp and ShardedDDPOption.ZERO_DP_3 in self.sharded_ddp:
             raise ValueError("`--sharded_ddp zero_dp_2` is not compatible with `--sharded_ddp zero_dp_3`.")
 
+
         if self.tpu_metrics_debug:
             warnings.warn(
                 "using `--tpu_metrics_debug` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `--debug tpu_metrics_debug` instead",
@@ -645,6 +650,14 @@ class TrainingArguments:
             self.tpu_metrics_debug = False
         if isinstance(self.debug, str):
             self.debug = [DebugOption(s) for s in self.debug.split()]
+
+        if self.deepspeed:
+            # - must be run very last in arg parsing, since it will use a lot of these settings.
+            # - must be run before the model is created.
+            from transformers.integrations import DeepSpeedConfigHF
+
+            # will be used later by the Trainer (leave self.deepspeed unmodified in case a user relies on it not to be modified)
+            self.deepspeed_config_hf = DeepSpeedConfigHF(self)
 
     def __repr__(self):
         # We override the default repr to remove deprecated arguments from the repr. This method should be removed once

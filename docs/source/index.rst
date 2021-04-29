@@ -1,12 +1,12 @@
 Transformers
 =======================================================================================================================
 
-State-of-the-art Natural Language Processing for Pytorch and TensorFlow 2.0.
+State-of-the-art Natural Language Processing for Jax, Pytorch and TensorFlow
 
 🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides general-purpose
 architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural Language Understanding (NLU) and Natural
-Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between
-TensorFlow 2.0 and PyTorch.
+Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between Jax,
+PyTorch and TensorFlow.
 
 This is the documentation of our repository `transformers <https://github.com/huggingface/transformers>`_.
 
@@ -43,11 +43,11 @@ Lower compute costs, smaller carbon footprint:
 Choose the right framework for every part of a model's lifetime:
 
 - Train state-of-the-art models in 3 lines of code
-- Deep interoperability between TensorFlow 2.0 and PyTorch models
-- Move a single model between TF2.0/PyTorch frameworks at will
+- Deep interoperability between Jax, Pytorch and TensorFlow models
+- Move a single model between Jax/PyTorch/TensorFlow frameworks at will
 - Seamlessly pick the right framework for training, evaluation, production
 
-Experimental support for Flax with a few models right now, expected to grow in the coming months.
+The support for Jax is still experimental (with a few models right now), expect to see it grow in the coming months!
 
 `All the model checkpoints <https://huggingface.co/models>`__ are seamlessly integrated from the huggingface.co `model
 hub <https://huggingface.co>`__ where they are uploaded directly by `users <https://huggingface.co/users>`__ and
@@ -74,8 +74,8 @@ The documentation is organized in five parts:
     - **MODELS** for the classes and functions related to each model implemented in the library.
     - **INTERNAL HELPERS** for the classes and functions we use internally.
 
-The library currently contains PyTorch, Tensorflow and Flax implementations, pretrained model weights, usage scripts
-and conversion utilities for the following models:
+The library currently contains Jax, PyTorch and Tensorflow implementations, pretrained model weights, usage scripts and
+conversion utilities for the following models:
 
 ..
     This list is updated automatically from the README with `make fix-copies`. Do not update manually!
@@ -251,8 +251,8 @@ and conversion utilities for the following models:
 .. _bigtable:
 
 The table below represents the current support in the library for each of those models, whether they have a Python
-tokenizer (called "slow"). A "fast" tokenizer backed by the 🤗 Tokenizers library, whether they have support in PyTorch,
-TensorFlow and/or Flax.
+tokenizer (called "slow"). A "fast" tokenizer backed by the 🤗 Tokenizers library, whether they have support in Jax (via
+Flax), PyTorch, and/or TensorFlow.
 
 ..
     This table is updated automatically from the auto modules with `make fix-copies`. Do not update manually!

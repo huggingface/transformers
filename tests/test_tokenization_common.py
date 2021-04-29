@@ -20,11 +20,15 @@ import pickle
 import re
 import shutil
 import tempfile
+import unittest
 from collections import OrderedDict
 from itertools import takewhile
 from typing import TYPE_CHECKING, Dict, List, Tuple, Union
 
+from huggingface_hub import HfApi
+from requests.exceptions import HTTPError
 from transformers import (
+    BertTokenizer,
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
@@ -32,8 +36,12 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    ENDPOINT_STAGING,
+    PASS,
+    USER,
     get_tests_dir,
     is_pt_tf_cross_test,
+    is_staging_test,
     require_tf,
     require_tokenizers,
     require_torch,
@@ -50,7 +58,7 @@ NON_ENGLISH_TAGS = ["chinese", "dutch", "french", "finnish", "german", "multilin
 
 
 def filter_non_english(_, pretrained_name: str):
-    """ Filter all the model for non-english language """
+    """Filter all the model for non-english language"""
     return not any([lang in pretrained_name for lang in NON_ENGLISH_TAGS])
 
 
@@ -2863,3 +2871,55 @@ class TokenizerTesterMixin:
                 )
                 for key in python_output:
                     self.assertEqual(python_output[key], rust_output[key])
+
+
+@is_staging_test
+class TokenizerPushToHubTester(unittest.TestCase):
+    vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", "bla", "blou"]
+
+    @classmethod
+    def setUpClass(cls):
+        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
+        cls._token = cls._api.login(username=USER, password=PASS)
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-tokenizer")
+        except HTTPError:
+            pass
+
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-tokenizer-org", organization="valid_org")
+        except HTTPError:
+            pass
+
+    def test_push_to_hub(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            vocab_file = os.path.join(tmp_dir, "vocab.txt")
+            with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
+                vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
+            tokenizer = BertTokenizer(vocab_file)
+            tokenizer.save_pretrained(
+                tmp_dir, push_to_hub=True, repo_name="test-tokenizer", use_auth_token=self._token
+            )
+
+            new_tokenizer = BertTokenizer.from_pretrained(f"{USER}/test-tokenizer")
+            self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
+
+    def test_push_to_hub_in_organization(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            vocab_file = os.path.join(tmp_dir, "vocab.txt")
+            with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
+                vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
+            tokenizer = BertTokenizer(vocab_file)
+            tokenizer.save_pretrained(
+                tmp_dir,
+                push_to_hub=True,
+                repo_name="test-tokenizer-org",
+                use_auth_token=self._token,
+                organization="valid_org",
+            )
+
+            new_tokenizer = BertTokenizer.from_pretrained("valid_org/test-tokenizer-org")
+            self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)

@@ -96,7 +96,7 @@ def write_msg(msg: Dict):
 
 
 def read_msg() -> Optional[Dict]:
-    """Read Line delimited JSON from stdin. """
+    """Read Line delimited JSON from stdin."""
     msg = json.loads(sys.stdin.readline().strip())
 
     if "terminate" in (msg.get("type"), msg.get("event")):

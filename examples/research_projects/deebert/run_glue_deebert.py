@@ -70,7 +70,7 @@ def get_wanted_result(result):
 
 
 def train(args, train_dataset, model, tokenizer, train_highway=False):
-    """ Train the model """
+    """Train the model"""
     if args.local_rank in [-1, 0]:
         tb_writer = SummaryWriter()
 
