@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Tuple
+from typing import Optional, Tuple
 
 import flax.linen as nn
 import jax
@@ -23,13 +23,15 @@ from jax import lax
 from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel
+from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxBaseModelOutputWithPooling
+from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
 from ...utils import logging
 from .configuration_roberta import RobertaConfig
 
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "roberta-base"
 _CONFIG_FOR_DOC = "RobertaConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
@@ -181,7 +183,7 @@ class FlaxRobertaSelfAttention(nn.Module):
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
         )
 
-    def __call__(self, hidden_states, attention_mask, deterministic=True):
+    def __call__(self, hidden_states, attention_mask, deterministic=True, output_attentions: bool = False):
         head_dim = self.config.hidden_size // self.config.num_attention_heads
 
         query_states = self.query(hidden_states).reshape(
@@ -223,7 +225,12 @@ class FlaxRobertaSelfAttention(nn.Module):
             precision=None,
         )
 
-        return attn_output.reshape(attn_output.shape[:2] + (-1,))
+        outputs = (attn_output.reshape(attn_output.shape[:2] + (-1,)),)
+
+        # TODO: at the moment it's not possible to retrieve attn_weights from
+        # dot_product_attention, but should be in the future -> add functionality then
+
+        return outputs
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertSelfOutput with Bert->Roberta
@@ -256,13 +263,22 @@ class FlaxRobertaAttention(nn.Module):
         self.self = FlaxRobertaSelfAttention(self.config, dtype=self.dtype)
         self.output = FlaxRobertaSelfOutput(self.config, dtype=self.dtype)
 
-    def __call__(self, hidden_states, attention_mask, deterministic=True):
+    def __call__(self, hidden_states, attention_mask, deterministic=True, output_attentions: bool = False):
         # Attention mask comes in as attention_mask.shape == (*batch_sizes, kv_length)
         # FLAX expects: attention_mask.shape == (*batch_sizes, 1, 1, kv_length) such that it is broadcastable
         # with attn_weights.shape == (*batch_sizes, num_heads, q_length, kv_length)
-        attn_output = self.self(hidden_states, attention_mask, deterministic=deterministic)
+        attn_outputs = self.self(
+            hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
+        )
+        attn_output = attn_outputs[0]
         hidden_states = self.output(attn_output, hidden_states, deterministic=deterministic)
-        return hidden_states
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += attn_outputs[1]
+
+        return outputs
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertIntermediate with Bert->Roberta
@@ -315,11 +331,20 @@ class FlaxRobertaLayer(nn.Module):
         self.intermediate = FlaxRobertaIntermediate(self.config, dtype=self.dtype)
         self.output = FlaxRobertaOutput(self.config, dtype=self.dtype)
 
-    def __call__(self, hidden_states, attention_mask, deterministic: bool = True):
-        attention_output = self.attention(hidden_states, attention_mask, deterministic=deterministic)
+    def __call__(self, hidden_states, attention_mask, deterministic: bool = True, output_attentions: bool = False):
+        attention_outputs = self.attention(
+            hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
+        )
+        attention_output = attention_outputs[0]
+
         hidden_states = self.intermediate(attention_output)
         hidden_states = self.output(hidden_states, attention_output, deterministic=deterministic)
-        return hidden_states
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attention_outputs[1],)
+        return outputs
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayerCollection with Bert->Roberta
@@ -332,10 +357,40 @@ class FlaxRobertaLayerCollection(nn.Module):
             FlaxRobertaLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
         ]
 
-    def __call__(self, hidden_states, attention_mask, deterministic: bool = True):
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        all_attentions = () if output_attentions else None
+        all_hidden_states = () if output_hidden_states else None
+
         for i, layer in enumerate(self.layers):
-            hidden_states = layer(hidden_states, attention_mask, deterministic=deterministic)
-        return hidden_states
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            layer_outputs = layer(hidden_states, attention_mask, deterministic=deterministic)
+
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_attentions += (layer_outputs[1],)
+
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        outputs = (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in outputs if v is not None)
+
+        return FlaxBaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        )
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEncoder with Bert->Roberta
@@ -346,8 +401,23 @@ class FlaxRobertaEncoder(nn.Module):
     def setup(self):
         self.layer = FlaxRobertaLayerCollection(self.config, dtype=self.dtype)
 
-    def __call__(self, hidden_states, attention_mask, deterministic: bool = True):
-        return self.layer(hidden_states, attention_mask, deterministic=deterministic)
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        return self.layer(
+            hidden_states,
+            attention_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPooler with Bert->Roberta
@@ -412,7 +482,21 @@ class FlaxRobertaPreTrainedModel(FlaxPreTrainedModel):
         params: dict = None,
         dropout_rng: PRNGKey = None,
         train: bool = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        if output_attentions:
+            raise NotImplementedError(
+                "Currently attention scores cannot be returned." "Please set `output_attentions` to False for now."
+            )
+
         # init input tensors if not passed
         if token_type_ids is None:
             token_type_ids = jnp.ones_like(input_ids)
@@ -435,6 +519,9 @@ class FlaxRobertaPreTrainedModel(FlaxPreTrainedModel):
             jnp.array(token_type_ids, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
             not train,
+            output_attentions,
+            output_hidden_states,
+            return_dict,
             rngs=rngs,
         )
 
@@ -450,17 +537,43 @@ class FlaxRobertaModule(nn.Module):
         self.encoder = FlaxRobertaEncoder(self.config, dtype=self.dtype)
         self.pooler = FlaxRobertaPooler(self.config, dtype=self.dtype)
 
-    def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True):
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
         hidden_states = self.embeddings(
             input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic
         )
-        hidden_states = self.encoder(hidden_states, attention_mask, deterministic=deterministic)
+        outputs = self.encoder(
+            hidden_states,
+            attention_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        hidden_states = outputs[0]
+        pooled = self.pooler(hidden_states) if self.add_pooling_layer else None
 
-        if not self.add_pooling_layer:
-            return hidden_states
+        if not return_dict:
+            # if pooled is None, don't return it
+            if pooled is None:
+                return (hidden_states,) + outputs[1:]
+            return (hidden_states, pooled) + outputs[1:]
 
-        pooled = self.pooler(hidden_states)
-        return hidden_states, pooled
+        return FlaxBaseModelOutputWithPooling(
+            last_hidden_state=hidden_states,
+            pooler_output=pooled,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -469,3 +582,8 @@ class FlaxRobertaModule(nn.Module):
 )
 class FlaxRobertaModel(FlaxRobertaPreTrainedModel):
     module_class = FlaxRobertaModule
+
+
+append_call_sample_docstring(
+    FlaxRobertaModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
+)
