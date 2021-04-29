@@ -51,4 +51,4 @@ Distributed Evaluation
 Debug Utilities
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.debug_utils.DebugActivationOverflow
+.. autoclass:: transformers.debug_utils.DebugUnderflowOverflow

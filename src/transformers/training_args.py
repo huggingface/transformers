@@ -278,7 +278,7 @@ class TrainingArguments:
 
             Possible options are:
 
-            - :obj:`"activation_overflow"`: detects overflow in model's input/outputs and reports the last frames that
+            - :obj:`"underflow_overflow"`: detects overflow in model's input/outputs and reports the last frames that
               led to the event
             - :obj:`"tpu_metrics_debug"`: print debug metrics on TPU
 
@@ -449,7 +449,7 @@ class TrainingArguments:
         default="",
         metadata={
             "help": "Whether or not to enable debug mode. Current options: "
-            "`activation_overflow` (Detect overflow in activations), "
+            "`underflow_overflow` (Detect underflow and overflow in activations and weights), "
             "`tpu_metrics_debug` (print debug metrics on TPU)."
         },
     )
@@ -639,7 +639,6 @@ class TrainingArguments:
             raise ValueError("`--sharded_ddp simple` is not compatible with any other option.")
         elif ShardedDDPOption.ZERO_DP_2 in self.sharded_ddp and ShardedDDPOption.ZERO_DP_3 in self.sharded_ddp:
             raise ValueError("`--sharded_ddp zero_dp_2` is not compatible with `--sharded_ddp zero_dp_3`.")
-
 
         if self.tpu_metrics_debug:
             warnings.warn(

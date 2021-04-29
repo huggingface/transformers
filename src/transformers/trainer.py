@@ -59,7 +59,7 @@ from torch.utils.data.sampler import RandomSampler, SequentialSampler
 from . import __version__
 from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
-from .debug_utils import DebugActivationOverflow, DebugOption
+from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .dependency_versions_check import dep_version_check
 from .file_utils import (
     CONFIG_NAME,
@@ -1079,8 +1079,8 @@ class Trainer:
             num_train_epochs = int(args.num_train_epochs)
             num_update_steps_per_epoch = max_steps
 
-        if DebugOption.ACIVATION_OVERFLOW in self.args.debug:
-            debug_overflow = DebugActivationOverflow(self.model)  # noqa
+        if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
+            debug_overflow = DebugUnderflowOverflow(self.model)  # noqa
 
         delay_optimizer_creation = self.sharded_ddp is not None and self.sharded_ddp != ShardedDDPOption.SIMPLE
         if args.deepspeed:
