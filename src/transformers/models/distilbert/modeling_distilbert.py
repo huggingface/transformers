@@ -93,7 +93,7 @@ class Embeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.dim, eps=1e-12)
         self.dropout = nn.Dropout(config.dropout)
 
-    def forward(self, input_ids, position_ids=None, past_key_values_length=0):
+    def forward(self, input_ids, past_key_values_length=0):
         """
         Parameters:
             input_ids: torch.tensor(bs, max_seq_length) The token ids to embed.
@@ -152,8 +152,7 @@ class MultiHeadSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states,
-        mask,
-        attention_mask=None,
+        attention_mask,
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
@@ -165,14 +164,21 @@ class MultiHeadSelfAttention(nn.Module):
             query: torch.tensor(bs, seq_length, dim)
             key: torch.tensor(bs, seq_length, dim)
             value: torch.tensor(bs, seq_length, dim)
-            mask: torch.tensor(bs, seq_length)
+            attention_mask: torch.tensor(bs, seq_length)
 
         Returns:
             weights: torch.tensor(bs, n_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
+
+        is_cross_attention = encoder_hidden_states is not None
+
         bs, q_length, dim = hidden_states.size()
-        k_length = hidden_states.size(1)
+        if is_cross_attention:
+            k_length = encoder_hidden_states.size(1)
+        else:
+            k_length = hidden_states.size(1)
+
         # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'
         # assert hidden_states.size() == value.size()
 
@@ -191,8 +197,6 @@ class MultiHeadSelfAttention(nn.Module):
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
-        is_cross_attention = encoder_hidden_states is not None
-
         if is_cross_attention and past_key_values is not None:
             # reuse key,value, cross_attentions
             key = past_key_values[0]
@@ -225,12 +229,8 @@ class MultiHeadSelfAttention(nn.Module):
 
         query = query / math.sqrt(dim_per_head)  # (bs, n_heads, q_length, dim_per_head)
         scores = torch.matmul(query, key.transpose(2, 3))  # (bs, n_heads, q_length, k_length)
-        mask = (mask == 0).view(mask_reshp).expand_as(scores)  # (bs, n_heads, q_length, k_length)
-        scores.masked_fill_(mask, -float("inf"))  # (bs, n_heads, q_length, k_length)
-
-        if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in DistilBertModel forward() function)
-            scores = scores + attention_mask
+        attention_mask = (attention_mask == 0).view(mask_reshp).expand_as(scores)  # (bs, n_heads, q_length, k_length)
+        scores.masked_fill_(attention_mask, -float("inf"))  # (bs, n_heads, q_length, k_length)
 
         weights = nn.Softmax(dim=-1)(scores)  # (bs, n_heads, q_length, k_length)
         weights = self.dropout(weights)  # (bs, n_heads, q_length, k_length)
@@ -318,7 +318,7 @@ class TransformerBlock(nn.Module):
         # Self-Attention
         self_attention_outputs = self.attention(
             hidden_states=hidden_states,
-            mask=attn_mask,
+            attention_mask=attn_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
             past_key_values=self_attn_past_key_value,
@@ -351,7 +351,7 @@ class TransformerBlock(nn.Module):
             cross_attn_past_key_value = past_key_values[-2:] if past_key_values is not None else None
             cross_attention_outputs = self.crossattention(
                 hidden_states=sa_output,
-                mask=attn_mask,
+                attention_mask=attn_mask,
                 head_mask=head_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
@@ -374,6 +374,11 @@ class TransformerBlock(nn.Module):
         output = (ffn_output,)
         if output_attentions:
             output = (sa_weights,) + output
+
+        # if decoder, return the attn key/values as the last output
+        if self.is_decoder:
+            output = output + (present_key_value,)
+
         return output
 
 
@@ -381,6 +386,7 @@ class Transformer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        self.is_decoder = config.is_decoder
         self.n_layers = config.n_layers
 
         layer = TransformerBlock(config)
@@ -395,6 +401,7 @@ class Transformer(nn.Module):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         past_key_values=None,
+        use_cache=None,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=None,
@@ -416,9 +423,11 @@ class Transformer(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
+        next_decoder_cache = () if use_cache else None
 
         hidden_state = hidden_states
         for i, layer_module in enumerate(self.layer):
+
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_state,)
 
@@ -431,14 +440,29 @@ class Transformer(nn.Module):
                 past_key_values=past_key_values[i] if past_key_values is not None else None,
                 output_attentions=output_attentions,
             )
-            hidden_state = layer_outputs[-1]
+
+            if self.is_decoder:
+                hidden_state = layer_outputs[-2]
+            else:
+                hidden_state = layer_outputs[-1]
+
+            if use_cache:
+                next_decoder_cache += (layer_outputs[-1],)
 
             if output_attentions:
-                assert len(layer_outputs) == 2
+
+                if self.is_decoder:
+                    assert len(layer_outputs) == 3
+                else:
+                    assert len(layer_outputs) == 2
+
                 attentions = layer_outputs[0]
                 all_attentions = all_attentions + (attentions,)
                 if self.config.add_cross_attention:
                     all_cross_attentions = all_cross_attentions + (layer_outputs[1],)
+
+            elif self.is_decoder:
+                assert len(layer_outputs) == 2
 
             else:
                 assert len(layer_outputs) == 1
@@ -460,6 +484,7 @@ class Transformer(nn.Module):
             )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_state,
+            past_key_values=next_decoder_cache,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
             cross_attentions=all_cross_attentions,
