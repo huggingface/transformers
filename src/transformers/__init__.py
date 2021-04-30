@@ -233,6 +233,7 @@ _import_structure = {
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
     "models.xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
     "pipelines": [
+        "AutomaticSpeechRecognitionPipeline",
         "Conversation",
         "ConversationalPipeline",
         "CsvPipelineDataFormat",
@@ -1583,6 +1584,7 @@ if TYPE_CHECKING:
 
     # Pipelines
     from .pipelines import (
+        AutomaticSpeechRecognitionPipeline,
         Conversation,
         ConversationalPipeline,
         CsvPipelineDataFormat,
