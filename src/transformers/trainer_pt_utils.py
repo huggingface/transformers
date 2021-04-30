@@ -33,6 +33,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler
 
 from .file_utils import is_sagemaker_dp_enabled, is_sagemaker_mp_enabled, is_torch_tpu_available
+from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
 
@@ -514,7 +515,10 @@ class LengthGroupedSampler(Sampler):
         self.batch_size = batch_size
         self.model_input_name = model_input_name if model_input_name is not None else "input_ids"
         if lengths is None:
-            if not isinstance(dataset[0], dict) or self.model_input_name not in dataset[0]:
+            if (
+                not (isinstance(dataset[0], dict) or isinstance(dataset[0], BatchEncoding))
+                or self.model_input_name not in dataset[0]
+            ):
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
                     f"'{self.model_input_name}' key."
@@ -575,7 +579,10 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         self.model_input_name = model_input_name if model_input_name is not None else "input_ids"
 
         if lengths is None:
-            if not isinstance(dataset[0], dict) or self.model_input_name not in dataset[0]:
+            if (
+                not (isinstance(dataset[0], dict) or isinstance(dataset[0], BatchEncoding))
+                or self.model_input_name not in dataset[0]
+            ):
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
                     f"'{self.model_input_name}' key."
