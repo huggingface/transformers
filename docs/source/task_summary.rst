@@ -85,9 +85,8 @@ each other. The process is the following:
 
 1. Instantiate a tokenizer and a model from the checkpoint name. The model is identified as a BERT model and loads it
    with the weights stored in the checkpoint.
-2. Build a sequence from the two sentences, with the correct model-specific separators token type ids and attention
-   masks (:func:`~transformers.PreTrainedTokenizer.encode` and :func:`~transformers.PreTrainedTokenizer.__call__` take
-   care of this).
+2. Build a sequence from the two sentences, with the correct model-specific separators, token type ids and attention
+   masks (which will be created automatically by the tokenizer).
 3. Pass this sequence through the model so that it is classified in one of the two available classes: 0 (not a
    paraphrase) and 1 (is a paraphrase).
 4. Compute the softmax of the result to get probabilities over the classes.
@@ -108,6 +107,7 @@ each other. The process is the following:
     >>> sequence_1 = "Apples are especially bad for your health"
     >>> sequence_2 = "HuggingFace's headquarters are situated in Manhattan"
 
+    >>> # The tokekenizer will automatically add any model specific separators (i.e. <CLS> and <SEP>) and tokens to the sequence, as well as compute the attention masks.
     >>> paraphrase = tokenizer(sequence_0, sequence_2, return_tensors="pt")
     >>> not_paraphrase = tokenizer(sequence_0, sequence_1, return_tensors="pt")
 
@@ -141,6 +141,7 @@ each other. The process is the following:
     >>> sequence_1 = "Apples are especially bad for your health"
     >>> sequence_2 = "HuggingFace's headquarters are situated in Manhattan"
 
+    >>> # The tokekenizer will automatically add any model specific separators (i.e. <CLS> and <SEP>) and tokens to the sequence, as well as compute the attention masks.
     >>> paraphrase = tokenizer(sequence_0, sequence_2, return_tensors="tf")
     >>> not_paraphrase = tokenizer(sequence_0, sequence_1, return_tensors="tf")
 
@@ -504,8 +505,8 @@ This outputs a (hopefully) coherent next token following the original sequence, 
     >>> print(resulting_string)
     Hugging Face is based in DUMBO, New York City, and has
 
-In the next section, we show how this functionality is leveraged in :func:`~transformers.PreTrainedModel.generate` to
-generate multiple tokens up to a user-defined length.
+In the next section, we show how :func:`~transformers.PreTrainedModel.generate` can be used to generate multiple tokens
+up to a specified length instead of one token at a time.
 
 Text Generation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -526,10 +527,11 @@ As a default all models apply *Top-K* sampling when used in pipelines, as config
 
 
 Here, the model generates a random text with a total maximal length of *50* tokens from context *"As far as I am
-concerned, I will"*. The default arguments of ``PreTrainedModel.generate()`` can be directly overridden in the
-pipeline, as is shown above for the argument ``max_length``.
+concerned, I will"*. Behind the scenes, the pipeline object calls the method
+:func:`~transformers.PreTrainedModel.generate` to generate text. The default arguments for this method can be
+overridden in the pipeline, as is shown above for the arguments ``max_length`` and ``do_sample``.
 
-Here is an example of text generation using ``XLNet`` and its tokenizer.
+Below is an example of text generation using ``XLNet`` and its tokenizer, which includes calling ``generate`` directly:
 
 .. code-block::
 
@@ -627,8 +629,8 @@ It leverages a fine-tuned model on CoNLL-2003, fine-tuned by `@stefan-it <https:
 
     >>> nlp = pipeline("ner")
 
-    >>> sequence = "Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO, therefore very"
-    ...            "close to the Manhattan Bridge which is visible from the window."
+    >>> sequence = """Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO, 
+    ... therefore very close to the Manhattan Bridge which is visible from the window."""
 
 
 This outputs a list of all words that have been identified as one of the entities from the 9 classes defined above.
@@ -659,15 +661,14 @@ Here is an example of doing named entity recognition, using a model and a tokeni
 
 1. Instantiate a tokenizer and a model from the checkpoint name. The model is identified as a BERT model and loads it
    with the weights stored in the checkpoint.
-2. Define the label list with which the model was trained on.
-3. Define a sequence with known entities, such as "Hugging Face" as an organisation and "New York City" as a location.
-4. Split words into tokens so that they can be mapped to predictions. We use a small hack by, first, completely
+2. Define a sequence with known entities, such as "Hugging Face" as an organisation and "New York City" as a location.
+3. Split words into tokens so that they can be mapped to predictions. We use a small hack by, first, completely
    encoding and decoding the sequence, so that we're left with a string that contains the special tokens.
-5. Encode that sequence into IDs (special tokens are added automatically).
-6. Retrieve the predictions by passing the input to the model and getting the first output. This results in a
+4. Encode that sequence into IDs (special tokens are added automatically).
+5. Retrieve the predictions by passing the input to the model and getting the first output. This results in a
    distribution over the 9 possible classes for each token. We take the argmax to retrieve the most likely class for
    each token.
-7. Zip together each token with its prediction and print it.
+6. Zip together each token with its prediction and print it.
 
 .. code-block::
 
@@ -706,18 +707,6 @@ Here is an example of doing named entity recognition, using a model and a tokeni
     >>> model = TFAutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
     >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
 
-    >>> label_list = [
-    ...     "O",       # Outside of a named entity
-    ...     "B-MISC",  # Beginning of a miscellaneous entity right after another miscellaneous entity
-    ...     "I-MISC",  # Miscellaneous entity
-    ...     "B-PER",   # Beginning of a person's name right after another person's name
-    ...     "I-PER",   # Person's name
-    ...     "B-ORG",   # Beginning of an organisation right after another organisation
-    ...     "I-ORG",   # Organisation
-    ...     "B-LOC",   # Beginning of a location right after another location
-    ...     "I-LOC"    # Location
-    ... ]
-
     >>> sequence = "Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO, therefore very" \
     ...            "close to the Manhattan Bridge."
 
@@ -731,12 +720,49 @@ Here is an example of doing named entity recognition, using a model and a tokeni
 
 This outputs a list of each token mapped to its corresponding prediction. Differently from the pipeline, here every
 token has a prediction as we didn't remove the "0"th class, which means that no particular entity was found on that
-token. The following array should be the output:
+token.
+
+In the above example, ``predictions`` is an integer that corresponds to the predicted class. We can use the
+``model.config.id2label`` property in order to recover the class name corresponding to the class number, which is
+illustrated below:
 
 .. code-block::
 
-    >>> print([(token, label_list[prediction]) for token, prediction in zip(tokens, predictions[0].numpy())])
-    [('[CLS]', 'O'), ('Hu', 'I-ORG'), ('##gging', 'I-ORG'), ('Face', 'I-ORG'), ('Inc', 'I-ORG'), ('.', 'O'), ('is', 'O'), ('a', 'O'), ('company', 'O'), ('based', 'O'), ('in', 'O'), ('New', 'I-LOC'), ('York', 'I-LOC'), ('City', 'I-LOC'), ('.', 'O'), ('Its', 'O'), ('headquarters', 'O'), ('are', 'O'), ('in', 'O'), ('D', 'I-LOC'), ('##UM', 'I-LOC'), ('##BO', 'I-LOC'), (',', 'O'), ('therefore', 'O'), ('very', 'O'), ('##c', 'O'), ('##lose', 'O'), ('to', 'O'), ('the', 'O'), ('Manhattan', 'I-LOC'), ('Bridge', 'I-LOC'), ('.', 'O'), ('[SEP]', 'O')]
+    >>> for token, prediction in zip(tokens, predictions[0].numpy()):
+    ...     print((token, model.config.id2label[prediction]))
+    ('[CLS]', 'O')
+    ('Hu', 'I-ORG')
+    ('##gging', 'I-ORG')
+    ('Face', 'I-ORG')
+    ('Inc', 'I-ORG')
+    ('.', 'O')
+    ('is', 'O')
+    ('a', 'O')
+    ('company', 'O')
+    ('based', 'O')
+    ('in', 'O')
+    ('New', 'I-LOC')
+    ('York', 'I-LOC')
+    ('City', 'I-LOC')
+    ('.', 'O')
+    ('Its', 'O')
+    ('headquarters', 'O')
+    ('are', 'O')
+    ('in', 'O')
+    ('D', 'I-LOC')
+    ('##UM', 'I-LOC')
+    ('##BO', 'I-LOC')
+    (',', 'O')
+    ('therefore', 'O')
+    ('very', 'O')
+    ('##c', 'O')
+    ('##lose', 'O')
+    ('to', 'O')
+    ('the', 'O')
+    ('Manhattan', 'I-LOC')
+    ('Bridge', 'I-LOC')
+    ('.', 'O')
+    ('[SEP]', 'O')
 
 Summarization
 -----------------------------------------------------------------------------------------------------------------------
@@ -818,6 +844,12 @@ CNN / Daily Mail), it yields very good results.
     >>> # T5 uses a max_length of 512 so we cut the article to 512 tokens.
     >>> inputs = tokenizer.encode("summarize: " + ARTICLE, return_tensors="tf", max_length=512)
     >>> outputs = model.generate(inputs, max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True)
+
+.. code-block::
+
+    >>> print(tokenizer.decode(outputs[0]))
+    <pad> prosecutors say the marriages were part of an immigration scam. if convicted, barrientos faces two criminal counts of "offering a false instrument for filing in the first degree" she has been married 10 times, nine of them between 1999 and 2002.</s>
+
 
 Translation
 -----------------------------------------------------------------------------------------------------------------------
