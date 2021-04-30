@@ -719,7 +719,6 @@ def main():
     del all_start_logits
     del all_end_logits
 
-    eval_dataset.set_format(type=None, columns=list(eval_dataset.features.keys()))
     outputs_numpy = (start_logits_concat, end_logits_concat)
     prediction = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
     eval_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)
@@ -751,8 +750,6 @@ def main():
         del all_start_logits
         del all_end_logits
 
-        # Now we need to add extra columns which we removed for post processing
-        predict_dataset.set_format(type=None, columns=list(predict_dataset.features.keys()))
         outputs_numpy = (start_logits_concat, end_logits_concat)
         prediction = post_processing_function(predict_examples, predict_dataset, outputs_numpy)
         predict_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)

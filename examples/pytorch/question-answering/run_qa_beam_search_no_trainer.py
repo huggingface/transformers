@@ -733,7 +733,6 @@ def main():
     del end_top_index
     del cls_logits
 
-    eval_dataset.set_format(type=None, columns=list(eval_dataset.features.keys()))
     outputs_numpy = (
         start_top_log_probs_concat,
         start_top_index_concat,
@@ -791,7 +790,6 @@ def main():
         del end_top_index
         del cls_logits
 
-        predict_dataset.set_format(type=None, columns=list(predict_dataset.features.keys()))
         outputs_numpy = (
             start_top_log_probs_concat,
             start_top_index_concat,
