@@ -15,6 +15,7 @@
 """Feature extractor class for DETR."""
 
 from typing import Dict, List, Optional, Union
+import pathlib
 
 import numpy as np
 from PIL import Image
@@ -43,6 +44,58 @@ def box_xyxy_to_cxcywh(x):
     x0, y0, x1, y1 = x_transposed[0], x_transposed[1], x_transposed[2], x_transposed[3]
     b = [(x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0), (y1 - y0)]
     return np.stack(b, axis=-1)
+
+
+# 2 functions below copied from https://github.com/cocodataset/panopticapi/blob/master/panopticapi/utils.py
+# Copyright (c) 2018, Alexander Kirillov
+# All rights reserved.
+def rgb2id(color):
+    if isinstance(color, np.ndarray) and len(color.shape) == 3:
+        if color.dtype == np.uint8:
+            color = color.astype(np.int32)
+        return color[:, :, 0] + 256 * color[:, :, 1] + 256 * 256 * color[:, :, 2]
+    return int(color[0] + 256 * color[1] + 256 * 256 * color[2])
+
+
+def id2rgb(id_map):
+    if isinstance(id_map, np.ndarray):
+        id_map_copy = id_map.copy()
+        rgb_shape = tuple(list(id_map.shape) + [3])
+        rgb_map = np.zeros(rgb_shape, dtype=np.uint8)
+        for i in range(3):
+            rgb_map[..., i] = id_map_copy % 256
+            id_map_copy //= 256
+        return rgb_map
+    color = []
+    for _ in range(3):
+        color.append(id_map % 256)
+        id_map //= 256
+    return color
+
+
+def masks_to_boxes(masks):
+    """Compute the bounding boxes around the provided masks
+    The masks should be in format [N, H, W] where N is the number of masks, (H, W) are the spatial dimensions.
+    Returns a [N, 4] tensors, with the boxes in xyxy format
+    """
+    if masks.size == 0:
+        return np.zeros((0, 4))
+
+    h, w = masks.shape[-2:]
+
+    y = np.arange(0, h, dtype=np.float32)
+    x = np.arange(0, w, dtype=np.float32)
+    y, x = np.meshgrid(y, x)
+
+    x_mask = (masks * np.expand_dims(x, axis=0))
+    x_max = x_mask.flatten(1).max(-1)[0]
+    x_min = x_mask.masked_fill(~(masks.bool()), 1e8).flatten(1).min(-1)[0]
+
+    y_mask = (masks * np.expand_dims(y, axis=0))
+    y_max = y_mask.flatten(1).max(-1)[0]
+    y_min = y_mask.masked_fill(~(masks.bool()), 1e8).flatten(1).min(-1)[0]
+
+    return torch.stack([x_min, y_min, x_max, y_max], 1)
 
 
 class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
@@ -75,9 +128,11 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     model_input_names = ["pixel_values", "pixel_mask"]
 
     def __init__(
-        self, do_resize=True, size=800, max_size=1333, do_normalize=True, image_mean=None, image_std=None, **kwargs
+        self, task="object_detection", do_resize=True, size=800, max_size=1333, do_normalize=True, image_mean=None, image_std=None, 
+        **kwargs
     ):
         super().__init__(**kwargs)
+        self.task = task
         self.do_resize = do_resize
         self.size = size
         self.max_size = max_size
@@ -104,8 +159,49 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return masks
 
+    def prepare(self, image, target, masks_path=None):
+        if self.task == "object_detection":
+            image, target = self.prepare_object_detection(image, target)
+            return image, target
+        elif self.task == "panoptic_segmentation":
+            image, target = self.prepare_panoptic_segmentation(image, target, masks_path)
+            return image, target
+        else:
+            raise ValueError(f"Task {task} not supported")
+
+    def prepare_panoptic_segmentation(self, image, target, masks_path, return_masks=True):
+        w, h = image.size
+        ann_info = target.copy()
+        ann_path = pathlib.Path(masks_path) / ann_info['file_name']
+        if "segments_info" in ann_info:
+            masks = np.asarray(Image.open(ann_path), dtype=np.uint32)
+            masks = rgb2id(masks)
+
+            ids = np.array([ann['id'] for ann in ann_info['segments_info']])
+            masks = masks == ids[:, None, None]
+
+            masks = np.asarray(masks, dtype=np.uint8)
+            labels = np.asarray([ann['category_id'] for ann in ann_info['segments_info']], dtype=np.int64)
+
+        target = {}
+        target['image_id'] = np.asarray([ann_info['image_id'] if "image_id" in ann_info else ann_info["id"]])
+        if return_masks:
+            target['masks'] = masks
+        target['labels'] = labels
+
+        target["boxes"] = masks_to_boxes(masks)
+
+        target['size'] = np.asarray([int(h), int(w)], dtype=np.int64)
+        target['orig_size'] = np.asarray([int(h), int(w)], dtype=np.int64)
+        if "segments_info" in ann_info:
+            for name in ['iscrowd', 'area']:
+                target[name] = np.asarray([ann[name] for ann in ann_info['segments_info']])
+
+        return image, target
+
+    
     # inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L50
-    def convertCocoToDetrFormat(self, image, target, return_segmentation_masks=False):
+    def prepare_object_detection(self, image, target, return_segmentation_masks=False):
         """
         Convert the target in COCO format into the format expected by DETR.
         """
@@ -271,8 +367,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
         ],
         annotations: Union[List[Dict], List[List[Dict]]] = None,
-        return_segmentation_masks: bool = False,
-        pad_and_return_pixel_mask: bool = True,
+        masks_path: Optional[pathlib.Path] = None, 
+        pad_and_return_pixel_mask: Optional[bool] = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchFeature:
@@ -299,10 +395,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 * image_id
                 * annotations, which is a list of COCO annotations.
 
-            return_segmentation_masks (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether to return segmentation masks. Should only be set to `True` if the annotations include a
-                "segmentation" key.
-
+            masks_path (:obj:`pathlib.Path`, `optional`):
+                Path to the directory containing the PNG files that store the class-agnostic image segmentations.
+            
             pad_and_return_pixel_mask (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to pad images up to the largest image in a batch and create a pixel mask.
 
@@ -326,8 +421,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             - **pixel_values** -- Pixel values to be fed to a model.
         """
         # Input type checking for clearer error
+
         valid_images = False
         valid_annotations = False
+        valid_masks_path = False
 
         # Check that images has a valid type
         if isinstance(images, (Image.Image, np.ndarray)) or is_torch_tensor(images):
@@ -350,25 +447,44 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         # Check that annotations has a valid type
         if annotations is not None:
             if not is_batched:
-                if isinstance(annotations, dict) and "image_id" in annotations and "annotations" in annotations:
-                    if isinstance(annotations["annotations"], (list, tuple)):
-                        # an image can have no annotations
-                        if len(annotations["annotations"]) == 0 or isinstance(annotations["annotations"][0], dict):
-                            valid_annotations = True
+                if self.task == "object_detection":
+                    if isinstance(annotations, dict) and "image_id" in annotations and "annotations" in annotations:
+                        if isinstance(annotations["annotations"], (list, tuple)):
+                            # an image can have no annotations
+                            if len(annotations["annotations"]) == 0 or isinstance(annotations["annotations"][0], dict):
+                                valid_annotations = True
+                elif self.task == "panoptic_segmentation":
+                    if isinstance(annotations, dict) and "image_id" in annotations and "segments_info" in annotations:
+                        if isinstance(annotations["segments_info"], (list, tuple)):
+                            # an image can have no segments (?)
+                            if len(annotations["segments_info"]) == 0 or isinstance(annotations["segments_info"][0], dict):
+                                valid_annotations = True
             else:
                 if isinstance(annotations, (list, tuple)):
                     assert len(images) == len(annotations), "There must be as many annotations as there are images"
-                    if isinstance(annotations[0], Dict) and isinstance(annotations[0]["annotations"], (list, tuple)):
-                        valid_annotations = True
+                    if isinstance(annotations[0], Dict):
+                        if self.task == "object_detection":
+                            if isinstance(annotations[0]["annotations"], (list, tuple)):
+                                valid_annotations = True
+                        elif self.task == "panoptic_segmentation":
+                            if isinstance(annotations[0]["segments_info"], (list, tuple)):
+                                valid_annotations = True
 
             if not valid_annotations:
                 raise ValueError(
                     """
-                    Annotations must of type `Dict` (single image) or `List[Dict]` (batch of images). Each dictionary
-                    should be of the format {'image_id': 39769, 'annotations': target}, with the target being a list of
+                    Annotations must of type `Dict` (single image) or `List[Dict]` (batch of images). In case of object
+                    detection, each dictionary should contain the keys 'image_id' and 'annotations', with the latter 
+                    being a list of annotations in COCO format. In case of panoptic segmentation, each dictionary should 
+                    contain the keys 'file_name', 'image_id' and 'segments_info', with the latter being a list of 
                     annotations in COCO format.
                     """
                 )
+
+        # Check that masks_path has a valid type
+        if self.task == "panoptic_segmentation":
+            if isinstance(masks_path, pathlib.Path):
+                valid_masks_path = True
 
         if not is_batched:
             images = [images]
@@ -380,9 +496,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             for idx, (image, target) in enumerate(zip(images, annotations)):
                 if not isinstance(image, Image.Image):
                     image = self.to_pil_image(image)
-                image, target = self.convertCocoToDetrFormat(
-                    image, target, return_segmentation_masks=return_segmentation_masks
-                )
+                image, target = self.prepare(image, target, masks_path)
                 images[idx] = image
                 annotations[idx] = target
 

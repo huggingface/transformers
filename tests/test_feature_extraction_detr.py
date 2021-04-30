@@ -16,6 +16,7 @@
 
 import json
 import unittest
+import pathlib
 
 import numpy as np
 
@@ -272,9 +273,9 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         )
 
     @slow
-    def test_call_pytorch_with_annotations(self):
+    def test_call_pytorch_with_annotations_object_detection(self):
         # prepare image and target
-        image = Image.open("./tests/fixtures/tests_samples/COCO/cats.png")
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
             target = json.loads(f.read())
 
@@ -315,3 +316,23 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         # verify size
         expected_size = torch.tensor([800, 1066])
         assert torch.allclose(encoding["target"][0]["size"], expected_size)
+
+    @slow
+    def test_call_pytorch_with_annotations_panoptic_segmentation(self):
+        # prepare image, target and masks_path
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations_panoptic.txt", "r") as f:
+            target = json.loads(f.read())
+
+        target = {"file_name": '000000039769.png', "image_id": 39769, "segments_info": target}
+        
+        masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
+
+        # encode them
+        # TODO replace by .from_pretrained facebook/detr-resnet-50-panoptic
+        feature_extractor = DetrFeatureExtractor(task="panoptic_segmentation")
+        encoding = feature_extractor(images=image, annotations=target, masks_path=masks_path, return_tensors="pt")
+
+        # verify pixel values
+        #TODO
+        pass
