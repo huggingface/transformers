@@ -257,9 +257,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 #####################
 
 
-def load_tf2_checkpoint_in_pytorch_model(
-    pt_model, tf_checkpoint_path, tf_inputs=None, allow_missing_keys=False, return_missing_keys=False
-):
+def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs=None, allow_missing_keys=False):
     """
     Load TF 2.0 HDF5 checkpoint in a PyTorch model We use HDF5 to easily do transfer learning (see
     https://github.com/tensorflow/tensorflow/blob/ee16fcac960ae660e0e4496658a366e2f745e1f0/tensorflow/python/keras/engine/network.py#L1352-L1357).

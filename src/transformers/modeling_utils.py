@@ -1164,7 +1164,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     from .modeling_tf_pytorch_utils import load_tf2_checkpoint_in_pytorch_model
 
                     model, missing_keys = load_tf2_checkpoint_in_pytorch_model(
-                        model, resolved_archive_file, allow_missing_keys=True, return_missing_keys=True
+                        model, resolved_archive_file, allow_missing_keys=True
                     )
                 except ImportError:
                     logger.error(
