@@ -1238,6 +1238,21 @@ class ModelTesterMixin:
             model.parallelize()
             model.generate(**cast_to_device(inputs_dict, "cuda:0"), num_beams=2)
 
+    def test_multilabel(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        config.problem_type = "multi_label_classification"
+
+        for model_class in self.all_model_classes:
+            if model_class not in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
+                continue
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+
 
 global_rng = random.Random()
 
