@@ -172,8 +172,6 @@ accelerate test
 that will check everything is ready for training. Finally, you cna launch training with
 
 ```bash
-export TASK_NAME=mrpc
-
 accelerate launch run_qa_no_trainer.py \
   --model_name_or_path bert-base-uncased \
   --dataset_name squad \
