@@ -25,6 +25,7 @@ import torch
 from torch import Tensor, device, dtype, nn
 from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
+from contextlib import contextmanager
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
@@ -49,6 +50,7 @@ from .utils import logging
 
 
 logger = logging.get_logger(__name__)
+
 
 try:
     from torch.nn import Identity
@@ -426,7 +428,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # trained, but which are deterministic)
     _keys_to_ignore_on_save = None
 
+    # whether weights should be initialized when instantiating model class
+    _init_weights = True
+
     is_parallelizable = False
+
+    @staticmethod
+    @contextmanager
+    def no_init_weights(cls):
+        cls._init_weights = False
+        try:
+            yield
+        finally:
+            cls._init_weights = True
 
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
@@ -766,8 +780,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def init_weights(self):
         """
-        Initializes and prunes weights if needed.
+        Maybe initializes and prunes weights if needed.
         """
+        if not self._init_weights:
+            return
+
+        raise ValueError("Don't use this function")
         # Initialize weights
         self.apply(self._init_weights)
 
@@ -1117,20 +1135,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         config.name_or_path = pretrained_model_name_or_path
 
         # Instantiate model.
-
-        # Make sure init function is not run since weights are overwritten
-        # from pre-trained weight file
-        model_kwargs["init_weights"] = False
-
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             # this immediately partitions the model to avoid the overhead in time and memory copying it on CPU or each GPU first
-            with deepspeed.zero.Init():
+            with deepspeed.zero.Init() and cls.no_init_weights(cls):
                 model = cls(config, *model_args, **model_kwargs)
         else:
-            model = cls(config, *model_args, **model_kwargs)
+            with cls.no_init_weights(cls):
+                model = cls(config, *model_args, **model_kwargs)
 
         if state_dict is None and not (from_tf or from_flax):
             try:
@@ -1142,9 +1156,32 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "
                 )
 
+            expected_keys = list(model.state_dict.keys())
+            loaded_keys = list(state_dict.keys())
+
+            add_base_model_prefix = model.base_model_prefix in set([weight_name.split('.')[0] for weight_name in expected_keys]) and model.base_model_prefix not in set([weight_name.split('.')[0] for weight_name in loaded_keys])
+            remove_base_model_prefix = model.base_model_prefix not in set([weight_name.split('.')[0] for weight_name in expected_keys]) and model.base_model_prefix in set([weight_name.split('.')[0] for weight_name in loaded_keys])
+
+            if add_base_model_prefix:
+                loaded_keys = ['.'.join(model.base_model_prefix, weight_name) for weight_name in loaded_keys if '.'.join(model.base_model_prefix, weight_name) in set(expected_keys)]
+            elif remove_base_model_prefix:
+                loaded_keys = ['.'.join(weight_name.split('.')[1:]) for weight_name in loaded_keys if model.base_model_prefix weight_name) for weight_name in loaded_keys if '.'.join(weight_name.split('.')[1:] in set(expected_keys)]
+
+            missing_keys = list(set(model.state_dict().keys()) - set(state_dict.keys())))
+            missing_keys = list(set(state_dict.keys()) - set(model.state_dict.keys()))
+
+            import ipdb; ipdb.set_trace()
+            missing_keys = ()
+
+        import ipdb; ipdb.set_trace()
         missing_keys = []
         unexpected_keys = []
         error_msgs = []
+
+        # tie unintialized modules
+        unintialized_modules = model.retrieve_modules_from_names(missing_keys)
+        for module in unintialized_modules:
+            model._init_weights(module)
 
         if from_tf:
             if resolved_archive_file.endswith(".index"):
@@ -1155,7 +1192,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 try:
                     from .modeling_tf_pytorch_utils import load_tf2_checkpoint_in_pytorch_model
 
-                    model = load_tf2_checkpoint_in_pytorch_model(model, resolved_archive_file, allow_missing_keys=True)
+                    model, missing_keys = load_tf2_checkpoint_in_pytorch_model(model, resolved_archive_file, allow_missing_keys=True, return_missing_keys=True)
                 except ImportError:
                     logger.error(
                         "Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed. Please see "
@@ -1271,11 +1308,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 error_msg = "\n\t".join(error_msgs)
                 raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
 
-        # tie unintialized modules
-        unintialized_modules = model.retrieve_modules_from_weights(missing_keys)
-        for module in unintialized_modules:
-            model._init_weights(module)
-
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
 
@@ -1293,16 +1325,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return model
 
     def retrieve_modules_from_weights(self, weight_keys):
-        retrieved_modules = set()
-        for weight_key in weight_keys:
-            module_ptr = self
-            for layer_name in weight_key.split(".")[:-1]:
-                module_ptr = module_ptr._modules[layer_name]
-            retrieved_modules.add(module_ptr)
-        # TOOD: IMPORTANT WE HAVE TO BE SURE THAT ALL WEIGHTS OF THE
-        # RETRIEVED MODULES ACTUALLY HAVE TO BE RANDOMELY INITIALIZED
-        # TEST THAT ALL WEIGHTS OF ALL MODULES ARE IN WEIGHT KEYS
-        return list(retrieved_modules)
+        module_keys = [".".join(key.split(".")[:-1]) for key in weight_keys]
+        return [module for name, module in self.named_modules() if name in module_keys]
 
 
 class Conv1D(nn.Module):

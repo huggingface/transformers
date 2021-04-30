@@ -257,7 +257,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 #####################
 
 
-def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs=None, allow_missing_keys=False):
+def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs=None, allow_missing_keys=False, return_missing_keys=False):
     """
     Load TF 2.0 HDF5 checkpoint in a PyTorch model We use HDF5 to easily do transfer learning (see
     https://github.com/tensorflow/tensorflow/blob/ee16fcac960ae660e0e4496658a366e2f745e1f0/tensorflow/python/keras/engine/network.py#L1352-L1357).
@@ -291,17 +291,17 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
 
     load_tf_weights(tf_model, tf_checkpoint_path)
 
-    return load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=allow_missing_keys)
+    return load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=allow_missing_keys, return_missing_keys=return_missing_keys)
 
 
-def load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=False):
+def load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=False, return_missing_keys=False):
     """Load TF 2.0 model in a pytorch model"""
     weights = tf_model.weights
 
-    return load_tf2_weights_in_pytorch_model(pt_model, weights, allow_missing_keys=allow_missing_keys)
+    return load_tf2_weights_in_pytorch_model(pt_model, weights, allow_missing_keys=allow_missing_keys, return_missing_keys=return_missing_keys)
 
 
-def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=False):
+def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=False, return_missing_keys=False):
     """Load TF2.0 symbolic weights in a PyTorch model"""
     try:
         import tensorflow as tf  # noqa: F401
@@ -416,4 +416,7 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
 
     logger.info(f"Weights or buffers not loaded from TF 2.0 model: {all_tf_weights}")
 
-    return pt_model
+    if not return_missing_keys:
+        return pt_model
+
+    return pt_model, missing_keys

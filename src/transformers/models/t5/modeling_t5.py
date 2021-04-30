@@ -782,7 +782,7 @@ class T5PreTrainedModel(PreTrainedModel):
 
 
 class T5Stack(T5PreTrainedModel):
-    def __init__(self, config, embed_tokens=None, init_weights=True):
+    def __init__(self, config, embed_tokens=None):
         super().__init__(config)
 
         self.embed_tokens = embed_tokens
@@ -794,8 +794,7 @@ class T5Stack(T5PreTrainedModel):
         self.final_layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
-        if init_weights:
-            self.init_weights()
+        self.init_weights()
 
         # Model parallel
         self.model_parallel = False
@@ -1196,7 +1195,7 @@ class T5Model(T5PreTrainedModel):
         r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
     ]
 
-    def __init__(self, config: T5Config, init_weights=True):
+    def __init__(self, config: T5Config):
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
@@ -1204,16 +1203,15 @@ class T5Model(T5PreTrainedModel):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = T5Stack(encoder_config, self.shared, init_weights=init_weights)
+        self.encoder = T5Stack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = T5Stack(decoder_config, self.shared, init_weights=init_weights)
+        self.decoder = T5Stack(decoder_config, self.shared)
 
-        if init_weights:
-            self.init_weights()
+        self.init_weights()
 
         # Model parallel
         self.model_parallel = False
@@ -1382,7 +1380,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
     ]
 
-    def __init__(self, config, init_weights=True):
+    def __init__(self, config):
         super().__init__(config)
         self.model_dim = config.d_model
 
@@ -1392,18 +1390,17 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = T5Stack(encoder_config, self.shared, init_weights=init_weights)
+        self.encoder = T5Stack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = T5Stack(decoder_config, self.shared, init_weights=init_weights)
+        self.decoder = T5Stack(decoder_config, self.shared)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
-        if init_weights:
-            self.init_weights()
+        self.init_weights()
 
         # Model parallel
         self.model_parallel = False
