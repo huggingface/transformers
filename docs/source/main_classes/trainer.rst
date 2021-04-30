@@ -1507,6 +1507,25 @@ and ``total_num_steps`, ``warmup_max_lr``, ``warmup_num_steps`` and ``total_num_
 
 
 
+
+fp32 Training
+=======================================================================================================================
+
+Deepspeed supports the full fp32 and also the fp16 mixed precision training.
+
+Because of the much lower memory requirements and faster speed one gets with the fp16 mixed precision,
+the only time you will want to not use it is when the model you're using doesn't behave well in this mode, typically this happens when the model wasn't pretrained in fp16 mixed precision (e.g. often this happens with bf16-pretrained models). Such models often overflow or underflow leading to ``NaN`` loss. If this is your case then you will want to use the fp32 mode, by disabling the fp16 mode, like so:
+
+.. code-block:: json
+
+    {
+        "fp16": {
+            "enabled": "false",
+        }
+    }
+
+
+
 Automatic Mixed Precision
 =======================================================================================================================
 
