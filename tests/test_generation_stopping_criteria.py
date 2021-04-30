@@ -40,10 +40,10 @@ class StoppingCriteriaTestCase(unittest.TestCase):
 
         self.assertFalse(criteria(input_ids, scores))
 
-        input_ids, scores = self._get_tensors(10)
+        input_ids, scores = self._get_tensors(9)
         self.assertFalse(criteria(input_ids, scores))
 
-        input_ids, scores = self._get_tensors(11)
+        input_ids, scores = self._get_tensors(10)
         self.assertTrue(criteria(input_ids, scores))
 
     def test_max_length_criteria(self):
@@ -52,10 +52,10 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         input_ids, scores = self._get_tensors(5)
         self.assertFalse(criteria(input_ids, scores))
 
-        input_ids, scores = self._get_tensors(10)
+        input_ids, scores = self._get_tensors(9)
         self.assertFalse(criteria(input_ids, scores))
 
-        input_ids, scores = self._get_tensors(11)
+        input_ids, scores = self._get_tensors(10)
         self.assertTrue(criteria(input_ids, scores))
 
     def test_max_time_criteria(self):
@@ -73,7 +73,6 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         with self.assertWarns(UserWarning):
             validate_stopping_criteria(StoppingCriteriaList([MaxLengthCriteria(10)]), 11)
 
-        stopping_criteria = StoppingCriteriaList()
-        validate_stopping_criteria(stopping_criteria, 11)
+        stopping_criteria = validate_stopping_criteria(StoppingCriteriaList(), 11)
 
         self.assertEqual(len(stopping_criteria), 1)

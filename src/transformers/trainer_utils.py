@@ -77,6 +77,13 @@ class EvalPrediction(NamedTuple):
     label_ids: np.ndarray
 
 
+class EvalLoopOutput(NamedTuple):
+    predictions: Union[np.ndarray, Tuple[np.ndarray]]
+    label_ids: Optional[np.ndarray]
+    metrics: Optional[Dict[str, float]]
+    num_samples: Optional[int]
+
+
 class PredictionOutput(NamedTuple):
     predictions: Union[np.ndarray, Tuple[np.ndarray]]
     label_ids: Optional[np.ndarray]
@@ -313,7 +320,7 @@ class TrainerMemoryTracker:
         self.init_reported = False
 
     def derive_stage(self):
-        """ derives the stage/caller name automatically """
+        """derives the stage/caller name automatically"""
         caller = inspect.currentframe().f_back.f_back.f_code.co_name
         if caller in self.stages:
             return self.stages[caller]
@@ -323,7 +330,7 @@ class TrainerMemoryTracker:
             )
 
     def cpu_mem_used(self):
-        """ get resident set size memory for the current process """
+        """get resident set size memory for the current process"""
         return self.process.memory_info().rss
 
     def peak_monitor_func(self):
@@ -339,7 +346,7 @@ class TrainerMemoryTracker:
                 break
 
     def start(self):
-        """ start tracking for the caller's stage """
+        """start tracking for the caller's stage"""
         if self.skip_memory_metrics:
             return
 
@@ -369,7 +376,7 @@ class TrainerMemoryTracker:
         peak_monitor_thread.start()
 
     def stop(self, stage):
-        """ stop tracking for the passed stage """
+        """stop tracking for the passed stage"""
 
         # deal with nested calls of eval during train - simply ignore those
         if self.cur_stage is not None and self.cur_stage != stage:
@@ -409,7 +416,7 @@ class TrainerMemoryTracker:
         self.cur_stage = None
 
     def update_metrics(self, stage, metrics):
-        """ stop tracking for the passed stage """
+        """stop tracking for the passed stage"""
         if self.skip_memory_metrics:
             return
 
@@ -431,7 +438,7 @@ class TrainerMemoryTracker:
                     metrics[f"{stage}_mem_gpu_{t}_delta"] = self.gpu[stage][t]
 
     def stop_and_update_metrics(self, metrics=None):
-        """ combine stop + update in one call for simpler code """
+        """combine stop + update in one call for simpler code"""
         if self.skip_memory_metrics:
             return
 

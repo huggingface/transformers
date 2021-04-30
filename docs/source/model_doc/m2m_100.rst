@@ -34,6 +34,8 @@ to create high quality models. Our focus on non-English-Centric models brings ga
 translating between non-English directions while performing competitively to the best single systems of WMT. We
 open-source our scripts so that others may reproduce the data, evaluation, and final M2M-100 model.*
 
+This model was contributed by `valhalla <https://huggingface.co/valhalla>`__.
+
 
 Training and Generation
 _______________________________________________________________________________________________________________________

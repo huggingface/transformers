@@ -20,8 +20,8 @@ The RetriBERT model was proposed in the blog post `Explain Anything Like I'm Fiv
 Question Answering <https://yjernite.github.io/lfqa.html>`__. RetriBERT is a small model that uses either a single or
 pair of BERT encoders with lower-dimension projection for dense semantic indexing of text.
 
-Code to train and use the model can be found `here
-<https://github.com/huggingface/transformers/tree/master/examples/distillation>`__.
+This model was contributed by `yjernite <https://huggingface.co/yjernite>`__. Code to train and use the model can be
+found :prefix_link:`here <examples/research-projects/distillation>`.
 
 
 RetriBertConfig
