@@ -63,7 +63,7 @@ can also be used by passing the name of the TPU resource with the `--tpu` argume
 
 One thing to note is that all data is loaded into memory in this script. Most text classification datasets are small
 enough that this is not an issue, but if you have a very large dataset you will need to modify the script to handle
-data streaming,. This is particularly challenging for TPUs, given the stricter requirements and the sheer volume of data
+data streaming. This is particularly challenging for TPUs, given the stricter requirements and the sheer volume of data
 required to keep them fed. A full explanation of all the possible pitfalls is a bit beyond this example script and 
 README, but for more information you can see the 'Input Datasets' section of 
 [this document](https://www.tensorflow.org/guide/tpu).
