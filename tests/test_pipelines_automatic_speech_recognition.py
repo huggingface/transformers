@@ -15,20 +15,56 @@
 import unittest
 
 from transformers import AutoFeatureExtractor, AutoTokenizer, Speech2TextForConditionalGeneration, Wav2Vec2ForCTC
-from transformers.pipelines import AutomaticSpeechRecognitionPipeline
+from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
 from transformers.testing_utils import require_datasets, require_torch, require_torchaudio, slow
 
 
+# We can't use this mixin because it assumes TF support.
 # from .test_pipelines_common import CustomInputPipelineCommonMixin
 
 
 class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
-    # pipeline_task = "automatic-speech-recognition"
-    # small_models = ["facebook/s2t-small-mustc-en-fr-st"]  # Models tested without the @slow decorator
-    # large_models = [
-    #     "facebook/wav2vec2-base-960h",
-    #     "facebook/s2t-small-mustc-en-fr-st",
-    # ]  # Models tested with the @slow decorator
+    @require_torch
+    @slow
+    def test_pt_defaults(self):
+        pipeline("automatic-speech-recognition", framework="pt")
+
+    @require_torch
+    def test_torch_small(self):
+        import numpy as np
+
+        nlp = pipeline(
+            task="automatic-speech-recognition",
+            model="facebook/s2t-small-mustc-en-fr-st",
+            tokenizer="facebook/s2t-small-mustc-en-fr-st",
+            framework="pt",
+        )
+        waveform = np.zeros((34000,))
+        output = nlp(waveform)
+        self.assertEqual(output, {"text": "C'est ce que j'ai fait à ce moment-là."})
+
+    @require_datasets
+    @require_torch
+    @slow
+    def test_torch_large(self):
+        import numpy as np
+
+        nlp = pipeline(
+            task="automatic-speech-recognition",
+            model="facebook/wav2vec2-base-960h",
+            tokenizer="facebook/wav2vec2-base-960h",
+            framework="pt",
+        )
+        waveform = np.zeros((34000,))
+        output = nlp(waveform)
+        self.assertEqual(output, {"text": ""})
+
+        from datasets import load_dataset
+
+        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        filename = ds[0]["file"]
+        output = nlp(filename)
+        self.assertEqual(output, {"text": "A MAN SAID TO THE UNIVERSE SIR I EXIST"})
 
     @slow
     @require_torch

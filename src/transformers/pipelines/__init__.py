@@ -95,6 +95,8 @@ if is_torch_available():
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
     )
+    from ..models.speech_to_text.modeling_speech_to_text import Speech2TextForConditionalGeneration
+    from ..models.wav2vec2.modeling_wav2vec2 import Wav2Vec2ForCTC
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
     from ..modeling_utils import PreTrainedModel
@@ -108,6 +110,12 @@ TASK_ALIASES = {
     "ner": "token-classification",
 }
 SUPPORTED_TASKS = {
+    "automatic-speech-recognition": {
+        "impl": AutomaticSpeechRecognitionPipeline,
+        "tf": None,
+        "pt": "config" if is_torch_available() else None,
+        "default": {"model": {"pt": "facebook/wav2vec2-base-960h"}},
+    },
     "feature-extraction": {
         "impl": FeatureExtractionPipeline,
         "tf": (TFAutoModel,) if is_tf_available() else (),
@@ -442,6 +450,15 @@ def pipeline(
             tokenizer = AutoTokenizer.from_pretrained(
                 tokenizer_identifier, revision=revision, use_fast=use_fast, _from_pipeline=task, **tokenizer_kwargs
             )
+        elif model_class == "config" and isinstance(model_id, str):
+            if config is None:
+                config = AutoConfig.from_pretrained(model_id, revision=revision, _from_pipeline=task, **model_kwargs)
+            try:
+                import transformers
+
+                model_class = getattr(transformers, config.architectures[0])
+            except Exception:
+                raise Exception(f"Could not load default model class for {model_id}")
 
     if load_feature_extractor:
         # Try to infer feature extractor from model or config name (if provided as str)
