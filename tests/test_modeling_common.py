@@ -181,9 +181,9 @@ class ModelTesterMixin:
         base_class = MODEL_MAPPING[config.__class__]
 
         def _mock_init_weights(self, module):
-            if hasattr(module, "weight"):
+            if hasattr(module, "weight") and module.weight is not None:
                 module.weight.data.fill_(3)
-            if hasattr(module, "bias"):
+            if hasattr(module, "bias") and module.bias is not None:
                 module.bias.data.fill_(3)
 
         for model_class in self.all_model_classes:
@@ -227,7 +227,7 @@ class ModelTesterMixin:
         def _mock_init_weights(self, module):
             if hasattr(module, "weight") and module.weight is not None:
                 module.weight.data.fill_(3)
-            if hasattr(module, "bias") and module.weight is not None:
+            if hasattr(module, "bias") and module.bias is not None:
                 module.bias.data.fill_(3)
 
         for model_class in self.all_model_classes:
