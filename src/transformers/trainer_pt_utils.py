@@ -102,6 +102,26 @@ def nested_concat(tensors, new_tensors, padding_index=-100):
         raise TypeError(f"Unsupported type for concatenation: got {type(tensors)}")
 
 
+def find_batch_size(tensors):
+    """
+    Find the first dimension of a tensor in a nested list/tuple/dict of tensors.
+    """
+    if isinstance(tensors, (list, tuple)):
+        for t in tensors:
+            result = find_batch_size(t)
+            if result is not None:
+                return result
+    elif isinstance(tensors, dict):
+        for key, value in tensors.items():
+            result = find_batch_size(value)
+            if result is not None:
+                return result
+    elif isinstance(tensors, torch.Tensor):
+        return tensors.shape[0] if len(tensors.shape) >= 1 else None
+    elif isinstance(tensors, np.ndarray):
+        return tensors.shape[0] if len(tensors.shape) >= 1 else None
+
+
 def nested_numpify(tensors):
     "Numpify `tensors` (even if it's a nested list/tuple of tensors)."
     if isinstance(tensors, (list, tuple)):
@@ -222,6 +242,10 @@ class SequentialDistributedSampler(Sampler):
     """
 
     def __init__(self, dataset, num_replicas=None, rank=None, batch_size=None):
+        warnings.warn(
+            "SequentialDistributedSampler is deprecated and will be removed in v5 of Transformers.",
+            FutureWarning,
+        )
         if num_replicas is None:
             if not dist.is_available():
                 raise RuntimeError("Requires distributed package to be available")
@@ -270,14 +294,14 @@ def get_tpu_sampler(dataset: torch.utils.data.dataset.Dataset, bach_size: int):
 
 
 def nested_new_like(arrays, num_samples, padding_index=-100):
-    """ Create the same nested structure as `arrays` with a first dimension always at `num_samples`."""
+    """Create the same nested structure as `arrays` with a first dimension always at `num_samples`."""
     if isinstance(arrays, (list, tuple)):
         return type(arrays)(nested_new_like(x, num_samples) for x in arrays)
     return np.full_like(arrays, padding_index, shape=(num_samples, *arrays.shape[1:]))
 
 
 def expand_like(arrays, new_seq_length, padding_index=-100):
-    """ Expand the `arrays` so that the second dimension grows to `new_seq_length`. Uses `padding_index` for padding."""
+    """Expand the `arrays` so that the second dimension grows to `new_seq_length`. Uses `padding_index` for padding."""
     result = np.full_like(arrays, padding_index, shape=(arrays.shape[0], new_seq_length) + arrays.shape[2:])
     result[:, : arrays.shape[1]] = arrays
     return result
@@ -338,6 +362,10 @@ class DistributedTensorGatherer:
     """
 
     def __init__(self, world_size, num_samples, make_multiple_of=None, padding_index=-100):
+        warnings.warn(
+            "DistributedTensorGatherer is deprecated and will be removed in v5 of Transformers.",
+            FutureWarning,
+        )
         self.world_size = world_size
         self.num_samples = num_samples
         total_size = world_size if make_multiple_of is None else world_size * make_multiple_of
@@ -576,6 +604,55 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         return iter(indices)
 
 
+class ShardSampler(Sampler):
+    """
+    Sampler that shards batches between several processes. Dispatches indices batch by batch: on 2 processes with batch
+    size 4, the first two batches are :obj:`[0, 1, 2, 3, 4, 5, 6, 7]` and :obj:`[8, 9, 10, 11, 12, 13, 14, 15]`, which
+    shard into :obj:`[0, 1, 2, 3]` and :obj:`[8, 9, 10, 11]` for GPU-0 and :obj:`[4, 5, 6, 7]` and :obj:`[12, 13, 14,
+    15]` for GPU-1.
+
+    The sampler thus yields :obj:`[0, 1, 2, 3, 8, 9, 10, 11]` on GPU-0 and :obj:`[4, 5, 6, 7, 12, 13, 14, 15]` on
+    GPU-1.
+    """
+
+    def __init__(
+        self,
+        dataset: Dataset,
+        batch_size: int = 1,
+        drop_last: bool = False,
+        num_processes: int = 1,
+        process_index: int = 0,
+    ):
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.drop_last = drop_last
+        self.num_processes = num_processes
+        self.process_index = process_index
+
+        self.total_batch_size = total_batch_size = batch_size * num_processes
+
+        num_batches = len(dataset) // total_batch_size if drop_last else math.ceil(len(dataset) / total_batch_size)
+        self.total_num_samples = num_batches * total_batch_size
+
+    def __iter__(self):
+        indices = list(range(len(self.dataset)))
+
+        # Add extra samples to make it evenly divisible. While loop is there in the edge case we have a tiny dataset
+        # and it needs to be done several times.
+        while len(indices) < self.total_num_samples:
+            indices += indices[: (self.total_num_samples - len(indices))]
+
+        result = []
+        for batch_start in range(self.batch_size * self.process_index, self.total_num_samples, self.total_batch_size):
+            result += indices[batch_start : batch_start + self.batch_size]
+
+        return iter(result)
+
+    def __len__(self):
+        # Each shard only sees a fraction of total_num_samples.
+        return self.total_num_samples // self.num_processes
+
+
 class IterableDatasetShard(IterableDataset):
     """
     Wraps a PyTorch :obj:`IterableDataset` to generate samples for one of the processes only. Instances of this class
@@ -598,8 +675,8 @@ class IterableDatasetShard(IterableDataset):
         :obj:`dataset` to generate your random numbers and call the
         :meth:`~transformers.trainer_pt_utils.IterableDatasetShard.set_epoch` method of this object. It will set the
         seed of this :obj:`generator` to :obj:`seed + epoch` on all processes before starting the iteration.
-        Alternatively, you can also subclass this class and override the :meth:`__iter__` method with your custom
-        logic.
+        Alternatively, you can also implement a :obj:`set_epoch()` method in your iterable dataset to deal with this.
+
 
     Args:
         dataset (:obj:`torch.utils.data.dataset.IterableDataset`):
@@ -634,12 +711,20 @@ class IterableDatasetShard(IterableDataset):
         self.process_index = process_index
         self.seed = seed
         self.epoch = 0
+        self.num_examples = 0
 
     def set_epoch(self, epoch):
         self.epoch = epoch
+        if hasattr(self.dataset, "set_epoch"):
+            self.dataset.set_epoch(epoch)
 
     def __iter__(self):
-        if hasattr(self.dataset, "generator") and isinstance(self.dataset.generator, torch.Generator):
+        self.num_examples = 0
+        if (
+            not hasattr(self.dataset, "set_epoch")
+            and hasattr(self.dataset, "generator")
+            and isinstance(self.dataset.generator, torch.Generator)
+        ):
             self.dataset.generator.manual_seed(self.seed + self.epoch)
         real_batch_size = self.batch_size * self.num_processes
         process_slice = range(self.process_index * self.batch_size, (self.process_index + 1) * self.batch_size)
@@ -647,6 +732,7 @@ class IterableDatasetShard(IterableDataset):
         first_batch = None
         current_batch = []
         for element in self.dataset:
+            self.num_examples += 1
             current_batch.append(element)
             # Wait to have a full batch before yielding elements.
             if len(current_batch) == real_batch_size:
@@ -888,10 +974,15 @@ if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
 
     @smp.step()
-    def smp_forward_backward(model, inputs, gradient_accumulation_steps=1):
-        outputs = model(**inputs)
+    def smp_forward_backward(model, inputs, gradient_accumulation_steps=1, scaler=None):
+        with torch.cuda.amp.autocast(enabled=(scaler is not None)):
+            outputs = model(**inputs)
+
         loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
         loss /= gradient_accumulation_steps
+        if scaler is not None:
+            loss = scaler.scale(loss).squeeze()
+
         model.backward(loss)
         return loss
 

@@ -187,11 +187,11 @@ class MultiHeadSelfAttention(nn.Module):
         mask_reshp = (bs, 1, 1, k_length)
 
         def shape(x):
-            """ separate heads """
+            """separate heads"""
             return x.view(bs, -1, self.n_heads, dim_per_head).transpose(1, 2)
 
         def unshape(x):
-            """ group heads """
+            """group heads"""
             return x.transpose(1, 2).contiguous().view(bs, -1, self.n_heads * dim_per_head)
 
         # If this is instantiated as a cross-attention module, the keys

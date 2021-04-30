@@ -292,7 +292,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         elif "<unk>" in self.sym2idx:
             self.unk_idx = self.sym2idx["<unk>"]
         else:
-            raise ValueError("No <unkown> token in vocabulary")
+            raise ValueError("No <unknown> token in vocabulary")
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if os.path.isdir(save_directory):
@@ -434,7 +434,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         return self.idx2sym[idx]
 
     def _convert_token_to_id(self, sym):
-        """ Converts a token (str) in an id using the vocab. """
+        """Converts a token (str) in an id using the vocab."""
         if sym in self.sym2idx:
             return self.sym2idx[sym]
         else:
