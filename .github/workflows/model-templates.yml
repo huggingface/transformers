@@ -1,6 +1,9 @@
 name: Model templates runner
 
 on:
+  push:
+    branches:
+      - master
   pull_request:
     paths:
       - "src/**"
