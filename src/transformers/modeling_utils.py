@@ -1125,7 +1125,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # this immediately partitions the model across all gpus, to avoid the overhead in time
             # and memory copying it on CPU or each GPU first
 
-            with deepspeed.zero.Init(config=deepspeed_config()):
+            ds_config = deepspeed_config()
+            # XXX: Fixme - we shouldn't need to figure dtype out, it should be in the config file
+            dtype = torch.float16 if ds_config.get("fp16", {}).get("enabled", True) else torch.float
+            with deepspeed.zero.Init(dtype=dtype, config=ds_config):
                 model = cls(config, *model_args, **model_kwargs)
         else:
             model = cls(config, *model_args, **model_kwargs)
