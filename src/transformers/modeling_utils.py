@@ -1243,9 +1243,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if remove_prefix:
             expected_keys = [".".join(s.split(".")[1:]) if s.startswith(prefix) else s for s in expected_keys]
         elif add_prefix:
-            expected_keys = [
-                ".".join([prefix, s]) if ".".join([prefix, s]) in set(loaded_keys) else s for s in expected_keys
-            ]
+            expected_keys = [".".join([prefix, s]) for s in expected_keys]
 
         missing_keys = list(set(expected_keys) - set(loaded_keys))
         unexpected_keys = list(set(loaded_keys) - set(expected_keys))
@@ -1335,7 +1333,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return model, missing_keys, unexpected_keys, error_msgs
 
     def retrieve_modules_from_names(self, names, add_prefix=False, remove_prefix=False):
-        module_keys = [".".join(key.split(".")[:-1]) for key in names]
+        module_keys = set([".".join(key.split(".")[:-1]) for key in names])
 
         retrieved_modules = []
         # retrieve all modules that has at least one missing weight name
@@ -1343,10 +1341,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if remove_prefix:
                 name = ".".join(name.split(".")[1:]) if name.startswith(self.base_model_prefix) else name
             elif add_prefix:
-                name = (
-                    ".".join([self.base_model_prefix, name]) if not name.startswith(self.base_model_prefix) else name
-                )
-            #
+                name = ".".join([self.base_model_prefix, name])
+
             if name in module_keys:
                 retrieved_modules.append(module)
 

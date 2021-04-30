@@ -212,6 +212,12 @@ class ModelTesterMixin:
 
                 for key in model_fast_init.state_dict().keys():
                     max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
+
+                    if max_diff > 1e-3:
+                        import ipdb
+
+                        ipdb.set_trace()
+
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_save_load_fast_init_to_base(self):
@@ -219,9 +225,9 @@ class ModelTesterMixin:
         base_class = MODEL_MAPPING[config.__class__]
 
         def _mock_init_weights(self, module):
-            if hasattr(module, "weight"):
+            if hasattr(module, "weight") and module.weight is not None:
                 module.weight.data.fill_(3)
-            if hasattr(module, "bias"):
+            if hasattr(module, "bias") and module.weight is not None:
                 module.bias.data.fill_(3)
 
         for model_class in self.all_model_classes:
@@ -230,7 +236,7 @@ class ModelTesterMixin:
 
             # make init deterministic, but make sure that
             # non-initialized weights throw errors nevertheless
-            model_class._init_weights = _mock_init_weights
+            base_class._init_weights = _mock_init_weights
 
             model = model_class(config)
             state_dict = model.state_dict()
@@ -242,11 +248,10 @@ class ModelTesterMixin:
 
             # check that certain keys didn't get saved with the model
             with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
+                model.config.save_pretrained(tmpdirname)
                 torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
 
-                torch.manual_seed(0)
-                model_fast_init = base_class.from_pretrained(tmpdirname, _no_fast_init=True)
+                model_fast_init = base_class.from_pretrained(tmpdirname)
                 model_slow_init = base_class.from_pretrained(tmpdirname, _no_fast_init=True)
 
                 for key in model_fast_init.state_dict().keys():
