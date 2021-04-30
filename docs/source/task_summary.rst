@@ -661,15 +661,14 @@ Here is an example of doing named entity recognition, using a model and a tokeni
 
 1. Instantiate a tokenizer and a model from the checkpoint name. The model is identified as a BERT model and loads it
    with the weights stored in the checkpoint.
-2. Define the label list with which the model was trained on, so that you can interpret the model's predictions.
-3. Define a sequence with known entities, such as "Hugging Face" as an organisation and "New York City" as a location.
-4. Split words into tokens so that they can be mapped to predictions. We use a small hack by, first, completely
+2. Define a sequence with known entities, such as "Hugging Face" as an organisation and "New York City" as a location.
+3. Split words into tokens so that they can be mapped to predictions. We use a small hack by, first, completely
    encoding and decoding the sequence, so that we're left with a string that contains the special tokens.
-5. Encode that sequence into IDs (special tokens are added automatically).
-6. Retrieve the predictions by passing the input to the model and getting the first output. This results in a
+4. Encode that sequence into IDs (special tokens are added automatically).
+5. Retrieve the predictions by passing the input to the model and getting the first output. This results in a
    distribution over the 9 possible classes for each token. We take the argmax to retrieve the most likely class for
    each token.
-7. Zip together each token with its prediction and print it.
+6. Zip together each token with its prediction and print it.
 
 .. code-block::
 
@@ -708,18 +707,6 @@ Here is an example of doing named entity recognition, using a model and a tokeni
     >>> model = TFAutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
     >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
 
-    >>> label_list = [
-    ...     "O",       # Outside of a named entity
-    ...     "B-MISC",  # Beginning of a miscellaneous entity right after another miscellaneous entity
-    ...     "I-MISC",  # Miscellaneous entity
-    ...     "B-PER",   # Beginning of a person's name right after another person's name
-    ...     "I-PER",   # Person's name
-    ...     "B-ORG",   # Beginning of an organisation right after another organisation
-    ...     "I-ORG",   # Organisation
-    ...     "B-LOC",   # Beginning of a location right after another location
-    ...     "I-LOC"    # Location
-    ... ]
-
     >>> sequence = "Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO, therefore very" \
     ...            "close to the Manhattan Bridge."
 
@@ -733,12 +720,49 @@ Here is an example of doing named entity recognition, using a model and a tokeni
 
 This outputs a list of each token mapped to its corresponding prediction. Differently from the pipeline, here every
 token has a prediction as we didn't remove the "0"th class, which means that no particular entity was found on that
-token. The following array should be the output:
+token.
+
+The predictions will be an integer that corresponds to the predicted class. To interpret our moddel's predictions, we
+can use the ``model.config.id2label`` property in order to recover the class name corresponding to the class number,
+which is illustrated below:
 
 .. code-block::
 
-    >>> print([(token, label_list[prediction]) for token, prediction in zip(tokens, predictions[0].numpy())])
-    [('[CLS]', 'O'), ('Hu', 'I-ORG'), ('##gging', 'I-ORG'), ('Face', 'I-ORG'), ('Inc', 'I-ORG'), ('.', 'O'), ('is', 'O'), ('a', 'O'), ('company', 'O'), ('based', 'O'), ('in', 'O'), ('New', 'I-LOC'), ('York', 'I-LOC'), ('City', 'I-LOC'), ('.', 'O'), ('Its', 'O'), ('headquarters', 'O'), ('are', 'O'), ('in', 'O'), ('D', 'I-LOC'), ('##UM', 'I-LOC'), ('##BO', 'I-LOC'), (',', 'O'), ('therefore', 'O'), ('very', 'O'), ('##c', 'O'), ('##lose', 'O'), ('to', 'O'), ('the', 'O'), ('Manhattan', 'I-LOC'), ('Bridge', 'I-LOC'), ('.', 'O'), ('[SEP]', 'O')]
+    >>> for token, prediction in zip(tokens, predictions[0].numpy()):
+    ...     print((token, model.config.id2label[prediction]))
+    ('[CLS]', 'O')
+    ('Hu', 'I-ORG')
+    ('##gging', 'I-ORG')
+    ('Face', 'I-ORG')
+    ('Inc', 'I-ORG')
+    ('.', 'O')
+    ('is', 'O')
+    ('a', 'O')
+    ('company', 'O')
+    ('based', 'O')
+    ('in', 'O')
+    ('New', 'I-LOC')
+    ('York', 'I-LOC')
+    ('City', 'I-LOC')
+    ('.', 'O')
+    ('Its', 'O')
+    ('headquarters', 'O')
+    ('are', 'O')
+    ('in', 'O')
+    ('D', 'I-LOC')
+    ('##UM', 'I-LOC')
+    ('##BO', 'I-LOC')
+    (',', 'O')
+    ('therefore', 'O')
+    ('very', 'O')
+    ('##c', 'O')
+    ('##lose', 'O')
+    ('to', 'O')
+    ('the', 'O')
+    ('Manhattan', 'I-LOC')
+    ('Bridge', 'I-LOC')
+    ('.', 'O')
+    ('[SEP]', 'O')
 
 Summarization
 -----------------------------------------------------------------------------------------------------------------------
