@@ -803,7 +803,6 @@ class T5Stack(T5PreTrainedModel):
         self.dropout = nn.Dropout(config.dropout_rate)
 
         self.init_weights()
-
         # Model parallel
         self.model_parallel = False
         self.device_map = None
