@@ -14,7 +14,7 @@
 
 from argparse import ArgumentParser
 
-from ..pipelines import SUPPORTED_TASKS, Pipeline, PipelineDataFormat, pipeline
+from ..pipelines import SUPPORTED_TASKS, TASK_ALIASES, Pipeline, PipelineDataFormat, pipeline
 from ..utils import logging
 from . import BaseTransformersCLICommand
 
@@ -63,7 +63,9 @@ class RunCommand(BaseTransformersCLICommand):
     @staticmethod
     def register_subcommand(parser: ArgumentParser):
         run_parser = parser.add_parser("run", help="Run a pipeline through the CLI")
-        run_parser.add_argument("--task", choices=SUPPORTED_TASKS.keys(), help="Task to run")
+        run_parser.add_argument(
+            "--task", choices=list(SUPPORTED_TASKS.keys()) + list(TASK_ALIASES.keys()), help="Task to run"
+        )
         run_parser.add_argument("--input", type=str, help="Path to the file to use for inference")
         run_parser.add_argument("--output", type=str, help="Path to the file that will be used post to write results.")
         run_parser.add_argument("--model", type=str, help="Name or path to the model to instantiate.")
