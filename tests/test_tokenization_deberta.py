@@ -18,7 +18,7 @@ import json
 import os
 import unittest
 
-from transformers import DebertaTokenizer
+from transformers import DebertaTokenizer, DebertaTokenizerFast
 from transformers.models.deberta.tokenization_deberta import VOCAB_FILES_NAMES
 from transformers.testing_utils import slow
 
@@ -28,7 +28,8 @@ from .test_tokenization_common import TokenizerTesterMixin
 class DebertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = DebertaTokenizer
-    test_rust_tokenizer = False
+    test_rust_tokenizer = True
+    rust_tokenizer_class = DebertaTokenizerFast
 
     def setUp(self):
         super().setUp()
