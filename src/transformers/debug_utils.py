@@ -93,7 +93,9 @@ class DebugUnderflowOverflow:
 
     The second work mode is per-batch tracing with the underflow/overflow detection feature turned off.
 
-    Let's say you want to watch the absolute min and max values for all the ingredients of each ``forward`` call of a given batch, and only do that for batches 1 and 3. Then you instantiate this class as ::
+    Let's say you want to watch the absolute min and max values for all the ingredients of each
+    ``forward`` call of a given batch, and only do that for batches 1 and 3. Then you instantiate
+    this class as ::
 
         debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1,3])
 
