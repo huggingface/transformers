@@ -1130,7 +1130,7 @@ class BigBirdPegasusEncoderAttention(nn.Module):
                 f"attention_type can either be original_full or block_sparse, but is {self.config.attention_type}"
             )
 
-        self.output = nn.Linear(config.hidden_size, config.hidden_size)
+        self.output = nn.Linear(config.hidden_size, config.hidden_size, bias=config.use_bias)
 
     def set_attention_type(self, value: str):
         if value not in ["original_full", "block_sparse"]:
@@ -1433,6 +1433,7 @@ class BigBirdPegasusDecoderLayer(nn.Module):
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
+            bias=config.use_bias,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -1444,6 +1445,7 @@ class BigBirdPegasusDecoderLayer(nn.Module):
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
+            bias=config.use_bias,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)

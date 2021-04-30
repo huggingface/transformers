@@ -73,6 +73,7 @@ REMAINING_PATTERNS = (
     + END_COMMON
 )
 
+KEYS_TO_IGNORE = ["encdec/key/bias", "encdec/query/bias", "encdec/value/bias", "self/key/bias", "self/query/bias", "self/value/bias", "encdec_output/dense/bias", "attention/output/dense/bias"]
 
 def rename_state_dict_key(k, patterns):
     for tf_name, hf_name in patterns:
@@ -92,6 +93,9 @@ def convert_bigbird_pegasus(tf_weights: dict, config_update: dict) -> BigBirdPeg
     remaining_weights = {k: tf_weights[k] for k in tf_weights if not k.startswith("pegasus/decoder")}
 
     for k, v in tqdm(decoder_weights.items(), "tf -> hf conversion"):
+        conditions = [k.endswith(ending) for ending in KEYS_TO_IGNORE]
+        if any(conditions):
+            continue
         patterns = DECODER_PATTERNS
         new_k = rename_state_dict_key(k, patterns)
         # print(k, " -> ", new_k)
@@ -103,6 +107,9 @@ def convert_bigbird_pegasus(tf_weights: dict, config_update: dict) -> BigBirdPeg
         assert v.shape == sd[new_k].shape, f"{new_k}, {k}, {v.shape}, {sd[new_k].shape}"
 
     for k, v in tqdm(remaining_weights.items(), "tf -> hf conversion"):
+        conditions = [k.endswith(ending) for ending in KEYS_TO_IGNORE]
+        if any(conditions):
+            continue
         patterns = REMAINING_PATTERNS
         new_k = rename_state_dict_key(k, patterns)
         # print(k, " -> ", new_k)
