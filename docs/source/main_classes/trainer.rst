@@ -1790,6 +1790,24 @@ stress on ``tensor([1.])``, or if you get an error where it says the parameter i
 larger multi-dimensional shape, this means that the parameter is partitioned and what you see is a ZeRO-3 placeholder.
 
 
+Troubleshooting
+=======================================================================================================================
+
+* ``deepspeed`` process gets killed at startup without a traceback
+
+If the ``deepspeed`` process gets killed at launch time without a traceback, that usually means that the program tried
+to allocate more CPU memory than your system has or your process is allowed to allocate and the OS kernel killed that
+process. This is because your configuration file most likely has either ``offload_optimizer`` or ``offload_param`` or
+both configured to offload to ``cpu`` (or under ZeRO-2 ``cpu_offload`` is enabled). If you have NVMe, experiment with
+offloading to NVMe if you're running under ZeRO-3.
+
+Work is being done to enable estimating how much memory is needed for a specific model: `PR
+<https://github.com/microsoft/DeepSpeed/pull/965>`__.
+
+
+
+
+
 
 Notes
 =======================================================================================================================
