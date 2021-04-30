@@ -450,15 +450,15 @@ def pipeline(
             tokenizer = AutoTokenizer.from_pretrained(
                 tokenizer_identifier, revision=revision, use_fast=use_fast, _from_pipeline=task, **tokenizer_kwargs
             )
-        elif model_class == "config" and isinstance(model_id, str):
+        elif model_class == "config":
             if config is None:
-                config = AutoConfig.from_pretrained(model_id, revision=revision, _from_pipeline=task, **model_kwargs)
+                config = AutoConfig.from_pretrained(model, revision=revision, _from_pipeline=task, **model_kwargs)
             try:
                 import transformers
 
                 model_class = getattr(transformers, config.architectures[0])
             except Exception:
-                raise Exception(f"Could not load default model class for {model_id}")
+                raise Exception(f"Could not load default model class for {model}")
 
     if load_feature_extractor:
         # Try to infer feature extractor from model or config name (if provided as str)
