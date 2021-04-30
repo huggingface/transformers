@@ -722,9 +722,9 @@ This outputs a list of each token mapped to its corresponding prediction. Differ
 token has a prediction as we didn't remove the "0"th class, which means that no particular entity was found on that
 token.
 
-The predictions will be an integer that corresponds to the predicted class. To interpret our moddel's predictions, we
-can use the ``model.config.id2label`` property in order to recover the class name corresponding to the class number,
-which is illustrated below:
+In the abvoe example, ``predictions`` is an integer that corresponds to the predicted class. We can use the
+``model.config.id2label`` property in order to recover the class name corresponding to the class number, which is
+illustrated below:
 
 .. code-block::
 
