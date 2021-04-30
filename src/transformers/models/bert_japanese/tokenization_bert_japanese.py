@@ -70,7 +70,25 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 
 class BertJapaneseTokenizer(BertTokenizer):
-    """BERT tokenizer for Japanese text"""
+    r"""
+    Construct a BERT tokenizer for Japanese text, based on a MecabTokenizer.
+
+    Args:
+        vocab_file (:obj:`str`):
+            Path to a one-wordpiece-per-line vocabulary file.
+        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to lower case the input. Only has an effect when do_basic_tokenize=True.
+        do_word_tokenize (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to do word tokenization.
+        do_subword_tokenize (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to do subword tokenization.
+        word_tokenizer_type (:obj:`str`, `optional`, defaults to :obj:`"basic"`):
+            Type of word tokenizer.
+        subword_tokenizer_type (:obj:`str`, `optional`, defaults to :obj:`"wordpiece"`):
+            Type of subword tokenizer.
+        mecab_kwargs (:obj:`str`, `optional`):
+            Dictionary passed to the :obj:`MecabTokenizer` constructor.
+    """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
@@ -94,23 +112,6 @@ class BertJapaneseTokenizer(BertTokenizer):
         mecab_kwargs=None,
         **kwargs
     ):
-        """
-        Constructs a MecabBertTokenizer.
-
-        Args:
-            **vocab_file**: Path to a one-wordpiece-per-line vocabulary file.
-            **do_lower_case**: (`optional`) boolean (default True)
-                Whether to lower case the input. Only has an effect when do_basic_tokenize=True.
-            **do_word_tokenize**: (`optional`) boolean (default True)
-                Whether to do word tokenization.
-            **do_subword_tokenize**: (`optional`) boolean (default True)
-                Whether to do subword tokenization.
-            **word_tokenizer_type**: (`optional`) string (default "basic")
-                Type of word tokenizer.
-            **subword_tokenizer_type**: (`optional`) string (default "wordpiece")
-                Type of subword tokenizer.
-            **mecab_kwargs**: (`optional`) dict passed to `MecabTokenizer` constructor (default None)
-        """
         super(BertTokenizer, self).__init__(
             unk_token=unk_token,
             sep_token=sep_token,
@@ -230,7 +231,7 @@ class MecabTokenizer:
             import fugashi
         except ModuleNotFoundError as error:
             raise error.__class__(
-                "You need to install fugashi to use MecabTokenizer."
+                "You need to install fugashi to use MecabTokenizer. "
                 "See https://pypi.org/project/fugashi/ for installation."
             )
 
@@ -303,7 +304,7 @@ class MecabTokenizer:
 
 
 class CharacterTokenizer:
-    """Runs Character tokenziation."""
+    """Runs Character tokenization."""
 
     def __init__(self, vocab, unk_token, normalize_text=True):
         """

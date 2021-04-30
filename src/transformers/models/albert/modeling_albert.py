@@ -71,7 +71,7 @@ ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
-    """ Load tf checkpoints in a pytorch model."""
+    """Load tf checkpoints in a pytorch model."""
     try:
         import re
 

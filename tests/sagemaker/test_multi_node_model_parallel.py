@@ -28,14 +28,14 @@ if is_sagemaker_available():
             "script": "run_glue_model_parallelism.py",
             "model_name_or_path": "roberta-large",
             "instance_type": "ml.p3dn.24xlarge",
-            "results": {"train_runtime": 1500, "eval_accuracy": 0.3, "eval_loss": 1.2},
+            "results": {"train_runtime": 1600, "eval_accuracy": 0.3, "eval_loss": 1.2},
         },
         {
             "framework": "pytorch",
             "script": "run_glue.py",
             "model_name_or_path": "roberta-large",
             "instance_type": "ml.p3dn.24xlarge",
-            "results": {"train_runtime": 1500, "eval_accuracy": 0.3, "eval_loss": 1.2},
+            "results": {"train_runtime": 1600, "eval_accuracy": 0.3, "eval_loss": 1.2},
         },
     ]
 )
@@ -43,7 +43,7 @@ class MultiNodeTest(unittest.TestCase):
     def setUp(self):
         if self.framework == "pytorch":
             subprocess.run(
-                f"cp ./examples/text-classification/run_glue.py {self.env.test_path}/run_glue.py".split(),
+                f"cp ./examples/pytorch/text-classification/run_glue.py {self.env.test_path}/run_glue.py".split(),
                 encoding="utf-8",
                 check=True,
             )

@@ -128,6 +128,12 @@ if __name__ == "__main__":
                 "common": "run_all_tests_torch_multi_gpu_test_reports/tests_torch_multi_gpu_[].txt",
                 "pipeline": "run_all_tests_torch_multi_gpu_test_reports/tests_torch_pipeline_multi_gpu_[].txt",
             },
+            "Torch Cuda Extensions Single GPU": {
+                "common": "run_tests_torch_cuda_extensions_gpu_test_reports/tests_torch_cuda_extensions_gpu_[].txt"
+            },
+            "Torch Cuda Extensions Multi GPU": {
+                "common": "run_tests_torch_cuda_extensions_multi_gpu_test_reports/tests_torch_cuda_extensions_multi_gpu_[].txt"
+            },
         }
     else:
         file_paths = {
@@ -135,6 +141,12 @@ if __name__ == "__main__":
             "Torch Single GPU": {"common": "run_all_tests_torch_gpu_test_reports/tests_torch_gpu_[].txt"},
             "TF Multi GPU": {"common": "run_all_tests_tf_multi_gpu_test_reports/tests_tf_multi_gpu_[].txt"},
             "Torch Multi GPU": {"common": "run_all_tests_torch_multi_gpu_test_reports/tests_torch_multi_gpu_[].txt"},
+            "Torch Cuda Extensions Single GPU": {
+                "common": "run_tests_torch_cuda_extensions_gpu_test_reports/tests_torch_cuda_extensions_gpu_[].txt"
+            },
+            "Torch Cuda Extensions Multi GPU": {
+                "common": "run_tests_torch_cuda_extensions_multi_gpu_test_reports/tests_torch_cuda_extensions_multi_gpu_[].txt"
+            },
         }
 
     client = WebClient(token=os.environ["CI_SLACK_BOT_TOKEN"])
@@ -148,15 +160,18 @@ if __name__ == "__main__":
             results[job] = {"failed": 0, "success": 0, "time_spent": "", "failures": ""}
 
             for key, file_path in file_dict.items():
-                with open(file_path.replace("[]", "stats")) as f:
-                    failed, success, time_spent = handle_test_results(f.read())
-                    results[job]["failed"] += failed
-                    results[job]["success"] += success
-                    results[job]["time_spent"] += time_spent[1:-1] + ", "
-                with open(file_path.replace("[]", "summary_short")) as f:
-                    for line in f:
-                        if re.search("FAILED", line):
-                            results[job]["failures"] += line
+                try:
+                    with open(file_path.replace("[]", "stats")) as f:
+                        failed, success, time_spent = handle_test_results(f.read())
+                        results[job]["failed"] += failed
+                        results[job]["success"] += success
+                        results[job]["time_spent"] += time_spent[1:-1] + ", "
+                    with open(file_path.replace("[]", "summary_short")) as f:
+                        for line in f:
+                            if re.search("FAILED", line):
+                                results[job]["failures"] += line
+                except FileNotFoundError:
+                    print("Artifact was not found, job was probably canceled.")
 
             # Remove the trailing ", "
             results[job]["time_spent"] = results[job]["time_spent"][:-2]

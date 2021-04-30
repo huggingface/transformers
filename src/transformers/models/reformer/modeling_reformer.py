@@ -612,7 +612,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         if isinstance(self.num_buckets, int):
             assert (
                 self.num_buckets % 2 == 0
-            ), f"There should be an even number of bucktes, but `self.num_bucktes`: {self.num_buckets}"
+            ), f"There should be an even number of buckets, but `self.num_buckets`: {self.num_buckets}"
             rotation_size = self.num_buckets
             num_buckets = self.num_buckets
         else:
@@ -1512,6 +1512,10 @@ class ReformerLayer(nn.Module):
         # Implementation of RevNet (see Fig. 6 in https://towardsdatascience.com/illustrating-the-reformer-393575ac6ba0)
         # This code is heavily inspired by https://github.com/lucidrains/reformer-pytorch/blob/master/reformer_pytorch/reversible.py
 
+        assert (
+            self.training
+        ), "If you want to train `ReformerModel` and its variations, make sure to use `model.train()` to put the model into training mode."
+
         with torch.enable_grad():
             next_attn_output.requires_grad = True
 
@@ -1775,7 +1779,7 @@ class ReformerPreTrainedModel(PreTrainedModel):
         return dummy_inputs
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, AxialPositionEmbeddings):
             for weight in module.weights:
                 torch.nn.init.normal_(weight, std=self.config.axial_norm_std)

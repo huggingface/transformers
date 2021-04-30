@@ -70,9 +70,6 @@ class TrainingArguments:
     <https://docs.python.org/3/library/argparse.html#module-argparse>`__ arguments that can be specified on the command
     line.
 
-
-
-
     Parameters:
         output_dir (:obj:`str`):
             The output directory where the model predictions and checkpoints will be written.
@@ -295,11 +292,20 @@ class TrainingArguments:
             When using distributed training, the value of the flag :obj:`find_unused_parameters` passed to
             :obj:`DistributedDataParallel`. Will default to :obj:`False` if gradient checkpointing is used, :obj:`True`
             otherwise.
-        dataloader_pin_memory (:obj:`bool`, `optional`, defaults to :obj:`True`)):
+        dataloader_pin_memory (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether you want to pin memory in data loaders or not. Will default to :obj:`True`.
-        skip_memory_metrics (:obj:`bool`, `optional`, defaults to :obj:`False`)):
+        skip_memory_metrics (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to skip adding of memory profiler reports to metrics. Defaults to :obj:`False`.
-
+        push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to upload the trained model to the hub after training. This argument is not directly used by
+            :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
+            the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
+            details.
+        resume_from_checkpoint (:obj:`str`, `optional`):
+            The path to a folder with a valid checkpoint for your model. This argument is not directly used by
+            :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
+            the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
+            details.
     """
 
     output_dir: str = field(
@@ -524,6 +530,16 @@ class TrainingArguments:
     skip_memory_metrics: bool = field(
         default=False, metadata={"help": "Whether or not to skip adding of memory profiler reports to metrics."}
     )
+    use_legacy_prediction_loop: bool = field(
+        default=False, metadata={"help": "Whether or not to use the legacy prediction_loop in the Trainer."}
+    )
+    push_to_hub: bool = field(
+        default=False, metadata={"help": "Whether or not to upload the trained model to the model hub after training."}
+    )
+    resume_from_checkpoint: Optional[str] = field(
+        default=None,
+        metadata={"help": "The path to a folder with a valid checkpoint for your model."},
+    )
     _n_gpu: int = field(init=False, repr=False, default=-1)
     mp_parameters: str = field(
         default="",
@@ -614,6 +630,14 @@ class TrainingArguments:
             raise ValueError("`--sharded_ddp simple` is not compatible with any other option.")
         elif ShardedDDPOption.ZERO_DP_2 in self.sharded_ddp and ShardedDDPOption.ZERO_DP_3 in self.sharded_ddp:
             raise ValueError("`--sharded_ddp zero_dp_2` is not compatible with `--sharded_ddp zero_dp_3`.")
+
+        if self.deepspeed:
+            # - must be run very last in arg parsing, since it will use a lot of these settings.
+            # - must be run before the model is created.
+            from transformers.integrations import DeepSpeedConfigHF
+
+            # will be used later by the Trainer (leave self.deepspeed unmodified in case a user relies on it not to be modified)
+            self.deepspeed_config_hf = DeepSpeedConfigHF(self)
 
     def __repr__(self):
         # We override the default repr to remove deprecated arguments from the repr. This method should be removed once
@@ -805,7 +829,7 @@ class TrainingArguments:
         """
         Whether or not to use no_sync for the gradients when doing gradient accumulation.
         """
-        return not (self.deepspeed or is_sagemaker_mp_enabled())
+        return not (self.deepspeed or is_sagemaker_dp_enabled() or is_sagemaker_mp_enabled())
 
     def to_dict(self):
         """

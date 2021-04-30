@@ -51,7 +51,7 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
     )  # '_._' is replaced by a level separation (can be used to convert TF2.0 lists in PyTorch nn.ModulesList)
     tf_name = re.sub(r"//+", "/", tf_name)  # Remove empty levels at the end
     tf_name = tf_name.split("/")  # Convert from TF2.0 '/' separators to PyTorch '.' separators
-    # Some weights have a single name withtout "/" such as final_logits_bias in BART
+    # Some weights have a single name without "/" such as final_logits_bias in BART
     if len(tf_name) > 1:
         tf_name = tf_name[1:]  # Remove level zero
 
@@ -379,6 +379,16 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
 
     missing_keys, unexpected_keys = pt_model.load_state_dict(new_pt_params_dict, strict=False)
     missing_keys += missing_keys_pt
+
+    # Some models may have keys that are not in the state by design, removing them before needlessly warning
+    # the user.
+    if pt_model._keys_to_ignore_on_load_missing is not None:
+        for pat in pt_model._keys_to_ignore_on_load_missing:
+            missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
+
+    if pt_model._keys_to_ignore_on_load_unexpected is not None:
+        for pat in pt_model._keys_to_ignore_on_load_unexpected:
+            unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
     if len(unexpected_keys) > 0:
         logger.warning(

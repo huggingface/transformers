@@ -210,7 +210,7 @@ def main():
         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
         "See details at https://nvidia.github.io/apex/amp.html",
     )
-    parser.add_argument("--gpus", type=int, default=1, help="Number of GPUs in the node.")
+    parser.add_argument("--n_gpu", type=int, default=1, help="Number of GPUs in the node.")
     parser.add_argument("--local_rank", type=int, default=-1, help="Distributed training - Local rank")
     parser.add_argument("--seed", type=int, default=56, help="Random seed")
 

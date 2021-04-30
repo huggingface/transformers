@@ -35,7 +35,7 @@ logger = logging.get_logger(__name__)
 DEPRECATION_WARNING = (
     "This {0} will be removed from the library soon, preprocessing should be handled with the 🤗 Datasets "
     "library. You can have a look at this example script for pointers: "
-    "https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_glue.py"
+    "https://github.com/huggingface/transformers/blob/master/examples/pytorch/text-classification/run_glue.py"
 )
 
 

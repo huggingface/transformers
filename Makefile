@@ -1,5 +1,7 @@
 .PHONY: deps_table_update modified_only_fixup extra_quality_checks quality style fixup fix-copies test test-examples docs
 
+# make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
+export PYTHONPATH = src
 
 check_dirs := examples tests src utils
 
@@ -73,7 +75,7 @@ test:
 # Run tests for examples
 
 test-examples:
-	python -m pytest -n auto --dist=loadfile -s -v ./examples/
+	python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/
 
 # Run tests for SageMaker DLC release
 

@@ -442,8 +442,8 @@ class TFGenerationMixin:
         **kwargs
     ):
         """
-        Generate sequences for each example without beam search (num_beams == 1). All returned sequence are generated
-        independantly.
+        Generate sequences for each example without beam search (num_beams == 1). All returned sequences are generated
+        independently.
         """
 
         # length of generated sentences / unfinished sentences

@@ -159,11 +159,11 @@ class MultiHeadAttention(nn.Module):
         mask_reshape = (bs, 1, qlen, klen) if mask.dim() == 3 else (bs, 1, 1, klen)
 
         def shape(x):
-            """  projection """
+            """projection"""
             return x.view(bs, -1, self.n_heads, dim_per_head).transpose(1, 2)
 
         def unshape(x):
-            """  compute context """
+            """compute context"""
             return x.transpose(1, 2).contiguous().view(bs, -1, self.n_heads * dim_per_head)
 
         q = shape(self.q_lin(input))  # (bs, n_heads, qlen, dim_per_head)
@@ -251,7 +251,7 @@ class XLMPreTrainedModel(PreTrainedModel):
         return {"input_ids": inputs_list, "attention_mask": attns_list, "langs": langs_list}
 
     def _init_weights(self, module):
-        """ Initialize the weights. """
+        """Initialize the weights."""
         if isinstance(module, nn.Embedding):
             if self.config is not None and self.config.embed_init_std is not None:
                 nn.init.normal_(module.weight, mean=0, std=self.config.embed_init_std)
@@ -348,7 +348,7 @@ XLM_INPUTS_DOCSTRING = r"""
             A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
             languages ids which can be obtained from the language names by using two conversion mappings provided in
             the configuration of the model (only provided for multilingual models). More precisely, the `language name
-            to language id` mapping is in :obj:`model.config.lang2id` (which is a dictionary strring to int) and the
+            to language id` mapping is in :obj:`model.config.lang2id` (which is a dictionary string to int) and the
             `language id to language name` mapping is in :obj:`model.config.id2lang` (dictionary int to string).
 
             See usage examples detailed in the :doc:`multilingual documentation <../multilingual>`.
@@ -1203,7 +1203,7 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, num_choicec, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,

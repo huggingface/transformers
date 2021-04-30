@@ -22,10 +22,22 @@ import tempfile
 import unittest
 from typing import List, Tuple
 
-from transformers import is_torch_available
+from huggingface_hub import HfApi
+from requests.exceptions import HTTPError
+from transformers import is_torch_available, logging
 from transformers.file_utils import WEIGHTS_NAME
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
+from transformers.testing_utils import (
+    ENDPOINT_STAGING,
+    PASS,
+    USER,
+    CaptureLogger,
+    is_staging_test,
+    require_torch,
+    require_torch_multi_gpu,
+    slow,
+    torch_device,
+)
 
 
 if is_torch_available():
@@ -213,8 +225,8 @@ class ModelTesterMixin:
                     "decoder_attention_mask",
                 ]
                 expected_arg_names.extend(
-                    ["head_mask", "decoder_head_mask", "encoder_outputs"]
-                    if "head_mask" and "decoder_head_mask" in arg_names
+                    ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
+                    if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
                     else ["encoder_outputs"]
                 )
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
@@ -480,6 +492,8 @@ class ModelTesterMixin:
                 arg_names = [*signature.parameters.keys()]
                 if "decoder_head_mask" in arg_names:  # necessary diferentiation because of T5 model
                     inputs["decoder_head_mask"] = head_mask
+                if "cross_attn_head_mask" in arg_names:
+                    inputs["cross_attn_head_mask"] = head_mask
             outputs = model(**inputs, return_dict=True)
 
             # Test that we can get a gradient back for importance score computation
@@ -511,6 +525,7 @@ class ModelTesterMixin:
             if model.config.is_encoder_decoder:
                 check_attentions_validity(outputs.encoder_attentions)
                 check_attentions_validity(outputs.decoder_attentions)
+                check_attentions_validity(outputs.cross_attentions)
             else:
                 check_attentions_validity(outputs.attentions)
 
@@ -983,7 +998,6 @@ class ModelTesterMixin:
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
 
     def test_model_outputs_equivalence(self):
-
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         def set_nan_tensor_to_zero(t):
@@ -1081,7 +1095,7 @@ class ModelTesterMixin:
 
         # some params shouldn't be scattered by nn.DataParallel
         # so just remove them if they are present.
-        blacklist_non_batched_params = ["head_mask", "decoder_head_mask"]
+        blacklist_non_batched_params = ["head_mask", "decoder_head_mask", "cross_attn_head_mask"]
         for k in blacklist_non_batched_params:
             inputs_dict.pop(k, None)
 
@@ -1107,7 +1121,7 @@ class ModelTesterMixin:
 
         # a candidate for testing_utils
         def get_current_gpu_memory_use():
-            """ returns a list of cuda memory allocations per GPU in MBs"""
+            """returns a list of cuda memory allocations per GPU in MBs"""
 
             per_device_memory = []
             for id in range(torch.cuda.device_count()):
@@ -1296,6 +1310,58 @@ class ModelUtilsTest(unittest.TestCase):
         model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
         self.assertIsNotNone(model)
 
-        with self.assertRaises(Exception) as context:
+        logger = logging.get_logger("transformers.configuration_utils")
+        with CaptureLogger(logger) as cl:
             BertModel.from_pretrained(TINY_T5)
-        self.assertTrue("You tried to initiate a model of type" in str(context.exception))
+        self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
+
+
+@require_torch
+@is_staging_test
+class ModelPushToHubTester(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
+        cls._token = cls._api.login(username=USER, password=PASS)
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-model")
+        except HTTPError:
+            pass
+
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-model-org", organization="valid_org")
+        except HTTPError:
+            pass
+
+    def test_push_to_hub(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        model = BertModel(config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, push_to_hub=True, repo_name="test-model", use_auth_token=self._token)
+
+            new_model = BertModel.from_pretrained(f"{USER}/test-model")
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
+    def test_push_to_hub_in_organization(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        model = BertModel(config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(
+                tmp_dir,
+                push_to_hub=True,
+                repo_name="test-model-org",
+                use_auth_token=self._token,
+                organization="valid_org",
+            )
+
+            new_model = BertModel.from_pretrained("valid_org/test-model-org")
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
