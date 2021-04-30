@@ -37,9 +37,9 @@ If you're using :class:`~transformers.Trainer`, you just need to add:
     --debug underflow_overflow
 
 to the normal command line arguments, or pass ``debug="underflow_overflow"`` when creating the
-:class:`~transformers.Trainer` object.
+:class:`~transformers.TrainingArguments` object.
 
-If you're using your own trainer you can accomplish the same with:
+If you're using your own training loop or another Trainer you can accomplish the same with:
 
 .. code-block:: python
 
