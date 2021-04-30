@@ -41,8 +41,10 @@ logger = logging.get_logger(__name__)
 class PegasusTokenizer(PreTrainedTokenizer):
     r"""
     Construct a PEGASUS tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__.
+
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
+
     Args:
         vocab_file (:obj:`str`):
             `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
@@ -51,7 +53,9 @@ class PegasusTokenizer(PreTrainedTokenizer):
             The token used for padding, for example when batching sequences of different lengths.
         eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
             The end of sequence token.
+
             .. note::
+
                 When building a sequence using special tokens, this is not the token that is used for the end of
                 sequence. The token used is the :obj:`sep_token`.
         unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
@@ -223,15 +227,18 @@ class PegasusTokenizer(PreTrainedTokenizer):
         """
         Build model inputs from a sequence or a pair of sequences for sequence classification tasks by concatenating
         and adding special tokens. A PEGASUS sequence has the following format, where ``X`` represents the sequence:
+
         - single sequence: ``X </s>``
         - pair of sequences: ``A B </s>`` (not intended use)
         BOS is never used. Pairs of sequences are not the expected use case, but they will be handled without a
         separator.
+
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of IDs to which the special tokens will be added.
             token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
+
         Returns:
             :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """

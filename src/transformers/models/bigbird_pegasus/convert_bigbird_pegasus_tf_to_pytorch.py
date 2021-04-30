@@ -73,7 +73,17 @@ REMAINING_PATTERNS = (
     + END_COMMON
 )
 
-KEYS_TO_IGNORE = ["encdec/key/bias", "encdec/query/bias", "encdec/value/bias", "self/key/bias", "self/query/bias", "self/value/bias", "encdec_output/dense/bias", "attention/output/dense/bias"]
+KEYS_TO_IGNORE = [
+    "encdec/key/bias",
+    "encdec/query/bias",
+    "encdec/value/bias",
+    "self/key/bias",
+    "self/query/bias",
+    "self/value/bias",
+    "encdec_output/dense/bias",
+    "attention/output/dense/bias",
+]
+
 
 def rename_state_dict_key(k, patterns):
     for tf_name, hf_name in patterns:
