@@ -52,6 +52,21 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 
+_init_weights = True
+
+
+@contextmanager
+def no_init_weights(_disable=False):
+    global _init_weights
+    # delete later after sufficient testing
+    if not _disable:
+        _init_weights = False
+    try:
+        yield
+    finally:
+        _init_weights = True
+
+
 try:
     from torch.nn import Identity
 except ImportError:
@@ -429,18 +444,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     _keys_to_ignore_on_save = None
 
     # whether weights should be initialized when instantiating model class
-    _init_weights = True
-
     is_parallelizable = False
-
-    @staticmethod
-    @contextmanager
-    def no_init_weights(cls):
-        cls._init_weights = False
-        try:
-            yield
-        finally:
-            cls._init_weights = True
 
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
@@ -782,10 +786,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         Maybe initializes and prunes weights if needed.
         """
-        if not self._init_weights:
+        if not _init_weights:
             return
 
-        raise ValueError("Don't use this function")
         # Initialize weights
         self.apply(self._init_weights)
 
@@ -1028,6 +1031,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         mirror = kwargs.pop("mirror", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
+        _no_fast_init = kwargs.pop("_no_fast_init", False)
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -1144,48 +1148,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # XXX: param_dict will be added in deepspeed==0.3.16 and probably replaced by deepspeed_config
             # with deepspeed.zero.Init(param_dict=deepspeed_config()):
-            with deepspeed.zero.Init() and cls.no_init_weights(cls):
+            with deepspeed.zero.Init() and no_init_weights(_disable=_no_fast_init):
                 model = cls(config, *model_args, **model_kwargs)
         else:
-            with cls.no_init_weights(cls):
+            with no_init_weights(_disable=_no_fast_init):
                 model = cls(config, *model_args, **model_kwargs)
-
-        if state_dict is None and not (from_tf or from_flax):
-            try:
-                state_dict = torch.load(resolved_archive_file, map_location="cpu")
-            except Exception:
-                raise OSError(
-                    f"Unable to load weights from pytorch checkpoint file for '{pretrained_model_name_or_path}' "
-                    f"at '{resolved_archive_file}'"
-                    "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "
-                )
-
-            expected_keys = list(model.state_dict.keys())
-            loaded_keys = list(state_dict.keys())
-
-            add_base_model_prefix = model.base_model_prefix in set([weight_name.split('.')[0] for weight_name in expected_keys]) and model.base_model_prefix not in set([weight_name.split('.')[0] for weight_name in loaded_keys])
-            remove_base_model_prefix = model.base_model_prefix not in set([weight_name.split('.')[0] for weight_name in expected_keys]) and model.base_model_prefix in set([weight_name.split('.')[0] for weight_name in loaded_keys])
-
-            if add_base_model_prefix:
-                loaded_keys = ['.'.join(model.base_model_prefix, weight_name) for weight_name in loaded_keys if '.'.join(model.base_model_prefix, weight_name) in set(expected_keys)]
-            elif remove_base_model_prefix:
-                loaded_keys = ['.'.join(weight_name.split('.')[1:]) for weight_name in loaded_keys if model.base_model_prefix weight_name) for weight_name in loaded_keys if '.'.join(weight_name.split('.')[1:] in set(expected_keys)]
-
-            missing_keys = list(set(model.state_dict().keys()) - set(state_dict.keys())))
-            missing_keys = list(set(state_dict.keys()) - set(model.state_dict.keys()))
-
-            import ipdb; ipdb.set_trace()
-            missing_keys = ()
-
-        import ipdb; ipdb.set_trace()
-        missing_keys = []
-        unexpected_keys = []
-        error_msgs = []
-
-        # tie unintialized modules
-        unintialized_modules = model.retrieve_modules_from_names(missing_keys)
-        for module in unintialized_modules:
-            model._init_weights(module)
 
         if from_tf:
             if resolved_archive_file.endswith(".index"):
@@ -1196,7 +1163,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 try:
                     from .modeling_tf_pytorch_utils import load_tf2_checkpoint_in_pytorch_model
 
-                    model, missing_keys = load_tf2_checkpoint_in_pytorch_model(model, resolved_archive_file, allow_missing_keys=True, return_missing_keys=True)
+                    model, missing_keys = load_tf2_checkpoint_in_pytorch_model(
+                        model, resolved_archive_file, allow_missing_keys=True, return_missing_keys=True
+                    )
                 except ImportError:
                     logger.error(
                         "Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed. Please see "
@@ -1215,102 +1184,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 raise
         else:
-            # Convert old format to new format if needed from a PyTorch state_dict
-            old_keys = []
-            new_keys = []
-            for key in state_dict.keys():
-                new_key = None
-                if "gamma" in key:
-                    new_key = key.replace("gamma", "weight")
-                if "beta" in key:
-                    new_key = key.replace("beta", "bias")
-                if new_key:
-                    old_keys.append(key)
-                    new_keys.append(new_key)
-            for old_key, new_key in zip(old_keys, new_keys):
-                state_dict[new_key] = state_dict.pop(old_key)
+            if state_dict is None:
+                try:
+                    state_dict = torch.load(resolved_archive_file, map_location="cpu")
+                except Exception:
+                    raise OSError(
+                        f"Unable to load weights from pytorch checkpoint file for '{pretrained_model_name_or_path}' "
+                        f"at '{resolved_archive_file}'"
+                        "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "
+                    )
 
-            # copy state_dict so _load_from_state_dict can modify it
-            metadata = getattr(state_dict, "_metadata", None)
-            state_dict = state_dict.copy()
-            if metadata is not None:
-                state_dict._metadata = metadata
-
-            # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
-            # so we need to apply the function recursively.
-            def load(module: nn.Module, prefix=""):
-                local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
-                args = (state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
-                if is_deepspeed_zero3_enabled():
-                    import deepspeed
-
-                    # because zero3 puts placeholders in model params, this context
-                    # manager gathers (unpartitions) the params of the current layer, then loads from
-                    # the state dict and then re-partitions them again
-                    with deepspeed.zero.GatheredParameters(list(module.parameters(recurse=False)), modifier_rank=0):
-                        if torch.distributed.get_rank() == 0:
-                            module._load_from_state_dict(*args)
-                else:
-                    module._load_from_state_dict(*args)
-
-                for name, child in module._modules.items():
-                    if child is not None:
-                        load(child, prefix + name + ".")
-
-            # Make sure we are able to load base models as well as derived models (with heads)
-            start_prefix = ""
-            model_to_load = model
-            has_prefix_module = any(s.startswith(cls.base_model_prefix) for s in state_dict.keys())
-            if not hasattr(model, cls.base_model_prefix) and has_prefix_module:
-                start_prefix = cls.base_model_prefix + "."
-            if hasattr(model, cls.base_model_prefix) and not has_prefix_module:
-                model_to_load = getattr(model, cls.base_model_prefix)
-
-            load(model_to_load, prefix=start_prefix)
-
-            if model.__class__.__name__ != model_to_load.__class__.__name__:
-                base_model_state_dict = model_to_load.state_dict().keys()
-                head_model_state_dict_without_base_prefix = [
-                    key.split(cls.base_model_prefix + ".")[-1] for key in model.state_dict().keys()
-                ]
-                missing_keys.extend(head_model_state_dict_without_base_prefix - base_model_state_dict)
-
-            # Some models may have keys that are not in the state by design, removing them before needlessly warning
-            # the user.
-            if cls._keys_to_ignore_on_load_missing is not None:
-                for pat in cls._keys_to_ignore_on_load_missing:
-                    missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
-
-            if cls._keys_to_ignore_on_load_unexpected is not None:
-                for pat in cls._keys_to_ignore_on_load_unexpected:
-                    unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
-
-            if len(unexpected_keys) > 0:
-                logger.warning(
-                    f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
-                    f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
-                    f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
-                    f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).\n"
-                    f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
-                    f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
-                )
-            else:
-                logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
-            if len(missing_keys) > 0:
-                logger.warning(
-                    f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
-                    f"and are newly initialized: {missing_keys}\n"
-                    f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
-                )
-            else:
-                logger.info(
-                    f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
-                    f"If your task is similar to the task the model of the checkpoint was trained on, "
-                    f"you can already use {model.__class__.__name__} for predictions without further training."
-                )
-            if len(error_msgs) > 0:
-                error_msg = "\n\t".join(error_msgs)
-                raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
+            model, missing_keys, unexpected_keys, error_msgs = cls._load_state_dict_into_model(
+                model, state_dict, pretrained_model_name_or_path
+            )
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
@@ -1328,8 +1214,123 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         return model
 
-    def retrieve_modules_from_weights(self, weight_keys):
-        module_keys = [".".join(key.split(".")[:-1]) for key in weight_keys]
+    def _load_state_dict_into_model(cls, model, state_dict, pretrained_model_name_or_path):
+
+        # Convert old format to new format if needed from a PyTorch state_dict
+        old_keys = []
+        new_keys = []
+        for key in state_dict.keys():
+            new_key = None
+            if "gamma" in key:
+                new_key = key.replace("gamma", "weight")
+            if "beta" in key:
+                new_key = key.replace("beta", "bias")
+            if new_key:
+                old_keys.append(key)
+                new_keys.append(new_key)
+        for old_key, new_key in zip(old_keys, new_keys):
+            state_dict[new_key] = state_dict.pop(old_key)
+
+        # Retrieve missing & unexpected_keys
+        expected_keys = list(model.state_dict().keys())
+        loaded_keys = list(state_dict.keys())
+        prefix = model.base_model_prefix
+
+        has_prefix_module = any(s.startswith(prefix) for s in loaded_keys)
+        expects_prefix_module = any(s.startswith(prefix) for s in expected_keys)
+
+        if not has_prefix_module and expects_prefix_module:
+            expected_keys = [s.split(prefix)[-1] for s in expected_keys if s.startswith(prefix)]
+        elif has_prefix_module and not expects_prefix_module:
+            expected_keys = [".".join([prefix, s]) for s in expected_keys if ".".join([prefix, s]) in set(loaded_keys)]
+
+        missing_keys = list(set(expected_keys) - set(loaded_keys))
+        unexpected_keys = list(set(loaded_keys) - set(expected_keys))
+
+        # Some models may have keys that are not in the state by design, removing them before needlessly warning
+        # the user.
+        if cls._keys_to_ignore_on_load_missing is not None:
+            for pat in cls._keys_to_ignore_on_load_missing:
+                missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
+
+        if cls._keys_to_ignore_on_load_unexpected is not None:
+            for pat in cls._keys_to_ignore_on_load_unexpected:
+                unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
+
+        # tie unintialized modules
+        unintialized_modules = model.retrieve_modules_from_names(missing_keys)
+        for module in unintialized_modules:
+            model._init_weights(module)
+        # copy state_dict so _load_from_state_dict can modify it
+        metadata = getattr(state_dict, "_metadata", None)
+        state_dict = state_dict.copy()
+        if metadata is not None:
+            state_dict._metadata = metadata
+
+        error_msgs = []
+
+        # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
+        # so we need to apply the function recursively.
+        def load(module: nn.Module, prefix=""):
+            local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
+            args = (state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
+            if is_deepspeed_zero3_enabled():
+                import deepspeed
+
+                # because zero3 puts placeholders in model params, this context
+                # manager gathers (unpartitions) the params of the current layer, then loads from
+                # the state dict and then re-partitions them again
+                with deepspeed.zero.GatheredParameters(list(module.parameters(recurse=False)), modifier_rank=0):
+                    if torch.distributed.get_rank() == 0:
+                        module._load_from_state_dict(*args)
+            else:
+                module._load_from_state_dict(*args)
+
+            for name, child in module._modules.items():
+                if child is not None:
+                    load(child, prefix + name + ".")
+
+        # Make sure we are able to load base models as well as derived models (with heads)
+        start_prefix = ""
+        model_to_load = model
+        if not hasattr(model, cls.base_model_prefix) and has_prefix_module:
+            start_prefix = cls.base_model_prefix + "."
+        if hasattr(model, cls.base_model_prefix) and not has_prefix_module:
+            model_to_load = getattr(model, cls.base_model_prefix)
+
+        load(model_to_load, prefix=start_prefix)
+
+        if len(unexpected_keys) > 0:
+            logger.warning(
+                f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
+                f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
+                f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
+                f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).\n"
+                f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
+                f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
+            )
+        else:
+            logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
+        if len(missing_keys) > 0:
+            logger.warning(
+                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
+                f"and are newly initialized: {missing_keys}\n"
+                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+            )
+        else:
+            logger.info(
+                f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
+                f"If your task is similar to the task the model of the checkpoint was trained on, "
+                f"you can already use {model.__class__.__name__} for predictions without further training."
+            )
+        if len(error_msgs) > 0:
+            error_msg = "\n\t".join(error_msgs)
+            raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
+
+        return model, missing_keys, unexpected_keys, error_msgs
+
+    def retrieve_modules_from_names(self, names):
+        module_keys = [".".join(key.split(".")[:-1]) for key in names]
         return [module for name, module in self.named_modules() if name in module_keys]
 
 
