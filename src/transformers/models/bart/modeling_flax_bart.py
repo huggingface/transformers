@@ -25,7 +25,18 @@ from flax.core.frozen_dict import FrozenDict
 from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, overwrite_call_docstring
+from ...modeling_flax_outputs import(
+    FlaxBaseModelOutput,
+    FlaxBaseModelOutputWithPastAndCrossAttentions,
+    FlaxSeq2SeqModelOutput,
+    FlaxSeq2SeqLMOutput,
+)
+
+from ...modeling_flax_utils import (
+    ACT2FN,
+    FlaxPreTrainedModel,
+    overwrite_call_docstring,
+)
 from ...utils import logging
 from .configuration_bart import BartConfig
 
@@ -721,8 +732,8 @@ class FlaxBartEncoder(nn.Module):
 
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        raise NotImplementedError(
-            "TODO: Return with return_dict is not implemented yet! Please use `return_dict=False`"
+        return FlaxBaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
 
@@ -952,10 +963,14 @@ class FlaxBartDecoder(nn.Module):
 
         if not return_dict:
             return tuple(
-                v for v in [hidden_states, all_hidden_states, all_self_attns, all_cross_attentions] if v is not None
+                v for v in [hidden_states, past_key_value, all_hidden_states, all_self_attns, all_cross_attentions] if v is not None
             )
-        raise NotImplementedError(
-            "TODO: Return with return_dict is not implemented yet! Please use `return_dict=False`"
+        return FlaxBaseModelOutputWithPastAndCrossAttentions(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_value,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+            cross_attentions=all_cross_attentions,
         )
 
 
@@ -1020,6 +1035,13 @@ class FlaxBartModule(nn.Module):
                 deterministic=deterministic,
             )
 
+        elif return_dict and not isinstance(encoder_outputs, FlaxBaseModelOutput):
+            encoder_outputs = FlaxBaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+            )
+
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
@@ -1037,8 +1059,16 @@ class FlaxBartModule(nn.Module):
 
         if not return_dict:
             return decoder_outputs + encoder_outputs
-        raise NotImplementedError(
-            "TODO: Return with return_dict is not implemented yet! Please use `return_dict=False`"
+
+        return FlaxSeq2SeqModelOutput(
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
         )
 
 
@@ -1109,16 +1139,19 @@ class FlaxBartForConditionalGenerationLMModule(nn.Module):
 
         lm_logits = self.lm_head(outputs[0])
 
-        masked_lm_loss = None
-        if labels is not None:
-            raise NotImplementedError("TODO: CrossEntropy loss calculation is not implemented yet.")
-
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+            return output
 
-        raise NotImplementedError(
-            "TODO: Return with return_dict is not implemented yet! Please use `return_dict=False`"
+        return FlaxSeq2SeqLMOutput(
+            logits=lm_logits,
+            past_key_values=outputs.past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
         )
 
 
