@@ -179,17 +179,34 @@ class ModelTesterMixin:
     def test_save_load_fast_init_from_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         base_class = MODEL_MAPPING[config.__class__]
+
+        def _mock_init_weights(self, module):
+            if hasattr(module, "weight"):
+                module.weight.data.fill_(3)
+            if hasattr(module, "bias"):
+                module.bias.data.fill_(3)
+
         for model_class in self.all_model_classes:
             if model_class == base_class:
                 continue
 
+            # make init deterministic, but make sure that
+            # non-initialized weights throw errors nevertheless
+            model_class._init_weights = _mock_init_weights
+
             model = base_class(config)
+            state_dict = model.state_dict()
+
+            # this will often delete a single weight of a multi-weight module
+            # to test an edge case
+            random_key_to_del = random.choice(list(state_dict.keys()))
+            del state_dict[random_key_to_del]
 
             # check that certain keys didn't get saved with the model
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
+                torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
 
-                torch.manual_seed(0)
                 model_fast_init = model_class.from_pretrained(tmpdirname)
                 model_slow_init = model_class.from_pretrained(tmpdirname, _no_fast_init=True)
 
@@ -201,15 +218,32 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         base_class = MODEL_MAPPING[config.__class__]
 
+        def _mock_init_weights(self, module):
+            if hasattr(module, "weight"):
+                module.weight.data.fill_(3)
+            if hasattr(module, "bias"):
+                module.bias.data.fill_(3)
+
         for model_class in self.all_model_classes:
             if model_class == base_class:
                 continue
 
+            # make init deterministic, but make sure that
+            # non-initialized weights throw errors nevertheless
+            model_class._init_weights = _mock_init_weights
+
             model = model_class(config)
+            state_dict = model.state_dict()
+
+            # this will often delete a single weight of a multi-weight module
+            # to test an edge case
+            random_key_to_del = random.choice(list(state_dict.keys()))
+            del state_dict[random_key_to_del]
 
             # check that certain keys didn't get saved with the model
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
+                torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
 
                 torch.manual_seed(0)
                 model_fast_init = base_class.from_pretrained(tmpdirname, _no_fast_init=True)

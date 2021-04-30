@@ -1237,10 +1237,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         has_prefix_module = any(s.startswith(prefix) for s in loaded_keys)
         expects_prefix_module = any(s.startswith(prefix) for s in expected_keys)
+        remove_prefix = not has_prefix_module and expects_prefix_module
+        add_prefix = has_prefix_module and not expects_prefix_module
 
-        if not has_prefix_module and expects_prefix_module:
+        if remove_prefix:
             expected_keys = [".".join(s.split(".")[1:]) if s.startswith(prefix) else s for s in expected_keys]
-        elif has_prefix_module and not expects_prefix_module:
+        elif add_prefix:
             expected_keys = [
                 ".".join([prefix, s]) if ".".join([prefix, s]) in set(loaded_keys) else s for s in expected_keys
             ]
@@ -1259,7 +1261,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
         # tie unintialized modules
-        unintialized_modules = model.retrieve_modules_from_names(missing_keys)
+        unintialized_modules = model.retrieve_modules_from_names(
+            missing_keys, add_prefix=add_prefix, remove_prefix=remove_prefix
+        )
         for module in unintialized_modules:
             model._init_weights(module)
         # copy state_dict so _load_from_state_dict can modify it
@@ -1274,7 +1278,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # so we need to apply the function recursively.
         def load(module: nn.Module, prefix=""):
             local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
-            args = (state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
+            args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
             if is_deepspeed_zero3_enabled():
                 import deepspeed
 
@@ -1330,9 +1334,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         return model, missing_keys, unexpected_keys, error_msgs
 
-    def retrieve_modules_from_names(self, names):
+    def retrieve_modules_from_names(self, names, add_prefix=False, remove_prefix=False):
         module_keys = [".".join(key.split(".")[:-1]) for key in names]
-        return [module for name, module in self.named_modules() if name in module_keys]
+
+        retrieved_modules = []
+        # retrieve all modules that has at least one missing weight name
+        for name, module in self.named_modules():
+            if remove_prefix:
+                name = ".".join(name.split(".")[1:]) if name.startswith(self.base_model_prefix) else name
+            elif add_prefix:
+                name = (
+                    ".".join([self.base_model_prefix, name]) if not name.startswith(self.base_model_prefix) else name
+                )
+            #
+            if name in module_keys:
+                retrieved_modules.append(module)
+
+        return retrieved_modules
 
 
 class Conv1D(nn.Module):
