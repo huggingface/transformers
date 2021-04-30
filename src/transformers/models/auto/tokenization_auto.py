@@ -157,6 +157,7 @@ if is_tokenizers_available():
     from ..bert.tokenization_bert_fast import BertTokenizerFast
     from ..camembert.tokenization_camembert_fast import CamembertTokenizerFast
     from ..convbert.tokenization_convbert_fast import ConvBertTokenizerFast
+    from ..deberta.tokenization_deberta_fast import DebertaTokenizerFast
     from ..distilbert.tokenization_distilbert_fast import DistilBertTokenizerFast
     from ..dpr.tokenization_dpr_fast import DPRQuestionEncoderTokenizerFast
     from ..electra.tokenization_electra_fast import ElectraTokenizerFast
@@ -181,6 +182,7 @@ if is_tokenizers_available():
     from ..t5.tokenization_t5_fast import T5TokenizerFast
     from ..xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
     from ..xlnet.tokenization_xlnet_fast import XLNetTokenizerFast
+
 else:
     AlbertTokenizerFast = None
     BartTokenizerFast = None
@@ -188,6 +190,7 @@ else:
     BertTokenizerFast = None
     CamembertTokenizerFast = None
     ConvBertTokenizerFast = None
+    DebertaTokenizerFast = None
     DistilBertTokenizerFast = None
     DPRQuestionEncoderTokenizerFast = None
     ElectraTokenizerFast = None
@@ -253,7 +256,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (CTRLConfig, (CTRLTokenizer, None)),
         (FSMTConfig, (FSMTTokenizer, None)),
         (BertGenerationConfig, (BertGenerationTokenizer, None)),
-        (DebertaConfig, (DebertaTokenizer, None)),
+        (DebertaConfig, (DebertaTokenizer, DebertaTokenizerFast)),
         (DebertaV2Config, (DebertaV2Tokenizer, None)),
         (RagConfig, (RagTokenizer, None)),
         (XLMProphetNetConfig, (XLMProphetNetTokenizer, None)),

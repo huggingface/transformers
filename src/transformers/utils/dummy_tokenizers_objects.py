@@ -56,6 +56,15 @@ class ConvBertTokenizerFast:
         requires_backends(self, ["tokenizers"])
 
 
+class DebertaTokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
 class DistilBertTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tokenizers"])
