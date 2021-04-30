@@ -25,6 +25,7 @@ from ..modelcard import ModelCard
 from ..models.auto.tokenization_auto import AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import logging
+from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
     ArgumentHandler,
     CsvPipelineDataFormat,
