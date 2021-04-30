@@ -7,7 +7,7 @@ deps = {
     "cookiecutter": "cookiecutter==1.7.2",
     "dataclasses": "dataclasses",
     "datasets": "datasets",
-    "deepspeed": "deepspeed>=0.3.15",
+    "deepspeed": "deepspeed>=0.3.16",
     "docutils": "docutils==0.16.0",
     "fairscale": "fairscale>0.3",
     "faiss-cpu": "faiss-cpu",

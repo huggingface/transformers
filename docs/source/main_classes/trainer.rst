@@ -1507,6 +1507,35 @@ and ``total_num_steps`, ``warmup_max_lr``, ``warmup_num_steps`` and ``total_num_
 
 
 
+
+fp32 Precision
+=======================================================================================================================
+
+Deepspeed supports the full fp32 and the fp16 mixed precision.
+
+Because of the much reduced memory needs and faster speed one gets with the fp16 mixed precision, the only time you
+will want to not use it is when the model you're using doesn't behave well under this training mode. Typically this
+happens when the model wasn't pretrained in the fp16 mixed precision (e.g. often this happens with bf16-pretrained
+models). Such models may overflow or underflow leading to ``NaN`` loss. If this is your case then you will want to use
+the full fp32 mode, by explicitly disabling the otherwise default fp16 mixed precision mode with:
+
+.. code-block:: json
+
+    {
+        "fp16": {
+            "enabled": "false",
+        }
+    }
+
+If you're using the Ampere-architecture based GPU, pytorch version 1.7 and higher will automatically switch to using
+the much more efficient tf32 format for some operations, but the results will still be in fp32. For details and
+benchmarks, please, see `TensorFloat-32(TF32) on Ampere devices
+<https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices>`__. The document includes
+instructions on how to disable this automatic conversion if for some reason you prefer not to use it.
+
+
+
+
 Automatic Mixed Precision
 =======================================================================================================================
 
@@ -1531,11 +1560,6 @@ and the :class:`~transformers.Trainer` will automatically enable or disable it b
 ``args.fp16_backend``. The rest of config values are up to you.
 
 This mode gets enabled when ``--fp16 --fp16_backend amp`` command line args are passed.
-
-.. note::
-
-   At the moment DeepSpeed doesn't supported fp32 mode, though it will become available soon. Until then it will be
-   always set to ``true``.
 
 You can also enable/disable this mode explicitly:
 
@@ -1788,6 +1812,24 @@ Also under ZeRO-3, if you write your own code and run into a model parameter wei
 
 stress on ``tensor([1.])``, or if you get an error where it says the parameter is of size ``1``, instead of some much
 larger multi-dimensional shape, this means that the parameter is partitioned and what you see is a ZeRO-3 placeholder.
+
+
+Troubleshooting
+=======================================================================================================================
+
+* ``deepspeed`` process gets killed at startup without a traceback
+
+If the ``deepspeed`` process gets killed at launch time without a traceback, that usually means that the program tried
+to allocate more CPU memory than your system has or your process is allowed to allocate and the OS kernel killed that
+process. This is because your configuration file most likely has either ``offload_optimizer`` or ``offload_param`` or
+both configured to offload to ``cpu`` (or under ZeRO-2 ``cpu_offload`` is enabled). If you have NVMe, experiment with
+offloading to NVMe if you're running under ZeRO-3.
+
+Work is being done to enable estimating how much memory is needed for a specific model: `PR
+<https://github.com/microsoft/DeepSpeed/pull/965>`__.
+
+
+
 
 
 
