@@ -20,7 +20,6 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available
-from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -45,6 +44,9 @@ if is_torch_available():
         BigBirdPegasusEncoder,
     )
 
+MODEL_ID = "vasudevgupta/bigbird-pegasus-large-pubmed"
+# TODO
+# bigbird fast tests will have problem of attention type switching
 
 def prepare_bigbird_pegasus_inputs_dict(
     config,
@@ -63,9 +65,6 @@ def prepare_bigbird_pegasus_inputs_dict(
         "attention_mask": attention_mask,
         "decoder_attention_mask": attention_mask,
     }
-
-
-# bigbird fast tests will have problem of attention type switching
 
 
 @require_torch
@@ -368,37 +367,11 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     #     self.model_tester.create_and_check_for_change_to_full_attn(*config_and_inputs)
 
 
-def assert_tensors_close(a, b, atol=1e-12, prefix=""):
-    """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""
-    if a is None and b is None:
-        return True
-    try:
-        if torch.allclose(a, b, atol=atol):
-            return True
-        raise
-    except Exception:
-        pct_different = (torch.gt((a - b).abs(), atol)).float().mean().item()
-        if a.numel() > 100:
-            msg = f"tensor values are {pct_different:.1%} percent different."
-        else:
-            msg = f"{a} != {b}"
-        if prefix:
-            msg = prefix + ": " + msg
-        raise AssertionError(msg)
-
-
-TOLERANCE = 1e-4
-MODEL_ID = "vasudevgupta/bigbird-pegasus-large-pubmed"
-
-
 @require_torch
 @require_sentencepiece
 @require_tokenizers
 @slow
 class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
-    @cached_property
-    def default_tokenizer(self):
-        return BigBirdPegasusTokenizer.from_pretrained(MODEL_ID)
 
     def _get_dummy_input_ids(self):
         # fmt: off
@@ -435,7 +408,7 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
         self.assertEqual(prediction_logits.shape, torch.Size((1, 16, 96103)))
         # fmt: off
         expected_prediction_logits_slice = torch.tensor(
-            [[2.785, 2.134, 6.9243, -1.6229, 1.3514, 1.6717, 3.7153, 4.046, 7.7103, 2.0608, 2.0849, 0.26425, 1.3922, 3.2817, 6.7929, 5.1377, -0.88223, 8.061, 3.504, -0.67016, 3.1645, 5.9968, 7.1979, 4.675, -1.7048, 3.6679, 6.0426, 2.2554], [2.8886, 2.1618, 7.3298, -1.6505, 1.4547, 1.5609, 4.0607, 4.0344, 7.9283, 2.0122, 2.2935, 0.64506, 1.3994, 2.8479, 6.8885, 5.2957, -1.0617, 7.596, 3.5451, -0.28749, 3.0484, 5.8572, 7.0605, 4.7069, -1.7569, 3.5513, 5.7782, 2.2574], [3.0022, 2.1422, 7.5003, -1.8414, 1.5542, 1.528, 4.2919, 4.2379, 8.0021, 2.0778, 2.3393, 0.77081, 1.4541, 2.8147, 6.9367, 5.5263, -0.9241, 7.3092, 3.5381, 0.0074557, 3.0441, 5.8372, 7.0485, 4.8198, -1.715, 3.52, 5.7461, 2.2033], [3.0866, 2.1803, 7.5962, -1.9698, 1.6234, 1.4729, 4.237, 4.2311, 8.0083, 2.1442, 2.2766, 0.79028, 1.3316, 2.8024, 6.8416, 5.7381, -0.95507, 7.1824, 3.6925, -0.022659, 2.9421, 6.0023, 7.0864, 4.9817, -1.6959, 3.4832, 5.6923, 2.2286]],  # noqa: E231
+            [[1.7769, 5.8479, 6.2375, 2.2745, 8.6157, 4.7483, 5.0647, 6.5358, 2.3393, 7.8333, 3.8403, 0.0255, 7.219, 5.2759, 3.097, 6.387, 4.9341, 7.1409, 5.1179, 0.1144, 6.8268, 0.7598, 0.6258, 2.373, 0.4627, -1.9919, 1.8422, 3.4578], [1.8026, 5.9604, 5.954, 2.8642, 9.0608, 4.394, 5.3779, 7.0216, 1.543, 7.8744, 4.4231, -0.0398, 7.6091, 5.6611, 3.3536, 6.8624, 4.7699, 6.5241, 4.8893, 0.5791, 6.8368, 0.1034, 0.0338, 2.9393, 0.5034, -2.5509, 2.0172, 3.2858], [1.8426, 5.9151, 5.5374, 3.0426, 9.1762, 3.6287, 5.3916, 7.4621, 1.2582, 7.9244, 4.694, -0.1308, 7.4725, 5.5385, 3.4598, 7.0422, 4.2455, 5.797, 4.5927, 0.7478, 6.7467, -0.2695, -0.3207, 3.0269, 0.4714, -2.8134, 2.0406, 3.1089], [1.6527, 5.8416, 5.4558, 3.0044, 9.3478, 3.2607, 5.3887, 7.52, 0.9362, 7.8877, 4.8465, -0.1705, 7.3932, 5.6352, 3.5744, 7.2623, 4.0485, 5.2788, 4.5859, 0.8325, 6.6088, -0.3676, -0.6287, 3.1731, 0.4483, -3.1573, 2.0522, 2.8868]],  # noqa: E231
             device=torch_device,
         )
         # fmt: on
@@ -456,7 +429,7 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
         self.assertEqual(prediction_logits.shape, torch.Size((1, 16, 96103)))
         # fmt: off
         expected_prediction_logits_slice = torch.tensor(
-            [[3.7736, 0.6459, 5.9393, -2.055, 1.3957, 1.6994, 1.7002, 4.3194, 6.727, 0.8877, 2.7457, 0.3128, -0.3091, 3.7636, 6.4191, 3.2155, -0.9953, 7.4407, 3.8938, 0.407, 3.7436, 3.7248, 5.6073, 3.8378, -1.94, 5.2315, 4.6829, 2.0397], [3.8075, 0.5993, 5.9881, -1.9268, 1.7395, 1.9801, 1.4785, 4.404, 6.9427, 0.6825, 2.8742, 0.7088, -0.6241, 3.3309, 6.5836, 3.2848, -1.1375, 7.2144, 4.1101, 0.8657, 3.952, 3.5079, 5.4696, 3.9301, -2.2243, 5.2562, 4.651, 1.9688], [3.9393, 0.5811, 6.1118, -1.9829, 1.9584, 2.0622, 1.6118, 4.5815, 7.1832, 0.6703, 2.9474, 0.8766, -0.7241, 3.309, 6.772, 3.4544, -1.0948, 7.0197, 4.2286, 1.1543, 4.0334, 3.4939, 5.5613, 4.1545, -2.2169, 5.4238, 4.7881, 1.9614], [4.0004, 0.5768, 6.1671, -2.1092, 2.0556, 2.0222, 1.5487, 4.5812, 7.2975, 0.7099, 3.0134, 0.9069, -0.8406, 3.2854, 6.756, 3.5334, -1.2231, 6.8766, 4.3854, 1.1062, 3.9816, 3.6632, 5.6403, 4.3885, -2.2414, 5.4234, 4.7948, 1.9947]],  # noqa: E231
+            [[1.3418, 5.8304, 6.5662, 2.0448, 8.7702, 4.6579, 4.9947, 6.429, 2.4296, 7.9431, 4.217, 0.0672, 7.334, 5.1966, 2.9603, 6.0814, 4.6756, 7.5522, 5.076, 0.213, 6.6638, 0.6577, 0.244, 2.1221, 0.7531, -2.4076, 1.8731, 3.5594], [1.5525, 6.0524, 6.309, 2.6245, 9.229, 4.5213, 5.0913, 7.0622, 1.7992, 8.0962, 4.7994, -0.0248, 7.7168, 5.5878, 3.0883, 6.5248, 4.7895, 6.9974, 4.8787, 0.5445, 6.6686, 0.0102, -0.1659, 2.6195, 0.7389, -2.8956, 1.9928, 3.3777], [1.6407, 6.2104, 6.0331, 2.8076, 9.4074, 3.9772, 5.0574, 7.5316, 1.4201, 8.3035, 5.0212, -0.1031, 7.553, 5.5023, 3.1427, 6.7674, 4.4409, 6.457, 4.525, 0.728, 6.5422, -0.6234, -0.4726, 2.7486, 0.6985, -3.0804, 1.9669, 3.2365], [1.5065, 6.1271, 5.8296, 2.8405, 9.5649, 3.6834, 5.1214, 7.546, 0.9758, 8.3335, 5.1952, -0.1395, 7.4348, 5.6893, 3.2942, 7.0356, 4.1665, 5.9695, 4.3898, 0.8931, 6.3988, -0.8957, -0.7522, 2.8924, 0.6498, -3.4358, 1.8654, 2.9735]],  # noqa: E231
             device=torch_device,
         )
         # fmt: on
@@ -466,43 +439,38 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
 
     def test_seq_to_seq_generation(self):
 
-        hf = BigBirdPegasusForConditionalGeneration.from_pretrained(MODEL_ID).to(torch_device)
-        tok = BigBirdPegasusTokenizer.from_pretrained(MODEL_ID)
+        model = BigBirdPegasusForConditionalGeneration.from_pretrained(MODEL_ID, attention_type="block_sparse", block_size=16, num_random_blocks=3)
+        model.to(torch_device)
+        tokenizer = BigBirdPegasusTokenizer.from_pretrained(MODEL_ID)
 
+        # fmt: off
         batch_input = [
-            # string 1,
-            # string 2,
-            # string 3,
-            # string 4,
+            'for about 20 years the problem of properties of short - term changes of solar activity has been considered extensively .\nmany investigators studied the short - term periodicities of the various indices of solar activity .\nseveral periodicities were detected , but the periodicities about 155 days and from the interval of @xmath3 $ ] days ( @xmath4 $ ] years ) are mentioned most often .\nfirst of them was discovered by @xcite in the occurence rate of gamma - ray flares detected by the gamma - ray spectrometer aboard the _ solar maximum mission ( smm ) .\nthis periodicity was confirmed for other solar flares data and for the same time period @xcite .\nit was also found in proton flares during solar cycles 19 and 20 @xcite , but it was not found in the solar flares data during solar cycles 22 @xcite .\n_    several autors confirmed above results for the daily sunspot area data . @xcite studied the sunspot data from 18741984 .\nshe found the 155-day periodicity in data records from 31 years .\nthis periodicity is always characteristic for one of the solar hemispheres ( the southern hemisphere for cycles 1215 and the northern hemisphere for cycles 1621 ) .\nmoreover , it is only present during epochs of maximum activity ( in episodes of 13 years ) .\nsimilarinvestigationswerecarriedoutby + @xcite .\nthey applied the same power spectrum method as lean , but the daily sunspot area data ( cycles 1221 ) were divided into 10 shorter time series .\nthe periodicities were searched for the frequency interval 57115 nhz ( 100200 days ) and for each of 10 time series .\nthe authors showed that the periodicity between 150160 days is statistically significant during all cycles from 16 to 21 .\nthe considered peaks were remained unaltered after removing the 11-year cycle and applying the power spectrum analysis .\n@xcite used the wavelet technique for the daily sunspot areas between 1874 and 1993 .\nthey determined the epochs of appearance of this periodicity and concluded that it presents around the maximum activity period in cycles 16 to 21 .\nmoreover , the power of this periodicity started growing at cycle 19 , decreased in cycles 20 and 21 and disappered after cycle 21 .\nsimilaranalyseswerepresentedby + @xcite , but for sunspot number , solar wind plasma , interplanetary magnetic field and geomagnetic activity index @xmath5 .\nduring 1964 - 2000 the sunspot number wavelet power of periods less than one year shows a cyclic evolution with the phase of the solar cycle.the 154-day period is prominent and its strenth is stronger around the 1982 - 1984 interval in almost all solar wind parameters .\nthe existence of the 156-day periodicity in sunspot data were confirmed by @xcite .\nthey considered the possible relation between the 475-day ( 1.3-year ) and 156-day periodicities .\nthe 475-day ( 1.3-year ) periodicity was also detected in variations of the interplanetary magnetic field , geomagnetic activity helioseismic data and in the solar wind speed @xcite .\n@xcite concluded that the region of larger wavelet power shifts from 475-day ( 1.3-year ) period to 620-day ( 1.7-year ) period and then back to 475-day ( 1.3-year ) .\nthe periodicities from the interval @xmath6 $ ] days ( @xmath4 $ ] years ) have been considered from 1968 .\n@xcite mentioned a 16.3-month ( 490-day ) periodicity in the sunspot numbers and in the geomagnetic data .\n@xcite analysed the occurrence rate of major flares during solar cycles 19 .\nthey found a 18-month ( 540-day ) periodicity in flare rate of the norhern hemisphere .\n@xcite confirmed this result for the @xmath7 flare data for solar cycles 20 and 21 and found a peak in the power spectra near 510540 days .\n@xcite found a 17-month ( 510-day ) periodicity of sunspot groups and their areas from 1969 to 1986 .\nthese authors concluded that the length of this period is variable and the reason of this periodicity is still not understood .\n@xcite and + @xcite obtained statistically significant peaks of power at around 158 days for daily sunspot data from 1923 - 1933 ( cycle 16 ) . in this paper the problem of the existence of this periodicity for sunspot data from cycle 16 is considered .\nthe daily sunspot areas , the mean sunspot areas per carrington rotation , the monthly sunspot numbers and their fluctuations , which are obtained after removing the 11-year cycle are analysed . in section 2 the properties of the power spectrum methods are described . in section 3 a new approach to the problem of aliases in the power spectrum analysis\nis presented . in section 4 numerical results of the new method of the diagnosis of an echo - effect for sunspot area data are discussed . in section 5 the problem of the existence of the periodicity of about 155 days during the maximum activity period for sunspot data from the whole solar disk and from each solar hemisphere separately is considered .'  # noqa: E231
         ]
+        # fmt: on
 
-        # The below article tests that we don't add any hypotheses outside of the top n_beams
-        dct = tok.batch_encode_plus(
+        dct = tokenizer(
             batch_input,
-            max_length=512,
+            max_length=1024,
             padding="max_length",
-            truncation_strategy="only_first",
             truncation=True,
             return_tensors="pt",
         )
 
-        hypotheses_batch = hf.generate(
+        hypotheses_batch = model.generate(
             input_ids=dct["input_ids"].to(torch_device),
-            attention_mask=dct["attention_mask"].to(torch_device),
-            num_beams=2,
+            num_beams=5,
+            length_penalty=0.8,
         )
+        generated = tokenizer.batch_decode(hypotheses_batch.tolist())
 
-        EXPECTED = [
-            # here expected 1,
-            # here expected 2,
-            # here expected 3,
-            # here expected 4,
+        # fmt: off
+        expected = [
+            "<s> the authors present results for properties of short - term periodicities of various indices of solar activity "  # noqa: E231
         ]
+        # fmt: on
 
-        generated = tok.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
-        )
-        assert generated == EXPECTED
+        self.assertTrue(generated == expected)
 
 
 class BigBirdPegasusStandaloneDecoderModelTester:
