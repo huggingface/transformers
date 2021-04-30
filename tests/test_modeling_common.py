@@ -176,6 +176,49 @@ class ModelTesterMixin:
                 for k in _keys_to_ignore_on_save:
                     self.assertNotIn(k, state_dict_saved)
 
+    def test_save_load_fast_init_from_base(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        base_class = MODEL_MAPPING[config.__class__]
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+
+            model = base_class(config)
+
+            # check that certain keys didn't get saved with the model
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                torch.manual_seed(0)
+                model_fast_init = model_class.from_pretrained(tmpdirname)
+                model_slow_init = model_class.from_pretrained(tmpdirname, _no_fast_init=True)
+
+                for key in model_fast_init.state_dict().keys():
+                    max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+    def test_save_load_fast_init_to_base(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        base_class = MODEL_MAPPING[config.__class__]
+
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+
+            model = model_class(config)
+
+            # check that certain keys didn't get saved with the model
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                torch.manual_seed(0)
+                model_fast_init = base_class.from_pretrained(tmpdirname, _no_fast_init=True)
+                model_slow_init = base_class.from_pretrained(tmpdirname, _no_fast_init=True)
+
+                for key in model_fast_init.state_dict().keys():
+                    max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -635,7 +678,7 @@ class ModelTesterMixin:
         if not self.test_pruning:
             return
 
-        for model_class in self.all_model_classes:
+        for model_class in self.all_model_classes[:1]:
             (
                 config,
                 inputs_dict,

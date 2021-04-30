@@ -786,15 +786,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         Maybe initializes and prunes weights if needed.
         """
+        # Prune heads if needed
+        if self.config.pruned_heads:
+            self.prune_heads(self.config.pruned_heads)
+
         if not _init_weights:
             return
 
         # Initialize weights
         self.apply(self._init_weights)
-
-        # Prune heads if needed
-        if self.config.pruned_heads:
-            self.prune_heads(self.config.pruned_heads)
 
         # Tie weights if needed
         self.tie_weights()
@@ -1163,9 +1163,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 try:
                     from .modeling_tf_pytorch_utils import load_tf2_checkpoint_in_pytorch_model
 
-                    model, missing_keys = load_tf2_checkpoint_in_pytorch_model(
-                        model, resolved_archive_file, allow_missing_keys=True
-                    )
+                    model = load_tf2_checkpoint_in_pytorch_model(model, resolved_archive_file, allow_missing_keys=True)
                 except ImportError:
                     logger.error(
                         "Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed. Please see "
@@ -1241,9 +1239,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         expects_prefix_module = any(s.startswith(prefix) for s in expected_keys)
 
         if not has_prefix_module and expects_prefix_module:
-            expected_keys = [s.split(prefix)[-1] for s in expected_keys if s.startswith(prefix)]
+            expected_keys = [".".join(s.split(".")[1:]) if s.startswith(prefix) else s for s in expected_keys]
         elif has_prefix_module and not expects_prefix_module:
-            expected_keys = [".".join([prefix, s]) for s in expected_keys if ".".join([prefix, s]) in set(loaded_keys)]
+            expected_keys = [
+                ".".join([prefix, s]) if ".".join([prefix, s]) in set(loaded_keys) else s for s in expected_keys
+            ]
 
         missing_keys = list(set(expected_keys) - set(loaded_keys))
         unexpected_keys = list(set(loaded_keys) - set(expected_keys))
