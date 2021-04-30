@@ -180,6 +180,9 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         base_class = MODEL_MAPPING[config.__class__]
 
+        if isinstance(base_class, tuple):
+            base_class = base_class[0]
+
         def _mock_init_weights(self, module):
             if hasattr(module, "weight") and module.weight is not None:
                 module.weight.data.fill_(3)
@@ -212,17 +215,14 @@ class ModelTesterMixin:
 
                 for key in model_fast_init.state_dict().keys():
                     max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
-
-                    if max_diff > 1e-3:
-                        import ipdb
-
-                        ipdb.set_trace()
-
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_save_load_fast_init_to_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         base_class = MODEL_MAPPING[config.__class__]
+
+        if isinstance(base_class, tuple):
+            base_class = base_class[0]
 
         def _mock_init_weights(self, module):
             if hasattr(module, "weight") and module.weight is not None:
