@@ -1517,7 +1517,7 @@ Because of the much reduced memory needs and faster speed one gets with the fp16
 will want to not use it is when the model you're using doesn't behave well under this training mode. Typically this
 happens when the model wasn't pretrained in the fp16 mixed precision (e.g. often this happens with bf16-pretrained
 models). Such models may overflow or underflow leading to ``NaN`` loss. If this is your case then you will want to use
-the full fp32 mode, by explicitly disabling the otherwise default fp16 mode with:
+the full fp32 mode, by explicitly disabling the otherwise default fp16 mixed precision mode with:
 
 .. code-block:: json
 
