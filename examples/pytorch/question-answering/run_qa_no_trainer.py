@@ -553,14 +553,17 @@ def main():
         train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
     )
 
-    eval_dataset.set_format(type="torch", columns=["attention_mask", "input_ids"])
-    eval_dataloader = DataLoader(eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size)
+    print(list(eval_dataset.features.keys()))
+    eval_dataset_for_model = eval_dataset.remove_columns(["example_id", "offset_mapping"])
+    eval_dataloader = DataLoader(eval_dataset_for_model, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size)
+    eval_dataset.set_format(type=None, columns=list(eval_dataset.features.keys()))
 
     if args.do_predict:
-        predict_dataset.set_format(type="torch", columns=["attention_mask", "input_ids"])
+        predict_dataset_for_model = predict_dataset.remove_columns(["example_id", "offset_mapping"])
         predict_dataloader = DataLoader(
-            predict_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
+            predict_dataset_for_model, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size   
         )
+        predict_dataset.set_format(type=None, columns=list(eval_dataset.features.keys()))
 
     # Post-processing:
     def post_processing_function(examples, features, predictions, stage="eval"):
