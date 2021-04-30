@@ -998,7 +998,6 @@ class ModelTesterMixin:
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
 
     def test_model_outputs_equivalence(self):
-
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         def set_nan_tensor_to_zero(t):
@@ -1122,7 +1121,7 @@ class ModelTesterMixin:
 
         # a candidate for testing_utils
         def get_current_gpu_memory_use():
-            """ returns a list of cuda memory allocations per GPU in MBs"""
+            """returns a list of cuda memory allocations per GPU in MBs"""
 
             per_device_memory = []
             for id in range(torch.cuda.device_count()):

@@ -18,6 +18,7 @@ import inspect
 import os
 import re
 import warnings
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
@@ -25,7 +26,6 @@ import torch
 from torch import Tensor, device, dtype, nn
 from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
-from contextlib import contextmanager
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
@@ -293,7 +293,7 @@ class ModuleUtilsMixin:
                 The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard).
             num_hidden_layers (:obj:`int`):
                 The number of hidden layers in the model.
-            is_attention_chunked: (:obj:`bool`, `optional, defaults to :obj:`False`):
+            is_attention_chunked: (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not the attentions scores are computed by chunks or not.
 
         Returns:
@@ -1139,7 +1139,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-            # this immediately partitions the model to avoid the overhead in time and memory copying it on CPU or each GPU first
+            # this immediately partitions the model across all gpus, to avoid the overhead in time
+            # and memory copying it on CPU or each GPU first
+
+            # XXX: param_dict will be added in deepspeed==0.3.16 and probably replaced by deepspeed_config
+            # with deepspeed.zero.Init(param_dict=deepspeed_config()):
             with deepspeed.zero.Init() and cls.no_init_weights(cls):
                 model = cls(config, *model_args, **model_kwargs)
         else:
