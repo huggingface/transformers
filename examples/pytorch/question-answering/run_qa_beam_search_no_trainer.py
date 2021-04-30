@@ -724,13 +724,14 @@ def main():
     start_top_index_concat = create_and_fill_np_array(all_start_top_index, eval_dataset, max_len)
     end_top_log_probs_concat = create_and_fill_np_array(all_end_top_log_probs, eval_dataset, max_len)
     end_top_index_concat = create_and_fill_np_array(all_end_top_index, eval_dataset, max_len)
-    all_cls_logits = np.concatenate(all_cls_logits, axis=0)
+    cls_logits_concat = np.concatenate(all_cls_logits, axis=0)
 
     # delete the list of numpy arrays
     del start_top_log_probs
     del start_top_index
     del end_top_log_probs
     del end_top_index
+    del cls_logits
 
     eval_dataset.set_format(type=None, columns=list(eval_dataset.features.keys()))
     outputs_numpy = (
@@ -738,7 +739,7 @@ def main():
         start_top_index_concat,
         end_top_log_probs_concat,
         end_top_index_concat,
-        cls_logits,
+        cls_logits_concat,
     )
     prediction = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
     eval_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)
@@ -781,13 +782,14 @@ def main():
         start_top_index_concat = create_and_fill_np_array(all_start_top_index, predict_dataset, max_len)
         end_top_log_probs_concat = create_and_fill_np_array(all_end_top_log_probs, predict_dataset, max_len)
         end_top_index_concat = create_and_fill_np_array(all_end_top_index, predict_dataset, max_len)
-        all_cls_logits = np.concatenate(all_cls_logits, axis=0)
+        cls_logits_concat = np.concatenate(all_cls_logits, axis=0)
 
         # delete the list of numpy arrays
         del start_top_log_probs
         del start_top_index
         del end_top_log_probs
         del end_top_index
+        del cls_logits
 
         predict_dataset.set_format(type=None, columns=list(predict_dataset.features.keys()))
         outputs_numpy = (
@@ -795,7 +797,7 @@ def main():
             start_top_index_concat,
             end_top_log_probs_concat,
             end_top_index_concat,
-            cls_logits,
+            cls_logits_concat,
         )
 
         prediction = post_processing_function(predict_examples, predict_dataset, outputs_numpy)
