@@ -1508,16 +1508,16 @@ and ``total_num_steps`, ``warmup_max_lr``, ``warmup_num_steps`` and ``total_num_
 
 
 
-fp32 Training
+fp32 Precision
 =======================================================================================================================
 
-Deepspeed supports the full fp32 and also the fp16 mixed precision training.
+Deepspeed supports the full fp32 and the fp16 mixed precision.
 
-Because of the much lower memory requirements and faster speed one gets with the fp16 mixed precision, the only time
-you will want to not use it is when the model you're using doesn't behave well in this mode, typically this happens
-when the model wasn't pretrained in fp16 mixed precision (e.g. often this happens with bf16-pretrained models). Such
-models often overflow or underflow leading to ``NaN`` loss. If this is your case then you will want to use the fp32
-mode, by disabling the fp16 mode, like so:
+Because of the much reduced memory needs and faster speed one gets with the fp16 mixed precision, the only time you
+will want to not use it is when the model you're using doesn't behave well under this training mode. Typically this
+happens when the model wasn't pretrained in the fp16 mixed precision (e.g. often this happens with bf16-pretrained
+models). Such models may overflow or underflow leading to ``NaN`` loss. If this is your case then you will want to use
+the full fp32 mode, by explicitly disabling the otherwise default fp16 mode with:
 
 .. code-block:: json
 
@@ -1526,6 +1526,13 @@ mode, by disabling the fp16 mode, like so:
             "enabled": "false",
         }
     }
+
+If you're using the Ampere-architecture based GPU, pytorch version 1.7 and higher will automatically switch to using
+the much more efficient tf32 format for some operations, but the results will still be in fp32. For details and
+benchmarks, please, see `TensorFloat-32(TF32) on Ampere devices
+<https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices>`__. The document includes
+instructions on how to disable this automatic conversion if for some reason you prefer not to use it.
+
 
 
 
@@ -1553,11 +1560,6 @@ and the :class:`~transformers.Trainer` will automatically enable or disable it b
 ``args.fp16_backend``. The rest of config values are up to you.
 
 This mode gets enabled when ``--fp16 --fp16_backend amp`` command line args are passed.
-
-.. note::
-
-   At the moment DeepSpeed doesn't supported fp32 mode, though it will become available soon. Until then it will be
-   always set to ``true``.
 
 You can also enable/disable this mode explicitly:
 
