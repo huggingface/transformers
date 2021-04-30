@@ -405,6 +405,7 @@ Flax), PyTorch, and/or TensorFlow.
     add_new_model
     fast_tokenizers
     testing
+    debugging
     serialization
 
 .. toctree::
