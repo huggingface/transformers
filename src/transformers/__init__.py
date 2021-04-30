@@ -233,6 +233,7 @@ _import_structure = {
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
     "models.xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
     "pipelines": [
+        "AutomaticSpeechRecognitionPipeline",
         "Conversation",
         "ConversationalPipeline",
         "CsvPipelineDataFormat",
@@ -314,6 +315,7 @@ if is_tokenizers_available():
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
     _import_structure["models.bert"].append("BertTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
+    _import_structure["models.deberta"].append("DebertaTokenizerFast")
     _import_structure["models.distilbert"].append("DistilBertTokenizerFast")
     _import_structure["models.dpr"].extend(
         ["DPRContextEncoderTokenizerFast", "DPRQuestionEncoderTokenizerFast", "DPRReaderTokenizerFast"]
@@ -1589,6 +1591,7 @@ if TYPE_CHECKING:
 
     # Pipelines
     from .pipelines import (
+        AutomaticSpeechRecognitionPipeline,
         Conversation,
         ConversationalPipeline,
         CsvPipelineDataFormat,
@@ -1665,6 +1668,7 @@ if TYPE_CHECKING:
         from .models.bert import BertTokenizerFast
         from .models.camembert import CamembertTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
+        from .models.deberta import DebertaTokenizerFast
         from .models.distilbert import DistilBertTokenizerFast
         from .models.dpr import DPRContextEncoderTokenizerFast, DPRQuestionEncoderTokenizerFast, DPRReaderTokenizerFast
         from .models.electra import ElectraTokenizerFast
