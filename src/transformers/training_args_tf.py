@@ -212,7 +212,10 @@ class TFTrainingArguments(TrainingArguments):
                 else:
                     tpu = tf.distribute.cluster_resolver.TPUClusterResolver()
             except ValueError:
-                tpu = None
+                if self.tpu_name:
+                    raise RuntimeError(f"Couldn't connect to TPU {self.tpu_name}!")
+                else:
+                    tpu = None
 
             if tpu:
                 # Set to bfloat16 in case of TPU
@@ -233,7 +236,7 @@ class TFTrainingArguments(TrainingArguments):
                 # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
                 strategy = tf.distribute.MirroredStrategy()
             else:
-                raise ValueError("Cannot find the proper strategy please check your environment properties.")
+                raise ValueError("Cannot find the proper strategy, please check your environment properties.")
 
         return strategy
 
