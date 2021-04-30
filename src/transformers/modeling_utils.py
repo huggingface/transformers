@@ -1214,6 +1214,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         return model
 
+    @classmethod
     def _load_state_dict_into_model(cls, model, state_dict, pretrained_model_name_or_path):
 
         # Convert old format to new format if needed from a PyTorch state_dict
