@@ -15,6 +15,7 @@
 
 
 import inspect
+import itertools
 import os
 import pickle
 import re
@@ -1726,6 +1727,29 @@ class TokenizerTesterMixin:
 
             # add pad_token_id to pass subsequent tests
             tokenizer.add_special_tokens({"pad_token": "<PAD>"})
+
+    @staticmethod
+    def does_subword_sampling(tokenizer, default_text: str = None):
+        """
+        Check if the tokenizer generates different results when subword regularization is enabled.
+
+        Subword regularization augments training data with subword sampling.
+        This has a random component.
+        """
+        default_text = "This is a test for subword regularization." if default_text is None else default_text
+
+        tokens_list = []
+        for _ in range(5):
+            tokens_list.append(tokenizer.tokenize(default_text))
+
+        # the list of different pairs of tokens_list
+        combinations = itertools.combinations(tokens_list, 2)
+
+        for combination in combinations:
+            if combination[0] != combination[1]:
+                return True  # subword sampling found
+
+        return False  # no subword sampling found
 
     @require_torch
     @slow

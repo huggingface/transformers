@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-import itertools
 import os
 import pickle
 import unittest
@@ -169,22 +167,7 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             SAMPLE_VOCAB, keep_accents=True, sp_model_kwargs={"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
         )
 
-        # Subword regularization augments training data with subword sampling.
-        # This has a random component. We test if the tokenizer generates different
-        # results when subword regularization is enabled.
-        tokens_list = []
-        for _ in range(5):
-            tokens_list.append(tokenizer.tokenize("This is a test for subword regularization."))
-
-        # the list of different pairs of tokens_list
-        combinations = itertools.combinations(tokens_list, 2)
-
-        all_equal = True
-        for combination in combinations:
-            if combination[0] != combination[1]:
-                all_equal = False
-
-        self.assertFalse(all_equal)
+        self.assertTrue(TokenizerTesterMixin.does_subword_sampling(tokenizer))
 
     def test_pickle_subword_regularization_tokenizer(self):
         """Google pickle __getstate__ __setstate__ if you are struggling with this."""
@@ -192,6 +175,7 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         sp_model_kwargs = {"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
         tokenizer = self.tokenizer_class(SAMPLE_VOCAB, keep_accents=True, sp_model_kwargs=sp_model_kwargs)
         tokenizer_bin = pickle.dumps(tokenizer)
+        del tokenizer
         tokenizer_new = pickle.loads(tokenizer_bin)
 
         self.assertTrue(hasattr(tokenizer_new, "_tokenizer"))
@@ -199,3 +183,4 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertIsNotNone(tokenizer_new._tokenizer.sp_model_kwargs)
         self.assertTrue(isinstance(tokenizer_new._tokenizer.sp_model_kwargs, dict))
         self.assertEqual(tokenizer_new._tokenizer.sp_model_kwargs, sp_model_kwargs)
+        self.assertTrue(TokenizerTesterMixin.does_subword_sampling(tokenizer_new))

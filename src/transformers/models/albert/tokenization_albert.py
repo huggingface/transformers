@@ -209,14 +209,10 @@ class AlbertTokenizer(PreTrainedTokenizer):
 
         return outputs
 
-    def _tokenize(self, text, sample=False):
+    def _tokenize(self, text):
         """Tokenize a string."""
         text = self.preprocess_text(text)
-
-        if not sample:
-            pieces = self.sp_model.encode(text, out_type=str)
-        else:
-            pieces = self.sp_model.SampleEncodeAsPieces(text, 64, 0.1)
+        pieces = self.sp_model.encode(text, out_type=str)
         new_pieces = []
         for piece in pieces:
             if len(piece) > 1 and piece[-1] == str(",") and piece[-2].isdigit():
