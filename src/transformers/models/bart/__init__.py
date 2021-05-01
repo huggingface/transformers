@@ -50,7 +50,12 @@ if is_tf_available():
     _import_structure["modeling_tf_bart"] = ["TFBartForConditionalGeneration", "TFBartModel", "TFBartPretrainedModel"]
 
 if is_flax_available():
-    _import_structure["modeling_flax_bart"] = ["FlaxBartForConditionalGeneration", "FlaxBartModel"]
+    _import_structure["modeling_flax_bart"] = [
+        "FlaxBartForConditionalGeneration",
+        "FlaxBartForSequenceClassification",
+        "FlaxBartForQuestionAnswering",
+        "FlaxBartModel",
+    ]
 
 if TYPE_CHECKING:
     from .configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig
@@ -73,6 +78,14 @@ if TYPE_CHECKING:
 
     if is_tf_available():
         from .modeling_tf_bart import TFBartForConditionalGeneration, TFBartModel, TFBartPretrainedModel
+
+    if is_flax_available():
+        from .modeling_flax_bart import (
+            FlaxBartForConditionalGeneration,
+            FlaxBartForSequenceClassification,
+            FlaxBartForQuestionAnswering,
+            FlaxBartModel,
+        )
 
 else:
     import importlib

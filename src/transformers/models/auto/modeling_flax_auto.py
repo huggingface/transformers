@@ -18,7 +18,12 @@
 from collections import OrderedDict
 
 from ...utils import logging
-from ..bart.modeling_flax_bart import FlaxBartForConditionalGeneration, FlaxBartModel
+from ..bart.modeling_flax_bart import (
+    FlaxBartForConditionalGeneration,
+    FlaxBartForSequenceClassification,
+    FlaxBartForQuestionAnswering,
+    FlaxBartModel,
+)
 from ..bert.modeling_flax_bert import (
     FlaxBertForMaskedLM,
     FlaxBertForMultipleChoice,
@@ -64,6 +69,7 @@ FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
         (BertConfig, FlaxBertForSequenceClassification),
+        (BartConfig, FlaxBartForSequenceClassification),
     ]
 )
 
@@ -71,6 +77,7 @@ FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
         (BertConfig, FlaxBertForQuestionAnswering),
+        (BartConfig, FlaxBartForQuestionAnswering),
     ]
 )
 
@@ -93,7 +100,11 @@ FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = OrderedDict(
         (BertConfig, FlaxBertForNextSentencePrediction),
     ]
 )
-FLAX_MODEL_FOR_CONDITIONAL_GENERATION = OrderedDict([(BartConfig, FlaxBartForConditionalGeneration)])
+FLAX_MODEL_FOR_CONDITIONAL_GENERATION_MAPPING = OrderedDict(
+    [
+        (BartConfig, FlaxBartForConditionalGeneration),
+    ]
+)
 
 FlaxAutoModel = auto_class_factory("FlaxAutoModel", FLAX_MODEL_MAPPING)
 
@@ -131,6 +142,6 @@ FlaxAutoModelForNextSentencePrediction = auto_class_factory(
 
 FlaxAutoModelForConditionalGeneration = auto_class_factory(
     "FlaxAutoModelForConditionalGeneration",
-    FLAX_MODEL_FOR_CONDITIONAL_GENERATION,
+    FLAX_MODEL_FOR_CONDITIONAL_GENERATION_MAPPING,
     head_doc="conditional generation",
 )
