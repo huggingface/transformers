@@ -14,8 +14,10 @@
 # limitations under the License.
 """Feature extractor class for DETR."""
 
-from typing import Dict, List, Optional, Union
+import io
+from collections import defaultdict
 import pathlib
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 from PIL import Image
