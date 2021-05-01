@@ -374,10 +374,7 @@ class DeepSpeedConfigHF:
         # amp: similar to the pytorch native amp - it has a bunch of optional params but we won't set
         # any here unless the user did the work
         config_fp16 = config.get("fp16")
-        # XXX: at the moment fp16 can't be False, but the fp32 solution is in works - once it's PR'ed and
-        # merged and a new release is made, delete the next line and uncomment the one after it
-        _set_if_auto(config_fp16, "enabled", True)
-        # _set_if_auto(config_fp16, "enabled", fp16_backend == "amp")
+        _set_if_auto(config_fp16, "enabled", fp16_backend == "amp")
 
         # apex: delegates amp work to apex (which needs to be available), but it cannot be used with any
         # ZeRO features, so probably best to be avoided.
