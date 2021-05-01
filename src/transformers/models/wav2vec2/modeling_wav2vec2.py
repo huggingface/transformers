@@ -50,7 +50,7 @@ def _compute_mask_indices(
     mask_length: int,
     attention_mask: Optional[torch.Tensor] = None,
     min_masks: int = 0,
-) -> np.ndarray:
+) -> torch.Tensor:
     """
     Computes random mask spans for a given shape
 
@@ -67,50 +67,43 @@ def _compute_mask_indices(
     Adapted from `fairseq's data_utils.py
     <https://github.com/pytorch/fairseq/blob/e0788f7007a8473a76db573985031f3c94201e79/fairseq/data/data_utils.py#L376>`__.
     """
+    torch_device = "cuda" if torch.cuda.is_available() else "cpu"
     bsz, all_sz = shape
-    mask = np.full((bsz, all_sz), False)
-
-    all_num_mask = int(
-        # add a random number for probabilistic rounding
-        mask_prob * all_sz / float(mask_length)
-        + np.random.rand()
-    )
-
-    all_num_mask = max(min_masks, all_num_mask)
-
-    mask_idcs = []
+    mask = torch.full((bsz, all_sz), False, device=torch_device)
+    min_len_unique, mask_idcs = float("Inf"), []
     padding_mask = attention_mask.ne(1) if attention_mask is not None else None
+    if padding_mask is not None:
+        sz = all_sz - padding_mask.long().sum(dim=1)
+        num_mask = (((sz * mask_prob) / mask_length) + torch.rand(bsz, device=torch_device)).int()
+    else:
+        sz = torch.full([bsz], all_sz, device=torch_device)
+        all_num_mask = ((all_sz * mask_prob) / mask_length) + torch.rand(1, device=torch_device)[0]
+        num_mask = torch.full([bsz], all_num_mask, device=torch_device).int()
+
+    num_mask = torch.clamp(num_mask, min=min_masks)
     for i in range(bsz):
-        if padding_mask is not None:
-            sz = all_sz - padding_mask[i].long().sum().item()
-            num_mask = int(
-                # add a random number for probabilistic rounding
-                mask_prob * sz / float(mask_length)
-                + np.random.rand()
-            )
-            num_mask = max(min_masks, num_mask)
-        else:
-            sz = all_sz
-            num_mask = all_num_mask
+        curr_num_mask = int(num_mask[i])
+        curr_sz = sz[i]
+        lengths = torch.full([curr_num_mask], mask_length, device=torch_device)
+        if lengths.nelement() == 0:
+            lengths[0] = min(mask_length, curr_sz - 1)
 
-        lengths = np.full(num_mask, mask_length)
+        min_len = lengths[0]
+        if curr_sz - min_len <= curr_num_mask:
+            min_len = curr_sz - curr_num_mask - 1
+        rg = torch.arange(curr_sz - min_len, dtype=torch.float32, device=torch_device)
+        mask_idc = rg.gather(dim=0, index=torch.multinomial(rg, curr_num_mask, replacement=False))
+        mask_idc = mask_idc.repeat(lengths[0]) + torch.flatten(
+            torch.arange(lengths[0], device=torch_device).repeat(mask_idc.size()[0], 1).T
+        )
+        mask_idc_unique = torch.unique(mask_idc[mask_idc < curr_sz])
+        min_len_unique = min(min_len_unique, mask_idc_unique.size()[0])
+        mask_idcs.append(mask_idc_unique)
 
-        if sum(lengths) == 0:
-            lengths[0] = min(mask_length, sz - 1)
-
-        min_len = min(lengths)
-        if sz - min_len <= num_mask:
-            min_len = sz - num_mask - 1
-
-        mask_idc = np.random.choice(sz - min_len, num_mask, replace=False)
-        mask_idc = np.asarray([mask_idc[j] + offset for j in range(len(mask_idc)) for offset in range(lengths[j])])
-        mask_idcs.append(np.unique(mask_idc[mask_idc < sz]))
-
-    min_len = min([len(m) for m in mask_idcs])
     for i, mask_idc in enumerate(mask_idcs):
-        if len(mask_idc) > min_len:
-            mask_idc = np.random.choice(mask_idc, min_len, replace=False)
-        mask[i, mask_idc] = True
+        if mask_idc.size()[0] > min_len_unique:
+            mask_idc = mask_idc.gather(dim=0, index=torch.multinomial(mask_idc, min_len_unique, replacement=False))
+        mask[i, mask_idc.long()] = True
 
     return mask
 
@@ -857,7 +850,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                     attention_mask=attention_mask,
                     min_masks=2,
                 )
-                hidden_states[torch.from_numpy(mask_time_indices)] = self.masked_spec_embed.to(hidden_states.dtype)
+                hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
 
             # apply SpecAugment along feature axis
             if self.config.mask_feature_prob > 0:
@@ -866,7 +859,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                     self.config.mask_feature_prob,
                     self.config.mask_feature_length,
                 )
-                mask_feature_indices = torch.from_numpy(mask_feature_indices).to(hidden_states.device)
+                mask_feature_indices = mask_feature_indices.to(hidden_states.device)
                 hidden_states[mask_feature_indices[:, None].expand(-1, sequence_length, -1)] = 0
 
         encoder_outputs = self.encoder(
