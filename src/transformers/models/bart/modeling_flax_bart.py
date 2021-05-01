@@ -29,6 +29,7 @@ from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_fo
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
+    FlaxCausalLMOutputWithCrossAttentions,
     FlaxSeq2SeqModelOutput,
     FlaxSeq2SeqLMOutput,
     FlaxSeq2SeqSequenceClassifierOutput,
@@ -1363,4 +1364,112 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
 
 class FlaxBartForQuestionAnswering(FlaxBartPretrainedModel):
     module_class = FlaxBartForQuestionAnsweringModule
+    dtype = jnp.float32
+
+
+class FlaxBartDecoderWrapperModule(nn.Module):
+    config: BartConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.decoder = FlaxBartDecoder(self.config, dtype=self.dtype)
+
+    def __call__(self, *args, **kwargs):
+        return self.decoder(*args, **kwargs)
+
+
+class FlaxBartDecoderWrapper(FlaxBartPretrainedModel):
+    """
+    This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
+    used in combination with the :class:`~transformers.EncoderDecoderModel` framework.
+    """
+    module_class = FlaxBartForQuestionAnsweringModule
+    dtype = jnp.float32
+
+
+class FlaxBartForCausalLMModule(nn.Module):
+    config: BartConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.config.is_decoder = True
+        self.config.is_encoder_decoder = False
+
+        self.decoder = FlaxBartDecoderWrapper(self.config, dtype=self.dtype)
+        self.lm_head = nn.Dense(self.config.vocab_size, use_bias=False, dtype=self.dtype)
+
+    def get_input_embeddings(self):
+        return self.model.decoder.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.decoder.embed_tokens = value
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.model.decoder = decoder
+
+    def get_decoder(self):
+        return self.model.decoder
+
+    def __call__(
+        self,
+        input_ids: Optional[jnp.ndarray] = None,
+        attention_mask: Optional[jnp.ndarray] = None,
+        encoder_hidden_states: Optional[jnp.ndarray] = None,
+        encoder_attention_mask: Optional[jnp.ndarray] = None,
+        head_mask: Optional[jnp.ndarray] = None,
+        cross_attn_head_mask: Optional[jnp.ndarray] = None,
+        past_key_values: Optional[jnp.ndarray] = None,
+        inputs_embeds: Optional[jnp.ndarray] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = False,
+        deterministic: bool = True,
+    ):
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        outputs = self.decoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            head_mask=head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        logits = self.lm_head(outputs[0])
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return output
+
+        return FlaxCausalLMOutputWithCrossAttentions(
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
+        )
+
+
+class FlaxBartForCausalLM(FlaxBartPretrainedModel):
+    module_class = FlaxBartForCausalLMModule
     dtype = jnp.float32
