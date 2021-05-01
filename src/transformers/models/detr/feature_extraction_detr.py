@@ -635,7 +635,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             outputs (:class:`~transformers.DetrForObjectDetection`):
                 Raw outputs of the model.
             target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`, `optional`):
-                Tensor containing the size (h, w) of each images of the batch. For evaluation, this must be the
+                Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the
                 original image size (before any data augmentation). For visualization, this should be the image size
                 after data augment, but before padding.
         """
@@ -677,17 +677,34 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/segmentation.py#L241
     def post_process_panoptic(self, outputs, processed_sizes, target_sizes=None, is_thing_map=None, threshold=0.85):
-        """ This function computes the panoptic prediction from the model's predictions.
+        """ 
+        Converts the output of :class:`~transformers.DetrForPanopticSegmentation` into actual panoptic predictions.
+        
+        Only supports PyTorch.
+        
         Parameters:
-            outputs: This is a dict coming directly from the model. See the model doc for the content.
-            processed_sizes: This is a list of tuples (or torch tensors) of sizes of the images that were passed to the
-                             model, ie the size after data augmentation but before batching.
-            target_sizes: This is a list of tuples (or torch tensors) corresponding to the requested final size
-                          of each prediction. If left to None, it will default to the processed_sizes
+            outputs (:class:`~transformers.DetrForPanopticSegmentation`):
+                Raw outputs of the model.
+            processed_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)` or :obj:`List[Tuple]` of length :obj:`batch_size`):
+                Torch Tensor (or list) containing the size (h, w) of each image of the batch, i.e. the size after data 
+                augmentation but before batching.
+            target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)` or :obj:`List[Tuple]` of length :obj:`batch_size`, `optional`):
+                Torch Tensor (or list) corresponding to the requested final size (h, w) of each prediction. 
+                If left to None, it will default to the :obj:`processed_sizes`.
+            is_thing_map (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`, `optional`):
+                Dictionary mapping class indices to either True or False, depending on whether or not they are a thing. 
+                If not set, defaults to the :obj:`is_thing_map` of COCO panoptic. 
+            threshold (:obj:`int`, `optional`, defaults to 0.85):
+                Threshold to use to filter out queries. 
             """
         if target_sizes is None:
             target_sizes = processed_sizes
         assert len(processed_sizes) == len(target_sizes)
+
+        if is_thing_map is None:
+            # default to is_thing_map of COCO panoptic
+            is_thing_map = {i: i <= 90 for i in range(201)}
+
         out_logits, raw_masks, raw_boxes = outputs.logits, outputs.pred_masks, outputs.pred_boxes
         assert len(out_logits) == len(raw_masks) == len(target_sizes)
         preds = []
