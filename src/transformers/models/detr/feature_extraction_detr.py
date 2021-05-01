@@ -85,17 +85,26 @@ def masks_to_boxes(masks):
 
     y = np.arange(0, h, dtype=np.float32)
     x = np.arange(0, w, dtype=np.float32)
-    y, x = np.meshgrid(y, x)
+    # see https://github.com/pytorch/pytorch/issues/50276 
+    y, x = np.meshgrid(y, x, indexing='ij')
 
     x_mask = (masks * np.expand_dims(x, axis=0))
-    x_max = x_mask.flatten(1).max(-1)[0]
-    x_min = x_mask.masked_fill(~(masks.bool()), 1e8).flatten(1).min(-1)[0]
+    x_max = x_mask.reshape(x_mask.shape[0],-1).max(-1)
+    x = np.ma.array(x_mask, mask=~(np.array(masks, dtype=bool)))
+    x_min = x.filled(fill_value=1e8)
+    x_min = x_min.reshape(x_min.shape[0], -1).min(-1)
 
     y_mask = (masks * np.expand_dims(y, axis=0))
-    y_max = y_mask.flatten(1).max(-1)[0]
-    y_min = y_mask.masked_fill(~(masks.bool()), 1e8).flatten(1).min(-1)[0]
+    y_max = y_mask.reshape(x_mask.shape[0],-1).max(-1)
+    y = np.ma.array(y_mask, mask=~(np.array(masks, dtype=bool)))
+    y_min = y.filled(fill_value=1e8)
+    y_min = y_min.reshape(y_min.shape[0], -1).min(-1)
 
-    return torch.stack([x_min, y_min, x_max, y_max], 1)
+    # y_mask = (masks * np.expand_dims(y, axis=0))
+    # y_max = y_mask.reshape(y_mask.shape[0],-1).max(-1)
+    # y_min = y_mask.masked_fill(~(np.array(masks, dtype=bool)), 1e8).flatten(1).min(-1)
+
+    return np.stack([x_min, y_min, x_max, y_max], 1)
 
 
 class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
@@ -140,6 +149,47 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.image_mean = image_mean if image_mean is not None else [0.485, 0.456, 0.406]
         self.image_std = image_std if image_std is not None else [0.229, 0.224, 0.225]
 
+    def prepare(self, image, target, masks_path=None):
+        if self.task == "object_detection":
+            image, target = self.prepare_object_detection(image, target)
+            return image, target
+        elif self.task == "panoptic_segmentation":
+            image, target = self.prepare_panoptic_segmentation(image, target, masks_path)
+            return image, target
+        else:
+            raise ValueError(f"Task {task} not supported")
+
+    def prepare_panoptic_segmentation(self, image, target, masks_path, return_masks=True):
+        w, h = image.size
+        ann_info = target.copy()
+        ann_path = pathlib.Path(masks_path) / ann_info['file_name']
+        
+        if "segments_info" in ann_info:
+            masks = np.asarray(Image.open(ann_path), dtype=np.uint32)
+            masks = rgb2id(masks)
+
+            ids = np.array([ann['id'] for ann in ann_info['segments_info']])
+            masks = masks == ids[:, None, None]
+            masks = np.asarray(masks, dtype=np.uint8)
+            
+            labels = np.asarray([ann['category_id'] for ann in ann_info['segments_info']], dtype=np.int64)
+
+        target = {}
+        target['image_id'] = np.asarray([ann_info['image_id'] if "image_id" in ann_info else ann_info["id"]], dtype=np.int64)
+        if return_masks:
+            target['masks'] = masks
+        target['class_labels'] = labels
+
+        target["boxes"] = masks_to_boxes(masks)
+
+        target['size'] = np.asarray([int(h), int(w)], dtype=np.int64)
+        target['orig_size'] = np.asarray([int(h), int(w)], dtype=np.int64)
+        if "segments_info" in ann_info:
+            target["iscrowd"] = np.asarray([ann["iscrowd"] for ann in ann_info['segments_info']], dtype=np.int64)
+            target["area"] = np.asarray([ann["area"] for ann in ann_info['segments_info']], dtype=np.float32)
+
+        return image, target
+
     # inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L33
     def convert_coco_poly_to_mask(segmentations, height, width):
 
@@ -158,47 +208,6 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             masks = np.zeros((0, height, width), dtype=np.uint8)
 
         return masks
-
-    def prepare(self, image, target, masks_path=None):
-        if self.task == "object_detection":
-            image, target = self.prepare_object_detection(image, target)
-            return image, target
-        elif self.task == "panoptic_segmentation":
-            image, target = self.prepare_panoptic_segmentation(image, target, masks_path)
-            return image, target
-        else:
-            raise ValueError(f"Task {task} not supported")
-
-    def prepare_panoptic_segmentation(self, image, target, masks_path, return_masks=True):
-        w, h = image.size
-        ann_info = target.copy()
-        ann_path = pathlib.Path(masks_path) / ann_info['file_name']
-        if "segments_info" in ann_info:
-            masks = np.asarray(Image.open(ann_path), dtype=np.uint32)
-            masks = rgb2id(masks)
-
-            ids = np.array([ann['id'] for ann in ann_info['segments_info']])
-            masks = masks == ids[:, None, None]
-
-            masks = np.asarray(masks, dtype=np.uint8)
-            labels = np.asarray([ann['category_id'] for ann in ann_info['segments_info']], dtype=np.int64)
-
-        target = {}
-        target['image_id'] = np.asarray([ann_info['image_id'] if "image_id" in ann_info else ann_info["id"]])
-        if return_masks:
-            target['masks'] = masks
-        target['labels'] = labels
-
-        target["boxes"] = masks_to_boxes(masks)
-
-        target['size'] = np.asarray([int(h), int(w)], dtype=np.int64)
-        target['orig_size'] = np.asarray([int(h), int(w)], dtype=np.int64)
-        if "segments_info" in ann_info:
-            for name in ['iscrowd', 'area']:
-                target[name] = np.asarray([ann[name] for ann in ann_info['segments_info']])
-
-        return image, target
-
     
     # inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L50
     def prepare_object_detection(self, image, target, return_segmentation_masks=False):
@@ -327,7 +336,11 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         target["size"] = np.asarray([h, w], dtype=np.int64)
 
         if "masks" in target:
-            target["masks"] = interpolate(target["masks"][:, None].float(), size, mode="nearest")[:, 0] > 0.5
+            # use PyTorch as current workaround
+            #TODO make this better
+            masks = torch.from_numpy(target["masks"][:, None]).float()
+            interpolated_masks = F.interpolate(masks, size, mode="nearest")[:, 0] > 0.5
+            target["masks"] = interpolated_masks.numpy()
 
         return rescaled_image, target
 
@@ -568,10 +581,11 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 if not is_torch_available():
                     raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
                 import torch
-
+                
                 encoded_inputs["target"] = [
                     {k: torch.from_numpy(v) for k, v in target.items()} for target in annotations
                 ]
+            
             elif tensor_type == TensorType.JAX:
                 if not is_flax_available():
                     raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")

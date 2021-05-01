@@ -321,9 +321,9 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
     def test_call_pytorch_with_annotations_panoptic_segmentation(self):
         # prepare image, target and masks_path
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations_panoptic.txt", "r") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt", "r") as f:
             target = json.loads(f.read())
-
+        
         target = {"file_name": '000000039769.png', "image_id": 39769, "segments_info": target}
         
         masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
@@ -334,5 +334,35 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         encoding = feature_extractor(images=image, annotations=target, masks_path=masks_path, return_tensors="pt")
 
         # verify pixel values
-        #TODO
-        pass
+        expected_shape = torch.Size([1, 3, 800, 1066])
+        self.assertEqual(encoding["pixel_values"].shape, expected_shape)
+
+        expected_slice = torch.tensor([0.2796, 0.3138, 0.3481])
+        assert torch.allclose(encoding["pixel_values"][0, 0, 0, :3], expected_slice, atol=1e-4)
+
+        # verify area
+        expected_area = torch.tensor([147979.6875, 165527.0469, 484638.5938, 11292.9375, 5879.6562, 7634.1147])
+        assert torch.allclose(encoding["target"][0]["area"], expected_area)
+        # verify boxes
+        expected_boxes_shape = torch.Size([6, 4])
+        self.assertEqual(encoding["target"][0]["boxes"].shape, expected_boxes_shape)
+        expected_boxes_slice = torch.tensor([0.2625, 0.5437, 0.4688, 0.8625])
+        assert torch.allclose(encoding["target"][0]["boxes"][0], expected_boxes_slice, atol=1e-3)
+        # verify image_id
+        expected_image_id = torch.tensor([39769])
+        assert torch.allclose(encoding["target"][0]["image_id"], expected_image_id)
+        # verify is_crowd
+        expected_is_crowd = torch.tensor([0, 0, 0, 0, 0, 0])
+        assert torch.allclose(encoding["target"][0]["iscrowd"], expected_is_crowd)
+        # verify class_labels
+        expected_class_labels = torch.tensor([17, 17, 63, 75, 75, 93])
+        assert torch.allclose(encoding["target"][0]["class_labels"], expected_class_labels)
+        # verify masks
+        expected_masks_sum = 822338
+        self.assertEqual(encoding["target"][0]["masks"].sum().item(), expected_masks_sum)
+        # verify orig_size
+        expected_orig_size = torch.tensor([480, 640])
+        assert torch.allclose(encoding["target"][0]["orig_size"], expected_orig_size)
+        # verify size
+        expected_size = torch.tensor([800, 1066])
+        assert torch.allclose(encoding["target"][0]["size"], expected_size)
