@@ -30,17 +30,12 @@ from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
     FlaxCausalLMOutputWithCrossAttentions,
-    FlaxSeq2SeqModelOutput,
     FlaxSeq2SeqLMOutput,
-    FlaxSeq2SeqSequenceClassifierOutput,
+    FlaxSeq2SeqModelOutput,
     FlaxSeq2SeqQuestionAnsweringModelOutput,
+    FlaxSeq2SeqSequenceClassifierOutput,
 )
-
-from ...modeling_flax_utils import (
-    ACT2FN,
-    FlaxPreTrainedModel,
-    overwrite_call_docstring,
-)
+from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel
 from ...utils import logging
 from .configuration_bart import BartConfig
 
@@ -470,6 +465,7 @@ class FlaxBartDecoderLayer(nn.Module):
 
 class FlaxBartClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
+
     config: BartConfig
     inner_dim: int
     num_classes: int
@@ -509,8 +505,11 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
+        input_ids = jax.ops.index_update(
+            input_ids, (..., -1), self.config.eos_token_id
+        )  # make sure initialization pass will work
         attention_mask = jnp.ones_like(input_ids)
-        decoder_input_ids = jnp.zeros(input_shape, dtype="i4")
+        decoder_input_ids = input_ids
         decoder_attention_mask = jnp.ones_like(input_ids)
 
         params_rng, dropout_rng = jax.random.split(rng)
@@ -534,11 +533,17 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = False,
+        return_dict: Optional[bool] = None,
         deterministic: bool = True,
         params: dict = None,
         dropout_rng: PRNGKey = None,
     ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
         # Sanity check
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -609,6 +614,102 @@ BART_START_DOCSTRING = r"""
             weights.
 """
 
+BART_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using :class:`~transformers.BartTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+        attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
+        decoder_input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`~transformers.BartTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
+
+            `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
+
+            Bart uses the :obj:`eos_token_id` as the starting token for :obj:`decoder_input_ids` generation. If
+            :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
+            :obj:`past_key_values`).
+
+            For translation and summarization training, :obj:`decoder_input_ids` should be provided. If no
+            :obj:`decoder_input_ids` is provided, the model will create this tensor by shifting the :obj:`input_ids` to
+            the right for denoising pre-training following the paper.
+        decoder_attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
+            Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
+            also be used by default.
+
+            If you want to change padding behavior, you should read :func:`modeling_bart._prepare_decoder_inputs` and
+            modify to your needs. See diagram 1 in `the paper <https://arxiv.org/abs/1910.13461>`__ for more
+            information on the default strategy.
+        head_mask (:obj:`jnp.ndarray` of shape :obj:`(encoder_layers, encoder_attention_heads)`, `optional`):
+            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        decoder_head_mask (:obj:`jnp.ndarray` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
+            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        cross_attn_head_mask (:obj:`jnp.ndarray` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in ``[0,
+            1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        encoder_outputs (:obj:`tuple(tuple(jnp.ndarray)`, `optional`):
+            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
+            :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
+            `optional`) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
+            cross-attention of the decoder.
+        past_key_values (:obj:`Tuple[Tuple[jnp.ndarray]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+            Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
+
+            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
+            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
+            instead of all :obj:`decoder_input_ids`` of shape :obj:`(batch_size, sequence_length)`.
+        inputs_embeds (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
+            vectors than the model's internal embedding lookup matrix.
+        decoder_inputs_embeds (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`):
+            Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded
+            representation. If :obj:`past_key_values` is used, optionally only the last :obj:`decoder_inputs_embeds`
+            have to be input (see :obj:`past_key_values`). This is useful if you want more control over how to convert
+            :obj:`decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+
+            If :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both unset, :obj:`decoder_inputs_embeds`
+            takes the value of :obj:`inputs_embeds`.
+        use_cache (:obj:`bool`, `optional`):
+            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
+            decoding (see :obj:`past_key_values`).
+        output_attentions (:obj:`bool`, `optional`):
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`):
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail.
+        return_dict (:obj:`bool`, `optional`):
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+"""
+
 
 class FlaxBartEncoder(nn.Module):
     """
@@ -660,7 +761,7 @@ class FlaxBartEncoder(nn.Module):
         inputs_embeds: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = False,
+        return_dict: bool = True,
         deterministic: bool = True,
     ):
         r"""
@@ -758,8 +859,8 @@ class FlaxBartEncoder(nn.Module):
             if output_attentions:
                 all_attentions = all_attentions + (attn,)
 
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
+        if output_hidden_states:
+            encoder_states = encoder_states + (hidden_states,)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
@@ -843,7 +944,7 @@ class FlaxBartDecoder(nn.Module):
         output_attentions: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = False,
+        return_dict: bool = True,
         deterministic: bool = True,
     ):
         r"""
@@ -984,6 +1085,7 @@ class FlaxBartDecoder(nn.Module):
                 use_cache=use_cache,
                 deterministic=deterministic,
             )
+            hidden_states = layer_outputs[0]
 
             if use_cache:
                 next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
@@ -1001,7 +1103,9 @@ class FlaxBartDecoder(nn.Module):
         next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
             return tuple(
-                v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_cross_attentions] if v is not None
+                v
+                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_cross_attentions]
+                if v is not None
             )
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
@@ -1032,6 +1136,7 @@ class FlaxBartModule(nn.Module):
         self.encoder = FlaxBartEncoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
         self.decoder = FlaxBartDecoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
 
+    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids: Optional[jnp.ndarray] = None,
@@ -1048,7 +1153,7 @@ class FlaxBartModule(nn.Module):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = False,
+        return_dict: bool = True,
         deterministic: bool = True,
     ):
         if decoder_input_ids is None and decoder_inputs_embeds is None:
@@ -1113,6 +1218,10 @@ class FlaxBartModule(nn.Module):
         )
 
 
+@add_start_docstrings(
+    "The bare Bart Model transformer outputting raw hidden-states without any specific head on top.",
+    BART_START_DOCSTRING,
+)
 class FlaxBartModel(FlaxBartPretrainedModel):
     config: BartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -1138,6 +1247,7 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
         self.lm_head = nn.Dense(self.model.shared.num_embeddings, use_bias=False, dtype=self.dtype)
         self.final_logits_bias = self.param("final_logits_bias", self.bias_init, self.model.shared.num_embeddings)
 
+    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids: Optional[jnp.ndarray] = None,
@@ -1154,7 +1264,7 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = False,
+        return_dict: bool = True,
         deterministic: bool = True,
     ):
         outputs = self.model(
@@ -1194,6 +1304,9 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
         )
 
 
+@add_start_docstrings(
+    "The BART Model with a language modeling head. Can be used for summarization.", BART_START_DOCSTRING
+)
 class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
     module_class = FlaxBartForConditionalGenerationModule
     dtype: jnp.dtype = jnp.float32
@@ -1202,16 +1315,18 @@ class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
 class FlaxBartForSequenceClassificationModule(nn.Module):
     config: BartConfig
     dtype: jnp.dtype = jnp.float32
+    num_labels: Optional[int] = None
 
     def setup(self):
         self.model = FlaxBartModule(config=self.config, dtype=self.dtype)
         self.classification_head = FlaxBartClassificationHead(
             config=self.config,
             inner_dim=self.config.d_model,
-            num_classes=self.config.num_labels,
+            num_classes=self.num_labels if self.num_labels is not None else self.config.num_labels,
             pooler_dropout=self.config.classifier_dropout,
         )
 
+    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids: Optional[jnp.ndarray] = None,
@@ -1228,7 +1343,7 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = False,
+        return_dict: bool = True,
         deterministic: bool = True,
     ):
         outputs = self.model(
@@ -1255,14 +1370,15 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
         eos_mask = lax.eq(input_ids, self.config.eos_token_id * jnp.ones_like(input_ids))
 
         if len(jnp.unique(eos_mask.sum(1))) > 1:
+            print(eos_mask.sum(1))
             raise ValueError("All examples must have the same number of <eos> tokens.")
 
-        if hidden_states[eos_mask, :].shape[0] == 0:  # we need to handle initialization pass
-            sentence_representation = jnp.zeros((1, 1, hidden_states.shape[-1]))
+        if (hidden_states[eos_mask, :].shape[0] == 0) and (input_ids.shape != (1, 1)):
+            raise ValueError("There are missing <eos> tokens in input_ids")
         else:
-            sentence_representation = hidden_states[eos_mask, :].reshape(hidden_states.shape[0], -1, hidden_states.shape[-1])[
-                :, -1, :
-            ]
+            sentence_representation = hidden_states[eos_mask, :].reshape(
+                hidden_states.shape[0], -1, hidden_states.shape[-1]
+            )[:, -1, :]
         logits = self.classification_head(sentence_representation, deterministic=deterministic)
 
         if not return_dict:
@@ -1281,6 +1397,13 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
         )
 
 
+@add_start_docstrings(
+    """
+    Bart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE
+    tasks.
+    """,
+    BART_START_DOCSTRING,
+)
 class FlaxBartForSequenceClassification(FlaxBartPretrainedModel):
     module_class = FlaxBartForSequenceClassificationModule
     dtype = jnp.float32
@@ -1295,6 +1418,7 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
         self.model = FlaxBartModule(config=self.config, dtype=self.dtype)
         self.qa_outputs = nn.Dense(self.num_labels, dtype=self.dtype)
 
+    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids: Optional[jnp.ndarray] = None,
@@ -1311,7 +1435,7 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = False,
+        return_dict: bool = True,
         deterministic: bool = True,
     ):
         outputs = self.model(
@@ -1360,6 +1484,13 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
         )
 
 
+@add_start_docstrings(
+    """
+    BART Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
+    BART_START_DOCSTRING,
+)
 class FlaxBartForQuestionAnswering(FlaxBartPretrainedModel):
     module_class = FlaxBartForQuestionAnsweringModule
     dtype = jnp.float32
@@ -1381,6 +1512,7 @@ class FlaxBartDecoderWrapper(FlaxBartPretrainedModel):
     This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
     used in combination with the :class:`~transformers.EncoderDecoderModel` framework.
     """
+
     module_class = FlaxBartDecoderWrapperModule
     dtype = jnp.float32
 
@@ -1427,9 +1559,86 @@ class FlaxBartForCausalLMModule(nn.Module):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = False,
+        return_dict: bool = True,
         deterministic: bool = True,
     ):
+        r"""
+        Args:
+            input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
+                provide it.
+
+                Indices can be obtained using :class:`~transformers.BartTokenizer`. See
+                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
+                for details.
+
+                `What are input IDs? <../glossary.html#input-ids>`__
+            attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                `What are attention masks? <../glossary.html#attention-mask>`__
+            encoder_hidden_states  (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+                if the model is configured as a decoder.
+            encoder_attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used
+                in the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
+            head_mask (:obj:`jnp.ndarray` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
+                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
+
+                - 1 indicates the head is **not masked**,
+                - 0 indicates the head is **masked**.
+
+            cross_attn_head_mask (:obj:`jnp.ndarray` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
+                Mask to nullify selected heads of the cross-attention modules. Mask values selected in ``[0, 1]``:
+
+                - 1 indicates the head is **not masked**,
+                - 0 indicates the head is **masked**.
+
+            past_key_values (:obj:`tuple(tuple(jnp.ndarray))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+                Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
+                decoding.
+
+                If :obj:`past_key_values` are used, the user can optionally input only the last ``decoder_input_ids``
+                (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
+                instead of all ``decoder_input_ids`` of shape :obj:`(batch_size, sequence_length)`.
+            labels (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                Labels for computing the masked language modeling loss. Indices should either be in ``[0, ...,
+                config.vocab_size]`` or -100 (see ``input_ids`` docstring). Tokens with indices set to ``-100`` are
+                ignored (masked), the loss is only computed for the tokens with labels in ``[0, ...,
+                config.vocab_size]``.
+            use_cache (:obj:`bool`, `optional`):
+                If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
+                decoding (see :obj:`past_key_values`).
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+            output_attentions (:obj:`bool`, `optional`):
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more detail.
+            output_hidden_states (:obj:`bool`, `optional`):
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
+                for more detail.
+            return_dict (:obj:`bool`, `optional`):
+                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+
+        Returns:
+
+        Example::
+
+            >>> from transformers import BartTokenizer, BartForCausalLM
+
+            >>> tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
+            >>> model = BartForCausalLM.from_pretrained('facebook/bart-large', add_cross_attention=False)
+            >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
+            >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+            >>> outputs = model(**inputs)
+
+            >>> last_hidden_states = outputs.last_hidden_state
+        """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

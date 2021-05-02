@@ -32,10 +32,22 @@ FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = None
 FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
 
 
+FLAX_MODEL_FOR_CONDITIONAL_GENERATION_MAPPING = None
+
+
 FLAX_MODEL_MAPPING = None
 
 
 class FlaxAutoModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxAutoModelForCausalLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
@@ -99,6 +111,15 @@ class FlaxAutoModelForSequenceClassification:
 
 
 class FlaxAutoModelForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxAutoModelForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
@@ -181,6 +202,51 @@ class FlaxBertPreTrainedModel:
 
 
 class FlaxRobertaModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxBartForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxBartForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxBartForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxBartForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxBartModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 

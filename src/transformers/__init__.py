@@ -1361,6 +1361,7 @@ if is_flax_available():
     _import_structure["modeling_flax_utils"] = ["FlaxPreTrainedModel"]
     _import_structure["models.auto"].extend(
         [
+            "FLAX_MODEL_FOR_CONDITIONAL_GENERATION_MAPPING",
             "FLAX_MODEL_FOR_MASKED_LM_MAPPING",
             "FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
             "FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
@@ -1371,6 +1372,7 @@ if is_flax_available():
             "FLAX_MODEL_MAPPING",
             "FlaxAutoModel",
             "FlaxAutoModelForCausalLM",
+            "FlaxAutoModelForConditionalGeneration",
             "FlaxAutoModelForMaskedLM",
             "FlaxAutoModelForMultipleChoice",
             "FlaxAutoModelForNextSentencePrediction",
@@ -1384,8 +1386,8 @@ if is_flax_available():
         [
             "FlaxBartForCausalLM",
             "FlaxBartForConditionalGeneration",
-            "FlaxBartForSequenceClassification",
             "FlaxBartForQuestionAnswering",
+            "FlaxBartForSequenceClassification",
             "FlaxBartModel",
         ]
     )
@@ -2558,8 +2560,8 @@ if TYPE_CHECKING:
         from .models.bart import (
             FlaxBartForCausalLM,
             FlaxBartForConditionalGeneration,
-            FlaxBartForSequenceClassification,
             FlaxBartForQuestionAnswering,
+            FlaxBartForSequenceClassification,
             FlaxBartModel,
         )
         from .models.bert import (

@@ -42,6 +42,14 @@ if is_torch_available():
     import torch
 
 
+def _config_zero_init(config):
+    configs_no_init = copy.deepcopy(config)
+    for key in configs_no_init.__dict__.keys():
+        if "_range" in key or "_std" in key or "initializer_factor" in key:
+            setattr(configs_no_init, key, 1e-10)
+    return configs_no_init
+
+
 def ids_tensor(shape, vocab_size, rng=None):
     """Creates a random int32 tensor of the shape within the vocab size."""
     if rng is None:
@@ -71,6 +79,7 @@ def random_attention_mask(shape, rng=None):
 class FlaxModelTesterMixin:
     model_tester = None
     all_model_classes = ()
+    test_head_masking = False
 
     def _prepare_for_class(self, inputs_dict, model_class):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -235,13 +244,37 @@ class FlaxModelTesterMixin:
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
                 model = model_class(config)
 
-                @jax.jit
-                def model_jitted(input_ids, attention_mask=None, token_type_ids=None):
-                    return model(
-                        input_ids=input_ids,
-                        attention_mask=attention_mask,
-                        token_type_ids=token_type_ids,
-                    ).to_tuple()
+                if config.is_encoder_decoder:
+
+                    @jax.jit
+                    def model_jitted(
+                        input_ids,
+                        decoder_input_ids=None,
+                        attention_mask=None,
+                        decoder_attention_mask=None,
+                        head_mask=None,
+                        decoder_head_mask=None,
+                        cross_attn_head_mask=None,
+                    ):
+                        return model(
+                            input_ids=input_ids,
+                            decoder_input_ids=decoder_input_ids,
+                            attention_mask=attention_mask,
+                            decoder_attention_mask=decoder_attention_mask,
+                            head_mask=head_mask,
+                            decoder_head_mask=decoder_head_mask,
+                            cross_attn_head_mask=cross_attn_head_mask,
+                        ).to_tuple()
+
+                else:
+
+                    @jax.jit
+                    def model_jitted(input_ids, attention_mask=None, token_type_ids=None):
+                        return model(
+                            input_ids=input_ids,
+                            attention_mask=attention_mask,
+                            token_type_ids=token_type_ids,
+                        ).to_tuple()
 
                 with self.subTest("JIT Enabled"):
                     jitted_outputs = model_jitted(**prepared_inputs_dict)
@@ -254,13 +287,37 @@ class FlaxModelTesterMixin:
                 for jitted_output, output in zip(jitted_outputs, outputs):
                     self.assertEqual(jitted_output.shape, output.shape)
 
-                @jax.jit
-                def model_jitted_return_dict(input_ids, attention_mask=None, token_type_ids=None):
-                    return model(
-                        input_ids=input_ids,
-                        attention_mask=attention_mask,
-                        token_type_ids=token_type_ids,
-                    )
+                if config.is_encoder_decoder:
+
+                    @jax.jit
+                    def model_jitted_return_dict(
+                        input_ids,
+                        decoder_input_ids=None,
+                        attention_mask=None,
+                        decoder_attention_mask=None,
+                        head_mask=None,
+                        decoder_head_mask=None,
+                        cross_attn_head_mask=None,
+                    ):
+                        return model(
+                            input_ids=input_ids,
+                            decoder_input_ids=decoder_input_ids,
+                            attention_mask=attention_mask,
+                            decoder_attention_mask=decoder_attention_mask,
+                            head_mask=head_mask,
+                            decoder_head_mask=decoder_head_mask,
+                            cross_attn_head_mask=cross_attn_head_mask,
+                        )
+
+                else:
+
+                    @jax.jit
+                    def model_jitted_return_dict(input_ids, attention_mask=None, token_type_ids=None):
+                        return model(
+                            input_ids=input_ids,
+                            attention_mask=attention_mask,
+                            token_type_ids=token_type_ids,
+                        )
 
                 # jitted function cannot return OrderedDict
                 with self.assertRaises(TypeError):
@@ -294,15 +351,31 @@ class FlaxModelTesterMixin:
             model = model_class(config)
 
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            hidden_states = outputs.hidden_states
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
-            self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
             seq_length = self.model_tester.seq_length
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
                 [seq_length, self.model_tester.hidden_size],
             )
+
+            if config.is_encoder_decoder:
+                hidden_states = outputs.decoder_hidden_states
+
+                self.assertIsInstance(hidden_states, (list, tuple))
+                self.assertEqual(len(hidden_states), expected_num_layers)
+                seq_len = getattr(self.model_tester, "seq_length", None)
+                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+
+                self.assertListEqual(
+                    list(hidden_states[0].shape[-2:]),
+                    [decoder_seq_length, self.model_tester.hidden_size],
+                )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

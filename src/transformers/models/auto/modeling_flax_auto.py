@@ -21,8 +21,8 @@ from ...utils import logging
 from ..bart.modeling_flax_bart import (
     FlaxBartForCausalLM,
     FlaxBartForConditionalGeneration,
-    FlaxBartForSequenceClassification,
     FlaxBartForQuestionAnswering,
+    FlaxBartForSequenceClassification,
     FlaxBartModel,
 )
 from ..bert.modeling_flax_bert import (
