@@ -17,9 +17,6 @@ import unittest
 import numpy as np
 import timeout_decorator  # noqa
 
-import jax
-import jax.numpy as jnp
-from jax import lax
 from transformers import BartConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
@@ -47,9 +44,9 @@ def prepare_bart_inputs_dict(
     cross_attn_head_mask=None,
 ):
     if attention_mask is None:
-        attention_mask = jnp.where(input_ids != config.pad_token_id, 1, 0)
+        attention_mask = np.where(input_ids != config.pad_token_id, 1, 0)
     if decoder_attention_mask is None:
-        decoder_attention_mask = jnp.where(decoder_input_ids != config.pad_token_id, 1, 0)
+        decoder_attention_mask = np.where(decoder_input_ids != config.pad_token_id, 1, 0)
     if head_mask is None:
         head_mask = np.ones((config.encoder_layers, config.encoder_attention_heads))
     if decoder_head_mask is None:
@@ -109,8 +106,10 @@ class FlaxBartModelTester(unittest.TestCase):
         self.initializer_range = initializer_range
 
     def prepare_config_and_inputs(self):
-        input_ids = lax.clamp(3, ids_tensor([self.batch_size, self.seq_length], self.vocab_size), self.vocab_size)
-        input_ids = jax.ops.index_update(input_ids, (..., -1), self.eos_token_id)  # Eos Token
+        input_ids = np.clip(ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size), 3, self.vocab_size)
+        input_ids = np.concatenate(
+            (input_ids, 2 * np.ones((self.batch_size, 1), dtype=np.int64)), -1
+        )
 
         decoder_input_ids = shift_tokens_right(input_ids, 1, 2)
 
@@ -144,7 +143,7 @@ class BartHeadTests(unittest.TestCase):
     vocab_size = 99
 
     def _get_config_and_data(self):
-        input_ids = jnp.array(
+        input_ids = np.array(
             [
                 [71, 82, 18, 33, 46, 91, 2],
                 [68, 34, 26, 58, 30, 82, 2],
@@ -160,7 +159,7 @@ class BartHeadTests(unittest.TestCase):
                 [45, 98, 37, 86, 59, 48, 2],
                 [70, 70, 50, 9, 28, 0, 2],
             ],
-            dtype=jnp.int64,
+            dtype=np.int64,
         )
 
         batch_size = input_ids.shape[0]
@@ -216,20 +215,20 @@ class BartHeadTests(unittest.TestCase):
             max_position_embeddings=48,
         )
         lm_model = FlaxBartForConditionalGeneration(config)
-        context = jnp.array([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]], dtype=jnp.int64)
-        summary = jnp.array([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]], dtype=jnp.int64)
+        context = np.array([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]], dtype=np.int64)
+        summary = np.array([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]], dtype=np.int64)
         outputs = lm_model(input_ids=context, decoder_input_ids=summary)
         expected_shape = (*summary.shape, config.vocab_size)
         self.assertEqual(outputs["logits"].shape, expected_shape)
 
     def test_shift_tokens_right(self):
-        input_ids = jnp.array([[71, 82, 18, 33, 2, 1, 1], [68, 34, 26, 58, 30, 82, 2]], dtype=jnp.int64)
+        input_ids = np.array([[71, 82, 18, 33, 2, 1, 1], [68, 34, 26, 58, 30, 82, 2]], dtype=np.int64)
         shifted = shift_tokens_right(input_ids, 1, 2)
-        n_pad_before = lax.eq(input_ids, 1).astype(jnp.float32).sum()
-        n_pad_after = lax.eq(shifted, 1).astype(jnp.float32).sum()
+        n_pad_before = np.equal(input_ids, 1).astype(np.float32).sum()
+        n_pad_after = np.equal(shifted, 1).astype(np.float32).sum()
         self.assertEqual(shifted.shape, input_ids.shape)
         self.assertEqual(n_pad_after, n_pad_before - 1)
-        self.assertTrue(lax.eq(shifted[:, 0], 2).all())
+        self.assertTrue(np.equal(shifted[:, 0], 2).all())
 
 
 @require_flax
