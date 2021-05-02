@@ -278,7 +278,6 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         return (vocab_file,)
 
     def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
-        # copy past the function from `src/transformers/tokenization_utils.py`
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
         it with indices starting from length of the current vocabulary.
@@ -325,8 +324,6 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         self.added_tokens_encoder.update(added_tok_encoder)
         self.added_tokens_decoder.update(added_tok_decoder)
 
-        # hack
-
         # Make sure we don't split on any special tokens (even they were already in the vocab before e.g. for Albert)
         if special_tokens:
             if len(new_tokens) == 1:
@@ -336,7 +333,6 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         else:
             # Or on the newly added tokens
             if len(tokens_to_add) == 1:
-                # hack added here
                 unique_no_split_tokens = self.unique_no_split_tokens[:]
                 _insert_one_token_to_ordered_list(self.unique_no_split_tokens, tokens_to_add[0])
                 self.unique_no_split_tokens = unique_no_split_tokens

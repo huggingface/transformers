@@ -375,6 +375,12 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         kwargs.update(self.special_tokens_map)
         return Wav2Vec2CTCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
+    def test_tokenizer_add_token_single_char(self):
+        tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-base-960h")
+        tokenizer.add_tokens("x")
+        token_ids = tokenizer("C x A").input_ids
+        self.assertEqual(token_ids, [19, 4, 32, 4, 7])
+
     def test_tokenizer_decode(self):
         tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-base-960h")
 
