@@ -75,13 +75,33 @@ class ViTEmbeddings(nn.Module):
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
+    def interpolate_pos_encoding(self, x, pos_embed):
+        
+        npatch = x.shape[1] - 1
+        N = pos_embed.shape[1] - 1
+        if npatch == N:
+            return pos_embed
+        class_emb = pos_embed[:, 0]
+        pos_embed = pos_embed[:, 1:]
+        dim = x.shape[-1]
+        pos_embed = nn.functional.interpolate(
+            pos_embed.reshape(1, int(math.sqrt(N)), int(math.sqrt(N)), dim).permute(0, 3, 1, 2),
+            scale_factor=math.sqrt(npatch / N),
+            mode='bicubic',
+        )
+        pos_embed = pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+        return torch.cat((class_emb.unsqueeze(0), pos_embed), dim=1)
+    
     def forward(self, pixel_values):
+        
         batch_size = pixel_values.shape[0]
         embeddings = self.patch_embeddings(pixel_values)
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
-        embeddings = embeddings + self.position_embeddings
+
+        position_embeddings = self.interpolate_pos_encoding(embeddings, self.position_embeddings)
+        embeddings = embeddings + position_embeddings
         embeddings = self.dropout(embeddings)
         return embeddings
 
@@ -496,7 +516,7 @@ class ViTModel(ViTPreTrainedModel):
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
+        
         embedding_output = self.embeddings(pixel_values)
 
         encoder_outputs = self.encoder(
