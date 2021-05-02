@@ -339,7 +339,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             # use PyTorch as current workaround
             #TODO make this better
             masks = torch.from_numpy(target["masks"][:, None]).float()
-            interpolated_masks = F.interpolate(masks, size, mode="nearest")[:, 0] > 0.5
+            interpolated_masks = F.interpolate(masks, size=(h,w), mode="nearest")[:, 0] > 0.5
             target["masks"] = interpolated_masks.numpy()
 
         return rescaled_image, target
@@ -387,7 +387,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several image(s) and optional annotations. Images are by default
-        padded up to the largest image in a batch, and a pixel mask is returned that indicates which pixels are
+        padded up to the largest image in a batch, and a pixel mask is created that indicates which pixels are
         read/which are padding.
 
         .. warning::
