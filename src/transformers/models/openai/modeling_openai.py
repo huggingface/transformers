@@ -146,7 +146,7 @@ class Attention(nn.Module):
     def __init__(self, nx, n_ctx, config, scale=False):
         super().__init__()
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
-        # [switch nx => n_state from Block to Attention to keep identical to TF implem]
+        # [switch nx => n_state from Block to Attention to keep identical to TF implementation]
         assert n_state % config.n_head == 0
         self.register_buffer("bias", torch.tril(torch.ones(n_ctx, n_ctx)).view(1, 1, n_ctx, n_ctx))
         self.n_head = config.n_head
@@ -178,7 +178,7 @@ class Attention(nn.Module):
         w = torch.matmul(q, k)
         if self.scale:
             w = w / math.sqrt(v.size(-1))
-        # w = w * self.bias + -1e9 * (1 - self.bias)  # TF implem method: mask_attn_weights
+        # w = w * self.bias + -1e9 * (1 - self.bias)  # TF implementation method: mask_attn_weights
         # XD: self.b may be larger than w, so we need to crop it
         b = self.bias[:, :, : w.size(-2), : w.size(-1)]
         w = w * b + -1e4 * (1 - b)
@@ -202,11 +202,11 @@ class Attention(nn.Module):
     def merge_heads(self, x):
         x = x.permute(0, 2, 1, 3).contiguous()
         new_x_shape = x.size()[:-2] + (x.size(-2) * x.size(-1),)
-        return x.view(*new_x_shape)  # in Tensorflow implem: fct merge_states
+        return x.view(*new_x_shape)  # in Tensorflow implementation: fct merge_states
 
     def split_heads(self, x, k=False):
         new_x_shape = x.size()[:-1] + (self.n_head, x.size(-1) // self.n_head)
-        x = x.view(*new_x_shape)  # in Tensorflow implem: fct split_states
+        x = x.view(*new_x_shape)  # in Tensorflow implementation: fct split_states
         if k:
             return x.permute(0, 2, 3, 1)
         else:
@@ -467,7 +467,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if position_ids is None:
-            # Code is different from when we had a single embedding matrice from position and token embeddings
+            # Code is different from when we had a single embedding matrix  from position and token embeddings
             position_ids = self.position_ids[None, : input_shape[-1]]
 
         # Attention mask.
@@ -814,7 +814,7 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
                 sequence_lengths = -1
                 logger.warning(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                    f"unexpected if using padding tokens in conjuction with `inputs_embeds.`"
+                    f"unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
 
         pooled_logits = logits[range(batch_size), sequence_lengths]

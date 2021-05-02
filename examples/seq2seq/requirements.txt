@@ -1,7 +1,0 @@
-datasets >= 1.1.3
-sentencepiece != 0.1.92
-protobuf
-sacrebleu >= 1.4.12
-rouge-score
-nltk
-py7zr

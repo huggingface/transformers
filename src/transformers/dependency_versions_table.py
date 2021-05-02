@@ -3,11 +3,11 @@
 # 2. run `make deps_table_update``
 deps = {
     "Pillow": "Pillow",
-    "black": "black>=20.8b1",
+    "black": "black==21.4b0",
     "cookiecutter": "cookiecutter==1.7.2",
     "dataclasses": "dataclasses",
     "datasets": "datasets",
-    "deepspeed": "deepspeed>=0.3.14",
+    "deepspeed": "deepspeed>=0.3.16",
     "docutils": "docutils==0.16.0",
     "fairscale": "fairscale>0.3",
     "faiss-cpu": "faiss-cpu",
@@ -16,6 +16,7 @@ deps = {
     "flake8": "flake8>=3.8.3",
     "flax": "flax>=0.3.2",
     "fugashi": "fugashi>=1.0",
+    "huggingface-hub": "huggingface-hub==0.0.8",
     "importlib_metadata": "importlib_metadata",
     "ipadic": "ipadic>=1.0.0,<2.0",
     "isort": "isort>=5.5.4",

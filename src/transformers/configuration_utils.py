@@ -22,14 +22,14 @@ import os
 from typing import Any, Dict, Tuple, Union
 
 from . import __version__
-from .file_utils import CONFIG_NAME, cached_path, hf_bucket_url, is_offline_mode, is_remote_url
+from .file_utils import CONFIG_NAME, PushToHubMixin, cached_path, hf_bucket_url, is_offline_mode, is_remote_url
 from .utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class PretrainedConfig(object):
+class PretrainedConfig(PushToHubMixin):
     r"""
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
     methods for loading/downloading/saving configurations.
@@ -310,7 +310,7 @@ class PretrainedConfig(object):
             self.id2label = {i: f"LABEL_{i}" for i in range(num_labels)}
             self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike]):
+    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
         """
         Save a configuration object to the directory ``save_directory``, so that it can be re-loaded using the
         :func:`~transformers.PretrainedConfig.from_pretrained` class method.
@@ -318,6 +318,11 @@ class PretrainedConfig(object):
         Args:
             save_directory (:obj:`str` or :obj:`os.PathLike`):
                 Directory where the configuration JSON file will be saved (will be created if it does not exist).
+            push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to push your model to the Hugging Face model hub after saving it.
+            kwargs:
+                Additional key word arguments passed along to the
+                :meth:`~transformers.file_utils.PushToHubMixin.push_to_hub` method.
         """
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -327,6 +332,10 @@ class PretrainedConfig(object):
 
         self.to_json_file(output_config_file, use_diff=True)
         logger.info(f"Configuration saved in {output_config_file}")
+
+        if push_to_hub:
+            url = self._push_to_hub(save_files=[output_config_file], **kwargs)
+            logger.info(f"Configuration pushed to the hub in this commit: {url}")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":

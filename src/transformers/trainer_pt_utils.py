@@ -33,6 +33,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler
 
 from .file_utils import is_sagemaker_dp_enabled, is_sagemaker_mp_enabled, is_torch_tpu_available
+from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
 
@@ -243,7 +244,7 @@ class SequentialDistributedSampler(Sampler):
 
     def __init__(self, dataset, num_replicas=None, rank=None, batch_size=None):
         warnings.warn(
-            "SequentialDistributedSampler is deprecated and will be removed in v5 of Tranformers.",
+            "SequentialDistributedSampler is deprecated and will be removed in v5 of Transformers.",
             FutureWarning,
         )
         if num_replicas is None:
@@ -294,14 +295,14 @@ def get_tpu_sampler(dataset: torch.utils.data.dataset.Dataset, bach_size: int):
 
 
 def nested_new_like(arrays, num_samples, padding_index=-100):
-    """ Create the same nested structure as `arrays` with a first dimension always at `num_samples`."""
+    """Create the same nested structure as `arrays` with a first dimension always at `num_samples`."""
     if isinstance(arrays, (list, tuple)):
         return type(arrays)(nested_new_like(x, num_samples) for x in arrays)
     return np.full_like(arrays, padding_index, shape=(num_samples, *arrays.shape[1:]))
 
 
 def expand_like(arrays, new_seq_length, padding_index=-100):
-    """ Expand the `arrays` so that the second dimension grows to `new_seq_length`. Uses `padding_index` for padding."""
+    """Expand the `arrays` so that the second dimension grows to `new_seq_length`. Uses `padding_index` for padding."""
     result = np.full_like(arrays, padding_index, shape=(arrays.shape[0], new_seq_length) + arrays.shape[2:])
     result[:, : arrays.shape[1]] = arrays
     return result
@@ -363,7 +364,7 @@ class DistributedTensorGatherer:
 
     def __init__(self, world_size, num_samples, make_multiple_of=None, padding_index=-100):
         warnings.warn(
-            "DistributedTensorGatherer is deprecated and will be removed in v5 of Tranformers.",
+            "DistributedTensorGatherer is deprecated and will be removed in v5 of Transformers.",
             FutureWarning,
         )
         self.world_size = world_size
@@ -514,7 +515,10 @@ class LengthGroupedSampler(Sampler):
         self.batch_size = batch_size
         self.model_input_name = model_input_name if model_input_name is not None else "input_ids"
         if lengths is None:
-            if not isinstance(dataset[0], dict) or self.model_input_name not in dataset[0]:
+            if (
+                not (isinstance(dataset[0], dict) or isinstance(dataset[0], BatchEncoding))
+                or self.model_input_name not in dataset[0]
+            ):
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
                     f"'{self.model_input_name}' key."
@@ -575,7 +579,10 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         self.model_input_name = model_input_name if model_input_name is not None else "input_ids"
 
         if lengths is None:
-            if not isinstance(dataset[0], dict) or self.model_input_name not in dataset[0]:
+            if (
+                not (isinstance(dataset[0], dict) or isinstance(dataset[0], BatchEncoding))
+                or self.model_input_name not in dataset[0]
+            ):
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
                     f"'{self.model_input_name}' key."
@@ -974,10 +981,15 @@ if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
 
     @smp.step()
-    def smp_forward_backward(model, inputs, gradient_accumulation_steps=1):
-        outputs = model(**inputs)
+    def smp_forward_backward(model, inputs, gradient_accumulation_steps=1, scaler=None):
+        with torch.cuda.amp.autocast(enabled=(scaler is not None)):
+            outputs = model(**inputs)
+
         loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
         loss /= gradient_accumulation_steps
+        if scaler is not None:
+            loss = scaler.scale(loss).squeeze()
+
         model.backward(loss)
         return loss
 

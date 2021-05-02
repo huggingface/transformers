@@ -54,8 +54,8 @@ Example of use:
     >>> # from transformers import TFAutoModel
     >>> # bertweet = TFAutoModel.from_pretrained("vinai/bertweet-base")
 
-
-The original code can be found `here <https://github.com/VinAIResearch/BERTweet>`__.
+This model was contributed by `dqnguyen <https://huggingface.co/dqnguyen>`__. The original code can be found `here
+<https://github.com/VinAIResearch/BERTweet>`__.
 
 BertweetTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
