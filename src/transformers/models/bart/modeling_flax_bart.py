@@ -22,7 +22,6 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict
-from jax import lax
 from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
@@ -67,7 +66,7 @@ def _make_causal_mask(
     bsz, tgt_len = input_ids_shape
     mask = jnp.full((tgt_len, tgt_len), float("-inf"))
     mask_cond = jnp.arange(mask.shape[-1])
-    mask = jax.ops.index_update(mask, mask_cond < (mask_cond + 1).reshape(mask.shape[-1], 1), 0)
+    mask = jnp.where(mask_cond < (mask_cond + 1).reshape(mask.shape[-1], 1), 0, mask)
     mask = mask.astype(dtype)
 
     if past_key_values_length > 0:
@@ -1367,11 +1366,12 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
 
         hidden_states = outputs[0]  # last hidden state
 
-        eos_mask = lax.eq(input_ids, self.config.eos_token_id * jnp.ones_like(input_ids))
+        eos_mask = jnp.where(input_ids == self.config.eos_token_id * jnp.ones_like(input_ids), 1, 0)
 
-        if len(jnp.unique(eos_mask.sum(1))) > 1:
-            print(eos_mask.sum(1))
-            raise ValueError("All examples must have the same number of <eos> tokens.")
+        # The first condition is necessary to overcome jax._src.errors.ConcretizationTypeError
+        if type(eos_mask) != jax.interpreters.partial_eval.DynamicJaxprTracer:
+            if len(jnp.unique(eos_mask.sum(1))) > 1:
+                raise ValueError("All examples must have the same number of <eos> tokens.")
 
         if (hidden_states[eos_mask, :].shape[0] == 0) and (input_ids.shape != (1, 1)):
             raise ValueError("There are missing <eos> tokens in input_ids")

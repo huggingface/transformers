@@ -276,6 +276,14 @@ class FlaxModelTesterMixin:
                             token_type_ids=token_type_ids,
                         ).to_tuple()
 
+                # Necessary implementation due to encoder-decoder past_key_values which are nested tuples
+                def assertEqual_nested(jitted_output, output):
+                    if isinstance(jitted_output, tuple) and isinstance(output, tuple):
+                        for jitted_out, out in zip(jitted_output, output):
+                            assertEqual_nested(jitted_out, out)
+                    else:
+                        self.assertEqual(jitted_output.shape, output.shape)
+
                 with self.subTest("JIT Enabled"):
                     jitted_outputs = model_jitted(**prepared_inputs_dict)
 
@@ -285,7 +293,7 @@ class FlaxModelTesterMixin:
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
-                    self.assertEqual(jitted_output.shape, output.shape)
+                    assertEqual_nested(jitted_output, output)
 
                 if config.is_encoder_decoder:
 
@@ -388,3 +396,73 @@ class FlaxModelTesterMixin:
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_headmasking(self):
+        if not self.test_head_masking:
+            return
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        inputs_dict["output_attentions"] = True
+        inputs_dict["output_hidden_states"] = True
+        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+
+            # Prepare head_mask
+            # Prepare head_mask
+            def prepare_layer_head_mask(i, attention_heads, num_hidden_layers):
+                if i == 0:
+                    return jnp.concatenate(
+                        (jnp.zeros(1, dtype=jnp.int32), jnp.ones(attention_heads - 1, dtype=jnp.int32)), 0
+                    ).reshape(1, -1)
+                elif i == num_hidden_layers - 1:
+                    return jnp.concatenate(
+                        (jnp.zeros(attention_heads - 1, dtype=jnp.int32), jnp.ones(1, dtype=jnp.int32)), 0
+                    ).reshape(1, -1)
+                else:
+                    return jnp.ones(attention_heads, dtype=jnp.int32).reshape(1, -1)
+
+            head_mask = jnp.concatenate(
+                [
+                    prepare_layer_head_mask(i, config.num_attention_heads, config.num_hidden_layers)
+                    for i in range(config.num_hidden_layers)
+                ],
+                0,
+            )
+
+            inputs = self._prepare_for_class(inputs_dict, model_class).copy()
+            inputs["head_mask"] = head_mask
+
+            if model.config.is_encoder_decoder:
+                signature = inspect.signature(model.__call__)
+                arg_names = [*signature.parameters.keys()]
+                if "decoder_head_mask" in arg_names:  # necessary diferentiation because of T5 model
+                    inputs["decoder_head_mask"] = head_mask
+                if "cross_attn_head_mask" in arg_names:
+                    inputs["cross_attn_head_mask"] = head_mask
+            outputs = model(**inputs, return_dict=True)
+
+            def check_attentions_validity(attentions):
+                # Remove Nan
+                for t in attentions:
+                    self.assertLess(
+                        jnp.sum(jnp.isnan(t)), t.size / 4
+                    )  # Check we don't have more than 25% nans (arbitrary)
+                attentions = [
+                    jnp.where(jnp.isnan(t), 0.0, t) for t in attentions
+                ]  # remove them (the test is less complete)
+
+                self.assertAlmostEqual(attentions[0][..., 0, :, :].flatten().sum().item(), 0.0)
+                self.assertNotEqual(attentions[0][..., -1, :, :].flatten().sum().item(), 0.0)
+                if len(attentions) > 2:  # encoder-decoder models have only 2 layers in each module
+                    self.assertNotEqual(attentions[1][..., 0, :, :].flatten().sum().item(), 0.0)
+                self.assertAlmostEqual(attentions[-1][..., -2, :, :].flatten().sum().item(), 0.0)
+                self.assertNotEqual(attentions[-1][..., -1, :, :].flatten().sum().item(), 0.0)
+
+            if model.config.is_encoder_decoder:
+                check_attentions_validity(outputs.encoder_attentions)
+                check_attentions_validity(outputs.decoder_attentions)
+                check_attentions_validity(outputs.cross_attentions)
+            else:
+                check_attentions_validity(outputs.attentions)

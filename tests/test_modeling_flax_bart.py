@@ -47,9 +47,9 @@ def prepare_bart_inputs_dict(
     cross_attn_head_mask=None,
 ):
     if attention_mask is None:
-        attention_mask = lax.ne(input_ids, config.pad_token_id)
+        attention_mask = jnp.where(input_ids != config.pad_token_id, 1, 0)
     if decoder_attention_mask is None:
-        decoder_attention_mask = lax.ne(decoder_input_ids, config.pad_token_id)
+        decoder_attention_mask = jnp.where(decoder_input_ids != config.pad_token_id, 1, 0)
     if head_mask is None:
         head_mask = np.ones((config.encoder_layers, config.encoder_attention_heads))
     if decoder_head_mask is None:
@@ -245,6 +245,7 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase):
         if is_flax_available()
         else ()
     )
+    test_head_masking = True
 
     def setUp(self):
         self.model_tester = FlaxBartModelTester(self)
