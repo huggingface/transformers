@@ -36,7 +36,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-# inspired by https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
+# 2 functions below inspired by https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
 def box_xyxy_to_cxcywh(x):
     """
     Converts a NumPy array of bounding boxes of shape (number of bounding boxes, 4) of format (x_0, y_0, x_1, y_1) to
@@ -46,6 +46,38 @@ def box_xyxy_to_cxcywh(x):
     x0, y0, x1, y1 = x_transposed[0], x_transposed[1], x_transposed[2], x_transposed[3]
     b = [(x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0), (y1 - y0)]
     return np.stack(b, axis=-1)
+
+
+def masks_to_boxes(masks):
+    """Compute the bounding boxes around the provided panoptic segmentation masks.
+    
+    The masks should be in format [N, H, W] where N is the number of masks, (H, W) are the spatial dimensions.
+    
+    Returns a [N, 4] tensor, with the boxes in xyxy format.
+    """
+    if masks.size == 0:
+        return np.zeros((0, 4))
+
+    h, w = masks.shape[-2:]
+
+    y = np.arange(0, h, dtype=np.float32)
+    x = np.arange(0, w, dtype=np.float32)
+    # see https://github.com/pytorch/pytorch/issues/50276 
+    y, x = np.meshgrid(y, x, indexing='ij')
+
+    x_mask = (masks * np.expand_dims(x, axis=0))
+    x_max = x_mask.reshape(x_mask.shape[0],-1).max(-1)
+    x = np.ma.array(x_mask, mask=~(np.array(masks, dtype=bool)))
+    x_min = x.filled(fill_value=1e8)
+    x_min = x_min.reshape(x_min.shape[0], -1).min(-1)
+
+    y_mask = (masks * np.expand_dims(y, axis=0))
+    y_max = y_mask.reshape(x_mask.shape[0],-1).max(-1)
+    y = np.ma.array(y_mask, mask=~(np.array(masks, dtype=bool)))
+    y_min = y.filled(fill_value=1e8)
+    y_min = y_min.reshape(y_min.shape[0], -1).min(-1)
+
+    return np.stack([x_min, y_min, x_max, y_max], 1)
 
 
 # 2 functions below copied from https://github.com/cocodataset/panopticapi/blob/master/panopticapi/utils.py
@@ -73,40 +105,6 @@ def id2rgb(id_map):
         color.append(id_map % 256)
         id_map //= 256
     return color
-
-
-def masks_to_boxes(masks):
-    """Compute the bounding boxes around the provided masks
-    The masks should be in format [N, H, W] where N is the number of masks, (H, W) are the spatial dimensions.
-    Returns a [N, 4] tensors, with the boxes in xyxy format
-    """
-    if masks.size == 0:
-        return np.zeros((0, 4))
-
-    h, w = masks.shape[-2:]
-
-    y = np.arange(0, h, dtype=np.float32)
-    x = np.arange(0, w, dtype=np.float32)
-    # see https://github.com/pytorch/pytorch/issues/50276 
-    y, x = np.meshgrid(y, x, indexing='ij')
-
-    x_mask = (masks * np.expand_dims(x, axis=0))
-    x_max = x_mask.reshape(x_mask.shape[0],-1).max(-1)
-    x = np.ma.array(x_mask, mask=~(np.array(masks, dtype=bool)))
-    x_min = x.filled(fill_value=1e8)
-    x_min = x_min.reshape(x_min.shape[0], -1).min(-1)
-
-    y_mask = (masks * np.expand_dims(y, axis=0))
-    y_max = y_mask.reshape(x_mask.shape[0],-1).max(-1)
-    y = np.ma.array(y_mask, mask=~(np.array(masks, dtype=bool)))
-    y_min = y.filled(fill_value=1e8)
-    y_min = y_min.reshape(y_min.shape[0], -1).min(-1)
-
-    # y_mask = (masks * np.expand_dims(y, axis=0))
-    # y_max = y_mask.reshape(y_mask.shape[0],-1).max(-1)
-    # y_min = y_mask.masked_fill(~(np.array(masks, dtype=bool)), 1e8).flatten(1).min(-1)
-
-    return np.stack([x_min, y_min, x_max, y_max], 1)
 
 
 class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
@@ -160,37 +158,6 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             return image, target
         else:
             raise ValueError(f"Task {task} not supported")
-
-    def prepare_panoptic_segmentation(self, image, target, masks_path, return_masks=True):
-        w, h = image.size
-        ann_info = target.copy()
-        ann_path = pathlib.Path(masks_path) / ann_info['file_name']
-        
-        if "segments_info" in ann_info:
-            masks = np.asarray(Image.open(ann_path), dtype=np.uint32)
-            masks = rgb2id(masks)
-
-            ids = np.array([ann['id'] for ann in ann_info['segments_info']])
-            masks = masks == ids[:, None, None]
-            masks = np.asarray(masks, dtype=np.uint8)
-            
-            labels = np.asarray([ann['category_id'] for ann in ann_info['segments_info']], dtype=np.int64)
-
-        target = {}
-        target['image_id'] = np.asarray([ann_info['image_id'] if "image_id" in ann_info else ann_info["id"]], dtype=np.int64)
-        if return_masks:
-            target['masks'] = masks
-        target['class_labels'] = labels
-
-        target["boxes"] = masks_to_boxes(masks)
-
-        target['size'] = np.asarray([int(h), int(w)], dtype=np.int64)
-        target['orig_size'] = np.asarray([int(h), int(w)], dtype=np.int64)
-        if "segments_info" in ann_info:
-            target["iscrowd"] = np.asarray([ann["iscrowd"] for ann in ann_info['segments_info']], dtype=np.int64)
-            target["area"] = np.asarray([ann["area"] for ann in ann_info['segments_info']], dtype=np.float32)
-
-        return image, target
 
     # inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L33
     def convert_coco_poly_to_mask(segmentations, height, width):
@@ -276,6 +243,37 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return image, target
 
+    def prepare_panoptic_segmentation(self, image, target, masks_path, return_masks=True):
+        w, h = image.size
+        ann_info = target.copy()
+        ann_path = pathlib.Path(masks_path) / ann_info['file_name']
+        
+        if "segments_info" in ann_info:
+            masks = np.asarray(Image.open(ann_path), dtype=np.uint32)
+            masks = rgb2id(masks)
+
+            ids = np.array([ann['id'] for ann in ann_info['segments_info']])
+            masks = masks == ids[:, None, None]
+            masks = np.asarray(masks, dtype=np.uint8)
+            
+            labels = np.asarray([ann['category_id'] for ann in ann_info['segments_info']], dtype=np.int64)
+
+        target = {}
+        target['image_id'] = np.asarray([ann_info['image_id'] if "image_id" in ann_info else ann_info["id"]], dtype=np.int64)
+        if return_masks:
+            target['masks'] = masks
+        target['class_labels'] = labels
+
+        target["boxes"] = masks_to_boxes(masks)
+
+        target['size'] = np.asarray([int(h), int(w)], dtype=np.int64)
+        target['orig_size'] = np.asarray([int(h), int(w)], dtype=np.int64)
+        if "segments_info" in ann_info:
+            target["iscrowd"] = np.asarray([ann["iscrowd"] for ann in ann_info['segments_info']], dtype=np.int64)
+            target["area"] = np.asarray([ann["area"] for ann in ann_info['segments_info']], dtype=np.float32)
+
+        return image, target
+    
     def _resize(self, image, size, target=None, max_size=None):
         """
         Resize the image to the given size. Size can be min_size (scalar) or (w, h) tuple. If size is an int, smaller
@@ -350,7 +348,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         """
         Normalize the image with a certain mean and std.
 
-        If given, also normalize the target based on the size of the image.
+        If given, also normalize the target bounding boxes based on the size of the image.
         """
 
         image = self.normalize(image, mean=mean, std=std)
