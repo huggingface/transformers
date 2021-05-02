@@ -492,7 +492,7 @@ class FlaxBartClassificationHead(nn.Module):
 
 class FlaxBartPretrainedModel(FlaxPreTrainedModel):
     config_class = BartConfig
-    base_model_prefix = "bart"
+    base_model_prefix: str = "bart"
     module_class: nn.Module = None
 
     def __init__(
@@ -622,8 +622,9 @@ class FlaxBartEncoder(nn.Module):
 
     config: BartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    embed_tokens: Optional[nn.Embed] = None
 
-    def setup(self, embed_tokens: Optional[nn.Embed] = None):
+    def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
         self.layerdrop = self.config.encoder_layerdrop
         self.layerdrop_layer = nn.Dropout(rate=self.config.encoder_layerdrop)
@@ -633,9 +634,7 @@ class FlaxBartEncoder(nn.Module):
         self.max_source_positions = self.config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if self.config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
+        if self.embed_tokens is None:
             self.embed_tokens = nn.Embed(
                 self.config.vocab_size,
                 embed_dim,
@@ -780,8 +779,9 @@ class FlaxBartDecoder(nn.Module):
 
     config: BartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    embed_tokens: Optional[nn.Embed] = None
 
-    def setup(self, embed_tokens: Optional[nn.Embed] = None):
+    def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
         self.layerdrop = self.config.decoder_layerdrop
         self.layerdrop_layer = nn.Dropout(rate=self.layerdrop)
@@ -791,9 +791,7 @@ class FlaxBartDecoder(nn.Module):
         self.max_target_positions = self.config.max_position_embeddings
         self.embed_scale = math.sqrt(self.config.d_model) if self.config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
+        if self.embed_tokens is None:
             self.embed_tokens = nn.Embed(
                 self.config.vocab_size,
                 embed_dim,
@@ -1031,8 +1029,8 @@ class FlaxBartModule(nn.Module):
             dtype=self.dtype,
         )
 
-        self.encoder = FlaxBartEncoder(self.config, dtype=self.dtype)
-        self.decoder = FlaxBartDecoder(self.config, dtype=self.dtype)
+        self.encoder = FlaxBartEncoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
+        self.decoder = FlaxBartDecoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
 
     def __call__(
         self,
@@ -1383,7 +1381,7 @@ class FlaxBartDecoderWrapper(FlaxBartPretrainedModel):
     This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
     used in combination with the :class:`~transformers.EncoderDecoderModel` framework.
     """
-    module_class = FlaxBartForQuestionAnsweringModule
+    module_class = FlaxBartDecoderWrapperModule
     dtype = jnp.float32
 
 
@@ -1395,7 +1393,7 @@ class FlaxBartForCausalLMModule(nn.Module):
         self.config.is_decoder = True
         self.config.is_encoder_decoder = False
 
-        self.decoder = FlaxBartDecoderWrapper(self.config, dtype=self.dtype)
+        self.model = FlaxBartDecoderWrapper(self.config, dtype=self.dtype)
         self.lm_head = nn.Dense(self.config.vocab_size, use_bias=False, dtype=self.dtype)
 
     def get_input_embeddings(self):
@@ -1440,7 +1438,7 @@ class FlaxBartForCausalLMModule(nn.Module):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.decoder(
+        outputs = self.model.decoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
