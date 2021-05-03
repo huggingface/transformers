@@ -1,9 +1,9 @@
 import dis
 import inspect
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import torch
-from torch.fx import Node, Proxy, Tracer
+from torch.fx import GraphModule, Node, Proxy, Tracer
 
 from . import PreTrainedModel
 
@@ -64,12 +64,18 @@ class CustomProxy(Proxy):
                 raise ValueError("num_choices must be given to the CustomTracer for MultipleChoice tasks.")
             shape = shape[:1] + [self.tracer.num_choices] + shape[1:]
         else:
-            instructions = dis.get_instructions(calling_frame.f_code)
+            # Default case:
+            #   - If self.size is called for an unpacking, retrieves the corresponding unpacking
+            # instruction, and returns the shape padded as much as necessary to match the expected
+            # number of items.
+            #   - If self.size is called outside of an unpacking context, simply return the shape.
+            instructions = reversed(list(dis.get_instructions(calling_frame.f_code))[: calling_frame.f_lasti])
             is_unpack = False
             for inst in instructions:
                 if inst.opname == "UNPACK_SEQUENCE":
                     is_unpack = True
                     break
+
             if is_unpack and inst.argval >= 3:
                 shape += [self.tracer.root.config.hidden_size]
                 dummy_values = [1] * (inst.argval - 3)
@@ -94,6 +100,7 @@ class CustomProxy(Proxy):
             # Returning True to every assertion in "apply_chuncking_to_forward"
             return True
         elif "assert" in code_context:
+            # Returning True to any assertion.
             return True
         elif calling_frame.f_code.co_name == "get_extended_attention_mask":
             # Corresponding to:
@@ -104,8 +111,8 @@ class CustomProxy(Proxy):
     def __setitem__(self, key, value):
         pass
 
-    def __iter__(self):
-        return iter(["dummy"])
+    def __contains__(self, key):
+        return False
 
 
 class CustomTracer(Tracer):
@@ -124,8 +131,29 @@ class CustomTracer(Tracer):
 
 
 def symbolic_trace(
-    model: PreTrainedModel, input_names: Optional[List[str]] = None, batch_size=1, seqlen=[128, 128], num_choices=-1
-):
+    model: PreTrainedModel,
+    input_names: Optional[List[str]] = None,
+    batch_size: int = 1,
+    seqlen: Union[int, List[int]] = [128, 128],
+    num_choices: int = -1,
+) -> GraphModule:
+
+    """
+    Performs symbolic tracing on the model.
+
+    Args:
+        model (:obj:`PretrainedModel`): The model to trace.
+        input_names (:obj:`Optional[List[str]]`): The names of the inputs of the traced model.
+            If input_names is None, the model dummy_inputs keys are used instead.
+        batch_size (:obj:`int`): The batch size of the traced model inputs.
+        seqlen (:obj:`Union[int, List[int]]`): The sequence length of the traced model inputs.
+            For Seq2Seq models with differents sequence length between the encoder and the decoder inputs, seqlen must
+            be [encoder_sequence_length, decoder_sequence_length].
+        num_choices (:obj:`int`): The number of possible choices for MultipleChoice task.
+
+    Returns:
+        :obj:`torch.fx.GraphModule`: A GraphModule constructed by recording operations seen while tracing the model.
+    """
     if input_names is None:
         input_names = model.dummy_inputs.keys()
 

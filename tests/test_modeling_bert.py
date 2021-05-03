@@ -17,6 +17,8 @@
 import unittest
 
 from transformers import is_torch_available
+from transformers.file_utils import is_torch_fx_available
+from transformers.modeling_fx_utils import symbolic_trace
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -405,6 +407,309 @@ class BertModelTester:
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
+    def create_and_check_tracing_for_causal_lm(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
+    ):
+        if not is_torch_fx_available():
+            self.parent.assertTrue(True)
+            return
+        model = BertLMHeadModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        traced = symbolic_trace(
+            model,
+            input_names=["input_ids", "attention_mask", "token_type_ids", "labels"],
+            batch_size=self.batch_size,
+            seqlen=self.seq_length,
+        )
+        traced_result = traced(
+            input_ids=input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
+        )
+        logits_close = torch.allclose(result.logits, traced_result["logits"])
+        loss_close = torch.allclose(result.loss, traced_result["loss"])
+        self.parent.assertTrue(logits_close and loss_close)
+
+    def create_and_check_tracing_for_masked_lm(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        if not is_torch_fx_available():
+            self.parent.assertTrue(True)
+            return
+        model = BertForMaskedLM(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        traced = symbolic_trace(
+            model,
+            input_names=["input_ids", "attention_mask", "token_type_ids", "labels"],
+            batch_size=self.batch_size,
+            seqlen=self.seq_length,
+        )
+        traced_result = traced(
+            input_ids=input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
+        )
+        logits_close = torch.allclose(result.logits, traced_result["logits"])
+        loss_close = torch.allclose(result.loss, traced_result["loss"])
+        self.parent.assertTrue(logits_close and loss_close)
+
+    def create_and_check_model_tracing_for_causal_lm_as_decoder(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
+    ):
+        if not is_torch_fx_available():
+            self.parent.assertTrue(True)
+            return
+
+        config.add_cross_attention = True
+        model = BertLMHeadModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+        )
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+            encoder_hidden_states=encoder_hidden_states,
+        )
+        traced = symbolic_trace(
+            model,
+            input_names=[
+                "input_ids",
+                "attention_mask",
+                "token_type_ids",
+                "labels",
+                "encoder_hidden_states",
+                "encoder_attention_mask",
+            ],
+            batch_size=self.batch_size,
+            seqlen=self.seq_length,
+        )
+        traced_result = traced(
+            input_ids=input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+        )
+        logits_close = torch.allclose(result.logits, traced_result["logits"], atol=1e-2)
+        loss_close = torch.allclose(result.loss, traced_result["loss"], atol=1e-3)
+        self.parent.assertTrue(logits_close and loss_close)
+
+    def create_and_check_tracing_for_next_sequence_prediction(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        if not is_torch_fx_available():
+            self.parent.assertTrue(True)
+            return
+        model = BertForNextSentencePrediction(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=sequence_labels,
+        )
+        traced = symbolic_trace(
+            model,
+            input_names=["input_ids", "attention_mask", "token_type_ids", "labels"],
+            batch_size=self.batch_size,
+            seqlen=self.seq_length,
+        )
+        traced_result = traced(
+            input_ids=input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels
+        )
+        logits_close = torch.allclose(result.logits, traced_result["logits"])
+        loss_close = torch.allclose(result.loss, traced_result["loss"])
+        self.parent.assertTrue(logits_close and loss_close)
+
+    def create_and_check_tracing_for_pretraining(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        if not is_torch_fx_available():
+            self.parent.assertTrue(True)
+            return
+        model = BertForPreTraining(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+            next_sentence_label=sequence_labels,
+        )
+        traced = symbolic_trace(
+            model,
+            input_names=["input_ids", "attention_mask", "token_type_ids", "labels", "next_sentence_label"],
+            batch_size=self.batch_size,
+            seqlen=self.seq_length,
+        )
+        traced_result = traced(
+            input_ids=input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+            next_sentence_label=sequence_labels,
+        )
+        prediction_logits_close = torch.allclose(result.prediction_logits, traced_result["prediction_logits"])
+        seq_relationship_logits_close = torch.allclose(
+            result.seq_relationship_logits, traced_result["seq_relationship_logits"]
+        )
+        loss_close = torch.allclose(result.loss, traced_result["loss"])
+        self.parent.assertTrue(prediction_logits_close and seq_relationship_logits_close and loss_close)
+
+    def create_and_check_tracing_for_question_answering(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        if not is_torch_fx_available():
+            self.parent.assertTrue(True)
+            return
+        model = BertForQuestionAnswering(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            start_positions=sequence_labels,
+            end_positions=sequence_labels,
+        )
+        traced = symbolic_trace(
+            model,
+            input_names=["input_ids", "attention_mask", "token_type_ids", "start_positions", "end_positions"],
+            batch_size=self.batch_size,
+            seqlen=self.seq_length,
+        )
+        traced_result = traced(
+            input_ids=input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            start_positions=sequence_labels,
+            end_positions=sequence_labels,
+        )
+        start_logits_close = torch.allclose(result.start_logits, traced_result["start_logits"])
+        end_logits_close = torch.allclose(result.end_logits, traced_result["end_logits"])
+        loss_close = torch.allclose(result.loss, traced_result["loss"])
+        self.parent.assertTrue(start_logits_close and end_logits_close and loss_close)
+
+    def create_and_check_tracing_for_sequence_classification(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        if not is_torch_fx_available():
+            self.parent.assertTrue(True)
+            return
+        config.num_labels = self.num_labels
+        model = BertForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
+        traced = symbolic_trace(
+            model,
+            input_names=["input_ids", "attention_mask", "token_type_ids", "labels"],
+            batch_size=self.batch_size,
+            seqlen=self.seq_length,
+        )
+        traced_result = traced(
+            input_ids=input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=sequence_labels,
+        )
+        logits_close = torch.allclose(result.logits, traced_result["logits"])
+        loss_close = torch.allclose(result.loss, traced_result["loss"])
+        self.parent.assertTrue(logits_close and loss_close)
+
+    def create_and_check_tracing_for_token_classification(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        if not is_torch_fx_available():
+            self.parent.assertTrue(True)
+            return
+        config.num_labels = self.num_labels
+        model = BertForTokenClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        traced = symbolic_trace(
+            model,
+            input_names=["input_ids", "attention_mask", "token_type_ids", "labels"],
+            batch_size=self.batch_size,
+            seqlen=self.seq_length,
+        )
+        traced_result = traced(
+            input_ids=input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+        )
+        logits_close = torch.allclose(result.logits, traced_result["logits"])
+        loss_close = torch.allclose(result.loss, traced_result["loss"])
+        self.parent.assertTrue(logits_close and loss_close)
+
+    def create_and_check_tracing_for_multiple_choice(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        if not is_torch_fx_available():
+            self.parent.assertTrue(True)
+            return
+        config.num_choices = self.num_choices
+        model = BertForMultipleChoice(config=config)
+        model.to(torch_device)
+        model.eval()
+        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        result = model(
+            multiple_choice_inputs_ids,
+            attention_mask=multiple_choice_input_mask,
+            token_type_ids=multiple_choice_token_type_ids,
+            labels=choice_labels,
+        )
+        traced = symbolic_trace(
+            model,
+            input_names=["input_ids", "attention_mask", "token_type_ids", "labels"],
+            batch_size=self.batch_size,
+            seqlen=self.seq_length,
+            num_choices=self.num_choices,
+        )
+        traced_result = traced(
+            input_ids=multiple_choice_inputs_ids,
+            attention_mask=multiple_choice_input_mask,
+            token_type_ids=multiple_choice_token_type_ids,
+            labels=choice_labels,
+        )
+        logits_close = torch.allclose(result.logits, traced_result["logits"])
+        loss_close = torch.allclose(result.loss, traced_result["loss"])
+        self.parent.assertTrue(logits_close and loss_close)
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -520,10 +825,6 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_for_multiple_choice(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
-
     def test_for_next_sequence_prediction(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_next_sequence_prediction(*config_and_inputs)
@@ -543,6 +844,46 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
+
+    def test_for_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
+
+    def test_tracing_for_causal_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_tracing_for_causal_lm(*config_and_inputs)
+
+    def test_tracing_for_masked_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_tracing_for_masked_lm(*config_and_inputs)
+
+    def test_tracing_for_causal_lm_decoder(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_model_tracing_for_causal_lm_as_decoder(*config_and_inputs)
+
+    def test_tracing_for_next_sequence_prediction(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_tracing_for_next_sequence_prediction(*config_and_inputs)
+
+    def test_tracing_for_pretraining(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_tracing_for_pretraining(*config_and_inputs)
+
+    def test_tracing_for_question_answering(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_tracing_for_question_answering(*config_and_inputs)
+
+    def test_tracing_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_tracing_for_sequence_classification(*config_and_inputs)
+
+    def test_tracing_for_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_tracing_for_token_classification(*config_and_inputs)
+
+    def test_tracing_for_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_tracing_for_multiple_choice(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):

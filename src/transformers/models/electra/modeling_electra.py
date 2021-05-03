@@ -1052,14 +1052,15 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fct = nn.BCEWithLogitsLoss()
             if attention_mask is not None:
                 active_loss = attention_mask.view(-1, discriminator_sequence_output.shape[1]) == 1
                 active_logits = logits.view(-1, discriminator_sequence_output.shape[1])[active_loss]
                 active_labels = labels[active_loss]
-                loss = loss_fct(active_logits, active_labels.float())
+                loss = F.binary_cross_entropy_with_logits(active_logits, active_labels.float())
             else:
-                loss = loss_fct(logits.view(-1, discriminator_sequence_output.shape[1]), labels.float())
+                loss = F.binary_cross_entropy_with_logits(
+                    logits.view(-1, discriminator_sequence_output.shape[1]), labels.float()
+                )
 
         if not return_dict:
             output = (logits,) + discriminator_hidden_states[1:]
@@ -1145,8 +1146,8 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         loss = None
         # Masked language modeling softmax layer
         if labels is not None:
-            loss_fct = F.cross_entropy  # -100 index = padding token
-            loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            # -100 index = padding token
+            loss = F.cross_entropy(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
             output = (prediction_scores,) + generator_hidden_states[1:]
@@ -1222,15 +1223,14 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fct = F.cross_entropy
             # Only keep active parts of the loss
             if attention_mask is not None:
                 active_loss = attention_mask.view(-1) == 1
                 active_logits = logits.view(-1, self.config.num_labels)[active_loss]
                 active_labels = labels.view(-1)[active_loss]
-                loss = loss_fct(active_logits, active_labels)
+                loss = F.cross_entropy(active_logits, active_labels)
             else:
-                loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+                loss = F.cross_entropy(logits.view(-1, self.config.num_labels), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + discriminator_hidden_states[1:]

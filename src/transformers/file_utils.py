@@ -263,6 +263,14 @@ def is_torch_cuda_available():
         return False
 
 
+def is_torch_fx_available():
+    if not is_torch_available():
+        return False
+    import torch
+
+    return version.parse(torch.__version__) >= version.parse("1.8")
+
+
 def is_tf_available():
     return _tf_available
 
@@ -1595,11 +1603,15 @@ def is_tensor(x):
     Tests if ``x`` is a :obj:`torch.Tensor`, :obj:`tf.Tensor`, obj:`jaxlib.xla_extension.DeviceArray` or
     :obj:`np.ndarray`.
     """
-    if is_torch_available():
-        import torch
+    if is_torch_fx_available():
         import torch.fx
 
-        if isinstance(x, (torch.Tensor, torch.fx.Proxy)):
+        if isinstance(x, torch.fx.Proxy):
+            return True
+    if is_torch_available():
+        import torch
+
+        if isinstance(x, torch.Tensor):
             return True
     if is_tf_available():
         import tensorflow as tf
