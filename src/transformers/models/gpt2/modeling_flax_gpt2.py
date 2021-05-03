@@ -17,9 +17,10 @@ from typing import Any, Optional, Tuple
 
 import flax.linen as nn
 import jax
+from jax.dtypes import dtype
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict
-from flax.linen import dot_product_attention, make_causal_mask
+from flax.linen import dot_product_attention, make_causal_mask, combine_masks
 from jax import lax
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
@@ -154,13 +155,17 @@ class FlaxGPT2Attention(nn.Module):
 
         query_length, key_length = query.shape[1], key.shape[1]
         causal_mask = self.causal_mask[:, :, key_length - query_length : key_length, :key_length]
-        causal_bias = lax.select(
-            causal_mask > 0,
-            jnp.full(causal_mask.shape, 0.0).astype(self.dtype),
-            jnp.full(causal_mask.shape, -1e4).astype(self.dtype),
-        )
 
-        # TODO: combine attention_mask with causal_mask
+        combined_mask = causal_mask
+        if attention_mask is not None:
+            attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
+            combined_mask = combine_masks(causal_mask, attention_mask, dtype="i4")
+
+        attention_bias = lax.select(
+            combined_mask > 0,
+            jnp.full(combined_mask.shape, 0.0).astype(self.dtype),
+            jnp.full(combined_mask.shape, -1e4).astype(self.dtype),
+        )
 
         dropout_rng = None
         if not deterministic and self.config.attn_pdrop > 0.0:
@@ -170,7 +175,7 @@ class FlaxGPT2Attention(nn.Module):
             query,
             key,
             value,
-            bias=causal_bias,
+            bias=attention_bias,
             dropout_rng=dropout_rng,
             dropout_rate=self.config.attn_pdrop,
             deterministic=deterministic,
