@@ -55,7 +55,8 @@ To preprocess our data, we will need a tokenizer:
 
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
 
-As we saw in :doc:`preprocessing`, we can prepare the text inputs for the model with the following command:
+As we saw in :doc:`preprocessing`, we can prepare the text inputs for the model with the following command (this is an
+example, not a command you can execute):
 
 .. code-block:: python
 
@@ -91,7 +92,7 @@ them by their `full` equivalent to train or evaluate on the full dataset.
 
 .. _trainer:
 
-Fine-tuning in PyTorch with Trainer
+Fine-tuning in PyTorch with the Trainer API
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Since PyTorch does not provide a training loop, the 🤗 Transformers library provides a :class:`~transformers.Trainer`
@@ -105,6 +106,11 @@ First, let's define our model:
     from transformers import AutoModelForSequenceClassification
 
     model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=2)
+
+This will issue a warning about some of the pretrained weights not being used and some weights being randomly
+initialized. That's because we are throwing away the pretraining head of the BERT model to replace it with a
+classification head which is randomly initialized. We will fine-tune this model on our task, transferring the knowledge
+of the pretrained model to it (which is why doing this is called transfer learning).
 
 Then, to define our :class:`~transformers.Trainer`, we will need to instantiate a
 :class:`~transformers.TrainingArguments`. This class contains all the hyperparameters we can tune for the
@@ -158,7 +164,11 @@ here we simply use accuracy. Then we define the :obj:`compute_metrics` function 
         predictions = np.argmax(logits, axis=-1)
         return metric.compute(predictions=predictions, references=labels)
 
-To check if this works in practice, let's create a new :class:`~transformers.Trainer` with our fine-tuned model:
+The compute function needs to receive a tuple (with logits and labels) and has to return a dictionary with string keys
+(the name of the metric) and float values. It will be called at the end of each evaluation phase on the whole arrays of
+predictions/labels.
+
+To check if this works on practice, let's create a new :class:`~transformers.Trainer` with our fine-tuned model:
 
 .. code-block:: python
 
@@ -246,6 +256,15 @@ as a PyTorch model (or vice-versa):
 
 Fine-tuning in native PyTorch
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+You might need to restart your notebook at this stage to free some memory, or excute the following code:
+
+.. code-block:: python
+
+    del model
+    del pytorch_model
+    del trainer
+    torch.cuda.empty_cache()
 
 Let's now see how to achieve the same results as in :ref:`trainer section <trainer>` in PyTorch. First we need to
 define the dataloaders, which we will use to iterate over batches. We just need to apply a bit of post-processing to
