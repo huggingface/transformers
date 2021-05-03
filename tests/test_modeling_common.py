@@ -193,6 +193,9 @@ class ModelTesterMixin:
             if model_class == base_class:
                 continue
 
+            # make sure that all keys are expected for test
+            model_class._keys_to_ignore_on_load_missing = []
+
             # make init deterministic, but make sure that
             # non-initialized weights throw errors nevertheless
             model_class._init_weights = _mock_init_weights
@@ -233,6 +236,9 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             if model_class == base_class:
                 continue
+
+            # make sure that all keys are expected for test
+            model_class._keys_to_ignore_on_load_missing = []
 
             # make init deterministic, but make sure that
             # non-initialized weights throw errors nevertheless
