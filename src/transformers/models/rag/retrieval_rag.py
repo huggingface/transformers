@@ -234,7 +234,7 @@ class CanonicalHFIndex(HFIndexBase):
     Args:
         vector_size (:obj:`int`): the dimension of the passages embeddings used by the index
         dataset_name (:obj:`str`, optional, defaults to ``wiki_dpr``):
-            A datatset identifier of the indexed dataset on HuggingFace AWS bucket (list all available datasets and ids
+            A dataset identifier of the indexed dataset on HuggingFace AWS bucket (list all available datasets and ids
             with ``datasets.list_datasets()``).
         dataset_split (:obj:`str`, optional, defaults to ``train``)
             Which split of the ``dataset`` to load.
@@ -442,7 +442,7 @@ class RagRetriever:
 
     def init_retrieval(self):
         """
-        Retriever initalization function. It loads the index into memory.
+        Retriever initialization function. It loads the index into memory.
         """
 
         logger.info("initializing retrieval")

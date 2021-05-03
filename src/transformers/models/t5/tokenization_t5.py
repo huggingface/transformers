@@ -243,7 +243,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         return pieces
 
     def _convert_token_to_id(self, token):
-        """ Converts a token (str) in an id using the vocab. """
+        """Converts a token (str) in an id using the vocab."""
         if token.startswith("<extra_id_"):
             match = re.match(r"<extra_id_(\d+)>", token)
             num = int(match.group(1))
@@ -259,7 +259,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         return token
 
     def convert_tokens_to_string(self, tokens):
-        """ Converts a sequence of tokens (string) in a single string. """
+        """Converts a sequence of tokens (string) in a single string."""
         current_sub_tokens = []
         out_string = ""
         for token in tokens:

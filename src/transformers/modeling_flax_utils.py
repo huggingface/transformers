@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import os
-from abc import ABC
 from functools import partial
 from pickle import UnpicklingError
 from typing import Dict, Set, Tuple, Union
@@ -29,14 +28,18 @@ from jax.random import PRNGKey
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
+    CONFIG_NAME,
     FLAX_WEIGHTS_NAME,
     WEIGHTS_NAME,
+    PushToHubMixin,
+    add_code_sample_docstrings,
     add_start_docstrings_to_model_forward,
     cached_path,
     copy_func,
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
+    replace_return_docstrings,
 )
 from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
 from .utils import logging
@@ -54,7 +57,7 @@ ACT2FN = {
 }
 
 
-class FlaxPreTrainedModel(ABC):
+class FlaxPreTrainedModel(PushToHubMixin):
     r"""
     Base class for all models.
 
@@ -93,7 +96,7 @@ class FlaxPreTrainedModel(ABC):
         self.key = PRNGKey(seed)
         self.dtype = dtype
 
-        # randomely initialized parameters
+        # randomly initialized parameters
         random_params = self.init_weights(self.key, input_shape)
 
         # save required_params as set
@@ -385,7 +388,7 @@ class FlaxPreTrainedModel(ABC):
 
         return model
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike]):
+    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub=False, **kwargs):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
         `:func:`~transformers.FlaxPreTrainedModel.from_pretrained`` class method
@@ -393,6 +396,11 @@ class FlaxPreTrainedModel(ABC):
         Arguments:
             save_directory (:obj:`str` or :obj:`os.PathLike`):
                 Directory to which to save. Will be created if it doesn't exist.
+            push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to push your model to the Hugging Face model hub after saving it.
+            kwargs:
+                Additional key word arguments passed along to the
+                :meth:`~transformers.file_utils.PushToHubMixin.push_to_hub` method.
         """
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -406,9 +414,17 @@ class FlaxPreTrainedModel(ABC):
         self.config.save_pretrained(save_directory)
 
         # save model
-        with open(os.path.join(save_directory, FLAX_WEIGHTS_NAME), "wb") as f:
+        output_model_file = os.path.join(save_directory, FLAX_WEIGHTS_NAME)
+        with open(output_model_file, "wb") as f:
             model_bytes = to_bytes(self.params)
             f.write(model_bytes)
+
+        logger.info(f"Model weights saved in {output_model_file}")
+
+        if push_to_hub:
+            saved_files = [os.path.join(save_directory, CONFIG_NAME), output_model_file]
+            url = self._push_to_hub(save_files=saved_files, **kwargs)
+            logger.info(f"Model pushed to the hub in this commit: {url}")
 
 
 def overwrite_call_docstring(model_class, docstring):
@@ -418,3 +434,22 @@ def overwrite_call_docstring(model_class, docstring):
     model_class.__call__.__doc__ = None
     # set correct docstring
     model_class.__call__ = add_start_docstrings_to_model_forward(docstring)(model_class.__call__)
+
+
+def append_call_sample_docstring(model_class, tokenizer_class, checkpoint, output_type, config_class, mask=None):
+    model_class.__call__ = copy_func(model_class.__call__)
+    model_class.__call__ = add_code_sample_docstrings(
+        tokenizer_class=tokenizer_class,
+        checkpoint=checkpoint,
+        output_type=output_type,
+        config_class=config_class,
+        model_cls=model_class.__name__,
+    )(model_class.__call__)
+
+
+def append_replace_return_docstrings(model_class, output_type, config_class):
+    model_class.__call__ = copy_func(model_class.__call__)
+    model_class.__call__ = replace_return_docstrings(
+        output_type=output_type,
+        config_class=config_class,
+    )(model_class.__call__)

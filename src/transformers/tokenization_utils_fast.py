@@ -520,7 +520,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         filename_prefix: Optional[str] = None,
     ) -> Tuple[str]:
         """
-        Save a tokenizer using the slow-tokenizer/legacy format: vocabulary + added tokens as well asin a unique JSON
+        Save a tokenizer using the slow-tokenizer/legacy format: vocabulary + added tokens as well as in a unique JSON
         file containing {config + vocab + added-tokens}.
         """
         save_directory = str(save_directory)
