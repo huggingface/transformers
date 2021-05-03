@@ -206,8 +206,8 @@ class ClipVisionConfig(PretrainedConfig):
 class ClipConfig(PretrainedConfig):
     r"""
     :class:`~transformers.ClipConfig` is the configuration class to store the configuration of a
-    :class:`~transformers.ClipModel`. It is used to instantiate CLIP model according to the
-    specified arguments, defining the text model and vision model configs.
+    :class:`~transformers.ClipModel`. It is used to instantiate CLIP model according to the specified arguments,
+    defining the text model and vision model configs.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -220,8 +220,8 @@ class ClipConfig(PretrainedConfig):
 
                 - **text_config** (:class:`~transformers.ClipTextConfig`, `optional`) -- An instance of a configuration
                   object that defines the text model config.
-                - **vision_config** (:class:`~transformers.ClipVisionConfig`, `optional`) -- An instance of a configuration
-                  object that defines the vision model config.
+                - **vision_config** (:class:`~transformers.ClipVisionConfig`, `optional`) -- An instance of a
+                  configuration object that defines the vision model config.
     """
 
     model_type = "clip"

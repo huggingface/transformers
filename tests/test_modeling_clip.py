@@ -400,6 +400,73 @@ class ClipTextModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
+class ClipModelTester:
+    def __init__(self, parent):
+        self.parent = parent
+        self.text_model_tester = ClipTextModelTester(parent)
+        self.vision_model_tester = ClipVisionModelTester(parent)
+
+    def prepare_config_and_inputs(self):
+        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
+        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+
+        config = ClipConfig.from_text_vision_configs(text_config, vision_config, output_dim=64)
+
+        return config, input_ids, attention_mask, pixel_values
+
+    def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
+        model = ClipModel(config).to(torch_device).eval()
+        result = model(input_ids, attention_mask, pixel_values=pixel_values)
+        self.parent.assertEqual(
+            result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
+        )
+        self.parent.assertEqual(
+            result.logits_per_text.shape, (self.text_model_tester.batch_size, self.vision_model_tester.batch_size)
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            attention_mask,
+            pixel_values,
+        ) = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, "pixel_values": pixel_values}
+        return config, inputs_dict
+
+
+@require_torch
+class ClipModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (ClipModel,) if is_torch_available() else ()
+    test_pruning = False
+    test_head_masking = False
+
+    def setUp(self):
+        self.model_tester = ClipModelTester(self)
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    # TODO: check training ?
+    def test_training(self):
+        pass
+
+    def test_inputs_embeds(self):
+        # Clip does not use inputs_embeds
+        pass
+
+    def test_resize_tokens_embeddings(self):
+        pass
+
+    @slow
+    def test_model_from_pretrained(self):
+        for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = ClipModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+
+
 # We will verify our results on an image of cute cats
 def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/cats.png")
