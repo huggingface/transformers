@@ -566,7 +566,7 @@ M2M_100_GENERATION_EXAMPLE = r"""
         >>> model_inputs = tokenizer(text_to_translate, return_tensors='pt')
 
         >>> # translate to French
-        >>> gen_tokens = model.generate( **model_inputs, forced_bos_token_id=tok.get_lang_id("fr"))
+        >>> gen_tokens = model.generate( **model_inputs, forced_bos_token_id=tokenizer.get_lang_id("fr"))
         >>> print(tokenizer.batch_decode(gen_tokens, skip_special_tokens=True))
 """
 
@@ -595,7 +595,7 @@ M2M_100_INPUTS_DOCSTRING = r"""
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
+            `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
 
             M2M100 uses the :obj:`eos_token_id` as the starting token for :obj:`decoder_input_ids` generation. If
             :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
@@ -1272,7 +1272,7 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
             >>> model_inputs = tokenizer(text_to_translate, return_tensors='pt')
 
             >>> # translate to French
-            >>> gen_tokens = model.generate( **model_inputs, forced_bos_token_id=tok.get_lang_id("fr"))
+            >>> gen_tokens = model.generate( **model_inputs, forced_bos_token_id=tokenizer.get_lang_id("fr"))
             >>> print(tokenizer.batch_decode(gen_tokens, skip_special_tokens=True))
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
