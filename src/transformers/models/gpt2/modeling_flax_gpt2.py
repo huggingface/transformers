@@ -21,7 +21,6 @@ import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict
 from flax.linen import combine_masks, dot_product_attention, make_causal_mask
 from jax import lax
-from jax.dtypes import dtype
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
@@ -124,12 +123,10 @@ class FlaxGPT2Attention(nn.Module):
         self.c_attn = FlaxConv1D(
             features=3 * self.embed_dim,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(config.initializer_range, self.dtype),
         )
         self.c_proj = FlaxConv1D(
             self.embed_dim,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(config.initializer_range, self.dtype),
         )
         self.resid_dropout = nn.Dropout(rate=config.resid_pdrop)
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="i4"))
@@ -200,12 +197,10 @@ class FlaxGPT2MLP(nn.Module):
         self.c_fc = FlaxConv1D(
             self.intermediate_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
         )
         self.c_proj = FlaxConv1D(
             embed_dim,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
         )
         self.act = ACT2FN[self.config.activation_function]
         self.dropout = nn.Dropout(rate=self.config.resid_pdrop)
@@ -240,13 +235,14 @@ class FlaxGPT2Block(nn.Module):
     ):
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
-        attn_output = self.attn(
+        outputs = self.attn(
             hidden_states,
             attention_mask=attention_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
         )
         # residual connection
+        attn_output = outputs[0]
         hidden_states = attn_output + residual
 
         residual = hidden_states
@@ -255,7 +251,7 @@ class FlaxGPT2Block(nn.Module):
         # residual connection
         hidden_states = residual + feed_forward_hidden_states
 
-        return hidden_states
+        return (hidden_states,) + outputs[1:]
 
 
 class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
@@ -269,7 +265,12 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
     module_class: nn.Module = None
 
     def __init__(
-        self, config: GPT2Config, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
+        self,
+        config: GPT2Config,
+        input_shape: Tuple = (1, 1),
+        seed: int = 0,
+        dtype: jnp.dtype = jnp.float32,
+        **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
@@ -278,11 +279,11 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         attention_mask = jnp.ones_like(input_ids)
-
+        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape)
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(rngs, input_ids, attention_mask)["params"]
+        return self.module.init(rngs, input_ids, attention_mask, position_ids)["params"]
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     def __call__(
@@ -481,7 +482,7 @@ class FlaxGPT2LMHeadModule(nn.Module):
         hidden_states = outputs[0]
 
         if self.config.tie_word_embeddings:
-            shared_kernel = self.transformer.variables["params"]["wte"].T
+            shared_kernel = self.transformer.variables["params"]["wte"]["embedding"].T
             lm_logits = self.lm_head.apply({"params": {"kernel": shared_kernel}}, hidden_states)
         else:
             lm_logits = self.lm_head(hidden_states)
