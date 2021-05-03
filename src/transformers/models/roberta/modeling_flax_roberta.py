@@ -59,9 +59,9 @@ ROBERTA_START_DOCSTRING = r"""
     generic methods the library implements for all its model (such as downloading, saving and converting weights from
     PyTorch models)
 
-    This model is also a Flax Linen `flax.nn.Module
-    <https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html>`__ subclass. Use it as a regular Flax
-    Module and refer to the Flax documentation for all matter related to general usage and behavior.
+    This model is also a Flax Linen `flax.linen.Module
+    <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`__ subclass. Use it as a regular Flax linen Module
+    and refer to the Flax documentation for all matter related to general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
 
@@ -73,8 +73,8 @@ ROBERTA_START_DOCSTRING = r"""
     Parameters:
         config (:class:`~transformers.RobertaConfig`): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
+            model weights.
 """
 
 ROBERTA_INPUTS_DOCSTRING = r"""
@@ -140,7 +140,6 @@ class FlaxRobertaEmbeddings(nn.Module):
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
     def __call__(self, input_ids, token_type_ids, position_ids, attention_mask, deterministic: bool = True):
-        batch_size, sequence_length = input_ids.shape
         # Embed
         inputs_embeds = self.word_embeddings(input_ids.astype("i4"))
         position_embeds = self.position_embeddings(position_ids.astype("i4"))
@@ -148,7 +147,6 @@ class FlaxRobertaEmbeddings(nn.Module):
 
         # Sum all embeddings
         hidden_states = inputs_embeds + token_type_embeddings + position_embeds
-        #        hidden_states = hidden_states.reshape((batch_size, sequence_length, -1))
 
         # Layer Norm
         hidden_states = self.LayerNorm(hidden_states)
