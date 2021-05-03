@@ -120,14 +120,8 @@ class FlaxGPT2Attention(nn.Module):
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
 
-        self.c_attn = FlaxConv1D(
-            features=3 * self.embed_dim,
-            dtype=self.dtype,
-        )
-        self.c_proj = FlaxConv1D(
-            self.embed_dim,
-            dtype=self.dtype,
-        )
+        self.c_attn = FlaxConv1D(features=3 * self.embed_dim, dtype=self.dtype)
+        self.c_proj = FlaxConv1D(self.embed_dim, dtype=self.dtype)
         self.resid_dropout = nn.Dropout(rate=config.resid_pdrop)
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="i4"))
 
@@ -194,14 +188,8 @@ class FlaxGPT2MLP(nn.Module):
 
     def setup(self):
         embed_dim = self.config.hidden_size
-        self.c_fc = FlaxConv1D(
-            self.intermediate_size,
-            dtype=self.dtype,
-        )
-        self.c_proj = FlaxConv1D(
-            embed_dim,
-            dtype=self.dtype,
-        )
+        self.c_fc = FlaxConv1D(self.intermediate_size, dtype=self.dtype)
+        self.c_proj = FlaxConv1D(embed_dim, dtype=self.dtype)
         self.act = ACT2FN[self.config.activation_function]
         self.dropout = nn.Dropout(rate=self.config.resid_pdrop)
 
