@@ -94,7 +94,7 @@ class ViTEmbeddings(nn.Module):
     
     def forward(self, x, output_attentions):
         
-        batch_size = x.shape[0]
+        batch_size, nc, w, h = x.shape[0]
 
         if output_attentions:
             N = self.position_embeddings.shape[1] - 1
