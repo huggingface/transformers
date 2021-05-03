@@ -25,7 +25,6 @@ import numpy as np
 
 from transformers import (
     WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
-    AddedToken,
     Wav2Vec2Config,
     Wav2Vec2CTCTokenizer,
     Wav2Vec2Tokenizer,
