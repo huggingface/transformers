@@ -358,6 +358,11 @@ training steps, using the `tqdm` library.
             optimizer.zero_grad()
             progress_bar.update(1)
 
+Note that if you are used to freezing the body of your pretrained model (like in computer vision) the above may seem a
+bit strange, as we are directly fine-tuning the whole model without taking any precaution. It actually works better
+this way for Transformers model (so this is not an oversight on our side). If you're not familiar with what "freezing
+the body" of the model means, forget you read this paragraph.
+
 Now to check the results, we need to write the evaluation loop. Like in the :ref:`trainer section <trainer>` we will
 use a metric from the datasets library. Here we accumulate the predictions at each batch before computing the final
 result when the loop is finished.
