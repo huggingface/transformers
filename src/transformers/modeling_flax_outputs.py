@@ -103,6 +103,9 @@ class FlaxMaskedLMOutput(ModelOutput):
     attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
 
 
+FlaxCausalLMOutput = FlaxMaskedLMOutput
+
+
 @dataclass
 class FlaxNextSentencePredictorOutput(ModelOutput):
     """
