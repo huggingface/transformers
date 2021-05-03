@@ -388,6 +388,10 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         token_ids = tokenizer("C a A c").input_ids
         self.assertEqual(token_ids, [19, 4, 33, 4, 7, 4, 35])
 
+        tokenizer.add_tokens(["a", "b", "c"])
+        token_ids = tokenizer("CaA c").input_ids
+        self.assertEqual(token_ids, [19, 33, 7, 4, 35])
+
     def test_tokenizer_add_token_words(self):
         tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-base-960h")
 
@@ -399,6 +403,10 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.add_tokens(["aaa", "bbb", "ccc"])
         token_ids = tokenizer("C aaa A ccc B B").input_ids
         self.assertEqual(token_ids, [19, 4, 33, 4, 7, 4, 35, 4, 24, 4, 24])
+
+        tokenizer.add_tokens(["aaa", "bbb", "ccc"])
+        token_ids = tokenizer("CaaaA ccc B B").input_ids
+        self.assertEqual(token_ids, [19, 33, 7, 4, 35, 4, 24, 4, 24])
 
     def test_tokenizer_decode(self):
         tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-base-960h")
