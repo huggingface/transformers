@@ -325,19 +325,10 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         self.added_tokens_decoder.update(added_tok_decoder)
 
         # Make sure we don't split on any special tokens (even they were already in the vocab before e.g. for Albert)
-        if special_tokens:
-            if len(new_tokens) == 1:
-                _insert_one_token_to_ordered_list(self.unique_no_split_tokens, new_tokens[0])
-            else:
-                self.unique_no_split_tokens = sorted(set(self.unique_no_split_tokens).union(set(new_tokens)))
-        else:
-            # Or on the newly added tokens
-            if len(tokens_to_add) == 1:
-                unique_no_split_tokens = self.unique_no_split_tokens[:]
-                _insert_one_token_to_ordered_list(self.unique_no_split_tokens, tokens_to_add[0])
-                self.unique_no_split_tokens = unique_no_split_tokens
-            else:
-                self.unique_no_split_tokens = sorted(set(self.unique_no_split_tokens).union(set(tokens_to_add)))
+        for token in tokens_to_add:
+            if len(token) > 1:
+                self._additional_special_tokens.append(AddedToken(token))
+                _insert_one_token_to_ordered_list(self.unique_no_split_tokens, token)
 
         return len(tokens_to_add)
 
