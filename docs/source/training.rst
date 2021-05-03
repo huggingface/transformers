@@ -158,7 +158,7 @@ here we simply use accuracy. Then we define the :obj:`compute_metrics` function 
         predictions = np.argmax(logits, axis=-1)
         return metric.compute(predictions=predictions, references=labels)
 
-To check if this works on practice, let's create a new :class:`~transformers.Trainer` with our fine-tuned model:
+To check if this works in practice, let's create a new :class:`~transformers.Trainer` with our fine-tuned model:
 
 .. code-block:: python
 
