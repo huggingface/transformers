@@ -163,6 +163,7 @@ def is_copy_consistent(filename, overwrite=False):
 
         # Test for a diff and act accordingly.
         if observed_code != theoretical_code:
+            import ipdb; ipdb.set_trace()
             diffs.append([object_name, start_index])
             if overwrite:
                 lines = lines[:start_index] + [theoretical_code] + lines[line_index:]
