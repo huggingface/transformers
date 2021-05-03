@@ -63,8 +63,6 @@ IGNORE_NON_TESTED = [
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
     "TFRobertaForMultipleChoice",  # TODO: fix
     "SeparableConv1D",  # Building part of bigger (tested) model.
-    "FlaxBartForCausalLM",  # TODO: fix
-    "FlaxBartDecoderWrapper",  # Building part of bigger (tested) model.
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't

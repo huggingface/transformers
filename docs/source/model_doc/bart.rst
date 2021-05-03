@@ -180,9 +180,3 @@ FlaxBartForQuestionAnswering
 .. autoclass:: transformers.FlaxBartForQuestionAnswering
     :members: __call__
 
-
-FlaxBartForCausalLM
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.FlaxBartForCausalLM
-    :members: __call__

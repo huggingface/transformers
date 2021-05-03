@@ -19,7 +19,6 @@ from collections import OrderedDict
 
 from ...utils import logging
 from ..bart.modeling_flax_bart import (
-    FlaxBartForCausalLM,
     FlaxBartForConditionalGeneration,
     FlaxBartForQuestionAnswering,
     FlaxBartForSequenceClassification,
@@ -49,13 +48,6 @@ FLAX_MODEL_MAPPING = OrderedDict(
         (RobertaConfig, FlaxRobertaModel),
         (BertConfig, FlaxBertModel),
         (BartConfig, FlaxBartModel),
-    ]
-)
-
-FLAX_MODEl_FOR_CAUSAL_LM_MAPPING = OrderedDict(
-    [
-        # Model for Causal LM mapping
-        (BartConfig, FlaxBartForCausalLM),
     ]
 )
 
@@ -118,10 +110,6 @@ FlaxAutoModel = auto_class_factory("FlaxAutoModel", FLAX_MODEL_MAPPING)
 
 FlaxAutoModelForPreTraining = auto_class_factory(
     "FlaxAutoModelForPreTraining", FLAX_MODEL_FOR_PRETRAINING_MAPPING, head_doc="pretraining"
-)
-
-FlaxAutoModelForCausalLM = auto_class_factory(
-    "FlaxAutoModelForCausalLM", FLAX_MODEl_FOR_CAUSAL_LM_MAPPING, head_doc="causal language modeling"
 )
 
 FlaxAutoModelForMaskedLM = auto_class_factory(

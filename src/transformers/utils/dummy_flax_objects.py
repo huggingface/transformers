@@ -44,15 +44,6 @@ class FlaxAutoModel:
         requires_backends(self, ["flax"])
 
 
-class FlaxAutoModelForCausalLM:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
 class FlaxAutoModelForMaskedLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
@@ -113,11 +104,6 @@ class FlaxAutoModelForTokenClassification:
 
     @classmethod
     def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
-class FlaxBartForCausalLM:
-    def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
 

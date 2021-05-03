@@ -1371,7 +1371,6 @@ if is_flax_available():
             "FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "FLAX_MODEL_MAPPING",
             "FlaxAutoModel",
-            "FlaxAutoModelForCausalLM",
             "FlaxAutoModelForConditionalGeneration",
             "FlaxAutoModelForMaskedLM",
             "FlaxAutoModelForMultipleChoice",
@@ -1384,7 +1383,6 @@ if is_flax_available():
     )
     _import_structure["models.bart"].extend(
         [
-            "FlaxBartForCausalLM",
             "FlaxBartForConditionalGeneration",
             "FlaxBartForQuestionAnswering",
             "FlaxBartForSequenceClassification",
@@ -2548,7 +2546,6 @@ if TYPE_CHECKING:
             FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             FLAX_MODEL_MAPPING,
             FlaxAutoModel,
-            FlaxAutoModelForCausalLM,
             FlaxAutoModelForMaskedLM,
             FlaxAutoModelForMultipleChoice,
             FlaxAutoModelForNextSentencePrediction,
@@ -2558,7 +2555,6 @@ if TYPE_CHECKING:
             FlaxAutoModelForTokenClassification,
         )
         from .models.bart import (
-            FlaxBartForCausalLM,
             FlaxBartForConditionalGeneration,
             FlaxBartForQuestionAnswering,
             FlaxBartForSequenceClassification,
