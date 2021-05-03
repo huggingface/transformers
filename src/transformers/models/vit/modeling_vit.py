@@ -102,8 +102,8 @@ class ViTEmbeddings(nn.Module):
 
             # interpolate patch embeddings
             dim = x.shape[-1]
-            w0 = w // self.patch_embeddings.patch_size
-            h0 = h // self.patch_embeddings.patch_size
+            w0 = w // self.patch_embeddings.patch_size[0]
+            h0 = h // self.patch_embeddings.patch_size[0]
             class_pos_embed = self.position_embeddings[:, 0]
             patch_pos_embed = self.position_embeddings[:, 1:]
             patch_pos_embed = nn.functional.interpolate(
