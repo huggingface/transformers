@@ -295,8 +295,8 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         Examples::
 
             # Let's see how to increase the vocabulary of Bert model and tokenizer
-            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            model = BertModel.from_pretrained('bert-base-uncased')
+            tokenizer = Wav2Vec2CTCTokenizer.from_pretrained('facebook/wav2vec2-base-960h')
+            model = Wav2Vec2ForCTC.from_pretrained('facebook/wav2vec2-base-960h')
 
             num_added_toks = tokenizer.add_tokens(['new_tok1', 'my_new-tok2'])
             print('We have added', num_added_toks, 'tokens')
@@ -324,7 +324,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         self.added_tokens_encoder.update(added_tok_encoder)
         self.added_tokens_decoder.update(added_tok_decoder)
 
-        # Make sure we don't split on any special tokens (even they were already in the vocab before e.g. for Albert)
+        # Make sure we don't split on any special tokens (even they were already in the vocab before)
         for token in tokens_to_add:
             if len(token) > 1:
                 self._additional_special_tokens.append(AddedToken(token))
