@@ -790,14 +790,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if self.config.pruned_heads:
             self.prune_heads(self.config.pruned_heads)
 
+        # Tie weights if needed
+        self.tie_weights()
+
         if not _init_weights:
             return
 
         # Initialize weights
         self.apply(self._init_weights)
-
-        # Tie weights if needed
-        self.tie_weights()
 
     def prune_heads(self, heads_to_prune: Dict[int, List[int]]):
         """
