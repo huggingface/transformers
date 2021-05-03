@@ -339,6 +339,7 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
+    # overwrite from test_modeling_common
     def test_save_load_fast_init_from_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         base_class = MODEL_MAPPING[config.__class__]
@@ -358,12 +359,19 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
             if model_class == base_class:
                 continue
 
+            # make a copy of model class to not break future tests
+            # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
+            class CopyClass(model_class):
+                pass
+
+            model_class_copy = CopyClass
+
             # make sure that all keys are expected for test
-            model_class._keys_to_ignore_on_load_missing = []
+            model_class_copy._keys_to_ignore_on_load_missing = []
 
             # make init deterministic, but make sure that
             # non-initialized weights throw errors nevertheless
-            model_class._init_weights = _mock_init_weights
+            model_class_copy._init_weights = _mock_init_weights
 
             model = base_class(config)
             state_dict = model.state_dict()
@@ -378,13 +386,14 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
                 model.save_pretrained(tmpdirname)
                 torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
 
-                model_fast_init = model_class.from_pretrained(tmpdirname)
-                model_slow_init = model_class.from_pretrained(tmpdirname, _no_fast_init=True)
+                model_fast_init = model_class_copy.from_pretrained(tmpdirname)
+                model_slow_init = model_class_copy.from_pretrained(tmpdirname, _no_fast_init=True)
 
                 for key in model_fast_init.state_dict().keys():
                     max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
+    # overwrite from test_modeling_common
     def test_save_load_fast_init_to_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         base_class = MODEL_MAPPING[config.__class__]
@@ -404,12 +413,19 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
             if model_class == base_class:
                 continue
 
+            # make a copy of model class to not break future tests
+            # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
+            class CopyClass(base_class):
+                pass
+
+            base_class_copy = CopyClass
+
             # make sure that all keys are expected for test
-            model_class._keys_to_ignore_on_load_missing = []
+            base_class_copy._keys_to_ignore_on_load_missing = []
 
             # make init deterministic, but make sure that
             # non-initialized weights throw errors nevertheless
-            base_class._init_weights = _mock_init_weights
+            base_class_copy._init_weights = _mock_init_weights
 
             model = model_class(config)
             state_dict = model.state_dict()
@@ -424,8 +440,8 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
                 model.config.save_pretrained(tmpdirname)
                 torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
 
-                model_fast_init = base_class.from_pretrained(tmpdirname)
-                model_slow_init = base_class.from_pretrained(tmpdirname, _no_fast_init=True)
+                model_fast_init = base_class_copy.from_pretrained(tmpdirname)
+                model_slow_init = base_class_copy.from_pretrained(tmpdirname, _no_fast_init=True)
 
                 for key in model_fast_init.state_dict().keys():
                     max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
@@ -548,6 +564,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
+    # overwrite from test_modeling_common
     def test_save_load_fast_init_from_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         base_class = MODEL_MAPPING[config.__class__]

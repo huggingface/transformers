@@ -377,11 +377,11 @@ class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
             if hasattr(module, "emb_projs"):
                 for i in range(len(module.emb_projs)):
                     if module.emb_projs[i] is not None:
-                        torch.nn.init.constant_(module.emb_projs[i], 3)
+                        torch.nn.init.constant_(module.emb_projs[i], 0.0003)
             if hasattr(module, "out_projs"):
                 for i in range(len(module.out_projs)):
                     if module.out_projs[i] is not None:
-                        torch.nn.init.constant_(module.out_projs[i], 3)
+                        torch.nn.init.constant_(module.out_projs[i], 0.0003)
 
             for param in ["r_emb", "r_w_bias", "r_r_bias", "r_bias"]:
                 if hasattr(module, param) and getattr(module, param) is not None:
