@@ -107,9 +107,7 @@ class FlaxBartModelTester(unittest.TestCase):
 
     def prepare_config_and_inputs(self):
         input_ids = np.clip(ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size), 3, self.vocab_size)
-        input_ids = np.concatenate(
-            (input_ids, 2 * np.ones((self.batch_size, 1), dtype=np.int64)), -1
-        )
+        input_ids = np.concatenate((input_ids, 2 * np.ones((self.batch_size, 1), dtype=np.int64)), -1)
 
         decoder_input_ids = shift_tokens_right(input_ids, 1, 2)
 

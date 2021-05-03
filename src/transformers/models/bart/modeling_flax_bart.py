@@ -28,7 +28,6 @@ from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_fo
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
-    FlaxCausalLMOutputWithCrossAttentions,
     FlaxSeq2SeqLMOutput,
     FlaxSeq2SeqModelOutput,
     FlaxSeq2SeqQuestionAnsweringModelOutput,
@@ -1225,15 +1224,6 @@ class FlaxBartModel(FlaxBartPretrainedModel):
     config: BartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
     module_class = FlaxBartModule
-
-    def get_input_embeddings(self):
-        return self.shared
-
-    def get_encoder(self):
-        return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
 
 class FlaxBartForConditionalGenerationModule(nn.Module):

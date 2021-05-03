@@ -55,6 +55,7 @@ FLAX_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
         # Model for pre-training mapping
         (BertConfig, FlaxBertForPreTraining),
+        (BartConfig, FlaxBartForConditionalGeneration),
     ]
 )
 
@@ -62,6 +63,7 @@ FLAX_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
         (BertConfig, FlaxBertForMaskedLM),
+        (BartConfig, FlaxBartForConditionalGeneration),
     ]
 )
 
@@ -100,11 +102,6 @@ FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = OrderedDict(
         (BertConfig, FlaxBertForNextSentencePrediction),
     ]
 )
-FLAX_MODEL_FOR_CONDITIONAL_GENERATION_MAPPING = OrderedDict(
-    [
-        (BartConfig, FlaxBartForConditionalGeneration),
-    ]
-)
 
 FlaxAutoModel = auto_class_factory("FlaxAutoModel", FLAX_MODEL_MAPPING)
 
@@ -138,10 +135,4 @@ FlaxAutoModelForNextSentencePrediction = auto_class_factory(
     "FlaxAutoModelForNextSentencePrediction",
     FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
     head_doc="next sentence prediction",
-)
-
-FlaxAutoModelForConditionalGeneration = auto_class_factory(
-    "FlaxAutoModelForConditionalGeneration",
-    FLAX_MODEL_FOR_CONDITIONAL_GENERATION_MAPPING,
-    head_doc="conditional generation",
 )
