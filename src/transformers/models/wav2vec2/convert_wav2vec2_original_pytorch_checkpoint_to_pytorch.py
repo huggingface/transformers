@@ -214,9 +214,8 @@ def convert_wav2vec2_checkpoint(
         hf_wav2vec = Wav2Vec2Model(config)
 
     if is_finetuned:
-
         model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
-            [checkpoint_path], arg_overrides={"data": dict_path}
+            [checkpoint_path], arg_overrides={"data": "/".join(dict_path.split("/")[:-1])}
         )
     else:
         model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task([checkpoint_path])
