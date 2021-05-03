@@ -31,7 +31,7 @@ from ...file_utils import (
     DUMMY_MASK,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_torch_fx_available,
+    is_torch_fx_proxy,
     replace_return_docstrings,
 )
 from ...modeling_outputs import (
@@ -44,11 +44,6 @@ from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices,
 from ...utils import logging
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_t5 import T5Config
-
-
-if is_torch_fx_available():
-    import torch.fx
-
 
 logger = logging.get_logger(__name__)
 
@@ -780,7 +775,7 @@ class T5PreTrainedModel(PreTrainedModel):
         ), "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id. See T5 docs for more information"
 
         # shift inputs to the right
-        if is_torch_fx_available() and isinstance(input_ids, torch.fx.Proxy):
+        if is_torch_fx_proxy(input_ids):
             # Item assignment is not supported natively for proxies.
             shifted_input_ids = torch.full(input_ids.shape[:-1] + (1,), decoder_start_token_id)
             shifted_input_ids = torch.cat([shifted_input_ids, input_ids[..., :-1]], dim=-1)
