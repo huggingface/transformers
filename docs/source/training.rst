@@ -16,10 +16,10 @@ Fine-tuning a pretrained model
 In this tutorial, we will show you how to fine-tune a pretrained model from the Transformers library. In TensorFlow,
 models can be directly trained using Keras and the :obj:`fit` method. In PyTorch, there is no generic training loop so
 the 🤗 Transformers library provides an API with the class :class:`~transformers.Trainer` to let you fine-tune or train
- a model from scratch easily. Then we will show you how to alternatively write the whole training loop in PyTorch.
+a model from scratch easily. Then we will show you how to alternatively write the whole training loop in PyTorch.
 
-Before we can fine-tune a model, we need a dataset. In this tutorial, we will show you how to fine-tune BERT on
-the `IMDB dataset <https://www.imdb.com/interfaces/>`__: the task is to classify whether movie reviews are positive or
+Before we can fine-tune a model, we need a dataset. In this tutorial, we will show you how to fine-tune BERT on the
+`IMDB dataset <https://www.imdb.com/interfaces/>`__: the task is to classify whether movie reviews are positive or
 negative. For examples of other tasks, refer to the :ref:`additional-resources` section!
 
 .. _data-processing:
@@ -43,9 +43,9 @@ First, we can use the :obj:`load_dataset` function to download and cache the dat
 This works like the :obj:`from_pretrained` method we saw for the models and tokenizers (except the cache directory is
 `~/.cache/huggingface/dataset` by default).
 
-The :obj:`raw_datasets` object is a dictionary with three keys: :obj:`"train"`, :obj:`"test"` and
-:obj:`"unsupervised"` (which correspond to the three splits of that dataset). We will use the :obj:`"train"` split for
-training and the :obj:`"test"` split for validation.
+The :obj:`raw_datasets` object is a dictionary with three keys: :obj:`"train"`, :obj:`"test"` and :obj:`"unsupervised"`
+(which correspond to the three splits of that dataset). We will use the :obj:`"train"` split for training and the
+:obj:`"test"` split for validation.
 
 To preprocess our data, we will need a tokenizer:
 
@@ -64,7 +64,8 @@ As we saw in :doc:`preprocessing`, we can prepare the text inputs for the model 
 This will make all the samples have the maximum length the model can accept (here 512), either by padding or truncating
 them.
 
-However, we can instead apply these preprocessing steps to all the splits of our dataset at once by using the :obj:`map` method:
+However, we can instead apply these preprocessing steps to all the splits of our dataset at once by using the
+:obj:`map` method:
 
 .. code-block:: python
 
