@@ -959,12 +959,6 @@ class GenerationMixin:
         )
 
         stopping_criteria = self._get_stopping_criteria(max_length=max_length, max_time=max_time)
-        if max_length is not None:
-            warnings.warn(
-                "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
-                UserWarning,
-            )
-            stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
 
         if is_greedy_gen_mode:
             if num_return_sequences > 1:
