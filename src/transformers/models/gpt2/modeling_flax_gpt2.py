@@ -17,21 +17,18 @@ from typing import Any, Optional, Tuple
 
 import flax.linen as nn
 import jax
-from jax.dtypes import dtype
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict
-from flax.linen import dot_product_attention, make_causal_mask, combine_masks
+from flax.linen import combine_masks, dot_product_attention, make_causal_mask
 from jax import lax
+from jax.dtypes import dtype
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
-from ...modeling_flax_utils import (
-    ACT2FN,
-    FlaxPreTrainedModel,
-    append_call_sample_docstring,
-)
+from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
 from ...utils import logging
 from .configuration_gpt2 import GPT2Config
+
 
 logger = logging.get_logger(__name__)
 
@@ -266,7 +263,7 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
-    
+
     config_class = GPT2Config
     base_model_prefix = "transformer"
     module_class: nn.Module = None
@@ -483,8 +480,11 @@ class FlaxGPT2LMHeadModule(nn.Module):
 
         hidden_states = outputs[0]
 
-        # TODO: handle shared embeddings
-        lm_logits = self.lm_head(hidden_states)
+        if self.config.tie_word_embeddings:
+            shared_kernel = self.transformer.variables["params"]["wte"].T
+            lm_logits = self.lm_head.apply({"params": {"kernel": shared_kernel}}, hidden_states)
+        else:
+            lm_logits = self.lm_head(hidden_states)
 
         if not return_dict:
             return (lm_logits,) + outputs[1:]
