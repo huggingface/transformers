@@ -1,0 +1,102 @@
+<!---
+Copyright 2021 The Google Flax Team Authors and HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+# Text classification examples
+
+## GLUE tasks
+
+Based on the script [`run_flax_glue.py`](https://github.com/huggingface/transformers/blob/master/examples/flax/text-classification/run_flax_glue.py).
+
+Fine-tuning the library models for sequence classification on the GLUE benchmark: [General Language Understanding
+Evaluation](https://gluebenchmark.com/). This script can fine-tune any of the models on the [hub](https://huggingface.co/models).
+
+GLUE is made up of a total of 9 different tasks. Here is how to run the script on one of them:
+
+```bash
+export TASK_NAME=mrpc
+
+python run_flax_glue.py \
+  --model_name_or_path bert-base-cased \
+  --task_name $TASK_NAME \
+  --do_train \
+  --do_eval \
+  --do_predict \
+  --max_seq_length 128 \
+  --per_device_train_batch_size 32 \
+  --learning_rate 2e-5 \
+  --num_train_epochs 3 \
+  --output_dir /tmp/$TASK_NAME/
+```
+
+where task name can be one of cola, mnli, mnli-mm, mrpc, qnli, qqp, rte, sst2, stsb, wnli.
+
+Using the command above, the script will train for 3 epochs and run eval after each epoch. Once
+training is done, it will run a few predictions on the test set and output the predictions.
+Metrics and hyperparameters are stored in Tensorflow event files in `---output_dir`.
+You can see the results by running `tensorboard` in that directory:
+
+```bash
+$ tensorboard --logdir .
+```
+
+### Accuracy Evaluation
+
+We trained five replicas and report mean accuracy and stdev on the dev set below.
+We use the same settings as in the command above (with an exception for MRPC and
+WNLI which are tiny and where we used 5 epochs instead of 3). We trained on 8 Cloud v3 TPUs.
+
+We use these epochs because this is standard for this task, but looking at the
+training curves of some tasks (e.g., SST-2, STS-b), it appears the models are undertrained
+and we could get better results when training longer.
+
+The random seed of each model is equal to the ID of the run. So in order to reproduce run 1,
+run the command above with `--seed=1`. The best run used random seed 2, which is the default
+in the script. The results of all runs are in [this Google Sheet](https://docs.google.com/spreadsheets/d/1wtcjX_fJLjYs6kXkoiej2qGjrl9ByfNhPulPAz71Ky4/edit?usp=sharing).
+
+
+| Task  | Metric                       | Acc (best run) | Acc (avg/5runs) | Stdev     | Metrics                                                                  |
+|-------|------------------------------|----------------|-----------------|-----------|--------------------------------------------------------------------------|
+| CoLA  | Matthew's corr               | 59.19          | 59.31           | 1.17      | [tfhub.dev](https://tensorboard.dev/experiment/zVRnDpUeRiWJOKJ6bDgksw/)  |
+| SST-2 | Accuracy                     | 91.47          | 91.83           | 0.63      | [tfhub.dev](https://tensorboard.dev/experiment/pijWaaOdTaiWD6Bqc6PoHQ/)  |
+| MRPC  | F1/Accuracy                  | 89.5/85.42     | 89.12/84.40     | 0.47/0.69 | [tfhub.dev](https://tensorboard.dev/experiment/GlXMMAsYTJOExm9BmKKoLw/)  |
+| STS-B | Pearson/Spearman corr.       | 88.92/88.68    | 89.13/88.86     | 0.22/0.20 | [tfhub.dev](https://tensorboard.dev/experiment/92w90I9JSV6w5x91e2bQpw/)  |
+| QQP   | Accuracy/F1                  | 90.83/87.63    | 90.87/87.66     | 0.05/0.07 | [tfhub.dev](https://tensorboard.dev/experiment/9JDb13BxS72c03LsyMNY8A/)  |
+| MNLI  | Matched acc./Mismatched acc. | 83.86/83.55    | 83.53/83.86     | 0.22/0.22 | [tfhub.dev](https://tensorboard.dev/experiment/X7AmBzhoR66VW8NgNLhRmQ/) / [tfhub.dev](https://tensorboard.dev/experiment/fDnYyHNKS1mbx2XrAFvIBw/)  |
+| QNLI  | Accuracy                     | 90.75          | 90.86           | 0.18      | [tfhub.dev](https://tensorboard.dev/experiment/Z0U789pbQRyJ4QbpAH3FlQ/)  |
+| RTE   | Accuracy                     | 69.14          | 67.50           | 1.66      | [tfhub.dev](https://tensorboard.dev/experiment/bDP0NVFyQKKHGL10XBErqg/)  |
+| WNLI  | Accuracy                     | 57.81          | 41.56           | 19.47     | [tfhub.dev](https://tensorboard.dev/experiment/7Nsags44Q1y2id46ddlhNQ/)  |
+
+Some of these results are significantly different from the ones reported on the test set of GLUE benchmark on the
+website. For QQP and WNLI, please refer to [FAQ #12](https://gluebenchmark.com/faq) on the website.
+
+### Runtime evaluation
+
+We also ran each task once on a single GPU, 8 GPUs, and 8 TPUs and report the
+overall training time below. The training time varied very little between runs,
+so we do not report mean and stdevs here. We used P100 GPUs and v3 Cloud TPUs.
+
+
+| Task  | time (1 GPU) | time (8 GPU)  | time (8 TPU) |
+|-------|--------------|---------------|--------------|
+| CoLA  |              |  1m 26s       |  1m 46s      |
+| SST-2 |              |  6m 28s       |  5m 30s      |
+| MRPC  |              |  1m 14s       |  1m 32s      |
+| STS-B |              |  1m 12s       |  1m 33s      |
+| QQP   |              | 31m 48s       | 24m 40s      |
+| MNLI  |              | 33m 55s       | 26m 30s      | 
+| QNLI  |              |  9m 40s       |  8m          |
+| RTE   |              |     55s       |  1m 21s      |
+| WNLI  |              |     48s       |  1m 12s      |
