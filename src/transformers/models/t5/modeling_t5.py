@@ -45,6 +45,7 @@ from ...utils import logging
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_t5 import T5Config
 
+
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "T5Config"

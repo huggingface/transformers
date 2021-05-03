@@ -266,6 +266,7 @@ def is_torch_cuda_available():
 _torch_fx_available = False
 if is_torch_available():
     import torch
+
     _torch_fx_available = version.parse(torch.__version__) >= version.parse("1.8")
 
 
@@ -1603,6 +1604,7 @@ def tf_required(func):
 def is_torch_fx_proxy(x):
     if is_torch_fx_available():
         import torch.fx
+
         return isinstance(x, torch.fx.Proxy)
     return False
 
