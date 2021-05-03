@@ -92,20 +92,26 @@ class ViTEmbeddings(nn.Module):
         pos_embed = pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return torch.cat((class_emb.unsqueeze(0), pos_embed), dim=1)
     
-    def forward(self, x, output_attentions):
+    def forward(self, x, output_attentions=False):
         
         batch_size, nc, w, h = x.shape
+        N = self.position_embeddings.shape[1] - 1
+        x = self.patch_embeddings(x)
+
+        print("N:", N)
+        print("Shape of x after patch embeddings:", x.shape)
 
         if output_attentions:
-            N = self.position_embeddings.shape[1] - 1
-            x = self.patch_embeddings(x)
-
             # interpolate patch embeddings
             dim = x.shape[-1]
             w0 = w // self.patch_embeddings.patch_size[0]
             h0 = h // self.patch_embeddings.patch_size[0]
+            print("w0:", w0)
+            print("h0:", h0)
             class_pos_embed = self.position_embeddings[:, 0]
             patch_pos_embed = self.position_embeddings[:, 1:]
+            print("Shape of class pos embed:", class_pos_embed.shape)
+            print("Shape of patch pos embed:", patch_pos_embed.shape)
             patch_pos_embed = nn.functional.interpolate(
                 patch_pos_embed.reshape(1, int(math.sqrt(N)), int(math.sqrt(N)), dim).permute(0, 3, 1, 2),
                 scale_factor=(w0 / math.sqrt(N), h0 / math.sqrt(N)),
@@ -118,14 +124,15 @@ class ViTEmbeddings(nn.Module):
                 helper = torch.zeros(w0)[None, None, :, None].repeat(1, dim, 1, h0 - patch_pos_embed.shape[-1]).to(x.device)
                 pos_embed = torch.cat((patch_pos_embed, helper), dim=-1)
             patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-            pos_embed = torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+            position_embeddings = torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+
         else:
-            embeddings = self.patch_embeddings(x)
+            # interpolate position embeddings
+            position_embeddings = self.interpolate_pos_encoding(x, self.position_embeddings)
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         x = torch.cat((cls_tokens, x), dim=1)
 
-        position_embeddings = self.interpolate_pos_encoding(x, self.position_embeddings)
         x = x + position_embeddings
         x = self.dropout(x)
         return x
