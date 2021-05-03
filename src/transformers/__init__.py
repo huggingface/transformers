@@ -1361,6 +1361,7 @@ if is_flax_available():
     _import_structure["modeling_flax_utils"] = ["FlaxPreTrainedModel"]
     _import_structure["models.auto"].extend(
         [
+            "FLAX_MODEL_FOR_CAUSAL_LM_MAPPING",
             "FLAX_MODEL_FOR_MASKED_LM_MAPPING",
             "FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
             "FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
@@ -1370,6 +1371,7 @@ if is_flax_available():
             "FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "FLAX_MODEL_MAPPING",
             "FlaxAutoModel",
+            "FlaxAutoModelForCausalLM",
             "FlaxAutoModelForMaskedLM",
             "FlaxAutoModelForMultipleChoice",
             "FlaxAutoModelForNextSentencePrediction",
@@ -1392,6 +1394,7 @@ if is_flax_available():
             "FlaxBertPreTrainedModel",
         ]
     )
+    _import_structure["models.gpt2"].extend(["FlaxGPT2LMHeadModel", "FlaxGPT2Model"])
     _import_structure["models.roberta"].append("FlaxRobertaModel")
 else:
     from .utils import dummy_flax_objects
@@ -2527,6 +2530,7 @@ if TYPE_CHECKING:
     if is_flax_available():
         from .modeling_flax_utils import FlaxPreTrainedModel
         from .models.auto import (
+            FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
             FLAX_MODEL_FOR_MASKED_LM_MAPPING,
             FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -2536,6 +2540,7 @@ if TYPE_CHECKING:
             FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             FLAX_MODEL_MAPPING,
             FlaxAutoModel,
+            FlaxAutoModelForCausalLM,
             FlaxAutoModelForMaskedLM,
             FlaxAutoModelForMultipleChoice,
             FlaxAutoModelForNextSentencePrediction,
@@ -2555,6 +2560,7 @@ if TYPE_CHECKING:
             FlaxBertModel,
             FlaxBertPreTrainedModel,
         )
+        from .models.gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model
         from .models.roberta import FlaxRobertaModel
     else:
         # Import the same objects as dummies to get them in the namespace.

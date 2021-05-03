@@ -28,9 +28,10 @@ from ..bert.modeling_flax_bert import (
     FlaxBertForTokenClassification,
     FlaxBertModel,
 )
+from ..gpt2.modeling_flax_gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model
 from ..roberta.modeling_flax_roberta import FlaxRobertaModel
 from .auto_factory import auto_class_factory
-from .configuration_auto import BertConfig, RobertaConfig
+from .configuration_auto import BertConfig, GPT2Config, RobertaConfig
 
 
 logger = logging.get_logger(__name__)
@@ -41,6 +42,7 @@ FLAX_MODEL_MAPPING = OrderedDict(
         # Base model mapping
         (RobertaConfig, FlaxRobertaModel),
         (BertConfig, FlaxBertModel),
+        (GPT2Config, FlaxGPT2Model),
     ]
 )
 
@@ -55,6 +57,13 @@ FLAX_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
         (BertConfig, FlaxBertForMaskedLM),
+    ]
+)
+
+FLAX_MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
+    [
+        # Model for Causal LM mapping
+        (GPT2Config, FlaxGPT2LMHeadModel)
     ]
 )
 
@@ -93,6 +102,10 @@ FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = OrderedDict(
 )
 
 FlaxAutoModel = auto_class_factory("FlaxAutoModel", FLAX_MODEL_MAPPING)
+
+FlaxAutoModelForCausalLM = auto_class_factory(
+    "FlaxAutoModelForCausalLM", FLAX_MODEL_FOR_CAUSAL_LM_MAPPING, head_doc="causal language modeling"
+)
 
 FlaxAutoModelForPreTraining = auto_class_factory(
     "FlaxAutoModelForPreTraining", FLAX_MODEL_FOR_PRETRAINING_MAPPING, head_doc="pretraining"
