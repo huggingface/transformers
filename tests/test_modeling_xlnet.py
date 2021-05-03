@@ -14,7 +14,9 @@
 # limitations under the License.
 
 
+import os
 import random
+import tempfile
 import unittest
 
 from transformers import is_torch_available
@@ -29,6 +31,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        MODEL_MAPPING,
         XLNetConfig,
         XLNetForMultipleChoice,
         XLNetForQuestionAnswering,
@@ -592,6 +595,98 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def test_retain_grad_hidden_states_attentions(self):
         # xlnet cannot keep gradients in attentions or hidden states
         return
+
+    def test_save_load_fast_init_to_base(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        base_class = MODEL_MAPPING[config.__class__]
+
+        if isinstance(base_class, tuple):
+            base_class = base_class[0]
+
+        def _mock_init_weights(self, module):
+            if hasattr(module, "weight") and module.weight is not None:
+                module.weight.data.fill_(3)
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.data.fill_(3)
+
+            for param in ["q", "k", "v", "o", "r", "r_r_bias", "r_s_bias", "r_w_bias", "seg_embed"]:
+                if hasattr(module, param) and getattr(module, param) is not None:
+                    weight = getattr(module, param)
+                    weight.data.fill_(3)
+
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+
+            # make init deterministic, but make sure that
+            # non-initialized weights throw errors nevertheless
+            base_class._init_weights = _mock_init_weights
+
+            model = model_class(config)
+            state_dict = model.state_dict()
+
+            # this will often delete a single weight of a multi-weight module
+            # to test an edge case
+            random_key_to_del = random.choice(list(state_dict.keys()))
+            del state_dict[random_key_to_del]
+
+            # check that certain keys didn't get saved with the model
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.config.save_pretrained(tmpdirname)
+                torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
+
+                model_fast_init = base_class.from_pretrained(tmpdirname)
+                model_slow_init = base_class.from_pretrained(tmpdirname, _no_fast_init=True)
+
+                for key in model_fast_init.state_dict().keys():
+                    max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+    def test_save_load_fast_init_from_base(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        base_class = MODEL_MAPPING[config.__class__]
+
+        if isinstance(base_class, tuple):
+            base_class = base_class[0]
+
+        def _mock_init_weights(self, module):
+            if hasattr(module, "weight") and module.weight is not None:
+                module.weight.data.fill_(3)
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.data.fill_(3)
+
+            for param in ["q", "k", "v", "o", "r", "r_r_bias", "r_s_bias", "r_w_bias", "seg_embed"]:
+                if hasattr(module, param) and getattr(module, param) is not None:
+                    weight = getattr(module, param)
+                    weight.data.fill_(3)
+
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+
+            # make init deterministic, but make sure that
+            # non-initialized weights throw errors nevertheless
+            model_class._init_weights = _mock_init_weights
+
+            model = base_class(config)
+            state_dict = model.state_dict()
+
+            # this will often delete a single weight of a multi-weight module
+            # to test an edge case
+            random_key_to_del = random.choice(list(state_dict.keys()))
+            del state_dict[random_key_to_del]
+
+            # check that certain keys didn't get saved with the model
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
+
+                model_fast_init = model_class.from_pretrained(tmpdirname)
+                model_slow_init = model_class.from_pretrained(tmpdirname, _no_fast_init=True)
+
+                for key in model_fast_init.state_dict().keys():
+                    max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
