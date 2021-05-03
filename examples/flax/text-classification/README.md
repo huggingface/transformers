@@ -35,7 +35,6 @@ python run_flax_glue.py \
   --do_eval \
   --do_predict \
   --max_seq_length 128 \
-  --per_device_train_batch_size 32 \
   --learning_rate 2e-5 \
   --num_train_epochs 3 \
   --output_dir /tmp/$TASK_NAME/
@@ -54,17 +53,16 @@ $ tensorboard --logdir .
 
 ### Accuracy Evaluation
 
-We trained five replicas and report mean accuracy and stdev on the dev set below.
-We use the same settings as in the command above (with an exception for MRPC and
-WNLI which are tiny and where we used 5 epochs instead of 3). We trained on 8 Cloud v3 TPUs.
+We train five replicas and report mean accuracy and stdev on the dev set below.
+We use the settings as in the command above (with an exception for MRPC and
+WNLI which are tiny and where we used 5 epochs instead of 3), and we use a total
+train batch size of 32 (we train on 8 Cloud v3 TPUs, so a per-device batch size of 4),
 
-We use these epochs because this is standard for this task, but looking at the
-training curves of some tasks (e.g., SST-2, STS-b), it appears the models are undertrained
-and we could get better results when training longer.
+On the task other than MRPC and WNLI we train for 3 these epochs because this is the standard,
+but looking at the training curves of some of them (e.g., SST-2, STS-b), it appears the models
+are undertrained and we could get better results when training longer.
 
-The random seed of each model is equal to the ID of the run. So in order to reproduce run 1,
-run the command above with `--seed=1`. The best run used random seed 2, which is the default
-in the script. The results of all runs are in [this Google Sheet](https://docs.google.com/spreadsheets/d/1wtcjX_fJLjYs6kXkoiej2qGjrl9ByfNhPulPAz71Ky4/edit?usp=sharing).
+In the Tensorboard results linked below, the random seed of each model is equal to the ID of the run. So in order to reproduce run 1, run the command above with `--seed=1`. The best run used random seed 2, which is the default in the script. The results of all runs are in [this Google Sheet](https://docs.google.com/spreadsheets/d/1wtcjX_fJLjYs6kXkoiej2qGjrl9ByfNhPulPAz71Ky4/edit?usp=sharing).
 
 
 | Task  | Metric                       | Acc (best run) | Acc (avg/5runs) | Stdev     | Metrics                                                                  |
@@ -84,19 +82,18 @@ website. For QQP and WNLI, please refer to [FAQ #12](https://gluebenchmark.com/f
 
 ### Runtime evaluation
 
-We also ran each task once on a single GPU, 8 GPUs, and 8 TPUs and report the
-overall training time below. The training time varied very little between runs,
-so we do not report mean and stdevs here. We used P100 GPUs and v3 Cloud TPUs.
+We also ran each task once on a single P100 GPU, 8 P100 GPUs, and 8 Cloud v3 TPUs and report the
+overall training time below. 
 
 
 | Task  | time (1 GPU) | time (8 GPU)  | time (8 TPU) |
 |-------|--------------|---------------|--------------|
-| CoLA  |              |  1m 26s       |  1m 46s      |
-| SST-2 |              |  6m 28s       |  5m 30s      |
-| MRPC  |              |  1m 14s       |  1m 32s      |
-| STS-B |              |  1m 12s       |  1m 33s      |
-| QQP   |              | 31m 48s       | 24m 40s      |
-| MNLI  |              | 33m 55s       | 26m 30s      | 
-| QNLI  |              |  9m 40s       |  8m          |
-| RTE   |              |     55s       |  1m 21s      |
-| WNLI  |              |     48s       |  1m 12s      |
+| CoLA  |     3m  6s   |  1m 26s       |  1m 46s      |
+| SST-2 |    22m  6s   |  6m 28s       |  5m 30s      |
+| MRPC  |     2m 17s   |  1m 14s       |  1m 32s      |
+| STS-B |     2m 11s   |  1m 12s       |  1m 33s      |
+| QQP   | 1u 20m 15s   | 31m 48s       | 24m 40s      |
+| MNLI  | 2u  7m 30s   | 33m 55s       | 26m 30s      | 
+| QNLI  |    34m 20s   |  9m 40s       |  8m          |
+| RTE   |     1m  8s   |     55s       |  1m 21s      |
+| WNLI  |        38s   |     48s       |  1m 12s      |
