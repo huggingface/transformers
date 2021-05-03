@@ -1535,10 +1535,6 @@ class BertForSequenceClassification(BertPreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
-            else:
-                raise ValueError(
-                    f"The config parameter `problem_type` not understood: received {self.config.problem_type} but only [regression, single_label_classification and multi_label_classification] are valid."
-                )
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
