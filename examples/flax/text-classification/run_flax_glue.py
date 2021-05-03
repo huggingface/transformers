@@ -40,8 +40,8 @@ from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
 from transformers import (
     BertConfig,
-    BertTokenizerFast,
-    FlaxBertForSequenceClassification,
+    AutoTokenizer,
+    FlaxAutoModelForSequenceClassification,
     HfArgumentParser,
     PreTrainedTokenizerBase,
     TrainingArguments,
@@ -219,21 +219,14 @@ def create_learning_rate_fn(config: FlaxTrainingArguments, train_ds_size: int) -
     """Returns a linear warmup, linear_decay learning rate function."""
     steps_per_epoch = train_ds_size // config.train_batch_size
     num_train_steps = steps_per_epoch * config.num_train_epochs
-    warmup_steps = max(config.warmup_steps, 1)
-
-    def linear_warmup(step):
-        return jnp.minimum(1.0, step / warmup_steps)
-
-    def linear_decay(step):
-        progress = jnp.maximum(0.0, (step - warmup_steps))
-        progress /= float(num_train_steps - warmup_steps)
-        return 1.0 - progress
-
-    def step_fn(step):
-        ret = config.learning_rate * linear_warmup(step) * linear_decay(step)
-        return jnp.asarray(ret, dtype=jnp.float32)
-
-    return step_fn
+    warmup_fn = optax.linear_schedule(
+        init_value=0., end_value=config.learning_rate,
+        transition_steps=config.warmup_steps)
+    decay_fn = optax.linear_schedule(
+        init_value=config.learning_rate, end_value=0,
+        transition_steps=num_train_steps-config.warmup_steps)
+    schedule_fn = optax.join_schedules(schedules=[warmup_fn, decay_fn], boundaries=[config.warmup_steps])
+    return schedule_fn
 
 
 def create_optimizer(learning_rate_fn: Callable[[int], float]) -> optax.GradientTransformation:
@@ -258,27 +251,25 @@ def create_optimizer(learning_rate_fn: Callable[[int], float]) -> optax.Gradient
 
 
 def create_train_state(
-    model: FlaxBertForSequenceClassification, learning_rate_fn: Callable[[int], float], task: GlueTask
+    model: FlaxAutoModelForSequenceClassification, learning_rate_fn: Callable[[int], float], task: GlueTask
 ) -> TrainState:
     """Create initial training state."""
     tx = create_optimizer(learning_rate_fn)
 
-    def regression_loss_fn(logits, labels):
-        # Mean-square error loss.
+    def mse_loss(logits, labels):
         return jnp.mean((logits[..., 0] - labels) ** 2)
 
-    def classification_loss_fn(logits, labels):
-        # Cross entropy loss.
-        num_labels = len(task.labels)
+    def cross_entropy_loss(logits, labels):
         logits = nn.log_softmax(logits)
-        return -jnp.mean(jnp.sum(onehot(labels, num_labels) * logits, axis=-1))
+        xentropy = optax.softmax_cross_entropy(logits, onehot(labels, num_classes=len(task.labels)))
+        return -jnp.mean(xentropy)
 
     if task.is_regression:
         logits_fn = lambda logits: logits[..., 0]
-        loss_fn = regression_loss_fn
+        loss_fn = mse_loss
     else:  # Classification.
         logits_fn = lambda logits: logits.argmax(-1)
-        loss_fn = classification_loss_fn
+        loss_fn = cross_entropy_loss
 
     return TrainState.create(apply_fn=model.__call__, params=model.params, tx=tx, logits_fn=logits_fn, loss_fn=loss_fn)
 
