@@ -443,7 +443,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # trained, but which are deterministic)
     _keys_to_ignore_on_save = None
 
-    # whether weights should be initialized when instantiating model class
     is_parallelizable = False
 
     @property
