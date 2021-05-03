@@ -193,12 +193,19 @@ class ModelTesterMixin:
             if model_class == base_class:
                 continue
 
+            # make a copy of model class to not break future tests
+            # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
+            class CopyClass(model_class):
+                pass
+
+            model_class_copy = CopyClass
+
             # make sure that all keys are expected for test
-            model_class._keys_to_ignore_on_load_missing = []
+            model_class_copy._keys_to_ignore_on_load_missing = []
 
             # make init deterministic, but make sure that
             # non-initialized weights throw errors nevertheless
-            model_class._init_weights = _mock_init_weights
+            model_class_copy._init_weights = _mock_init_weights
 
             model = base_class(config)
             state_dict = model.state_dict()
@@ -213,8 +220,8 @@ class ModelTesterMixin:
                 model.save_pretrained(tmpdirname)
                 torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
 
-                model_fast_init = model_class.from_pretrained(tmpdirname)
-                model_slow_init = model_class.from_pretrained(tmpdirname, _no_fast_init=True)
+                model_fast_init = model_class_copy.from_pretrained(tmpdirname)
+                model_slow_init = model_class_copy.from_pretrained(tmpdirname, _no_fast_init=True)
 
                 for key in model_fast_init.state_dict().keys():
                     max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
@@ -234,15 +241,23 @@ class ModelTesterMixin:
                 module.bias.data.fill_(3)
 
         for model_class in self.all_model_classes:
+
             if model_class == base_class:
                 continue
 
+            # make a copy of model class to not break future tests
+            # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
+            class CopyClass(base_class):
+                pass
+
+            base_class_copy = CopyClass
+
             # make sure that all keys are expected for test
-            model_class._keys_to_ignore_on_load_missing = []
+            base_class_copy._keys_to_ignore_on_load_missing = []
 
             # make init deterministic, but make sure that
             # non-initialized weights throw errors nevertheless
-            base_class._init_weights = _mock_init_weights
+            base_class_copy._init_weights = _mock_init_weights
 
             model = model_class(config)
             state_dict = model.state_dict()
@@ -257,8 +272,8 @@ class ModelTesterMixin:
                 model.config.save_pretrained(tmpdirname)
                 torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
 
-                model_fast_init = base_class.from_pretrained(tmpdirname)
-                model_slow_init = base_class.from_pretrained(tmpdirname, _no_fast_init=True)
+                model_fast_init = base_class_copy.from_pretrained(tmpdirname)
+                model_slow_init = base_class_copy.from_pretrained(tmpdirname, _no_fast_init=True)
 
                 for key in model_fast_init.state_dict().keys():
                     max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
