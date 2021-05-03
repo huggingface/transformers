@@ -1275,14 +1275,6 @@ class ModelTesterMixin:
                     loss = model(**inputs).loss
                     loss.backward()
 
-            with self.assertRaises(ValueError):
-                config.problem_type = "non_existent_problem"
-                model = model_class(config)
-                model.to(torch_device)
-                model.train()
-                inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                model(**inputs)
-
 
 global_rng = random.Random()
 
