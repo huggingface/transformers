@@ -1739,6 +1739,42 @@ class LongformerSelfAttention:
         requires_backends(self, ["torch"])
 
 
+LUKE_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class LukeForEntityClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LukeForEntityPairClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LukeForEntitySpanClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LukeModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LukePreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class LxmertEncoder:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])

@@ -189,6 +189,7 @@ _import_structure = {
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
+    "models.luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig", "LukeTokenizer"],
     "models.lxmert": ["LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LxmertConfig", "LxmertTokenizer"],
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config"],
     "models.marian": ["MarianConfig"],
@@ -444,8 +445,8 @@ if is_torch_available():
     ]
     _import_structure["generation_utils"] = ["top_k_top_p_filtering"]
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
-    # PyTorch models structure
 
+    # PyTorch models structure
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -751,6 +752,16 @@ if is_torch_available():
             "LongformerForTokenClassification",
             "LongformerModel",
             "LongformerSelfAttention",
+        ]
+    )
+    _import_structure["models.luke"].extend(
+        [
+            "LUKE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LukeForEntityClassification",
+            "LukeForEntityPairClassification",
+            "LukeForEntitySpanClassification",
+            "LukeModel",
+            "LukePreTrainedModel",
         ]
     )
     _import_structure["models.lxmert"].extend(
@@ -1542,6 +1553,7 @@ if TYPE_CHECKING:
     from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
+    from .models.luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig, LukeTokenizer
     from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, LxmertTokenizer
     from .models.m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
     from .models.marian import MarianConfig
@@ -2023,6 +2035,14 @@ if TYPE_CHECKING:
             LongformerForTokenClassification,
             LongformerModel,
             LongformerSelfAttention,
+        )
+        from .models.luke import (
+            LUKE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LukeForEntityClassification,
+            LukeForEntityPairClassification,
+            LukeForEntitySpanClassification,
+            LukeModel,
+            LukePreTrainedModel,
         )
         from .models.lxmert import (
             LxmertEncoder,
