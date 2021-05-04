@@ -19,6 +19,8 @@ import warnings
 from collections import OrderedDict
 
 from ...utils import logging
+
+# Add modeling imports here
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -57,8 +59,6 @@ from ..big_bird.modeling_big_bird import (
     BigBirdForTokenClassification,
     BigBirdModel,
 )
-
-# Add modeling imports here
 from ..bigbird_pegasus.modeling_bigbird_pegasus import (
     BigBirdPegasusForCausalLM,
     BigBirdPegasusForConditionalGeneration,

@@ -276,11 +276,7 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False
-    test_missing_keys = False
-
-    # torchscript should be possible, but takes prohibitively long to test.
-    # Also torchscript is not an important feature to have in the beginning.
-    # test_torchscript = False
+    test_missing_keys = True
 
     def setUp(self):
         self.model_tester = BigBirdPegasusModelTester(self)
@@ -464,10 +460,9 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
 
         # fmt: off
         expected = [
-            "<s> the properties of the short - term periodicities of various indices of solar activity are studied."
+            '<s> the properties of the short - term periodicities of various indices of solar activity are studied.<n> one of them is the periodicity between 150 and 160 days.<n> this periodicity was discovered by @xcite in the occurence rate of gamma - ray flares detected by the gamma - ray spectrometer during epochs of maximum activity ( in episodes of 13 years ).<n> it was also found in proton flares during solar cycles 19 and 20 @xcite, and in data records from 31 years.<n> it is only present during epochs of maximum activity ( in episodes of 13 years ).<n> another property of short - term periodicities is the 18-month ( 540-day ) periodicity in flare rate of the norhern hemisphere.<n> it was discovered by @xcite in the occurence rate of gamma - ray flares detected by the gamma - ray spectrometer during solar cycles 19 and 20.<n> it was also found in proton flares during solar cycles 19 and 20 @xcite, and in data records from 31 years. in this paper<n> the problem of the existence of this periodicity for sunspot data from 1923 - 1933 is considered. the daily sunspot areas, the mean sunspot',  # noqa: E231
         ]
         # fmt: on
-
         self.assertTrue(generated == expected)
 
 
