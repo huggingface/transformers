@@ -439,7 +439,7 @@ CLIP_INPUTS_DOCSTRING = r"""
 """
 
 
-class ClipEncoder(ClipPreTrainedModel):
+class ClipEncoder(nn.Module):
     """
     Transformer encoder consisting of *config.num_hidden_layers* self attention layers. Each layer is a
     :class:`ClipEncoderLayer`.

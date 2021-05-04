@@ -7,6 +7,16 @@ class ImageFeatureExtractionMixin:
         requires_backends(self, ["vision"])
 
 
+class ClipFeatureExtractor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class ClipProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class DeiTFeatureExtractor:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["vision"])

@@ -18,8 +18,7 @@
 import inspect
 import unittest
 
-import requests
-from transformers.file_utils import cached_property, is_torch_available, is_vision_available
+from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -464,6 +463,7 @@ class ClipModelTest(unittest.TestCase):
 def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/cats.png")
     return image
+
 
 @require_vision
 class ClipModelIntegrationTest(unittest.TestCase):
