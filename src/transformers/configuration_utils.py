@@ -163,6 +163,14 @@ class PretrainedConfig(PushToHubMixin):
           typically for a classification task.
         - **task_specific_params** (:obj:`Dict[str, Any]`, `optional`) -- Additional keyword arguments to store for the
           current task.
+        - **problem_type** (:obj:`str`, `optional`) -- Problem type for :obj:`XxxForSequenceClassification` models. Can
+          be one of (:obj:`"regression"`, :obj:`"single_label_classification"`, :obj:`"multi_label_classification"`).
+          Please note that this parameter is only available in the following models: `AlbertForSequenceClassification`,
+          `BertForSequenceClassification`, `BigBirdForSequenceClassification`, `ConvBertForSequenceClassification`,
+          `DistilBertForSequenceClassification`, `ElectraForSequenceClassification`, `FunnelForSequenceClassification`,
+          `LongformerForSequenceClassification`, `MobileBertForSequenceClassification`,
+          `ReformerForSequenceClassification`, `RobertaForSequenceClassification`,
+          `SqueezeBertForSequenceClassification`, `XLMForSequenceClassification` and `XLNetForSequenceClassification`.
 
     Parameters linked to the tokenizer
 
@@ -259,6 +267,15 @@ class PretrainedConfig(PushToHubMixin):
 
         # task specific arguments
         self.task_specific_params = kwargs.pop("task_specific_params", None)
+
+        # regression / multi-label classification
+        self.problem_type = kwargs.pop("problem_type", None)
+        allowed_problem_types = ("regression", "single_label_classification", "multi_label_classification")
+        if self.problem_type is not None and self.problem_type not in allowed_problem_types:
+            raise ValueError(
+                f"The config parameter `problem_type` wasnot understood: received {self.problem_type}"
+                "but only 'regression', 'single_label_classification' and 'multi_label_classification' are valid."
+            )
 
         # TPU arguments
         if kwargs.pop("xla_device", None) is not None:

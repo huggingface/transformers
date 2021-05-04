@@ -351,6 +351,7 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         else ()
     )
     all_generative_model_classes = (RobertaForCausalLM,) if is_torch_available() else ()
+    test_sequence_classification_problem_types = True
 
     def setUp(self):
         self.model_tester = RobertaModelTester(self)
