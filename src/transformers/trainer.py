@@ -127,6 +127,7 @@ from .utils import logging
 from .utils.modeling_auto_mapping import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
 
 
+_is_torch_generator_available = False
 _is_native_amp_available = False
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
@@ -141,6 +142,7 @@ if is_apex_available():
     from apex import amp
 
 if version.parse(torch.__version__) >= version.parse("1.6"):
+    _is_torch_generator_available = True
     _is_native_amp_available = True
     from torch.cuda.amp import autocast
 
@@ -535,6 +537,11 @@ class Trainer:
         if not isinstance(self.train_dataset, collections.abc.Sized):
             return None
 
+        generator = None
+        if self.args.world_size <= 1 and _is_torch_generator_available:
+            generator = torch.Generator()
+            generator.manual_seed(int(torch.empty((), dtype=torch.int64).random_().item()))
+
         # Build the sampler.
         if self.args.group_by_length:
             if is_datasets_available() and isinstance(self.train_dataset, datasets.Dataset):
@@ -547,13 +554,6 @@ class Trainer:
                 lengths = None
             model_input_name = self.tokenizer.model_input_names[0] if self.tokenizer is not None else None
             if self.args.world_size <= 1:
-                if version.parse(torch.__version__) < version.parse("1.6.0"):
-                    generator = None
-                else:
-                    # Torch generator were introduced in PyTorch 1.6.0.
-                    generator = torch.Generator()
-                    generator.manual_seed(int(torch.empty((), dtype=torch.int64).random_().item()))
-
                 return LengthGroupedSampler(
                     self.train_dataset,
                     self.args.train_batch_size,
@@ -574,12 +574,6 @@ class Trainer:
 
         else:
             if self.args.world_size <= 1:
-                if version.parse(torch.__version__) < version.parse("1.6.0"):
-                    return RandomSampler(self.train_dataset)
-
-                # Torch generator were introduced in PyTorch 1.6.0.
-                generator = torch.Generator()
-                generator.manual_seed(int(torch.empty((), dtype=torch.int64).random_().item()))
                 return RandomSampler(self.train_dataset, generator=generator)
             elif (
                 self.args.parallel_mode in [ParallelMode.TPU, ParallelMode.SAGEMAKER_MODEL_PARALLEL]
@@ -1193,13 +1187,6 @@ class Trainer:
                     steps_trained_progress_bar = tqdm(total=steps_trained_in_current_epoch)
                     steps_trained_progress_bar.set_description("Skipping the first batches")
 
-        # RNG states
-        checkpoint_rng_state = None
-        if resume_from_checkpoint is not None and os.path.isfile(
-            os.path.join(resume_from_checkpoint, "rng_state.pth")
-        ):
-            checkpoint_rng_state = torch.load(os.path.join(resume_from_checkpoint, "rng_state.pth"))
-
         # Update the references
         self.callback_handler.model = self.model
         self.callback_handler.optimizer = self.optimizer
@@ -1258,28 +1245,8 @@ class Trainer:
                     steps_trained_in_current_epoch -= 1
                     if steps_trained_progress_bar is not None:
                         steps_trained_progress_bar.update(1)
-                    if steps_trained_in_current_epoch == 0 and checkpoint_rng_state is not None:
-                        # We're finished skipping so set the RNG states to be exactly as they were at the
-                        # checkpoint time.
-                        torch.random.set_rng_state(checkpoint_rng_state["cpu"])
-                        if torch.cuda.is_available():
-                            if args.local_rank != -1:
-                                if f"cuda_{args.local_rank}" not in checkpoint_rng_state:
-                                    logger.warn(
-                                        "You are resuming a training that was launched in a distributed fashion in a "
-                                        "non-distributed way. Reproducibility cannot be guaranteed."
-                                    )
-                                else:
-                                    torch.cuda.random.set_rng_state(checkpoint_rng_state[f"cuda_{args.local_rank}"])
-                            else:
-                                if "cuda" not in checkpoint_rng_state:
-                                    logger.warn(
-                                        "You are resuming a training that was launched in a non-distributed fashion "
-                                        "with GPUs on either in a distributed fashion or not on GPUs. Reproducibility "
-                                        "cannot be guaranteed."
-                                    )
-                                else:
-                                    torch.cuda.random.set_rng_state_all(checkpoint_rng_state["cuda"])
+                    if steps_trained_in_current_epoch == 0:
+                        self._load_rng_state(resume_from_checkpoint)
                     continue
                 elif steps_trained_progress_bar is not None:
                     steps_trained_progress_bar.close()
@@ -1436,6 +1403,32 @@ class Trainer:
         if self.control.should_save:
             self._save_checkpoint(model, trial, metrics=metrics)
             self.control = self.callback_handler.on_save(self.args, self.state, self.control)
+
+    def _load_rng_state(self, checkpoint):
+        # Load RNG states from `checkpoint`
+        if resume_from_checkpoint is None or not os.path.isfile(os.path.join(checkpoint, "rng_state.pth")):
+            return
+
+        checkpoint_rng_state = torch.load(os.path.join(checkpoint, "rng_state.pth"))
+        torch.random.set_rng_state(checkpoint_rng_state["cpu"])
+        if torch.cuda.is_available():
+            if args.local_rank != -1:
+                if f"cuda_{args.local_rank}" not in checkpoint_rng_state:
+                    logger.warn(
+                        "You are resuming a training that was launched in a distributed fashion in a "
+                        "non-distributed way. Reproducibility cannot be guaranteed."
+                    )
+                else:
+                    torch.cuda.random.set_rng_state(checkpoint_rng_state[f"cuda_{args.local_rank}"])
+            else:
+                if "cuda" not in checkpoint_rng_state:
+                    logger.warn(
+                        "You are resuming a training that was launched in a non-distributed fashion "
+                        "with GPUs on either in a distributed fashion or not on GPUs. Reproducibility "
+                        "cannot be guaranteed."
+                    )
+                else:
+                    torch.cuda.random.set_rng_state_all(checkpoint_rng_state["cuda"])
 
     def _save_checkpoint(self, model, trial, metrics=None):
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
