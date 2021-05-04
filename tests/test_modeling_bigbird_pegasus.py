@@ -37,7 +37,7 @@ if is_torch_available():
         BigBirdPegasusForQuestionAnswering,
         BigBirdPegasusForSequenceClassification,
         BigBirdPegasusModel,
-        BigBirdPegasusTokenizer,
+        PegasusTokenizer,
     )
     from transformers.models.bigbird_pegasus.modeling_bigbird_pegasus import (
         BigBirdPegasusDecoder,
@@ -441,7 +441,7 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
 
         model = BigBirdPegasusForConditionalGeneration.from_pretrained(MODEL_ID, attention_type="block_sparse", block_size=16, num_random_blocks=3)
         model.to(torch_device)
-        tokenizer = BigBirdPegasusTokenizer.from_pretrained(MODEL_ID)
+        tokenizer = PegasusTokenizer.from_pretrained(MODEL_ID)
 
         # fmt: off
         batch_input = [
