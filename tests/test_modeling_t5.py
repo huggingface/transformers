@@ -20,7 +20,6 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property, is_torch_fx_available
-from transformers.modeling_fx_utils import symbolic_trace
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -33,6 +32,10 @@ if is_torch_available():
 
     from transformers import T5Config, T5EncoderModel, T5ForConditionalGeneration, T5Model, T5Tokenizer
     from transformers.models.t5.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
+
+
+if is_torch_fx_available():
+    from transformers.modeling_fx_utils import symbolic_trace
 
 
 class T5ModelTester:

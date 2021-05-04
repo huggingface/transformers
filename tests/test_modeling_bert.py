@@ -18,7 +18,6 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.file_utils import is_torch_fx_available
-from transformers.modeling_fx_utils import symbolic_trace
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -44,6 +43,9 @@ if is_torch_available():
         BertModel,
     )
     from transformers.models.bert.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
+
+if is_torch_fx_available():
+    from transformers.modeling_fx_utils import symbolic_trace
 
 
 class BertModelTester:
