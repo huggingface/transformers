@@ -37,21 +37,20 @@ highly-optimized Faster RCNN baseline on the challenging COCO object detection d
 generalized to produce panoptic segmentation in a unified manner. We show that it significantly outperforms competitive
 baselines.*
 
-This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code can be found 
-`here <https://github.com/facebookresearch/detr>`__.
+This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code can be found `here
+<https://github.com/facebookresearch/detr>`__.
 
 Here's a TLDR explaining how the model works:
 
 First, an image is sent through a pre-trained convolutional backbone (in the paper, the authors use
 ResNet-50/ResNet-101). Let's assume we also add a batch dimension. This means that the input to the backbone is a
-tensor of shape :obj:`(batch_size, 3, height, width)`, assuming the image has 3 color channels (RGB). The CNN backbone 
-outputs a new lower-resolution feature map, typically of shape :obj:`(batch_size, 2048, height/32, width/32)`. This is 
-then projected to match the hidden dimension of the Transformer of DETR, which is :obj:`256` by default, using a 
-:obj:`nn.Conv2D` layer.
-So now, we have a tensor of shape :obj:`(batch_size, 256, height/32, width/32).` Next, the feature map is flattened and 
-transposed to obtain a tensor of shape :obj:`(batch_size, seq_len, d_model)` = :obj:`(batch, width/32*height/32, 256)`. 
-So a difference with NLP models is that the sequence length is actually longer than usual, but with a smaller :obj:`d_model` 
-(which in NLP is typically 768 or higher).
+tensor of shape :obj:`(batch_size, 3, height, width)`, assuming the image has 3 color channels (RGB). The CNN backbone
+outputs a new lower-resolution feature map, typically of shape :obj:`(batch_size, 2048, height/32, width/32)`. This is
+then projected to match the hidden dimension of the Transformer of DETR, which is :obj:`256` by default, using a
+:obj:`nn.Conv2D` layer. So now, we have a tensor of shape :obj:`(batch_size, 256, height/32, width/32).` Next, the
+feature map is flattened and transposed to obtain a tensor of shape :obj:`(batch_size, seq_len, d_model)` =
+:obj:`(batch, width/32*height/32, 256)`. So a difference with NLP models is that the sequence length is actually longer
+than usual, but with a smaller :obj:`d_model` (which in NLP is typically 768 or higher).
 
 Next, this is sent through the encoder, outputting :obj:`encoder_hidden_states` of the same shape (you can consider
 these as image features). Next, so-called **object queries** are sent through the decoder. This is a tensor of shape

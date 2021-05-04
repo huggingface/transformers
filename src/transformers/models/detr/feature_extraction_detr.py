@@ -15,8 +15,8 @@
 """Feature extractor class for DETR."""
 
 import io
-from collections import defaultdict
 import pathlib
+from collections import defaultdict
 from typing import Dict, List, Optional, Union
 
 import numpy as np
@@ -38,17 +38,18 @@ logger = logging.get_logger(__name__)
 # 2 functions below inspired by https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
 def center_to_corners_format(x):
     """
-    Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to 
-    corners format (x_0, y_0, x_1, y_1).
+    Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
+    (x_0, y_0, x_1, y_1).
     """
     x_c, y_c, w, h = x.unbind(-1)
     b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
     return torch.stack(b, dim=-1)
 
+
 def corners_to_center_format(x):
     """
-    Converts a NumPy array of bounding boxes of shape (number of bounding boxes, 4) of corners format (x_0, y_0, x_1, y_1) to
-    center format (center_x, center_y, width, height).
+    Converts a NumPy array of bounding boxes of shape (number of bounding boxes, 4) of corners format (x_0, y_0, x_1,
+    y_1) to center format (center_x, center_y, width, height).
     """
     x_transposed = x.T
     x0, y0, x1, y1 = x_transposed[0], x_transposed[1], x_transposed[2], x_transposed[3]
@@ -57,10 +58,11 @@ def corners_to_center_format(x):
 
 
 def masks_to_boxes(masks):
-    """Compute the bounding boxes around the provided panoptic segmentation masks.
-    
+    """
+    Compute the bounding boxes around the provided panoptic segmentation masks.
+
     The masks should be in format [N, H, W] where N is the number of masks, (H, W) are the spatial dimensions.
-    
+
     Returns a [N, 4] tensor, with the boxes in corner (xyxy) format.
     """
     if masks.size == 0:
@@ -70,17 +72,17 @@ def masks_to_boxes(masks):
 
     y = np.arange(0, h, dtype=np.float32)
     x = np.arange(0, w, dtype=np.float32)
-    # see https://github.com/pytorch/pytorch/issues/50276 
-    y, x = np.meshgrid(y, x, indexing='ij')
+    # see https://github.com/pytorch/pytorch/issues/50276
+    y, x = np.meshgrid(y, x, indexing="ij")
 
-    x_mask = (masks * np.expand_dims(x, axis=0))
-    x_max = x_mask.reshape(x_mask.shape[0],-1).max(-1)
+    x_mask = masks * np.expand_dims(x, axis=0)
+    x_max = x_mask.reshape(x_mask.shape[0], -1).max(-1)
     x = np.ma.array(x_mask, mask=~(np.array(masks, dtype=bool)))
     x_min = x.filled(fill_value=1e8)
     x_min = x_min.reshape(x_min.shape[0], -1).min(-1)
 
-    y_mask = (masks * np.expand_dims(y, axis=0))
-    y_max = y_mask.reshape(x_mask.shape[0],-1).max(-1)
+    y_mask = masks * np.expand_dims(y, axis=0)
+    y_max = y_mask.reshape(x_mask.shape[0], -1).max(-1)
     y = np.ma.array(y_mask, mask=~(np.array(masks, dtype=bool)))
     y_min = y.filled(fill_value=1e8)
     y_min = y_min.reshape(y_min.shape[0], -1).min(-1)
@@ -125,13 +127,13 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     Args:
         task (:obj:`str`, `optional`, defaults to :obj:`object_detection`):
-            Task for which to prepare features for. 
+            Task for which to prepare features for.
         do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to resize the input to a certain :obj:`size`.
         size (:obj:`int`, `optional`, defaults to 800):
             Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`. If size
-            is a sequence like (:obj:`widht`, :obj:`height`), output size will be matched to this. If size is an int, 
-            smaller edge of the image will be matched to this number. i.e, if :obj:`height` > :obj:`width`, then image 
+            is a sequence like (:obj:`widht`, :obj:`height`), output size will be matched to this. If size is an int,
+            smaller edge of the image will be matched to this number. i.e, if :obj:`height` > :obj:`width`, then image
             will be rescaled to (:obj:`size` * :obj:`height` / :obj:`width`, :obj:`size`).
         max_size (:obj:`int`, `optional`, defaults to :obj:`1333`):
             The largest size an image dimension can have (otherwise it's capped). Only has an effect if
@@ -147,7 +149,14 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     model_input_names = ["pixel_values", "pixel_mask"]
 
     def __init__(
-        self, task="object_detection", do_resize=True, size=800, max_size=1333, do_normalize=True, image_mean=None, image_std=None, 
+        self,
+        task="object_detection",
+        do_resize=True,
+        size=800,
+        max_size=1333,
+        do_normalize=True,
+        image_mean=None,
+        image_std=None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -170,7 +179,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             raise ValueError(f"Task {self.task} not supported")
 
     # inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L33
-    def convert_coco_poly_to_mask(segmentations, height, width):
+    def convert_coco_poly_to_mask(self, segmentations, height, width):
 
         masks = []
         for polygons in segmentations:
@@ -187,7 +196,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             masks = np.zeros((0, height, width), dtype=np.uint8)
 
         return masks
-    
+
     # inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L50
     def prepare_object_detection(self, image, target, return_segmentation_masks=False):
         """
@@ -215,7 +224,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         if return_segmentation_masks:
             segmentations = [obj["segmentation"] for obj in anno]
-            masks = convert_coco_poly_to_mask(segmentations, h, w)
+            masks = self.convert_coco_poly_to_mask(segmentations, h, w)
 
         keypoints = None
         if anno and "keypoints" in anno[0]:
@@ -256,34 +265,36 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     def prepare_panoptic_segmentation(self, image, target, masks_path, return_masks=True):
         w, h = image.size
         ann_info = target.copy()
-        ann_path = pathlib.Path(masks_path) / ann_info['file_name']
-        
+        ann_path = pathlib.Path(masks_path) / ann_info["file_name"]
+
         if "segments_info" in ann_info:
             masks = np.asarray(Image.open(ann_path), dtype=np.uint32)
             masks = rgb_to_id(masks)
 
-            ids = np.array([ann['id'] for ann in ann_info['segments_info']])
+            ids = np.array([ann["id"] for ann in ann_info["segments_info"]])
             masks = masks == ids[:, None, None]
             masks = np.asarray(masks, dtype=np.uint8)
-            
-            labels = np.asarray([ann['category_id'] for ann in ann_info['segments_info']], dtype=np.int64)
+
+            labels = np.asarray([ann["category_id"] for ann in ann_info["segments_info"]], dtype=np.int64)
 
         target = {}
-        target['image_id'] = np.asarray([ann_info['image_id'] if "image_id" in ann_info else ann_info["id"]], dtype=np.int64)
+        target["image_id"] = np.asarray(
+            [ann_info["image_id"] if "image_id" in ann_info else ann_info["id"]], dtype=np.int64
+        )
         if return_masks:
-            target['masks'] = masks
-        target['class_labels'] = labels
+            target["masks"] = masks
+        target["class_labels"] = labels
 
         target["boxes"] = masks_to_boxes(masks)
 
-        target['size'] = np.asarray([int(h), int(w)], dtype=np.int64)
-        target['orig_size'] = np.asarray([int(h), int(w)], dtype=np.int64)
+        target["size"] = np.asarray([int(h), int(w)], dtype=np.int64)
+        target["orig_size"] = np.asarray([int(h), int(w)], dtype=np.int64)
         if "segments_info" in ann_info:
-            target["iscrowd"] = np.asarray([ann["iscrowd"] for ann in ann_info['segments_info']], dtype=np.int64)
-            target["area"] = np.asarray([ann["area"] for ann in ann_info['segments_info']], dtype=np.float32)
+            target["iscrowd"] = np.asarray([ann["iscrowd"] for ann in ann_info["segments_info"]], dtype=np.int64)
+            target["area"] = np.asarray([ann["area"] for ann in ann_info["segments_info"]], dtype=np.float32)
 
         return image, target
-    
+
     def _resize(self, image, size, target=None, max_size=None):
         """
         Resize the image to the given size. Size can be min_size (scalar) or (w, h) tuple. If size is an int, smaller
@@ -347,9 +358,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         if "masks" in target:
             # use PyTorch as current workaround
-            #TODO make this better
+            # TODO make this better
             masks = torch.from_numpy(target["masks"][:, None]).float()
-            interpolated_masks = F.interpolate(masks, size=(h,w), mode="nearest")[:, 0] > 0.5
+            interpolated_masks = F.interpolate(masks, size=(h, w), mode="nearest")[:, 0] > 0.5
             target["masks"] = interpolated_masks.numpy()
 
         return rescaled_image, target
@@ -382,7 +393,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
         ],
         annotations: Union[List[Dict], List[List[Dict]]] = None,
-        masks_path: Optional[pathlib.Path] = None, 
+        masks_path: Optional[pathlib.Path] = None,
         pad_and_return_pixel_mask: Optional[bool] = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
@@ -412,7 +423,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
             masks_path (:obj:`pathlib.Path`, `optional`):
                 Path to the directory containing the PNG files that store the class-agnostic image segmentations.
-            
+
             pad_and_return_pixel_mask (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to pad images up to the largest image in a batch and create a pixel mask.
 
@@ -471,7 +482,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                     if isinstance(annotations, dict) and "image_id" in annotations and "segments_info" in annotations:
                         if isinstance(annotations["segments_info"], (list, tuple)):
                             # an image can have no segments (?)
-                            if len(annotations["segments_info"]) == 0 or isinstance(annotations["segments_info"][0], dict):
+                            if len(annotations["segments_info"]) == 0 or isinstance(
+                                annotations["segments_info"][0], dict
+                            ):
                                 valid_annotations = True
             else:
                 if isinstance(annotations, (list, tuple)):
@@ -488,10 +501,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 raise ValueError(
                     """
                     Annotations must of type `Dict` (single image) or `List[Dict]` (batch of images). In case of object
-                    detection, each dictionary should contain the keys 'image_id' and 'annotations', with the latter 
-                    being a list of annotations in COCO format. In case of panoptic segmentation, each dictionary should 
-                    contain the keys 'file_name', 'image_id' and 'segments_info', with the latter being a list of 
-                    annotations in COCO format.
+                    detection, each dictionary should contain the keys 'image_id' and 'annotations', with the latter
+                    being a list of annotations in COCO format. In case of panoptic segmentation, each dictionary
+                    should contain the keys 'file_name', 'image_id' and 'segments_info', with the latter being a list
+                    of annotations in COCO format.
                     """
                 )
 
@@ -499,6 +512,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if self.task == "panoptic_segmentation":
             if isinstance(masks_path, pathlib.Path):
                 valid_masks_path = True
+            if not valid_masks_path:
+                raise ValueError(
+                    "The path to the directory containing the mask PNG files should be provided as a `pathlib.Path` object."
+                )
 
         if not is_batched:
             images = [images]
@@ -569,11 +586,11 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 tensor_type = TensorType(tensor_type)
 
             if not tensor_type == TensorType.PYTORCH:
-                raise ValueError("Only PyTorch is supported.")
+                raise ValueError("Only PyTorch is supported for the moment.")
             else:
                 if not is_torch_available():
                     raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
-                
+
                 encoded_inputs["target"] = [
                     {k: torch.from_numpy(v) for k, v in target.items()} for target in annotations
                 ]
@@ -587,7 +604,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             for index, item in enumerate(sublist):
                 maxes[index] = max(maxes[index], item)
         return maxes
-    
+
     def pad_and_create_pixel_mask(self, tensor_list):
         """
         Pad images up to the largest image in a batch and create a corresponding pixel_mask.
@@ -611,8 +628,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return tensor, mask
 
-    ### POSTPROCESSING METHODS ###
-    
+    # POSTPROCESSING METHODS
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/detr.py#L258
     def post_process(self, outputs, target_sizes):
         """
@@ -624,9 +640,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             outputs (:class:`~transformers.DetrForObjectDetection`):
                 Raw outputs of the model.
             target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`, `optional`):
-                Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the
-                original image size (before any data augmentation). For visualization, this should be the image size
-                after data augment, but before padding.
+                Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
+                image size (before any data augmentation). For visualization, this should be the image size after data
+                augment, but before padding.
         """
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
@@ -649,12 +665,13 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/segmentation.py#L218
     def post_process_segmentation(self, results, outputs, orig_target_sizes, max_target_sizes, threshold=0.5):
-        """ 
-        Converts the output of :class:`~transformers.DetrForPanopticSegmentation` into actual instance segmentation predictions.
-        
+        """
+        Converts the output of :class:`~transformers.DetrForPanopticSegmentation` into actual instance segmentation
+        predictions.
+
         Only supports PyTorch.
         """
-        
+
         assert len(orig_target_sizes) == len(max_target_sizes)
         max_h, max_w = max_target_sizes.max(0)[0].tolist()
         outputs_masks = outputs.pred_masks.squeeze(2)
@@ -672,26 +689,26 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/segmentation.py#L241
     def post_process_panoptic(self, outputs, processed_sizes, target_sizes=None, is_thing_map=None, threshold=0.85):
-        """ 
+        """
         Converts the output of :class:`~transformers.DetrForPanopticSegmentation` into actual panoptic predictions.
-        
+
         Only supports PyTorch.
-        
+
         Parameters:
             outputs (:class:`~transformers.DetrForPanopticSegmentation`):
                 Raw outputs of the model.
             processed_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)` or :obj:`List[Tuple]` of length :obj:`batch_size`):
-                Torch Tensor (or list) containing the size (h, w) of each image of the batch, i.e. the size after data 
+                Torch Tensor (or list) containing the size (h, w) of each image of the batch, i.e. the size after data
                 augmentation but before batching.
             target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)` or :obj:`List[Tuple]` of length :obj:`batch_size`, `optional`):
-                Torch Tensor (or list) corresponding to the requested final size (h, w) of each prediction. 
-                If left to None, it will default to the :obj:`processed_sizes`.
+                Torch Tensor (or list) corresponding to the requested final size (h, w) of each prediction. If left to
+                None, it will default to the :obj:`processed_sizes`.
             is_thing_map (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`, `optional`):
-                Dictionary mapping class indices to either True or False, depending on whether or not they are a thing. 
-                If not set, defaults to the :obj:`is_thing_map` of COCO panoptic. 
+                Dictionary mapping class indices to either True or False, depending on whether or not they are a thing.
+                If not set, defaults to the :obj:`is_thing_map` of COCO panoptic.
             threshold (:obj:`int`, `optional`, defaults to 0.85):
-                Threshold to use to filter out queries. 
-            """
+                Threshold to use to filter out queries.
+        """
         if target_sizes is None:
             target_sizes = processed_sizes
         assert len(processed_sizes) == len(target_sizes)
@@ -758,7 +775,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 seg_img = seg_img.resize(size=(final_w, final_h), resample=Image.NEAREST)
 
                 np_seg_img = (
-                    torch.ByteTensor(torch.ByteStorage.from_buffer(seg_img.tobytes())).view(final_h, final_w, 3).numpy()
+                    torch.ByteTensor(torch.ByteStorage.from_buffer(seg_img.tobytes()))
+                    .view(final_h, final_w, 3)
+                    .numpy()
                 )
                 m_id = torch.from_numpy(rgb_to_id(np_seg_img))
 

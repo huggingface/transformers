@@ -17,14 +17,10 @@
 
 import inspect
 import math
-import tempfile
 import unittest
-
-from PIL import Image
 
 from transformers import is_torch_available, is_vision_available
 from transformers.file_utils import cached_property
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -35,7 +31,7 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor
 if is_torch_available():
     import torch
 
-    from transformers import MODEL_MAPPING, DetrConfig, DetrForObjectDetection, DetrForPanopticSegmentation, DetrModel
+    from transformers import DetrConfig, DetrForObjectDetection, DetrForPanopticSegmentation, DetrModel
 
 
 if is_vision_available():
@@ -85,7 +81,7 @@ class DetrModelTester:
         self.num_labels = num_labels
 
         # we can also set the expected seq length for both encoder and decoder
-        self.encoder_seq_length = math.ceil(self.min_size / 32) * math.ceil(self.max_size / 32) 
+        self.encoder_seq_length = math.ceil(self.min_size / 32) * math.ceil(self.max_size / 32)
         self.decoder_seq_length = self.num_queries
 
     def prepare_config_and_inputs(self):
@@ -157,7 +153,11 @@ class DetrModelTester:
 @require_torch
 class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (DetrModel, DetrForObjectDetection, DetrForPanopticSegmentation,)
+        (
+            DetrModel,
+            DetrForObjectDetection,
+            DetrForPanopticSegmentation,
+        )
         if is_torch_available()
         else ()
     )
@@ -180,7 +180,9 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                         high=self.model_tester.num_labels, size=(self.model_tester.n_targets,)
                     )
                     target["boxes"] = torch.rand(self.model_tester.n_targets, 4)
-                    target["masks"] = torch.rand(self.model_tester.n_targets, self.model_tester.min_size, self.model_tester.max_size)
+                    target["masks"] = torch.rand(
+                        self.model_tester.n_targets, self.model_tester.min_size, self.model_tester.max_size
+                    )
                     labels.append(target)
                 inputs_dict["labels"] = labels
 
@@ -302,7 +304,11 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
                     list(cross_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, decoder_seq_length, encoder_key_length,],
+                    [
+                        self.model_tester.num_attention_heads,
+                        decoder_seq_length,
+                        encoder_key_length,
+                    ],
                 )
 
             # Check attention is always last and order is fine
@@ -335,8 +341,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                     list(self_attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
-    
-    
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -440,7 +445,7 @@ class DetrModelIntegrationTests(unittest.TestCase):
         expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels + 1))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
         expected_slice_logits = torch.tensor(
-            [[-18.1565,  -1.7568, -13.5029], [-16.8888,  -1.4138, -14.1028], [-17.5709,  -2.5080, -11.8654]]
+            [[-18.1565, -1.7568, -13.5029], [-16.8888, -1.4138, -14.1028], [-17.5709, -2.5080, -11.8654]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-4))
 
@@ -454,6 +459,6 @@ class DetrModelIntegrationTests(unittest.TestCase):
         expected_shape_masks = torch.Size((1, model.config.num_queries, 200, 267))
         self.assertEqual(outputs.pred_masks.shape, expected_shape_masks)
         expected_slice_masks = torch.tensor(
-            [[ -7.7558, -10.8788, -11.9797], [-11.8881, -16.4329, -17.7451], [-14.7316, -19.7383, -20.3004]]
+            [[-7.7558, -10.8788, -11.9797], [-11.8881, -16.4329, -17.7451], [-14.7316, -19.7383, -20.3004]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.pred_masks[0, 0, :3, :3], expected_slice_masks, atol=1e-4))

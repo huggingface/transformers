@@ -15,8 +15,8 @@
 
 
 import json
-import unittest
 import pathlib
+import unittest
 
 import numpy as np
 
@@ -308,9 +308,9 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt", "r") as f:
             target = json.loads(f.read())
-        
-        target = {"file_name": '000000039769.png', "image_id": 39769, "segments_info": target}
-        
+
+        target = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}
+
         masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
 
         # encode them

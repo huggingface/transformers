@@ -19,11 +19,9 @@ import math
 import random
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
-from collections import OrderedDict
 
 import torch
 import torch.nn.functional as F
-import torchvision
 from torch import Tensor, nn
 from torchvision.ops.boxes import box_area
 
@@ -153,10 +151,8 @@ class DetrForPanopticSegmentationOutput(DetrObjectDetectionOutput):
     pred_masks: torch.FloatTensor = None
 
 
-## BELOW: utilities copied from
+# BELOW: utilities copied from
 # https://github.com/facebookresearch/detr/blob/master/backbone.py
-
-
 class FrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
@@ -223,7 +219,7 @@ class Backbone(nn.Module):
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the body to get list of feature maps
         feature_maps = self.body(pixel_values)
-        
+
         if self.return_intermediate_layers:
             out = []
             for x in feature_maps:
@@ -232,7 +228,7 @@ class Backbone(nn.Module):
                 mask = F.interpolate(mask[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
                 out.append((x, mask))
             return out
-        
+
         assert pixel_mask is not None
         # get final feature map
         feature_map = feature_maps[-1]
@@ -250,7 +246,7 @@ class Joiner(nn.Sequential):
             features = self[0](pixel_values, pixel_mask)
             feature_map, pixel_mask = features[-1]
             pos = self[1](feature_map, pixel_mask).to(feature_map.dtype)
-            
+
             return features, pos
 
         else:
@@ -444,11 +440,15 @@ class DetrAttention(nn.Module):
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}")
+            raise ValueError(
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+            )
 
         if attention_mask is not None:
             if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}")
+                raise ValueError(
+                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+                )
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
@@ -469,7 +469,9 @@ class DetrAttention(nn.Module):
         attn_output = torch.bmm(attn_probs, value_states)
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-            raise ValueError(f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}")
+            raise ValueError(
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+            )
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
@@ -1283,7 +1285,9 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         self.class_labels_classifier = nn.Linear(
             config.d_model, config.num_labels + 1
         )  # We add one for the "no object" class
-        self.bbox_predictor = DetrMLPPredictionHead(input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3)
+        self.bbox_predictor = DetrMLPPredictionHead(
+            input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
+        )
 
         self.init_weights()
 
@@ -1421,8 +1425,8 @@ class DetrForObjectDetection(DetrPreTrainedModel):
 
 @add_start_docstrings(
     """
-    DETR Model (consisting of a backbone and encoder-decoder Transformer) with a segmentation head on top, for
-    tasks such as COCO panoptic. Should have config.return_intermediate_layers = True. 
+    DETR Model (consisting of a backbone and encoder-decoder Transformer) with a segmentation head on top, for tasks
+    such as COCO panoptic. Should have config.return_intermediate_layers = True.
 
     """,
     DETR_START_DOCSTRING,
@@ -1458,10 +1462,10 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
         r"""
         labels (:obj:`List[Dict]` of len :obj:`(batch_size,)`, `optional`):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing 3 keys:
-            'class_labels', 'boxes' and 'masks' (the class labels, bounding boxes and segmentation masks of an image 
-            in the batch respectively). The class labels themselves should be a :obj:`torch.LongTensor` of len 
-            :obj:`(number of bounding boxes in the image,)`, the boxes a :obj:`torch.FloatTensor` of shape 
-            :obj:`(number of bounding boxes in the image, 4)` and the masks a :obj:`torch.FloatTensor` of shape 
+            'class_labels', 'boxes' and 'masks' (the class labels, bounding boxes and segmentation masks of an image in
+            the batch respectively). The class labels themselves should be a :obj:`torch.LongTensor` of len
+            :obj:`(number of bounding boxes in the image,)`, the boxes a :obj:`torch.FloatTensor` of shape
+            :obj:`(number of bounding boxes in the image, 4)` and the masks a :obj:`torch.FloatTensor` of shape
             :obj:`(number of bounding boxes in the image, 4)`.
 
         Returns:
@@ -1485,12 +1489,12 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
             >>> bboxes = outputs.pred_boxes
             >>> masks = outputs.pred_masks
         """
-        
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
+
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
-        
+
         if pixel_mask is None:
             pixel_mask = torch.ones((batch_size, height, width), device=device)
 
@@ -1530,7 +1534,9 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
             )
 
         # Fifth, sent query embeddings + position embeddings through the decoder (which is conditioned on the encoder output)
-        query_position_embeddings = self.detr.model.query_position_embeddings.weight.unsqueeze(0).repeat(batch_size, 1, 1)
+        query_position_embeddings = self.detr.model.query_position_embeddings.weight.unsqueeze(0).repeat(
+            batch_size, 1, 1
+        )
         queries = torch.zeros_like(query_position_embeddings)
 
         # decoder outputs consists of (dec_features, dec_hidden, dec_attn)
@@ -1547,21 +1553,20 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
         )
 
         sequence_output = decoder_outputs[0]
-        
+
         # Sixth, compute logits, pred_boxes and pred_masks
         logits = self.detr.class_labels_classifier(sequence_output)
         pred_boxes = self.detr.bbox_predictor(sequence_output).sigmoid()
 
-        memory = encoder_outputs[0].permute(0,2,1).view(batch_size, self.config.d_model, height, width)
+        memory = encoder_outputs[0].permute(0, 2, 1).view(batch_size, self.config.d_model, height, width)
         mask = flattened_mask.view(batch_size, height, width)
 
         # FIXME h_boxes takes the last one computed, keep this in mind
         # important: we need to reverse the mask, since in the original implementation the mask works reversed
         # bbox_mask is of shape (batch_size, num_queries, number_of_attention_heads in bbox_attention, height/32, width/32)
         bbox_mask = self.bbox_attention(sequence_output, memory, mask=~mask)
-        
-        seg_masks = self.mask_head(projected_feature_map, bbox_mask, 
-                                    [features[3][0], features[2][0], features[1][0]])
+
+        seg_masks = self.mask_head(projected_feature_map, bbox_mask, [features[3][0], features[2][0], features[1][0]])
 
         pred_masks = seg_masks.view(batch_size, self.detr.config.num_queries, seg_masks.shape[-2], seg_masks.shape[-1])
 
@@ -1607,9 +1612,9 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
 
         if not return_dict:
             if auxiliary_outputs is not None:
-                output = (logits, pred_boxes, pred_masks) + auxiliary_outputs + outputs
+                output = (logits, pred_boxes, pred_masks) + auxiliary_outputs + decoder_outputs + encoder_outputs
             else:
-                output = (logits, pred_boxes, pred_masks) + outputs
+                output = (logits, pred_boxes, pred_masks) + decoder_outputs + encoder_outputs
             return ((loss, loss_dict) + output) if loss is not None else output
 
         return DetrForPanopticSegmentationOutput(
@@ -1625,7 +1630,7 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
-        )                
+        )
 
 
 def _expand(tensor, length: int):
@@ -1635,15 +1640,16 @@ def _expand(tensor, length: int):
 # taken from https://github.com/facebookresearch/detr/blob/master/models/segmentation.py
 class DetrMaskHeadSmallConv(nn.Module):
     """
-    Simple convolutional head, using group norm.
-    Upsampling is done using a FPN approach
+    Simple convolutional head, using group norm. Upsampling is done using a FPN approach
     """
 
     def __init__(self, dim, fpn_dims, context_dim):
         super().__init__()
-        
-        assert dim % 8 == 0, "The hidden_size + number of attention heads must be divisible by 8 as the number of groups in GroupNorm is set to 8"
-        
+
+        assert (
+            dim % 8 == 0
+        ), "The hidden_size + number of attention heads must be divisible by 8 as the number of groups in GroupNorm is set to 8"
+
         inter_dims = [dim, context_dim // 2, context_dim // 4, context_dim // 8, context_dim // 16, context_dim // 64]
 
         self.lay1 = torch.nn.Conv2d(dim, dim, 3, padding=1)
@@ -1670,11 +1676,11 @@ class DetrMaskHeadSmallConv(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x: Tensor, bbox_mask: Tensor, fpns: List[Tensor]):
-        # here we concatenate x, the projected feature map, of shape (batch_size, d_model, heigth/32, width/32) with 
-        # the bbox_mask = the attention maps of shape (batch_size, n_queries, n_heads, height/32, width/32). 
+        # here we concatenate x, the projected feature map, of shape (batch_size, d_model, heigth/32, width/32) with
+        # the bbox_mask = the attention maps of shape (batch_size, n_queries, n_heads, height/32, width/32).
         # We expand the projected feature map to match the number of heads.
         x = torch.cat([_expand(x, bbox_mask.shape[1]), bbox_mask.flatten(0, 1)], 1)
-        
+
         x = self.lay1(x)
         x = self.gn1(x)
         x = F.relu(x)
@@ -1745,12 +1751,13 @@ class DetrMHAttentionMap(nn.Module):
 def dice_loss(inputs, targets, num_boxes):
     """
     Compute the DICE loss, similar to generalized IOU for masks
+
     Args:
         inputs: A float tensor of arbitrary shape.
                 The predictions for each example.
         targets: A float tensor with the same shape as inputs. Stores the binary
-                 classification label for each element in inputs
-                (0 for the negative class and 1 for the positive class).
+                 classification label for each element in inputs (0 for the negative class and 1 for the positive
+                 class).
     """
     inputs = inputs.sigmoid()
     inputs = inputs.flatten(1)
@@ -1763,16 +1770,18 @@ def dice_loss(inputs, targets, num_boxes):
 def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: float = 2):
     """
     Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
+
     Args:
         inputs: A float tensor of arbitrary shape.
                 The predictions for each example.
         targets: A float tensor with the same shape as inputs. Stores the binary
-                 classification label for each element in inputs
-                (0 for the negative class and 1 for the positive class).
+                 classification label for each element in inputs (0 for the negative class and 1 for the positive
+                 class).
         alpha: (optional) Weighting factor in range (0,1) to balance
                 positive vs negative examples. Default = -1 (no weighting).
         gamma: Exponent of the modulating factor (1 - p_t) to
                balance easy vs hard examples.
+
     Returns:
         Loss tensor
     """
@@ -1902,7 +1911,9 @@ class SetCriterion(nn.Module):
         target_masks = target_masks[tgt_idx]
 
         # upsample predictions to the target size
-        src_masks = F.interpolate(src_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False)
+        src_masks = F.interpolate(
+            src_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
+        )
         src_masks = src_masks[:, 0].flatten(1)
 
         target_masks = target_masks.flatten(1)
@@ -1981,8 +1992,8 @@ class SetCriterion(nn.Module):
 # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
 class DetrMLPPredictionHead(nn.Module):
     """
-    Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates, height and
-    width of a bounding box w.r.t. an image.
+    Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
+    height and width of a bounding box w.r.t. an image.
 
     Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
 
@@ -2119,6 +2130,7 @@ def generalized_box_iou(boxes1, boxes2):
 
 # below: taken from https://github.com/facebookresearch/detr/blob/master/util/misc.py#L306
 
+
 def _max_by_axis(the_list):
     # type: (List[List[int]]) -> List[int]
     maxes = the_list[0]
@@ -2162,7 +2174,7 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
         mask = torch.ones((b, h, w), dtype=torch.bool, device=device)
         for img, pad_img, m in zip(tensor_list, tensor, mask):
             pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
-            m[: img.shape[1], :img.shape[2]] = False
+            m[: img.shape[1], : img.shape[2]] = False
     else:
-        raise ValueError('not supported')
+        raise ValueError("not supported")
     return NestedTensor(tensor, mask)

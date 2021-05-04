@@ -80,7 +80,8 @@ class DetrConfig(PretrainedConfig):
         auxiliary_loss (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
         position_embedding_type (:obj:`str`, `optional`, defaults to :obj:`"sine"`):
-            Type of position embeddings to be used on top of the image features. One of :obj:`"sine"` or :obj:`"learned"`.
+            Type of position embeddings to be used on top of the image features. One of :obj:`"sine"` or
+            :obj:`"learned"`.
         backbone (:obj:`str`, `optional`, defaults to :obj:`resnet50`):
             Name of convolutional backbone to use. Supports any convolutional backbone from the timm package.
         train_backbone (:obj:`bool`, `optional`, defaults to :obj:`True`):

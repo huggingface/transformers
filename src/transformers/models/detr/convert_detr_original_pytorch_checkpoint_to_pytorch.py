@@ -115,7 +115,7 @@ def read_in_q_k_v(state_dict, is_panoptic=False):
     prefix = ""
     if is_panoptic:
         prefix = "detr."
-    
+
     # first: transformer encoder
     for i in range(6):
         # read in weights + bias of input projection layer (in PyTorch's MultiHeadAttention, this is a single matrix + bias)
@@ -141,7 +141,9 @@ def read_in_q_k_v(state_dict, is_panoptic=False):
         state_dict[f"decoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[-256:, :]
         state_dict[f"decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-256:]
         # read in weights + bias of input projection layer of cross-attention
-        in_proj_weight_cross_attn = state_dict.pop(f"{prefix}transformer.decoder.layers.{i}.multihead_attn.in_proj_weight")
+        in_proj_weight_cross_attn = state_dict.pop(
+            f"{prefix}transformer.decoder.layers.{i}.multihead_attn.in_proj_weight"
+        )
         in_proj_bias_cross_attn = state_dict.pop(f"{prefix}transformer.decoder.layers.{i}.multihead_attn.in_proj_bias")
         # next, add query, keys and values (in that order) of cross-attention to the state dict
         state_dict[f"decoder.layers.{i}.encoder_attn.q_proj.weight"] = in_proj_weight_cross_attn[:256, :]
@@ -150,6 +152,7 @@ def read_in_q_k_v(state_dict, is_panoptic=False):
         state_dict[f"decoder.layers.{i}.encoder_attn.k_proj.bias"] = in_proj_bias_cross_attn[256:512]
         state_dict[f"decoder.layers.{i}.encoder_attn.v_proj.weight"] = in_proj_weight_cross_attn[-256:, :]
         state_dict[f"decoder.layers.{i}.encoder_attn.v_proj.bias"] = in_proj_bias_cross_attn[-256:]
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():
@@ -177,16 +180,15 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
     if is_panoptic:
         config.num_labels = 250
         config.masks = True
-    else: 
+    else:
         config.num_labels = 91
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
-    
+
     # prepare image
     img = prepare_img()
     encoding = feature_extractor(images=img, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
-    pixel_mask = encoding["pixel_mask"]
 
     logger.info(f"Converting model {model_name}...")
 
@@ -204,7 +206,11 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
     prefix = "detr.model." if is_panoptic else "model."
     for key in state_dict.copy().keys():
         if is_panoptic:
-            if key.startswith("detr") and not key.startswith("class_labels_classifier") and not key.startswith("bbox_predictor"):
+            if (
+                key.startswith("detr")
+                and not key.startswith("class_labels_classifier")
+                and not key.startswith("bbox_predictor")
+            ):
                 val = state_dict.pop(key)
                 state_dict["detr.model" + key[4:]] = val
             elif "class_labels_classifier" in key or "bbox_predictor" in key:
@@ -241,7 +247,11 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--model_name", default="detr_resnet50", type=str, help="Name of the DETR model you'd like to convert.")
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model.")
+    parser.add_argument(
+        "--model_name", default="detr_resnet50", type=str, help="Name of the DETR model you'd like to convert."
+    )
+    parser.add_argument(
+        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
+    )
     args = parser.parse_args()
     convert_detr_checkpoint(args.model_name, args.pytorch_dump_folder_path)
