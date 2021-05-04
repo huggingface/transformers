@@ -182,6 +182,16 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+def recursive_print(state_dict, prefix=""):
+    for key, value in state_dict.items():
+        if isinstance(value, dict):
+            recursive_print(value, prefix=key)
+        elif isinstance(value, torch.Tensor):
+            print(f"{prefix}/{key}: {value.shape}, {value.view(-1,).tolist()[:10]}")
+        else:
+            print(f"{prefix}/{key}: {value}")
+
+
 class Trainer:
     """
     Trainer is a simple but feature-complete training and eval loop for PyTorch, optimized for 🤗 Transformers.
@@ -570,7 +580,7 @@ class Trainer:
                 # Torch generator were introduced in PyTorch 1.6.0.
                 generator = torch.Generator()
                 generator.manual_seed(int(torch.empty((), dtype=torch.int64).random_().item()))
-                return PrintRandomSampler(self.train_dataset, generator=generator)
+                return RandomSampler(self.train_dataset, generator=generator)
             elif (
                 self.args.parallel_mode in [ParallelMode.TPU, ParallelMode.SAGEMAKER_MODEL_PARALLEL]
                 and not self.args.dataloader_drop_last
@@ -1182,6 +1192,11 @@ class Trainer:
                 if self.is_local_process_zero() and not args.disable_tqdm:
                     steps_trained_progress_bar = tqdm(total=steps_trained_in_current_epoch)
                     steps_trained_progress_bar.set_description("Skipping the first batches")
+        
+        # RNG states
+        checkpoint_rng_state = None
+        if resume_from_checkpoint is not None and os.path.isfile(os.path.join(resume_from_checkpoint, "rng_state.pth")):
+            checkpoint_rng_state = torch.load(os.path.join(resume_from_checkpoint, "rng_state.pth"))
 
         # Update the references
         self.callback_handler.model = self.model
@@ -1212,7 +1227,7 @@ class Trainer:
                 # We just need to begin an iteration to create the randomization of the sampler.
                 for _ in train_dataloader:
                     break
-
+        
         for epoch in range(epochs_trained, num_train_epochs):
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
@@ -1241,6 +1256,11 @@ class Trainer:
                     steps_trained_in_current_epoch -= 1
                     if steps_trained_progress_bar is not None:
                         steps_trained_progress_bar.update(1)
+                    if steps_trained_in_current_epoch == 0 and checkpoint_rng_state is not None:
+                        # We're finished skipping so set the RNG states to be exactly as they were at the
+                        # checkpoint time.
+                        torch.random.set_rng_state(checkpoint_rng_state["cpu"])
+                        torch.cuda.random.set_rng_state(checkpoint_rng_state["cuda"])
                     continue
                 elif steps_trained_progress_bar is not None:
                     steps_trained_progress_bar.close()
@@ -1475,6 +1495,12 @@ class Trainer:
         # Maybe delete some older checkpoints.
         if self.is_world_process_zero():
             self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
+        
+        # Save RNG state in non-distributed training
+        if self.args.world_size <= 1:
+            rng_states = {"cpu": torch.random.get_rng_state(), "cuda": torch.cuda.random.get_rng_state()}
+            torch.save(rng_states, os.path.join(output_dir, "rng_state.pth"))
+        
 
     def _load_optimizer_and_scheduler(self, checkpoint):
         """If optimizer and scheduler states exist, load them."""
@@ -2367,7 +2393,7 @@ class Trainer:
         with tempfile.TemporaryDirectory() as tmp_dir:
             for f in os.listdir(save_directory):
                 fname = os.path.join(save_directory, f)
-                if os.path.isfile(fname):
+                if os.path.isfile(fname) and fname != "rng_state.pth":
                     shutil.copy(fname, os.path.join(tmp_dir, f))
 
             return unwrap_model(self.model)._push_to_hub(
