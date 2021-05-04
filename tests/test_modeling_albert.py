@@ -230,6 +230,8 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
 
+    test_sequence_classification_problem_types = True
+
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
