@@ -238,6 +238,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
 
         - single sequence: ``X </s>``
         - pair of sequences: ``A B </s>`` (not intended use)
+
         BOS is never used. Pairs of sequences are not the expected use case, but they will be handled without a
         separator.
 
