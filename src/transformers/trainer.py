@@ -1272,7 +1272,7 @@ class Trainer:
                                 else:
                                     torch.cuda.random.set_rng_state(checkpoint_rng_state[f"cuda_{args.local_rank}"])
                             else:
-                                if f"cuda" not in checkpoint_rng_state:
+                                if "cuda" not in checkpoint_rng_state:
                                     logger.warn(
                                         "You are resuming a training that was launched in a non-distributed fashion "
                                         "with GPUs on either in a distributed fashion or not on GPUs. Reproducibility "
