@@ -47,6 +47,7 @@ from ..ibert.configuration_ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBe
 from ..layoutlm.configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig
 from ..led.configuration_led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig
 from ..longformer.configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
+from ..luke.configuration_luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig
 from ..lxmert.configuration_lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig
 from ..m2m_100.configuration_m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
 from ..marian.configuration_marian import MarianConfig
@@ -88,6 +89,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         # Add archive maps here
         VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -141,6 +143,7 @@ CONFIG_MAPPING = OrderedDict(
         # Add configs here
         ("visual_bert", VisualBertConfig),
         ("deit", DeiTConfig),
+        ("luke", LukeConfig),
         ("gpt_neo", GPTNeoConfig),
         ("big_bird", BigBirdConfig),
         ("speech_to_text", Speech2TextConfig),
@@ -200,6 +203,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         # Add full (and cased) model names here
         ("visual_bert", "VisualBert"),
         ("deit", "DeiT"),
+        ("luke", "LUKE"),
         ("gpt_neo", "GPT Neo"),
         ("big_bird", "BigBird"),
         ("speech_to_text", "Speech2Text"),
