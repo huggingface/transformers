@@ -295,7 +295,7 @@ def check_models_are_auto_configured(module, all_auto_models):
 
 def check_all_models_are_auto_configured():
     """Check all models are each in an auto class."""
-    if os.getenv("TRANSFORMERS_IS_CI").upper() in ENV_VARS_TRUE_VALUES:
+    if os.getenv("TRANSFORMERS_IS_CI", "").upper() in ENV_VARS_TRUE_VALUES:
         raise Exception("Variable is properly set.")
     missing_backends = []
     if not is_torch_available():
@@ -306,7 +306,7 @@ def check_all_models_are_auto_configured():
         missing_backends.append("Flax")
     if len(missing_backends) > 0:
         missing = ", ".join(missing_backends)
-        if os.getenv("TRANSFORMERS_IS_CI").upper() in ENV_VARS_TRUE_VALUES:
+        if os.getenv("TRANSFORMERS_IS_CI", "").upper() in ENV_VARS_TRUE_VALUES:
             raise Exception(
                 "Full quality checks require all backends to be installed (with `pip install -e .[dev]` in the "
                 f"Transformers repo, the following are missing: {missing}."
