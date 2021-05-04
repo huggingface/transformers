@@ -537,8 +537,19 @@ class Trainer:
                 lengths = None
             model_input_name = self.tokenizer.model_input_names[0] if self.tokenizer is not None else None
             if self.args.world_size <= 1:
+                if version.parse(torch.__version__) < version.parse("1.6.0"):
+                    generator = None
+                else:
+                    # Torch generator were introduced in PyTorch 1.6.0.
+                    generator = torch.Generator()
+                    generator.manual_seed(int(torch.empty((), dtype=torch.int64).random_().item()))
+
                 return LengthGroupedSampler(
-                    self.train_dataset, self.args.train_batch_size, lengths=lengths, model_input_name=model_input_name
+                    self.train_dataset,
+                    self.args.train_batch_size,
+                    lengths=lengths,
+                    model_input_name=model_input_name,
+                    generator=generator,
                 )
             else:
                 return DistributedLengthGroupedSampler(
