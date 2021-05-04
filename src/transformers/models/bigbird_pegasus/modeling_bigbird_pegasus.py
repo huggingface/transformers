@@ -130,8 +130,8 @@ class BigBirdPegasusSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
             )
 
         self.num_attention_heads = config.num_attention_heads
@@ -312,7 +312,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
 
     @staticmethod
     def torch_bmm_nd(inp_1, inp_2, ndim=None):
-        """ Fast nd matrix multiplication """
+        """Fast nd matrix multiplication"""
         # faster replacement of torch.einsum ("bhqk,bhkd->bhqd")
         return torch.bmm(inp_1.reshape((-1,) + inp_1.shape[-2:]), inp_2.reshape((-1,) + inp_2.shape[-2:])).view(
             inp_1.shape[: ndim - 2] + (inp_1.shape[ndim - 2], inp_2.shape[ndim - 1])
@@ -320,7 +320,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
 
     @staticmethod
     def torch_bmm_nd_transpose(inp_1, inp_2, ndim=None):
-        """ Fast nd matrix multiplication with transpose """
+        """Fast nd matrix multiplication with transpose"""
         # faster replacement of torch.einsum (bhqd,bhkd->bhqk)
         return torch.bmm(
             inp_1.reshape((-1,) + inp_1.shape[-2:]), inp_2.reshape((-1,) + inp_2.shape[-2:]).transpose(1, 2)
@@ -552,7 +552,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
             band_product, dim=-1
         )  # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, (5+n_rand_blocks)*to_block_size]
 
-        # contibution of sliding keys
+        # contribution of sliding keys
         # [bsz, n_heads, m//from_block_size-4, from_block_size, 3*to_block_size] x [bsz, n_heads, from_seq_len//from_block_size-4, 3*to_block_size, -1]
         context_layer = self.torch_bmm_nd(
             attn_weights[:, :, :, :, to_block_size : 4 * to_block_size], exp_blocked_value_matrix, ndim=5
@@ -704,7 +704,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
                 attn_probs_view[:, :, q_idx, :, q_idx : q_idx + 3, :] = right_slice.view(
                     bsz, n_heads, from_block_size, 3, to_block_size
                 )  # inner_band_product
-            # global keys (correspomding to 1st key block)
+            # global keys (corresponding to 1st key block)
             attention_probs[:, :, 2 * from_block_size : -2 * from_block_size, :to_block_size] = attn_weights[
                 :, :, :, :, :to_block_size
             ].view(
@@ -774,7 +774,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
 
     @staticmethod
     def torch_gather_b2(params, indices):
-        # this operation is equilvalent to tf.gather when batch_dims=2
+        # this operation is equivalent to tf.gather when batch_dims=2
 
         if params.shape[:2] != indices.shape[:2]:
             raise ValueError(
@@ -882,7 +882,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
             to_block_size: int. size of block in to sequence.
             num_rand_blocks: int. Number of random chunks per row.
             last_idx: if -1 then num_rand_blocks blocks chosen anywhere in to sequence,
-            if positive then num_rand_blocks blocks choosen only upto last_idx.
+            if positive then num_rand_blocks blocks chosen only up to last_idx.
 
         Returns:
             adjacency list of size from_seq_length//from_block_size-2 by num_rand_blocks
@@ -977,7 +977,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         plan_block_length = np.array(plan_from_length) // from_block_size
         # till when to follow plan
         max_plan_idx = plan_from_length.index(from_seq_length)
-        # Random Attention adjajency list
+        # Random Attention adjacency list
         rand_attn = [
             np.zeros((num_blocks, np.sum(plan_num_rand_blocks[: max_plan_idx + 1])), dtype=np.int32)
             for i in range(num_heads)
@@ -1074,8 +1074,8 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
 
         Args:
             block_id: int. block id of row.
-            to_start_block_id: int. random attention coloum start id.
-            to_end_block_id: int. random attention coloum end id.
+            to_start_block_id: int. random attention column start id.
+            to_end_block_id: int. random attention column end id.
             num_rand_blocks: int. number of random blocks to be selected.
             window_block_left: int. number of blocks of window to left of a block.
             window_block_right: int. number of blocks of window to right of a block.
@@ -1315,9 +1315,9 @@ class BigBirdPegasusDecoderAttention(nn.Module):
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if output_attentions:
-            # this operation is a bit akward, but it's required to
+            # this operation is a bit awkward, but it's required to
             # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
+            # In order to do so, attn_weights have to be reshaped
             # twice and have to be reused in the following
             attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
@@ -1988,9 +1988,8 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
         padding_len = (block_size - seq_len % block_size) % block_size
         if padding_len > 0:
             logger.info(
-                "Input ids are automatically padded from {} to {} to be a multiple of `config.block_size`: {}".format(
-                    seq_len, seq_len + padding_len, block_size
-                )
+                f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
+                f"`config.block_size`: {block_size}"
             )
             if input_ids is not None:
                 input_ids = F.pad(input_ids, (0, padding_len), value=pad_token_id)
@@ -2830,7 +2829,7 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         head_mask=None,
-        encoder_head_mask=None,
+        cross_attn_head_mask=None,
         past_key_values=None,
         inputs_embeds=None,
         labels=None,
@@ -2845,7 +2844,7 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.PegasusTokenizer`. See
+                Indices can be obtained using :class:`~transformers.BigBirdPegasusTokenizer`. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 
@@ -2863,18 +2862,17 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
             encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used
                 in the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
-            head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
+            head_mask (:obj:`torch.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
                 Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
 
                 - 1 indicates the head is **not masked**,
-                - 0 indicates the heas is **masked**.
+                - 0 indicates the head is **masked**.
 
-            encoder_head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
-                Mask to nullify selected heads of the attention modules in encoder to avoid performing cross-attention
-                on hidden heads. Mask values selected in ``[0, 1]``:
+            cross_attn_head_mask (:obj:`torch.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
+                Mask to nullify selected heads of the cross-attention modules. Mask values selected in ``[0, 1]``:
 
                 - 1 indicates the head is **not masked**,
-                - 0 indicates the heas is **masked**.
+                - 0 indicates the head is **masked**.
 
             past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
                 Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
@@ -2907,9 +2905,9 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
 
         Example::
 
-            >>> from transformers import PegasusTokenizer, BigBirdPegasusForCausalLM
+            >>> from transformers import BigBirdPegasusTokenizer, BigBirdPegasusForCausalLM
 
-            >>> tokenizer = PegasusTokenizer.from_pretrained('facebook/bart-large')
+            >>> tokenizer = BigBirdPegasusTokenizer.from_pretrained('facebook/bart-large')
             >>> model = BigBirdPegasusForCausalLM.from_pretrained('facebook/bart-large', add_cross_attention=False)
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
@@ -2931,7 +2929,7 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             head_mask=head_mask,
-            encoder_head_mask=encoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,

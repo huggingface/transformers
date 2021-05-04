@@ -40,11 +40,11 @@ class BertTokenizerFast:
 
 class BigBirdPegasusTokenizerFast:
     def __init__(self, *args, **kwargs):
-        requires_tokenizers(self)
+        requires_backends(self, ["tokenizers"])
 
     @classmethod
     def from_pretrained(self, *args, **kwargs):
-        requires_tokenizers(self)
+        requires_backends(self, ["tokenizers"])
 
 
 class CamembertTokenizerFast:
