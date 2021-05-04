@@ -295,10 +295,6 @@ def check_models_are_auto_configured(module, all_auto_models):
 
 def check_all_models_are_auto_configured():
     """Check all models are each in an auto class."""
-    print(f'TRANFORMERS_IS_CI: {os.getenv("TRANSFORMERS_IS_CI", "").upper()}')
-    print(os.getenv("TRANSFORMERS_IS_CI", "").upper() in ENV_VARS_TRUE_VALUES)
-    if os.getenv("TRANSFORMERS_IS_CI", "").upper() in ENV_VARS_TRUE_VALUES:
-        raise Exception("Variable is properly set.")
     missing_backends = []
     if not is_torch_available():
         missing_backends.append("PyTorch")
