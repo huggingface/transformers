@@ -126,8 +126,8 @@ class FlaxElectraModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
             if model_class_name == FlaxElectraForMaskedLM:
-                model = model_class_name.from_pretrained("google/electra-small-generator", from_pt=True)
+                model = model_class_name.from_pretrained("google/electra-small-generator")
             else:
-                model = model_class_name.from_pretrained("google/electra-small-discriminator", from_pt=True)
+                model = model_class_name.from_pretrained("google/electra-small-discriminator")
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)

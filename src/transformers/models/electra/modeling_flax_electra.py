@@ -13,28 +13,71 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Tuple
+from dataclasses import dataclass
+from typing import Callable, Optional, Tuple
 
 import numpy as np
 
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import jaxlib.xla_extension as jax_xla
 from flax.core.frozen_dict import FrozenDict
 from flax.linen import dot_product_attention
 from jax import lax
 from jax.random import PRNGKey
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, overwrite_call_docstring
+from ...file_utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...modeling_flax_outputs import (
+    FlaxBaseModelOutput,
+    FlaxMaskedLMOutput,
+    FlaxMultipleChoiceModelOutput,
+    FlaxQuestionAnsweringModelOutput,
+    FlaxSequenceClassifierOutput,
+    FlaxTokenClassifierOutput,
+)
+from ...modeling_flax_utils import (
+    ACT2FN,
+    FlaxPreTrainedModel,
+    append_call_sample_docstring,
+    append_replace_return_docstrings,
+    overwrite_call_docstring,
+)
 from ...utils import logging
 from .configuration_electra import ElectraConfig
 
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "google/electra-small-discriminator"
 _CONFIG_FOR_DOC = "ElectraConfig"
 _TOKENIZER_FOR_DOC = "ElectraTokenizer"
+
+
+@dataclass
+class FlaxElectraForPreTrainingOutput(ModelOutput):
+    """
+    Output type of :class:`~transformers.ElectraForPreTraining`.
+
+    Args:
+        logits (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        hidden_states (:obj:`tuple(jax_xla.DeviceArray)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`jax_xla.DeviceArray` (one for the output of the embeddings + one for the output of each
+            layer) of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(jax_xla.DeviceArray)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`jax_xla.DeviceArray` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    logits: jax_xla.DeviceArray = None
+    hidden_states: Optional[Tuple[jax_xla.DeviceArray]] = None
+    attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
 
 
 ELECTRA_START_DOCSTRING = r"""
@@ -165,7 +208,7 @@ class FlaxElectraSelfAttention(nn.Module):
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
         )
 
-    def __call__(self, hidden_states, attention_mask, deterministic=True):
+    def __call__(self, hidden_states, attention_mask, deterministic=True, output_attentions: bool = False):
         head_dim = self.config.hidden_size // self.config.num_attention_heads
 
         query_states = self.query(hidden_states).reshape(
@@ -207,7 +250,12 @@ class FlaxElectraSelfAttention(nn.Module):
             precision=None,
         )
 
-        return attn_output.reshape(attn_output.shape[:2] + (-1,))
+        outputs = (attn_output.reshape(attn_output.shape[:2] + (-1,)),)
+
+        # TODO: at the moment it's not possible to retrieve attn_weights from
+        # dot_product_attention, but should be in the future -> add functionality then
+
+        return outputs
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertSelfOutput with Bert->Electra
@@ -240,13 +288,22 @@ class FlaxElectraAttention(nn.Module):
         self.self = FlaxElectraSelfAttention(self.config, dtype=self.dtype)
         self.output = FlaxElectraSelfOutput(self.config, dtype=self.dtype)
 
-    def __call__(self, hidden_states, attention_mask, deterministic=True):
+    def __call__(self, hidden_states, attention_mask, deterministic=True, output_attentions: bool = False):
         # Attention mask comes in as attention_mask.shape == (*batch_sizes, kv_length)
         # FLAX expects: attention_mask.shape == (*batch_sizes, 1, 1, kv_length) such that it is broadcastable
         # with attn_weights.shape == (*batch_sizes, num_heads, q_length, kv_length)
-        attn_output = self.self(hidden_states, attention_mask, deterministic=deterministic)
+        attn_outputs = self.self(
+            hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
+        )
+        attn_output = attn_outputs[0]
         hidden_states = self.output(attn_output, hidden_states, deterministic=deterministic)
-        return hidden_states
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += attn_outputs[1]
+
+        return outputs
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertIntermediate with Bert->Electra
@@ -299,11 +356,20 @@ class FlaxElectraLayer(nn.Module):
         self.intermediate = FlaxElectraIntermediate(self.config, dtype=self.dtype)
         self.output = FlaxElectraOutput(self.config, dtype=self.dtype)
 
-    def __call__(self, hidden_states, attention_mask, deterministic: bool = True):
-        attention_output = self.attention(hidden_states, attention_mask, deterministic=deterministic)
+    def __call__(self, hidden_states, attention_mask, deterministic: bool = True, output_attentions: bool = False):
+        attention_outputs = self.attention(
+            hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
+        )
+        attention_output = attention_outputs[0]
+
         hidden_states = self.intermediate(attention_output)
         hidden_states = self.output(hidden_states, attention_output, deterministic=deterministic)
-        return hidden_states
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attention_outputs[1],)
+        return outputs
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayerCollection with Bert->Electra
@@ -316,10 +382,40 @@ class FlaxElectraLayerCollection(nn.Module):
             FlaxElectraLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
         ]
 
-    def __call__(self, hidden_states, attention_mask, deterministic: bool = True):
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        all_attentions = () if output_attentions else None
+        all_hidden_states = () if output_hidden_states else None
+
         for i, layer in enumerate(self.layers):
-            hidden_states = layer(hidden_states, attention_mask, deterministic=deterministic)
-        return hidden_states
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            layer_outputs = layer(hidden_states, attention_mask, deterministic=deterministic)
+
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_attentions += (layer_outputs[1],)
+
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        outputs = (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in outputs if v is not None)
+
+        return FlaxBaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        )
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEncoder with Bert->Electra
@@ -330,8 +426,23 @@ class FlaxElectraEncoder(nn.Module):
     def setup(self):
         self.layer = FlaxElectraLayerCollection(self.config, dtype=self.dtype)
 
-    def __call__(self, hidden_states, attention_mask, deterministic: bool = True):
-        return self.layer(hidden_states, attention_mask, deterministic=deterministic)
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        return self.layer(
+            hidden_states,
+            attention_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
 
 class FlaxElectraGeneratorPredictions(nn.Module):
@@ -409,7 +520,22 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
         params: dict = None,
         dropout_rng: PRNGKey = None,
         train: bool = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        if output_attentions:
+            raise NotImplementedError(
+                "Currently attention scores cannot be returned. Please set `output_attentions` to False for now."
+            )
+
         # init input tensors if not passed
         if token_type_ids is None:
             token_type_ids = jnp.ones_like(input_ids)
@@ -432,6 +558,9 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
             jnp.array(token_type_ids, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
             not train,
+            output_attentions,
+            output_hidden_states,
+            return_dict,
             rngs=rngs,
         )
 
@@ -446,15 +575,31 @@ class FlaxElectraModule(nn.Module):
             self.embeddings_project = nn.Dense(self.config.hidden_size)
         self.encoder = FlaxElectraEncoder(self.config, dtype=self.dtype)
 
-    def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True):
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
         embeddings = self.embeddings(
             input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic
         )
         if hasattr(self, "embeddings_project"):
             embeddings = self.embeddings_project(embeddings)
 
-        hidden_states = self.encoder(embeddings, attention_mask, deterministic=deterministic)
-        return (hidden_states,)
+        return self.encoder(
+            embeddings,
+            attention_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
 
 @add_start_docstrings(
@@ -463,6 +608,11 @@ class FlaxElectraModule(nn.Module):
 )
 class FlaxElectraModel(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraModule
+
+
+append_call_sample_docstring(
+    FlaxElectraModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC
+)
 
 
 class FlaxElectraTiedDense(nn.Module):
@@ -498,11 +648,27 @@ class FlaxElectraForMaskedLMModule(nn.Module):
             self.generator_lm_head = nn.Dense(self.config.vocab_size, dtype=self.dtype)
 
     def __call__(
-        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ):
-        hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
-        )[0]
+        outputs = self.electra(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        hidden_states = outputs[0]
         prediction_scores = self.generator_predictions(hidden_states)
 
         if self.config.tie_word_embeddings:
@@ -511,12 +677,24 @@ class FlaxElectraForMaskedLMModule(nn.Module):
         else:
             prediction_scores = self.generator_lm_head(prediction_scores)
 
-        return (prediction_scores,)
+        if not return_dict:
+            return (prediction_scores,) + outputs[1:]
+
+        return FlaxMaskedLMOutput(
+            logits=prediction_scores,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings("""Electra Model with a `language modeling` head on top. """, ELECTRA_START_DOCSTRING)
 class FlaxElectraForMaskedLM(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraForMaskedLMModule
+
+
+append_call_sample_docstring(
+    FlaxElectraForMaskedLM, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
+)
 
 
 class FlaxElectraForPreTrainingModule(nn.Module):
@@ -528,15 +706,39 @@ class FlaxElectraForPreTrainingModule(nn.Module):
         self.discriminator_predictions = FlaxElectraDiscriminatorPredictions(config=self.config, dtype=self.dtype)
 
     def __call__(
-        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ):
         # Model
-        hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
-        )[0]
+        outputs = self.electra(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        hidden_states = outputs[0]
 
         logits = self.discriminator_predictions(hidden_states)
-        return (logits,)
+
+        if not return_dict:
+            return (logits,) + outputs[1:]
+
+        return FlaxElectraForPreTrainingOutput(
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -551,6 +753,31 @@ class FlaxElectraForPreTraining(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraForPreTrainingModule
 
 
+FLAX_ELECTRA_FOR_PRETRAINING_DOCSTRING = """
+    Returns:
+
+    Example::
+
+        >>> from transformers import ElectraTokenizer, FlaxElectraForPreTraining
+
+        >>> tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
+        >>> model = FlaxElectraForPreTraining.from_pretrained('google/electra-small-discriminator')
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
+        >>> outputs = model(**inputs)
+
+        >>> prediction_logits = outputs.logits
+"""
+
+overwrite_call_docstring(
+    FlaxElectraForPreTraining,
+    ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length") + FLAX_ELECTRA_FOR_PRETRAINING_DOCSTRING,
+)
+append_replace_return_docstrings(
+    FlaxElectraForPreTraining, output_type=FlaxElectraForPreTrainingOutput, config_class=_CONFIG_FOR_DOC
+)
+
+
 class FlaxElectraForTokenClassificationModule(nn.Module):
     config: ElectraConfig
     dtype: jnp.dtype = jnp.float32
@@ -561,16 +788,40 @@ class FlaxElectraForTokenClassificationModule(nn.Module):
         self.classifier = nn.Dense(self.config.num_labels)
 
     def __call__(
-        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ):
         # Model
-        hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
-        )[0]
+        outputs = self.electra(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        hidden_states = outputs[0]
 
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         logits = self.classifier(hidden_states)
-        return (logits,)
+
+        if not return_dict:
+            return (logits,) + outputs[1:]
+
+        return FlaxTokenClassifierOutput(
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -583,6 +834,15 @@ class FlaxElectraForTokenClassificationModule(nn.Module):
 )
 class FlaxElectraForTokenClassification(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraForTokenClassificationModule
+
+
+append_call_sample_docstring(
+    FlaxElectraForTokenClassification,
+    _TOKENIZER_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
+    FlaxTokenClassifierOutput,
+    _CONFIG_FOR_DOC,
+)
 
 
 def identity(x, **kwargs):
@@ -668,7 +928,15 @@ class FlaxElectraForMultipleChoiceModule(nn.Module):
         self.classifier = nn.Dense(1, dtype=self.dtype)
 
     def __call__(
-        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ):
         num_choices = input_ids.shape[1]
         input_ids = input_ids.reshape(-1, input_ids.shape[-1]) if input_ids is not None else None
@@ -677,15 +945,30 @@ class FlaxElectraForMultipleChoiceModule(nn.Module):
         position_ids = position_ids.reshape(-1, position_ids.shape[-1]) if position_ids is not None else None
 
         # Model
-        hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
-        )[0]
+        outputs = self.electra(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        hidden_states = outputs[0]
         pooled_output = self.sequence_summary(hidden_states, deterministic=deterministic)
         logits = self.classifier(pooled_output)
 
         reshaped_logits = logits.reshape(-1, num_choices)
 
-        return (reshaped_logits,)
+        if not return_dict:
+            return (reshaped_logits,) + outputs[1:]
+
+        return FlaxMultipleChoiceModelOutput(
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -703,6 +986,13 @@ class FlaxElectraForMultipleChoice(FlaxElectraPreTrainedModel):
 overwrite_call_docstring(
     FlaxElectraForMultipleChoice, ELECTRA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
 )
+append_call_sample_docstring(
+    FlaxElectraForMultipleChoice,
+    _TOKENIZER_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
+    FlaxMultipleChoiceModelOutput,
+    _CONFIG_FOR_DOC,
+)
 
 
 class FlaxElectraForQuestionAnsweringModule(nn.Module):
@@ -714,19 +1004,42 @@ class FlaxElectraForQuestionAnsweringModule(nn.Module):
         self.qa_outputs = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
     def __call__(
-        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ):
         # Model
-        hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
+        outputs = self.electra(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
-
+        hidden_states = outputs[0]
         logits = self.qa_outputs(hidden_states)
         start_logits, end_logits = logits.split(self.config.num_labels, axis=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
 
-        return (start_logits, end_logits)
+        if not return_dict:
+            return (start_logits, end_logits) + outputs[1:]
+
+        return FlaxQuestionAnsweringModelOutput(
+            start_logits=start_logits,
+            end_logits=end_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -738,6 +1051,15 @@ class FlaxElectraForQuestionAnsweringModule(nn.Module):
 )
 class FlaxElectraForQuestionAnswering(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraForQuestionAnsweringModule
+
+
+append_call_sample_docstring(
+    FlaxElectraForQuestionAnswering,
+    _TOKENIZER_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
+    FlaxQuestionAnsweringModelOutput,
+    _CONFIG_FOR_DOC,
+)
 
 
 class FlaxElectraClassificationHead(nn.Module):
@@ -770,15 +1092,38 @@ class FlaxElectraForSequenceClassificationModule(nn.Module):
         self.classifier = FlaxElectraClassificationHead(config=self.config, dtype=self.dtype)
 
     def __call__(
-        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ):
         # Model
-        hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
-        )[0]
+        outputs = self.electra(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        hidden_states = outputs[0]
         logits = self.classifier(hidden_states, deterministic=deterministic)
 
-        return (logits,)
+        if not return_dict:
+            return (logits,) + outputs[1:]
+
+        return FlaxSequenceClassifierOutput(
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -790,3 +1135,12 @@ class FlaxElectraForSequenceClassificationModule(nn.Module):
 )
 class FlaxElectraForSequenceClassification(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraForSequenceClassificationModule
+
+
+append_call_sample_docstring(
+    FlaxElectraForSequenceClassification,
+    _TOKENIZER_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
+    FlaxSequenceClassifierOutput,
+    _CONFIG_FOR_DOC,
+)
