@@ -209,7 +209,11 @@ if is_torch_available():
 
         def forward(self, input_x, labels=None, **kwargs):
             y = input_x * self.a + self.b
-            y += 0.05 * torch.randn(1).squeeze() + 0.05 * torch.tensor(np.random.rand() + random.random())
+            torch_rand = torch.randn(1).squeeze()
+            np_rand = np.random.rand()
+            rand_rand = random.random()
+
+            y += 0.05 * torch_rand + 0.05 * torch.tensor(np_rand + rand_rand)
 
             if labels is None:
                 return (y,)
@@ -721,7 +725,12 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue("No valid checkpoint found in output directory" in str(context.exception))
 
     def test_resume_training_with_randomness(self):
-        set_seed(63)
+        if torch.cuda.device_count() >= 2:
+            # This test will fail flakily for more than 2 GPUs since the result will be slightly more different.
+            return
+
+        if torch.cuda.is_available():
+            torch.backends.cudnn.deterministic = True
         train_dataset = RegressionDataset(length=128)
         eval_dataset = RegressionDataset()
 
@@ -739,8 +748,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
         trainer.train(resume_from_checkpoint=os.path.join(tmp_dir, "checkpoint-15"))
         (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
-        self.assertTrue(math.isclose(a, a1, rel_tol=1e-4))
-        self.assertTrue(math.isclose(b, b1, rel_tol=1e-4))
+
+        self.assertTrue(math.isclose(a, a1, rel_tol=1e-8))
+        self.assertTrue(math.isclose(b, b1, rel_tol=1e-8))
 
     def test_resume_training_with_gradient_accumulation(self):
         if torch.cuda.device_count() > 2:
