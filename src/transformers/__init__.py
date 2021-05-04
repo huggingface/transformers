@@ -1403,6 +1403,18 @@ if is_flax_available():
             "FlaxBertPreTrainedModel",
         ]
     )
+    _import_structure["models.electra"].extend(
+        [
+            "FlaxElectraForMaskedLM",
+            "FlaxElectraForMultipleChoice",
+            "FlaxElectraForPreTraining",
+            "FlaxElectraForQuestionAnswering",
+            "FlaxElectraForSequenceClassification",
+            "FlaxElectraForTokenClassification",
+            "FlaxElectraModel",
+            "FlaxElectraPreTrainedModel",
+        ]
+    )
     _import_structure["models.roberta"].extend(
         [
             "FlaxRobertaForMaskedLM",
@@ -2584,6 +2596,16 @@ if TYPE_CHECKING:
             FlaxBertForTokenClassification,
             FlaxBertModel,
             FlaxBertPreTrainedModel,
+        )
+        from .models.electra import (
+            FlaxElectraForMaskedLM,
+            FlaxElectraForMultipleChoice,
+            FlaxElectraForPreTraining,
+            FlaxElectraForQuestionAnswering,
+            FlaxElectraForSequenceClassification,
+            FlaxElectraForTokenClassification,
+            FlaxElectraModel,
+            FlaxElectraPreTrainedModel,
         )
         from .models.roberta import (
             FlaxRobertaForMaskedLM,
