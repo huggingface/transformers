@@ -22,11 +22,7 @@ from ...file_utils import _BaseLazyModule, is_tokenizers_available, is_torch_ava
 
 _import_structure = {
     "configuration_bigbird_pegasus": ["BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "BigBirdPegasusConfig"],
-    "tokenization_bigbird_pegasus": ["BigBirdPegasusTokenizer"],
 }
-
-if is_tokenizers_available():
-    _import_structure["tokenization_bigbird_pegasus_fast"] = ["BigBirdPegasusTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_bigbird_pegasus"] = [
@@ -42,10 +38,6 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .configuration_bigbird_pegasus import BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdPegasusConfig
-    from .tokenization_bigbird_pegasus import BigBirdPegasusTokenizer
-
-    if is_tokenizers_available():
-        from .tokenization_bigbird_pegasus_fast import BigBirdPegasusTokenizerFast
 
     if is_torch_available():
         from .modeling_bigbird_pegasus import (

@@ -49,6 +49,7 @@ Tips:
 - Sequence length must be divisible by block size.
 - Current implementation supports only **ITC**.
 - Current implementation doesn't support **num_random_blocks = 0**
+- BigBirdPegasus uses the PegasusTokenizer
 
 The original code can be found `here <https://github.com/google-research/bigbird>`__.
 
@@ -57,22 +58,6 @@ BigBirdPegasusConfig
 
 .. autoclass:: transformers.BigBirdPegasusConfig
     :members:
-
-
-BigBirdPegasusTokenizer
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.BigBirdPegasusTokenizer
-    :members: build_inputs_with_special_tokens, get_special_tokens_mask,
-        create_token_type_ids_from_sequences, save_vocabulary
-
-
-BigBirdPegasusTokenizerFast
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.BigBirdPegasusTokenizerFast
-    :members: build_inputs_with_special_tokens, get_special_tokens_mask,
-        create_token_type_ids_from_sequences, save_vocabulary
 
 
 BigBirdPegasusModel

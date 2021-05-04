@@ -52,7 +52,7 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/bigbird-pegasus-large-arxiv"
 _CONFIG_FOR_DOC = "BigBirdPegasusConfig"
-_TOKENIZER_FOR_DOC = "BigBirdPegasusTokenizer"
+_TOKENIZER_FOR_DOC = "PegasusTokenizer"
 
 
 BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -1614,10 +1614,10 @@ BIGBIRD_PEGASUS_START_DOCSTRING = r"""
 BIGBIRD_PEGASUS_GENERATION_EXAMPLE = r"""
     Summarization example::
 
-        >>> from transformers import BigBirdPegasusTokenizer, BigBirdPegasusForConditionalGeneration, BigBirdPegasusConfig
+        >>> from transformers import PegasusTokenizer, BigBirdPegasusForConditionalGeneration, BigBirdPegasusConfig
 
         >>> model = BigBirdPegasusForConditionalGeneration.from_pretrained('bigbird-pegasus-large-arxiv')
-        >>> tokenizer = BigBirdPegasusTokenizer.from_pretrained('bigbird-pegasus-large-arxiv')
+        >>> tokenizer = PegasusTokenizer.from_pretrained('bigbird-pegasus-large-arxiv')
 
         >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=4096, return_tensors='pt', truncation=True)
@@ -1633,7 +1633,7 @@ BIGBIRD_PEGASUS_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.BigBirdPegasusTokenizer`. See
+            Indices can be obtained using :class:`~transformers.PegasusTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
@@ -1787,7 +1787,7 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.BigBirdPegasusTokenizer`. See
+                Indices can be obtained using :class:`~transformers.PegasusTokenizer`. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 
@@ -2089,7 +2089,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.BigBirdPegasusTokenizer`. See
+                Indices can be obtained using :class:`~transformers.PegasusTokenizer`. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 
@@ -2466,8 +2466,8 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
 
         Conditional generation example::
 
-            >>> from transformers import BigBirdPegasusTokenizer, BigBirdPegasusForConditionalGeneration
-            >>> tokenizer = BigBirdPegasusTokenizer.from_pretrained('google/bigbird-pegasus-large-arxiv')
+            >>> from transformers import PegasusTokenizer, BigBirdPegasusForConditionalGeneration
+            >>> tokenizer = PegasusTokenizer.from_pretrained('google/bigbird-pegasus-large-arxiv')
             >>> TXT = "My friends are <mask> but they eat too many carbs."
 
             >>> model = BigBirdPegasusForConditionalGeneration.from_pretrained('google/bigbird-pegasus-large-arxiv')
@@ -2845,7 +2845,7 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.BigBirdPegasusTokenizer`. See
+                Indices can be obtained using :class:`~transformers.PegasusTokenizer`. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 
@@ -2907,9 +2907,9 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
 
         Example::
 
-            >>> from transformers import BigBirdPegasusTokenizer, BigBirdPegasusForCausalLM
+            >>> from transformers import PegasusTokenizer, BigBirdPegasusForCausalLM
 
-            >>> tokenizer = BigBirdPegasusTokenizer.from_pretrained('facebook/bart-large')
+            >>> tokenizer = PegasusTokenizer.from_pretrained('facebook/bart-large')
             >>> model = BigBirdPegasusForCausalLM.from_pretrained('facebook/bart-large', add_cross_attention=False)
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")

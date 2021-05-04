@@ -154,7 +154,6 @@ _import_structure = {
     "models.bigbird_pegasus": [
         "BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BigBirdPegasusConfig",
-        "BigBirdPegasusTokenizer",
     ],
     "models.blenderbot": ["BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BlenderbotConfig", "BlenderbotTokenizer"],
     "models.blenderbot_small": [
@@ -1414,7 +1413,6 @@ if TYPE_CHECKING:
     from .models.bigbird_pegasus import (
         BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BigBirdPegasusConfig,
-        BigBirdPegasusTokenizer,
     )
     from .models.blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig, BlenderbotTokenizer
     from .models.blenderbot_small import (
