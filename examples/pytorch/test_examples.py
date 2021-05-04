@@ -204,7 +204,6 @@ class ExamplesTests(TestCasePlus):
             run_ner.main()
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_accuracy"], 0.75)
-            self.assertGreaterEqual(result["eval_precision"], 0.75)
             self.assertLess(result["eval_loss"], 0.5)
 
     def test_run_squad(self):
