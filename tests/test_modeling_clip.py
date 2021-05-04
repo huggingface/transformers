@@ -19,7 +19,6 @@ import inspect
 import unittest
 
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
-from transformers.models.clip.modeling_clip import ClipVisionEmbeddings
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -29,7 +28,7 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, r
 if is_torch_available():
     import torch
 
-    from transformers import ClipConfig, ClipModel, ClipTextConfig, ClipTextModel, ClipVisionConfig, ClipVisionModel
+    from transformers import ClipConfig, ClipModel, ClipTextConfig, ClipTextModel, ClipVisionConfig, ClipVisionModel, ClipTokenizer
     from transformers.models.clip.modeling_clip import CLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -437,28 +436,13 @@ class ClipModelTester:
 
 
 @require_torch
-class ClipModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (ClipModel,) if is_torch_available() else ()
-    test_pruning = False
-    test_head_masking = False
-
+class ClipModelTest(unittest.TestCase):
     def setUp(self):
         self.model_tester = ClipModelTester(self)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    # TODO: check training ?
-    def test_training(self):
-        pass
-
-    def test_inputs_embeds(self):
-        # Clip does not use inputs_embeds
-        pass
-
-    def test_resize_tokens_embeddings(self):
-        pass
 
     @slow
     def test_model_from_pretrained(self):
@@ -471,3 +455,15 @@ class ClipModelTest(ModelTesterMixin, unittest.TestCase):
 def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/cats.png")
     return image
+
+
+@require_vision
+class ClipModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference(self):
+        model = ClipModel.from_pretrained("valhalla/clip-vit-base")
+        tokenizer = ClipTokenizer.from_pretrained("valhalla/clip-vit-base")
+        feature_extractor = ClipFeatureExtractor.from_pretrained("valhall/clip-vit-base")
+
+        image = prepare_img()
+        pixel_values = feature_extractor(image=image, return_tensors="pt")
