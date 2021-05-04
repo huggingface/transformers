@@ -180,6 +180,15 @@ class FlaxBertPreTrainedModel:
         requires_backends(self, ["flax"])
 
 
+class FlaxRobertaForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
 class FlaxRobertaModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
