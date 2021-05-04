@@ -45,7 +45,6 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
 )
-from transformers.trainer_utils import set_seed
 from transformers.utils.hp_naming import TrialShortNamer
 
 
