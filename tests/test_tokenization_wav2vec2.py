@@ -229,9 +229,10 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
         tmpdirname2 = tempfile.mkdtemp()
 
         tokenizer_files = tokenizer.save_pretrained(tmpdirname2)
+        separator = "\\" if os.name == "nt" else "/"
         self.assertSequenceEqual(
             sorted(tuple(VOCAB_FILES_NAMES.values()) + ("special_tokens_map.json", "added_tokens.json")),
-            sorted(tuple(x.split("/")[-1] for x in tokenizer_files)),
+            sorted(tuple(x.split(separator)[-1] for x in tokenizer_files)),
         )
 
         # Checks everything loads correctly in the same way
