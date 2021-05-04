@@ -21,6 +21,7 @@ import warnings
 from pathlib import Path
 
 from transformers import is_flax_available, is_tf_available, is_torch_available
+from transformers.file_utils import ENV_VARS_TRUE_VALUES
 from transformers.models.auto import get_values
 
 
@@ -294,6 +295,8 @@ def check_models_are_auto_configured(module, all_auto_models):
 
 def check_all_models_are_auto_configured():
     """Check all models are each in an auto class."""
+    if os.getenv("TRANSFORMERS_IS_CI").upper() in ENV_VARS_TRUE_VALUES:
+        raise Exception("Variable is properly set.")
     missing_backends = []
     if not is_torch_available():
         missing_backends.append("PyTorch")
@@ -303,12 +306,18 @@ def check_all_models_are_auto_configured():
         missing_backends.append("Flax")
     if len(missing_backends) > 0:
         missing = ", ".join(missing_backends)
-        warnings.warn(
-            "Full quality checks require all backends to be installed (with `pip install -e .[dev]` in the "
-            f"Transformers repo, the following are missing: {missing}. While it's probably fine as long as you didn't "
-            "make any change in one of those backends modeling files, you should probably execute the command above "
-            "to be on the safe side."
-        )
+        if os.getenv("TRANSFORMERS_IS_CI").upper() in ENV_VARS_TRUE_VALUES:
+            raise Exception(
+                "Full quality checks require all backends to be installed (with `pip install -e .[dev]` in the "
+                f"Transformers repo, the following are missing: {missing}."
+            )
+        else:
+            warnings.warn(
+                "Full quality checks require all backends to be installed (with `pip install -e .[dev]` in the "
+                f"Transformers repo, the following are missing: {missing}. While it's probably fine as long as you "
+                "didn't make any change in one of those backends modeling files, you should probably execute the "
+                "command above to be on the safe side."
+            )
     modules = get_model_modules()
     all_auto_models = get_all_auto_configured_models()
     failures = []
