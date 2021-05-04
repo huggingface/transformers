@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import SPIECE_UNDERLINE, BatchEncoding, T5Tokenizer, T5TokenizerFast
+from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, T5Tokenizer, T5TokenizerFast
 from transformers.file_utils import cached_property, is_tf_available, is_torch_available
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers
 
@@ -246,3 +246,31 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         slow_text = self.t5_base_tokenizer.decode(fast_ids)
         self.assertEqual(tgt_text, fast_text)
         self.assertEqual(tgt_text, slow_text)
+
+    def test_special_tokens_initialization(self):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+
+                added_tokens = [f"<extra_id_{i}>" for i in range(100)] + [AddedToken("<special>", lstrip=True)]
+
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, additional_special_tokens=added_tokens, **kwargs
+                )
+                tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, additional_special_tokens=added_tokens, **kwargs, from_slow=True
+                )
+                tokenizer_p = self.tokenizer_class.from_pretrained(
+                    pretrained_name, additional_special_tokens=added_tokens, **kwargs
+                )
+
+                p_output = tokenizer_p.encode("Hey this is a <special> token")
+                r_output = tokenizer_r.encode("Hey this is a <special> token")
+                cr_output = tokenizer_cr.encode("Hey this is a <special> token")
+
+                special_token_id = tokenizer_r.encode("<special>", add_special_tokens=False)[0]
+
+                self.assertEqual(p_output, r_output)
+                self.assertEqual(cr_output, r_output)
+                self.assertTrue(special_token_id in p_output)
+                self.assertTrue(special_token_id in r_output)
+                self.assertTrue(special_token_id in cr_output)
