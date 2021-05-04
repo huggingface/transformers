@@ -37,13 +37,12 @@ class DetrConfig(PretrainedConfig):
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
 
-
     Args:
         num_queries (:obj:`int`, `optional`, defaults to 100):
             Number of object queries, i.e. detection slots. This is the maximal number of objects
             :class:`~transformers.DetrModel` can detect in a single image. For COCO, we recommend 100 queries.
         d_model (:obj:`int`, `optional`, defaults to 256):
-            Dimensionality of the layers.
+            Dimension of the layers.
         encoder_layers (:obj:`int`, `optional`, defaults to 6):
             Number of encoder layers.
         decoder_layers (:obj:`int`, `optional`, defaults to 6):
@@ -53,9 +52,9 @@ class DetrConfig(PretrainedConfig):
         decoder_attention_heads (:obj:`int`, `optional`, defaults to 8):
             Number of attention heads for each attention layer in the Transformer decoder.
         decoder_ffn_dim (:obj:`int`, `optional`, defaults to 2048):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
         encoder_ffn_dim (:obj:`int`, `optional`, defaults to 2048):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
         activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"relu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
             :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
@@ -80,9 +79,9 @@ class DetrConfig(PretrainedConfig):
             https://arxiv.org/abs/1909.11556>`__ for more details.
         auxiliary_loss (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
-        position_embedding_type (:obj:`str`, `optional`, defaults to :obj:`sine`):
-            Type of position embeddings to be used on top of the image features. One of 'sine' or 'learned'.
-        backbone (:obj:`bool`, `optional`, defaults to :obj:`resnet50`):
+        position_embedding_type (:obj:`str`, `optional`, defaults to :obj:`"sine"`):
+            Type of position embeddings to be used on top of the image features. One of :obj:`"sine"` or :obj:`"learned"`.
+        backbone (:obj:`str`, `optional`, defaults to :obj:`resnet50`):
             Name of convolutional backbone to use. Supports any convolutional backbone from the timm package.
         train_backbone (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to train (fine-tune) the backbone.
@@ -106,7 +105,6 @@ class DetrConfig(PretrainedConfig):
             Relative weight of the generalized IoU loss in the object detection loss.
         eos_coefficient (:obj:`float`, `optional`, defaults to 0.1):
             Relative classification weight of the 'no-object' class in the object detection loss.
-
 
     Examples::
 
@@ -161,10 +159,7 @@ class DetrConfig(PretrainedConfig):
         eos_coefficient=0.1,
         **kwargs
     ):
-        super().__init__(
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
         self.num_queries = num_queries
         self.max_position_embeddings = max_position_embeddings

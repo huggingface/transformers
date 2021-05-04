@@ -157,11 +157,7 @@ class DetrModelTester:
 @require_torch
 class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (
-            DetrModel,
-            DetrForObjectDetection,
-            DetrForPanopticSegmentation,
-        )
+        (DetrModel, DetrForObjectDetection, DetrForPanopticSegmentation,)
         if is_torch_available()
         else ()
     )
@@ -306,11 +302,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
                     list(cross_attentions[0].shape[-3:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        decoder_seq_length,
-                        encoder_key_length,
-                    ],
+                    [self.model_tester.num_attention_heads, decoder_seq_length, encoder_key_length,],
                 )
 
             # Check attention is always last and order is fine
@@ -355,10 +347,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             arg_names = [*signature.parameters.keys()]
 
             if model.config.is_encoder_decoder:
-                expected_arg_names = [
-                    "pixel_values",
-                    "pixel_mask",
-                ]
+                expected_arg_names = ["pixel_values", "pixel_mask"]
                 expected_arg_names.extend(
                     ["head_mask", "decoder_head_mask", "encoder_outputs"]
                     if "head_mask" and "decoder_head_mask" in arg_names

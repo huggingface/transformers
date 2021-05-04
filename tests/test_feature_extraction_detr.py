@@ -174,12 +174,7 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
 
         self.assertEqual(
             encoded_images.shape,
-            (
-                1,
-                self.feature_extract_tester.num_channels,
-                expected_height,
-                expected_width,
-            ),
+            (1, self.feature_extract_tester.num_channels, expected_height, expected_width),
         )
 
         # Test batched
@@ -211,12 +206,7 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
 
         self.assertEqual(
             encoded_images.shape,
-            (
-                1,
-                self.feature_extract_tester.num_channels,
-                expected_height,
-                expected_width,
-            ),
+            (1, self.feature_extract_tester.num_channels, expected_height, expected_width),
         )
 
         # Test batched
@@ -249,12 +239,7 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
 
         self.assertEqual(
             encoded_images.shape,
-            (
-                1,
-                self.feature_extract_tester.num_channels,
-                expected_height,
-                expected_width,
-            ),
+            (1, self.feature_extract_tester.num_channels, expected_height, expected_width),
         )
 
         # Test batched

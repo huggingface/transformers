@@ -26,7 +26,6 @@ from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...file_utils import TensorType, is_flax_available, is_tf_available, is_torch_available
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import logging
-from .modeling_detr import box_cxcywh_to_xyxy
 
 
 if is_torch_available():
@@ -37,6 +36,14 @@ logger = logging.get_logger(__name__)
 
 
 # 2 functions below inspired by https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
+def box_cxcywh_to_xyxy(x):
+    """
+    Converts a PyTorch tensor of bounding boxes of format (center_x, center_y, width, height) to (x_0, y_0, x_1, y_1).
+    """
+    x_c, y_c, w, h = x.unbind(-1)
+    b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
+    return torch.stack(b, dim=-1)
+
 def box_xyxy_to_cxcywh(x):
     """
     Converts a NumPy array of bounding boxes of shape (number of bounding boxes, 4) of format (x_0, y_0, x_1, y_1) to
@@ -83,7 +90,7 @@ def masks_to_boxes(masks):
 # 2 functions below copied from https://github.com/cocodataset/panopticapi/blob/master/panopticapi/utils.py
 # Copyright (c) 2018, Alexander Kirillov
 # All rights reserved.
-def rgb2id(color):
+def rgb_to_id(color):
     if isinstance(color, np.ndarray) and len(color.shape) == 3:
         if color.dtype == np.uint8:
             color = color.astype(np.int32)
@@ -91,7 +98,7 @@ def rgb2id(color):
     return int(color[0] + 256 * color[1] + 256 * 256 * color[2])
 
 
-def id2rgb(id_map):
+def id_to_rgb(id_map):
     if isinstance(id_map, np.ndarray):
         id_map_copy = id_map.copy()
         rgb_shape = tuple(list(id_map.shape) + [3])
@@ -116,6 +123,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
 
     Args:
+        task (:obj:`str`, `optional`, defaults to :obj:`object_detection`):
+            Task for which to prepare features for. 
         do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to resize the input to a certain :obj:`size`.
         size (:obj:`int`, `optional`, defaults to 800):
@@ -250,7 +259,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         
         if "segments_info" in ann_info:
             masks = np.asarray(Image.open(ann_path), dtype=np.uint32)
-            masks = rgb2id(masks)
+            masks = rgb_to_id(masks)
 
             ids = np.array([ann['id'] for ann in ann_info['segments_info']])
             masks = masks == ids[:, None, None]
@@ -403,7 +412,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
             annotations (:obj:`Dict`, :obj:`List[Dict]`, `optional`):
                 The corresponding annotations in COCO format. The annotations for each image should have the following
-                format: {'image_id': image_id, 'annotations': target}, in other words a dicitionary with 2 keys:
+                format: {'image_id': image_id, 'annotations': target}, in other words a dictionary with 2 keys:
 
                 * image_id
                 * annotations, which is a list of COCO annotations.
@@ -567,35 +576,15 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             if not isinstance(tensor_type, TensorType):
                 tensor_type = TensorType(tensor_type)
 
-            if tensor_type == TensorType.TENSORFLOW:
-                if not is_tf_available():
-                    raise ImportError(
-                        "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
-                    )
-                import tensorflow as tf
-
-                encoded_inputs["target"] = [
-                    {k: tf.convert_to_tensor(v) for k, v in target.items()} for target in annotations
-                ]
-            elif tensor_type == TensorType.PYTORCH:
+            if not tensor_type == TensorType.PYTORCH:
+                raise ValueError("Only PyTorch is supported.")
+            else:
                 if not is_torch_available():
                     raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
-                import torch
                 
                 encoded_inputs["target"] = [
                     {k: torch.from_numpy(v) for k, v in target.items()} for target in annotations
                 ]
-            
-            elif tensor_type == TensorType.JAX:
-                if not is_flax_available():
-                    raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
-                import jax.numpy as jnp  # noqa: F811
-
-                encoded_inputs["target"] = [
-                    {k: jax.numpy.asarray(v) for k, v in target.items()} for target in annotations
-                ]
-            else:
-                encoded_inputs["target"] = annotations
 
         return encoded_inputs
 
@@ -658,6 +647,12 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/segmentation.py#L218
     def post_process_segmentation(self, results, outputs, orig_target_sizes, max_target_sizes, threshold=0.5):
+        """ 
+        Converts the output of :class:`~transformers.DetrForPanopticSegmentation` into actual instance segmentation predictions.
+        
+        Only supports PyTorch.
+        """
+        
         assert len(orig_target_sizes) == len(max_target_sizes)
         max_h, max_w = max_target_sizes.max(0)[0].tolist()
         outputs_masks = outputs.pred_masks.squeeze(2)
@@ -757,13 +752,13 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
                 final_h, final_w = to_tuple(target_size)
 
-                seg_img = Image.fromarray(id2rgb(m_id.view(h, w).cpu().numpy()))
+                seg_img = Image.fromarray(id_to_rgb(m_id.view(h, w).cpu().numpy()))
                 seg_img = seg_img.resize(size=(final_w, final_h), resample=Image.NEAREST)
 
                 np_seg_img = (
                     torch.ByteTensor(torch.ByteStorage.from_buffer(seg_img.tobytes())).view(final_h, final_w, 3).numpy()
                 )
-                m_id = torch.from_numpy(rgb2id(np_seg_img))
+                m_id = torch.from_numpy(rgb_to_id(np_seg_img))
 
                 area = []
                 for i in range(len(scores)):

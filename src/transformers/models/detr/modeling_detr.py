@@ -41,6 +41,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttenti
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_detr import DetrConfig
+from .feature_extraction_detr import box_cxcywh_to_xyxy
 
 
 logger = logging.get_logger(__name__)
@@ -337,18 +338,10 @@ class DetrLearnedPositionEmbedding(nn.Module):
         j = torch.arange(h, device=x.device)
         x_emb = self.column_embeddings(i)
         y_emb = self.row_embeddings(j)
-        pos = (
-            torch.cat(
-                [
-                    x_emb.unsqueeze(0).repeat(h, 1, 1),
-                    y_emb.unsqueeze(1).repeat(1, w, 1),
-                ],
-                dim=-1,
-            )
-            .permute(2, 0, 1)
-            .unsqueeze(0)
-            .repeat(x.shape[0], 1, 1, 1)
-        )
+        pos = torch.cat([x_emb.unsqueeze(0).repeat(h, 1, 1), y_emb.unsqueeze(1).repeat(1, w, 1)], dim=-1)
+        pos = pos.permute(2, 0, 1)
+        pos = pos.unsqueeze(0)
+        pos = pos.repeat(x.shape[0], 1, 1, 1)
         return pos
 
 
@@ -370,7 +363,6 @@ class DetrAttention(nn.Module):
     Multi-headed attention from 'Attention Is All You Need' paper.
 
     Here, we add position embeddings to the queries and keys (as explained in the DETR paper).
-
     """
 
     def __init__(
@@ -526,9 +518,9 @@ class DetrEncoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape :obj:`(seq_len, batch, embed_dim)`
             attention_mask (:obj:`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+                :obj:`(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             position_embeddings (:obj:`torch.FloatTensor`, `optional`): position embeddings, to be added to hidden_states.
             output_attentions (:obj:`bool`, `optional`):
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
@@ -607,12 +599,12 @@ class DetrDecoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape :obj:`(seq_len, batch, embed_dim)`
             attention_mask (:obj:`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            encoder_hidden_states (:obj:`torch.FloatTensor`): cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
+                :obj:`(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            encoder_hidden_states (:obj:`torch.FloatTensor`): cross attention input to the layer of shape :obj:`(seq_len, batch, embed_dim)`
             encoder_attention_mask (:obj:`torch.FloatTensor`): encoder attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+                :obj:`(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             output_attentions (:obj:`bool`, `optional`):
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
                 returned tensors for more detail.
@@ -1466,24 +1458,12 @@ class DetrForObjectDetection(DetrPreTrainedModel):
     DETR_START_DOCSTRING,
 )
 class DetrForPanopticSegmentation(DetrPreTrainedModel):
-    def __init__(self, config: DetrConfig, box_model=None, freeze_detr=False):
+    def __init__(self, config: DetrConfig):
         super().__init__(config)
 
         config.return_intermediate_layers = True
-        if not box_model:
-            # end-to-end approach
-            self.detr = DetrForObjectDetection(config)
-        else: 
-            # step-2 approach
-            freeze_detr = True
-            #initialize model with weights of provided box_model, but with config.return_intermediate_layers=True
-            #this makes sure the backbone returns a list of features
-            model = DetrForObjectDetection(config)
-            self.detr = model.load_state_dict(box_model.state_dict())
-
-        if freeze_detr:
-            for p in self.parameters():
-                p.requires_grad_(False)
+        # object detection model
+        self.detr = DetrForObjectDetection(config)
 
         # segmentation head
         hidden_size, number_of_heads = config.d_model, config.encoder_attention_heads
@@ -2127,27 +2107,6 @@ class HungarianMatcher(nn.Module):
 
 
 # below: bounding box utilities taken from https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
-
-
-def box_cxcywh_to_xyxy(x):
-    """
-    Converts a bounding box of format (center_x, center_y, width, height) to (x_0, y_0, x_1, y_1).
-    """
-
-    x_c, y_c, w, h = x.unbind(-1)
-    b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
-    return torch.stack(b, dim=-1)
-
-
-def box_xyxy_to_cxcywh(x):
-    """
-    Converts a bounding box of format (x_0, y_0, x_1, y_1) to (center_x, center_y, width, height).
-    """
-
-    x0, y0, x1, y1 = x.unbind(-1)
-    b = [(x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0), (y1 - y0)]
-    return torch.stack(b, dim=-1)
-
 
 # modified from torchvision to also return the union
 def box_iou(boxes1, boxes2):
