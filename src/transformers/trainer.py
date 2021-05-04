@@ -1409,10 +1409,10 @@ class Trainer:
                 )
                 return
         else:
-            rng_file = os.path.join(checkpoint, f"rng_state.pth")
+            rng_file = os.path.join(checkpoint, "rng_state.pth")
             if not os.path.isfile(os.path.join(checkpoint, rng_file)):
                 logger.info(
-                    f"Didn't find an RNG file, if you are resuming a training that was launched in a distributed "
+                    "Didn't find an RNG file, if you are resuming a training that was launched in a distributed "
                     "fashion, reproducibility is not guaranteed."
                 )
                 return
@@ -1518,10 +1518,10 @@ class Trainer:
                 # In non distributed, we save the global CUDA RNG state (will take care of DataParallel)
                 rng_states["cuda"] = torch.cuda.random.get_rng_state_all()
             else:
-                rng_states[f"cuda"] = torch.cuda.random.get_rng_state()
+                rng_states["cuda"] = torch.cuda.random.get_rng_state()
 
         if is_torch_tpu_available():
-            rng_states[f"xla"] = xm.get_rng_state().item()
+            rng_states["xla"] = xm.get_rng_state()
 
         if self.args.local_rank == -1:
             torch.save(rng_states, os.path.join(output_dir, "rng_state.pth"))
