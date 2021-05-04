@@ -112,10 +112,24 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
     prefix_tokens: List[int] = []
     suffix_tokens: List[int] = []
 
-    def __init__(self, *args, tokenizer_file=None, src_lang=None, tgt_lang=None, **kwargs):
-        super().__init__(*args, tokenizer_file=tokenizer_file, src_lang=src_lang, tgt_lang=tgt_lang, **kwargs)
+    def __init__(
+        self, *args, tokenizer_file=None, src_lang=None, tgt_lang=None, additional_special_tokens=None, **kwargs
+    ):
+        super().__init__(
+            *args,
+            tokenizer_file=tokenizer_file,
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
+            additional_special_tokens=additional_special_tokens,
+            **kwargs,
+        )
 
-        self.add_special_tokens({"additional_special_tokens": FAIRSEQ_LANGUAGE_CODES})
+        _additional_special_tokens = FAIRSEQ_LANGUAGE_CODES.copy()
+
+        if additional_special_tokens is not None:
+            _additional_special_tokens.extend(additional_special_tokens)
+
+        self.add_special_tokens({"additional_special_tokens": _additional_special_tokens})
 
         self._src_lang = src_lang if src_lang is not None else "en_XX"
         self.cur_lang_code = self.convert_tokens_to_ids(self._src_lang)
