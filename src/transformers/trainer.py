@@ -565,7 +565,9 @@ class Trainer:
 
         else:
             if self.args.world_size <= 1:
-                return RandomSampler(self.train_dataset, generator=generator)
+                if _is_torch_generator_available:
+                    return RandomSampler(self.train_dataset, generator=generator)
+                return RandomSampler(self.train_dataset)
             elif (
                 self.args.parallel_mode in [ParallelMode.TPU, ParallelMode.SAGEMAKER_MODEL_PARALLEL]
                 and not self.args.dataloader_drop_last
