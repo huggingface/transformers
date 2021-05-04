@@ -510,6 +510,7 @@ class LengthGroupedSampler(Sampler):
         batch_size: int,
         lengths: Optional[List[int]] = None,
         model_input_name: Optional[str] = None,
+        generator=None,
     ):
         self.dataset = dataset
         self.batch_size = batch_size
@@ -525,12 +526,13 @@ class LengthGroupedSampler(Sampler):
                 )
             lengths = [len(feature[self.model_input_name]) for feature in dataset]
         self.lengths = lengths
+        self.generator = generator
 
     def __len__(self):
         return len(self.lengths)
 
     def __iter__(self):
-        indices = get_length_grouped_indices(self.lengths, self.batch_size)
+        indices = get_length_grouped_indices(self.lengths, self.batch_size, generator=self.generator)
         return iter(indices)
 
 
