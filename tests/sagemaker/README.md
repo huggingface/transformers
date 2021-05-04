@@ -18,7 +18,7 @@ git+https://github.com/huggingface/transformers.git@v4.5.0.rc0 # install master 
 After we adjusted the `requirements.txt` we can run Amazon SageMaker tests with:  
 
 ```bash
-AWS_PROFILE=<enter-your-profile> make sagemaker-test
+AWS_PROFILE=<enter-your-profile> make test-sagemaker
 ```
 These tests take around 10-15 minutes to finish. Preferably make a screenshot of the successfully ran tests.
 
@@ -66,8 +66,7 @@ images:
 ```
 2. In the PR comment describe what test, we ran and with which package versions. Here you can copy the table from [Current Tests](#current-tests). 
 
-TODO: Add a screenshot of PR + Text template to make it easy to open. 
- 
+2. In the PR comment describe what test we ran and with which framework versions. Here you can copy the table from [Current Tests](#current-tests). You can take a look at this [PR](https://github.com/aws/deep-learning-containers/pull/1016), which information are needed. 
 ## Test Case 2: Releasing a New AWS Framework DLC
 
 
@@ -88,10 +87,9 @@ tensorflow-gpu==2.5.0 # for tensorflow
 After we adjusted the `requirements.txt` we can run Amazon SageMaker tests with. 
 
 ```bash
-AWS_PROFILE=<enter-your-profile> make sagemaker-test
+AWS_PROFILE=<enter-your-profile> make test-sagemaker
 ```
 These tests take around 10-15 minutes to finish. Preferably make a screenshot of the successfully ran tests.
-
 
 ### After successful Tests:
 
@@ -136,10 +134,7 @@ images:
     docker_file: !join [ docker/, *SHORT_VERSION, /, *DOCKER_PYTHON_VERSION, /, 
       *CUDA_VERSION, /Dockerfile., *DEVICE_TYPE ]
 ```
-2. In the PR comment describe what test we ran and with which framework versions. Here you can copy the table from [Current Tests](#current-tests). 
-
-TODO: Add a screenshot of PR + Text template to make it easy to open. 
-
+2. In the PR comment describe what test we ran and with which framework versions. Here you can copy the table from [Current Tests](#current-tests). You can take a look at this [PR](https://github.com/aws/deep-learning-containers/pull/1025), which information are needed.
 
 ## Current Tests
 

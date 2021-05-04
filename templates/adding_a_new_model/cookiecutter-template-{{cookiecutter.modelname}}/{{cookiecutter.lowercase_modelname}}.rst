@@ -27,6 +27,10 @@ Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
+This model was contributed by `<INSERT YOUR HF USERNAME HERE> 
+<https://huggingface.co/<INSERT YOUR HF USERNAME HERE>>`__. The original code can be found `here 
+<<INSERT LINK TO GITHUB REPO HERE>>`__.
+
 {{cookiecutter.camelcase_modelname}}Config
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -46,8 +50,7 @@ Tips:
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.{{cookiecutter.camelcase_modelname}}TokenizerFast
-    :members: build_inputs_with_special_tokens, get_special_tokens_mask,
-        create_token_type_ids_from_sequences, save_vocabulary
+    :members:
 
 
 {% if "PyTorch" in cookiecutter.generate_tensorflow_and_pytorch -%}

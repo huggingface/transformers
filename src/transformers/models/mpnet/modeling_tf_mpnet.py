@@ -192,8 +192,8 @@ class TFMPNetSelfAttention(tf.keras.layers.Layer):
 
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads}"
             )
 
         self.num_attention_heads = config.num_attention_heads
@@ -352,7 +352,7 @@ class TFMPNetEncoder(tf.keras.layers.Layer):
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.initializer_range = config.initializer_range
 
-        self.layer = [TFMPNetLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
+        self.layer = [TFMPNetLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
 
     def build(self, input_shape):
@@ -430,7 +430,7 @@ class TFMPNetEncoder(tf.keras.layers.Layer):
         return ret
 
     def compute_position_bias(self, x, position_ids=None):
-        """ Compute binned relative position bias """
+        """Compute binned relative position bias"""
         input_shape = shape_list(x)
         qlen, klen = input_shape[1], input_shape[1]
 
@@ -674,7 +674,7 @@ MPNET_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare MPNet Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare MPNet Model transformer outputting raw hidden-states without any specific head on top.",
     MPNET_START_DOCSTRING,
 )
 class TFMPNetModel(TFMPNetPreTrainedModel):

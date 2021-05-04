@@ -22,9 +22,22 @@ import tempfile
 import unittest
 from typing import List, Tuple
 
-from transformers import is_torch_available
+from huggingface_hub import HfApi
+from requests.exceptions import HTTPError
+from transformers import is_torch_available, logging
 from transformers.file_utils import WEIGHTS_NAME
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
+from transformers.models.auto import get_values
+from transformers.testing_utils import (
+    ENDPOINT_STAGING,
+    PASS,
+    USER,
+    CaptureLogger,
+    is_staging_test,
+    require_torch,
+    require_torch_multi_gpu,
+    slow,
+    torch_device,
+)
 
 
 if is_torch_available():
@@ -34,6 +47,7 @@ if is_torch_available():
     from transformers import (
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         MODEL_FOR_CAUSAL_LM_MAPPING,
+        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
         MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
         MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -75,10 +89,11 @@ class ModelTesterMixin:
     test_missing_keys = True
     test_model_parallel = False
     is_encoder_decoder = False
+    test_sequence_classification_problem_types = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
-        if model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
+        if model_class in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
             inputs_dict = {
                 k: v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
                 if isinstance(v, torch.Tensor) and v.ndim > 1
@@ -87,9 +102,9 @@ class ModelTesterMixin:
             }
 
         if return_labels:
-            if model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
+            if model_class in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
                 inputs_dict["labels"] = torch.ones(self.model_tester.batch_size, dtype=torch.long, device=torch_device)
-            elif model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
+            elif model_class in get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING):
                 inputs_dict["start_positions"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
@@ -97,17 +112,18 @@ class ModelTesterMixin:
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
             elif model_class in [
-                *MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values(),
-                *MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.values(),
+                *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
+                *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING),
+                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
             ]:
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
             elif model_class in [
-                *MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.values(),
-                *MODEL_FOR_CAUSAL_LM_MAPPING.values(),
-                *MODEL_FOR_MASKED_LM_MAPPING.values(),
-                *MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.values(),
+                *get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING),
+                *get_values(MODEL_FOR_CAUSAL_LM_MAPPING),
+                *get_values(MODEL_FOR_MASKED_LM_MAPPING),
+                *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING),
             ]:
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
@@ -172,7 +188,7 @@ class ModelTesterMixin:
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
-                        msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
     def test_determinism(self):
@@ -210,8 +226,8 @@ class ModelTesterMixin:
                     "decoder_attention_mask",
                 ]
                 expected_arg_names.extend(
-                    ["head_mask", "decoder_head_mask", "encoder_outputs"]
-                    if "head_mask" and "decoder_head_mask" in arg_names
+                    ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
+                    if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
                     else ["encoder_outputs"]
                 )
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
@@ -227,7 +243,7 @@ class ModelTesterMixin:
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class in MODEL_MAPPING.values():
+            if model_class in get_values(MODEL_MAPPING):
                 continue
             model = model_class(config)
             model.to(torch_device)
@@ -246,7 +262,7 @@ class ModelTesterMixin:
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class in MODEL_MAPPING.values():
+            if model_class in get_values(MODEL_MAPPING):
                 continue
             model = model_class(config)
             model.to(torch_device)
@@ -310,7 +326,7 @@ class ModelTesterMixin:
                 if "labels" in inputs_dict:
                     correct_outlen += 1  # loss is added to beginning
                 # Question Answering model returns start_logits and end_logits
-                if model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
+                if model_class in get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING):
                     correct_outlen += 1  # start_logits and end_logits instead of only 1 output
                 if "past_key_values" in outputs:
                     correct_outlen += 1  # past_key_values have been returned
@@ -477,6 +493,8 @@ class ModelTesterMixin:
                 arg_names = [*signature.parameters.keys()]
                 if "decoder_head_mask" in arg_names:  # necessary diferentiation because of T5 model
                     inputs["decoder_head_mask"] = head_mask
+                if "cross_attn_head_mask" in arg_names:
+                    inputs["cross_attn_head_mask"] = head_mask
             outputs = model(**inputs, return_dict=True)
 
             # Test that we can get a gradient back for importance score computation
@@ -508,6 +526,7 @@ class ModelTesterMixin:
             if model.config.is_encoder_decoder:
                 check_attentions_validity(outputs.encoder_attentions)
                 check_attentions_validity(outputs.decoder_attentions)
+                check_attentions_validity(outputs.cross_attentions)
             else:
                 check_attentions_validity(outputs.attentions)
 
@@ -928,7 +947,7 @@ class ModelTesterMixin:
                     model.base_model.save_pretrained(temp_dir_name)
                     model, loading_info = model_class.from_pretrained(temp_dir_name, output_loading_info=True)
 
-                    with self.subTest(msg="Missing keys for {}".format(model.__class__.__name__)):
+                    with self.subTest(msg=f"Missing keys for {model.__class__.__name__}"):
                         self.assertGreater(len(loading_info["missing_keys"]), 0)
 
     def test_tie_model_weights(self):
@@ -980,7 +999,6 @@ class ModelTesterMixin:
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
 
     def test_model_outputs_equivalence(self):
-
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         def set_nan_tensor_to_zero(t):
@@ -1078,7 +1096,7 @@ class ModelTesterMixin:
 
         # some params shouldn't be scattered by nn.DataParallel
         # so just remove them if they are present.
-        blacklist_non_batched_params = ["head_mask", "decoder_head_mask"]
+        blacklist_non_batched_params = ["head_mask", "decoder_head_mask", "cross_attn_head_mask"]
         for k in blacklist_non_batched_params:
             inputs_dict.pop(k, None)
 
@@ -1104,7 +1122,7 @@ class ModelTesterMixin:
 
         # a candidate for testing_utils
         def get_current_gpu_memory_use():
-            """ returns a list of cuda memory allocations per GPU in MBs"""
+            """returns a list of cuda memory allocations per GPU in MBs"""
 
             per_device_memory = []
             for id in range(torch.cuda.device_count()):
@@ -1221,6 +1239,42 @@ class ModelTesterMixin:
             model.parallelize()
             model.generate(**cast_to_device(inputs_dict, "cuda:0"), num_beams=2)
 
+    def test_problem_types(self):
+        if not self.test_sequence_classification_problem_types:
+            return
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        problem_types = [
+            {"title": "multi_label_classification", "num_labels": 2, "dtype": torch.float},
+            {"title": "single_label_classification", "num_labels": 1, "dtype": torch.long},
+            {"title": "regression", "num_labels": 1, "dtype": torch.float},
+        ]
+
+        for model_class in self.all_model_classes:
+            if model_class not in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
+                continue
+
+            for problem_type in problem_types:
+                with self.subTest(msg=f"Testing {model_class} with {problem_type['title']}"):
+
+                    config.problem_type = problem_type["title"]
+                    config.num_labels = problem_type["num_labels"]
+
+                    model = model_class(config)
+                    model.to(torch_device)
+                    model.train()
+
+                    inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+                    if problem_type["num_labels"] > 1:
+                        inputs["labels"] = inputs["labels"].unsqueeze(1).repeat(1, problem_type["num_labels"])
+
+                    inputs["labels"] = inputs["labels"].to(problem_type["dtype"])
+
+                    loss = model(**inputs).loss
+                    loss.backward()
+
 
 global_rng = random.Random()
 
@@ -1293,6 +1347,58 @@ class ModelUtilsTest(unittest.TestCase):
         model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
         self.assertIsNotNone(model)
 
-        with self.assertRaises(Exception) as context:
+        logger = logging.get_logger("transformers.configuration_utils")
+        with CaptureLogger(logger) as cl:
             BertModel.from_pretrained(TINY_T5)
-        self.assertTrue("You tried to initiate a model of type" in str(context.exception))
+        self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
+
+
+@require_torch
+@is_staging_test
+class ModelPushToHubTester(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
+        cls._token = cls._api.login(username=USER, password=PASS)
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-model")
+        except HTTPError:
+            pass
+
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-model-org", organization="valid_org")
+        except HTTPError:
+            pass
+
+    def test_push_to_hub(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        model = BertModel(config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, push_to_hub=True, repo_name="test-model", use_auth_token=self._token)
+
+            new_model = BertModel.from_pretrained(f"{USER}/test-model")
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
+    def test_push_to_hub_in_organization(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        model = BertModel(config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(
+                tmp_dir,
+                push_to_hub=True,
+                repo_name="test-model-org",
+                use_auth_token=self._token,
+                organization="valid_org",
+            )
+
+            new_model = BertModel.from_pretrained("valid_org/test-model-org")
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))

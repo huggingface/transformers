@@ -19,9 +19,11 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from .debug_utils import DebugOption
 from .file_utils import (
     cached_property,
-    is_sagemaker_distributed_available,
+    is_sagemaker_dp_enabled,
+    is_sagemaker_mp_enabled,
     is_torch_available,
     is_torch_tpu_available,
     torch_required,
@@ -36,8 +38,13 @@ if is_torch_available():
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
 
-if is_sagemaker_distributed_available():
+if is_sagemaker_dp_enabled():
     import smdistributed.dataparallel.torch.distributed as sm_dist
+
+if is_sagemaker_mp_enabled():
+    import smdistributed.modelparallel.torch as smp
+
+    smp.init()
 
 
 logger = logging.get_logger(__name__)
@@ -63,9 +70,6 @@ class TrainingArguments:
     Using :class:`~transformers.HfArgumentParser` we can turn this class into `argparse
     <https://docs.python.org/3/library/argparse.html#module-argparse>`__ arguments that can be specified on the command
     line.
-
-
-
 
     Parameters:
         output_dir (:obj:`str`):
@@ -188,8 +192,6 @@ class TrainingArguments:
             Rank of the process during distributed training.
         tpu_num_cores (:obj:`int`, `optional`):
             When training on TPU, the number of TPU cores (automatically passed by launcher script).
-        debug (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            When training on TPU, whether to print debug metrics or not.
         dataloader_drop_last (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to drop the last incomplete batch (if the length of the dataset is not divisible by the batch size)
             or not.
@@ -271,11 +273,21 @@ class TrainingArguments:
             The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
             labels are changed from 0s and 1s to :obj:`label_smoothing_factor/num_labels` and :obj:`1 -
             label_smoothing_factor + label_smoothing_factor/num_labels` respectively.
+        debug (:obj:`str` or list of :class:`~transformers.debug_utils.DebugOption`, `optional`, defaults to :obj:`""`):
+            Enable one or more debug features. This is an experimental feature.
+
+            Possible options are:
+
+            - :obj:`"underflow_overflow"`: detects overflow in model's input/outputs and reports the last frames that
+              led to the event
+            - :obj:`"tpu_metrics_debug"`: print debug metrics on TPU
+
+            The options should be separated by whitespaces.
         adafactor (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use the :class:`~transformers.Adafactor` optimizer instead of
             :class:`~transformers.AdamW`.
         group_by_length (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to group together samples of roughly the same legnth in the training dataset (to minimize
+            Whether or not to group together samples of roughly the same length in the training dataset (to minimize
             padding applied and be more efficient). Only useful if applying dynamic padding.
         length_column_name (:obj:`str`, `optional`, defaults to :obj:`"length"`):
             Column name for precomputed lengths. If the column exists, grouping by length will use these values rather
@@ -289,11 +301,20 @@ class TrainingArguments:
             When using distributed training, the value of the flag :obj:`find_unused_parameters` passed to
             :obj:`DistributedDataParallel`. Will default to :obj:`False` if gradient checkpointing is used, :obj:`True`
             otherwise.
-        dataloader_pin_memory (:obj:`bool`, `optional`, defaults to :obj:`True`)):
+        dataloader_pin_memory (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether you want to pin memory in data loaders or not. Will default to :obj:`True`.
-        skip_memory_metrics (:obj:`bool`, `optional`, defaults to :obj:`False`)):
+        skip_memory_metrics (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to skip adding of memory profiler reports to metrics. Defaults to :obj:`False`.
-
+        push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to upload the trained model to the hub after training. This argument is not directly used by
+            :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
+            the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
+            details.
+        resume_from_checkpoint (:obj:`str`, `optional`):
+            The path to a folder with a valid checkpoint for your model. This argument is not directly used by
+            :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
+            the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
+            details.
     """
 
     output_dir: str = field(
@@ -310,7 +331,7 @@ class TrainingArguments:
     )
 
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
-    do_eval: bool = field(default=None, metadata={"help": "Whether to run eval on the dev set."})
+    do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
     evaluation_strategy: IntervalStrategy = field(
         default="no",
@@ -425,9 +446,18 @@ class TrainingArguments:
     )
     tpu_metrics_debug: bool = field(
         default=False,
-        metadata={"help": "Deprecated, the use of `--debug` is preferred. TPU: Whether to print debug metrics"},
+        metadata={
+            "help": "Deprecated, the use of `--debug tpu_metrics_debug` is preferred. TPU: Whether to print debug metrics"
+        },
     )
-    debug: bool = field(default=False, metadata={"help": "Whether to print debug metrics on TPU"})
+    debug: str = field(
+        default="",
+        metadata={
+            "help": "Whether or not to enable debug mode. Current options: "
+            "`underflow_overflow` (Detect underflow and overflow in activations and weights), "
+            "`tpu_metrics_debug` (print debug metrics on TPU)."
+        },
+    )
 
     dataloader_drop_last: bool = field(
         default=False, metadata={"help": "Drop the last incomplete batch if it is not divisible by the batch size."}
@@ -518,9 +548,29 @@ class TrainingArguments:
     skip_memory_metrics: bool = field(
         default=False, metadata={"help": "Whether or not to skip adding of memory profiler reports to metrics."}
     )
+    use_legacy_prediction_loop: bool = field(
+        default=False, metadata={"help": "Whether or not to use the legacy prediction_loop in the Trainer."}
+    )
+    push_to_hub: bool = field(
+        default=False, metadata={"help": "Whether or not to upload the trained model to the model hub after training."}
+    )
+    resume_from_checkpoint: Optional[str] = field(
+        default=None,
+        metadata={"help": "The path to a folder with a valid checkpoint for your model."},
+    )
     _n_gpu: int = field(init=False, repr=False, default=-1)
+    mp_parameters: str = field(
+        default="",
+        metadata={"help": "Used by the SageMaker launcher to send mp-specific args. Ignored in Trainer"},
+    )
 
     def __post_init__(self):
+        # Handle --use_env option in torch.distributed.launch (local_rank not passed as an arg then).
+        # This needs to happen before any call to self.device or self.n_gpu.
+        env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
+        if env_local_rank != -1 and env_local_rank != self.local_rank:
+            self.local_rank = env_local_rank
+
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
         #  see https://github.com/huggingface/transformers/issues/10628
@@ -599,6 +649,24 @@ class TrainingArguments:
         elif ShardedDDPOption.ZERO_DP_2 in self.sharded_ddp and ShardedDDPOption.ZERO_DP_3 in self.sharded_ddp:
             raise ValueError("`--sharded_ddp zero_dp_2` is not compatible with `--sharded_ddp zero_dp_3`.")
 
+        if self.tpu_metrics_debug:
+            warnings.warn(
+                "using `--tpu_metrics_debug` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `--debug tpu_metrics_debug` instead",
+                FutureWarning,
+            )
+            self.debug += " tpu_metrics_debug"
+            self.tpu_metrics_debug = False
+        if isinstance(self.debug, str):
+            self.debug = [DebugOption(s) for s in self.debug.split()]
+
+        if self.deepspeed:
+            # - must be run very last in arg parsing, since it will use a lot of these settings.
+            # - must be run before the model is created.
+            from transformers.integrations import DeepSpeedConfigHF
+
+            # will be used later by the Trainer (leave self.deepspeed unmodified in case a user relies on it not to be modified)
+            self.deepspeed_config_hf = DeepSpeedConfigHF(self)
+
     def __repr__(self):
         # We override the default repr to remove deprecated arguments from the repr. This method should be removed once
         # those deprecated arguments are removed form TrainingArguments. (TODO: v5)
@@ -646,7 +714,11 @@ class TrainingArguments:
         elif is_torch_tpu_available():
             device = xm.xla_device()
             self._n_gpu = 0
-        elif is_sagemaker_distributed_available():
+        elif is_sagemaker_mp_enabled():
+            local_rank = smp.local_rank()
+            device = torch.device("cuda", local_rank)
+            self._n_gpu = 1
+        elif is_sagemaker_dp_enabled():
             sm_dist.init_process_group()
             self.local_rank = sm_dist.get_local_rank()
             device = torch.device("cuda", self.local_rank)
@@ -730,8 +802,10 @@ class TrainingArguments:
         """
         if is_torch_tpu_available():
             return ParallelMode.TPU
-        elif is_sagemaker_distributed_available():
-            return ParallelMode.SAGEMAKER_DISTRIBUTED
+        elif is_sagemaker_mp_enabled():
+            return ParallelMode.SAGEMAKER_MODEL_PARALLEL
+        elif is_sagemaker_dp_enabled():
+            return ParallelMode.SAGEMAKER_DATA_PARALLEL
         elif self.local_rank != -1:
             return ParallelMode.DISTRIBUTED
         elif self.n_gpu > 1:
@@ -747,7 +821,9 @@ class TrainingArguments:
         """
         if is_torch_tpu_available():
             return xm.xrt_world_size()
-        elif is_sagemaker_distributed_available():
+        elif is_sagemaker_mp_enabled():
+            return smp.dp_size()
+        elif is_sagemaker_dp_enabled():
             return sm_dist.get_world_size()
         elif self.local_rank != -1:
             return torch.distributed.get_world_size()
@@ -761,7 +837,9 @@ class TrainingArguments:
         """
         if is_torch_tpu_available():
             return xm.get_ordinal()
-        elif is_sagemaker_distributed_available():
+        elif is_sagemaker_mp_enabled():
+            return smp.dp_rank()
+        elif is_sagemaker_dp_enabled():
             return sm_dist.get_rank()
         elif self.local_rank != -1:
             return torch.distributed.get_rank()
@@ -772,14 +850,14 @@ class TrainingArguments:
         """
         Can be subclassed and overridden for some specific integrations.
         """
-        return True
+        return not is_sagemaker_mp_enabled()
 
     @property
     def _no_sync_in_gradient_accumulation(self):
         """
         Whether or not to use no_sync for the gradients when doing gradient accumulation.
         """
-        return not self.deepspeed
+        return not (self.deepspeed or is_sagemaker_dp_enabled() or is_sagemaker_mp_enabled())
 
     def to_dict(self):
         """
@@ -817,5 +895,6 @@ class ParallelMode(Enum):
     NOT_PARALLEL = "not_parallel"
     NOT_DISTRIBUTED = "not_distributed"
     DISTRIBUTED = "distributed"
-    SAGEMAKER_DISTRIBUTED = "sm_distributed"
+    SAGEMAKER_MODEL_PARALLEL = "sagemaker_model_parallel"
+    SAGEMAKER_DATA_PARALLEL = "sagemaker_data_parallel"
     TPU = "tpu"

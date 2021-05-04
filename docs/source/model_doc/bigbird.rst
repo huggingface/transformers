@@ -41,6 +41,8 @@ propose novel applications to genomics data.*
 
 Tips:
 
+- For an in-detail explanation on how BigBird's attention works, see `this blog post
+  <https://huggingface.co/blog/big-bird>`__.
 - BigBird comes with 2 implementations: **original_full** & **block_sparse**. For the sequence length < 1024, using
   **original_full** is advised as there is no benefit in using **block_sparse** attention.
 - The code currently uses window size of 3 blocks and 2 global blocks.
@@ -48,7 +50,8 @@ Tips:
 - Current implementation supports only **ITC**.
 - Current implementation doesn't support **num_random_blocks = 0**
 
-The original code can be found `here <https://github.com/google-research/bigbird>`__.
+This model was contributed by `vasudevgupta <https://huggingface.co/vasudevgupta>`__. The original code can be found
+`here <https://github.com/google-research/bigbird>`__.
 
 BigBirdConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

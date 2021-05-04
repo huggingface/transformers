@@ -56,31 +56,32 @@ Tips:
 
 .. code-block::
 
-   def normalize_bbox(bbox, width, height):
-        return [
-            int(1000 * (bbox[0] / width)),
-            int(1000 * (bbox[1] / height)),
-            int(1000 * (bbox[2] / width)),
-            int(1000 * (bbox[3] / height)),
-        ]
+    def normalize_bbox(bbox, width, height):
+         return [
+             int(1000 * (bbox[0] / width)),
+             int(1000 * (bbox[1] / height)),
+             int(1000 * (bbox[2] / width)),
+             int(1000 * (bbox[3] / height)),
+         ]
 
 Here, :obj:`width` and :obj:`height` correspond to the width and height of the original document in which the token
 occurs. Those can be obtained using the Python Image Library (PIL) library for example, as follows:
 
 .. code-block::
 
-   from PIL import Image
+    from PIL import Image
 
-   image = Image.open("name_of_your_document - can be a png file, pdf, etc.")
+    image = Image.open("name_of_your_document - can be a png file, pdf, etc.")
 
-   width, height = image.size
+    width, height = image.size
 
 - For a demo which shows how to fine-tune :class:`LayoutLMForTokenClassification` on the `FUNSD dataset
   <https://guillaumejaume.github.io/FUNSD/>`__ (a collection of annotated forms), see `this notebook
   <https://github.com/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Fine_tuning_LayoutLMForTokenClassification_on_FUNSD.ipynb>`__.
   It includes an inference part, which shows how to use Google's Tesseract on a new document.
 
-The original code can be found `here <https://github.com/microsoft/unilm/tree/master/layoutlm>`_.
+This model was contributed by `liminghao1630 <https://huggingface.co/liminghao1630>`__. The original code can be found
+`here <https://github.com/microsoft/unilm/tree/master/layoutlm>`_.
 
 
 LayoutLMConfig

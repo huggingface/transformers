@@ -148,7 +148,6 @@ class GenerationTesterMixin:
         }
         beam_scorer = BeamSearchScorer(
             batch_size=batch_size,
-            max_length=max_length,
             num_beams=beam_kwargs["num_beams"],
             device=torch_device,
             length_penalty=beam_kwargs["length_penalty"],
@@ -169,7 +168,6 @@ class GenerationTesterMixin:
         }
         beam_scorer = BeamSearchScorer(
             batch_size=batch_size,
-            max_length=max_length,
             num_beams=beam_kwargs["num_beams"],
             device=torch_device,
             length_penalty=beam_kwargs["length_penalty"],
@@ -1358,13 +1356,14 @@ class GenerationIntegrationTests(unittest.TestCase):
             bos_token_id=bart_model.config.bos_token_id,
         )
 
-        bart_model.greedy_search(
-            input_ids,
-            max_length=max_length,
-            pad_token_id=bart_model.config.pad_token_id,
-            eos_token_id=bart_model.config.eos_token_id,
-            **model_kwargs,
-        )
+        with self.assertWarns(UserWarning):
+            bart_model.greedy_search(
+                input_ids,
+                max_length=max_length,
+                pad_token_id=bart_model.config.pad_token_id,
+                eos_token_id=bart_model.config.eos_token_id,
+                **model_kwargs,
+            )
 
     def test_max_length_backward_compat_sample(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
@@ -1381,13 +1380,14 @@ class GenerationIntegrationTests(unittest.TestCase):
             bos_token_id=bart_model.config.bos_token_id,
         )
         with torch.no_grad():
-            bart_model.sample(
-                input_ids,
-                max_length=max_length,
-                pad_token_id=bart_model.config.pad_token_id,
-                eos_token_id=bart_model.config.eos_token_id,
-                **model_kwargs,
-            )
+            with self.assertWarns(UserWarning):
+                bart_model.sample(
+                    input_ids,
+                    max_length=max_length,
+                    pad_token_id=bart_model.config.pad_token_id,
+                    eos_token_id=bart_model.config.eos_token_id,
+                    **model_kwargs,
+                )
 
     def test_max_length_backward_compat_beam_search(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
@@ -1409,13 +1409,13 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         beam_scorer = BeamSearchScorer(
             batch_size=batch_size,
-            max_length=max_length,
             num_beams=num_beams,
             device=torch_device,
         )
-        _ = bart_model.beam_search(
-            input_ids, num_beams=num_beams, max_length=max_length, beam_scorer=beam_scorer, **model_kwargs
-        )
+        with self.assertWarns(UserWarning):
+            _ = bart_model.beam_search(
+                input_ids, num_beams=num_beams, max_length=max_length, beam_scorer=beam_scorer, **model_kwargs
+            )
 
     def test_max_length_backward_compat_group_beam_search(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
@@ -1439,15 +1439,15 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         diverse_beam_scorer = BeamSearchScorer(
             batch_size=batch_size,
-            max_length=max_length,
             num_beams=num_beams,
             device=torch_device,
             num_beam_hyps_to_keep=num_return_sequences,
             num_beam_groups=num_beam_groups,
         )
-        bart_model.group_beam_search(
-            input_ids, diverse_beam_scorer, num_beams=num_beams, max_length=max_length, **model_kwargs
-        )
+        with self.assertWarns(UserWarning):
+            bart_model.group_beam_search(
+                input_ids, diverse_beam_scorer, num_beams=num_beams, max_length=max_length, **model_kwargs
+            )
 
     def test_max_length_warning_if_different(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
@@ -1498,7 +1498,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         # Beam
         beam_scorer = BeamSearchScorer(
             batch_size=batch_size,
-            max_length=max_length,
             num_beams=num_beams,
             device=torch_device,
         )
@@ -1516,7 +1515,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         # Grouped beam search
         diverse_beam_scorer = BeamSearchScorer(
             batch_size=batch_size,
-            max_length=max_length,
             num_beams=num_beams,
             device=torch_device,
             num_beam_hyps_to_keep=num_return_sequences,
@@ -1531,3 +1529,51 @@ class GenerationIntegrationTests(unittest.TestCase):
                 max_length=max_length,
                 **model_kwargs,
             )
+
+    def test_beam_search_warning_if_max_length_is_passed(self):
+        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
+        bart_tokenizer = BartTokenizer.from_pretrained("sshleifer/bart-tiny-random")
+        bart_model = BartForConditionalGeneration.from_pretrained("sshleifer/bart-tiny-random").to(torch_device)
+
+        batch_size = 1
+        num_beams = 3
+
+        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+        input_ids = input_ids.expand(num_beams, -1)
+        model_kwargs = bart_model._prepare_encoder_decoder_kwargs_for_generation(input_ids, {})
+
+        stopping_criteria_max_length = 18
+        stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=stopping_criteria_max_length)])
+
+        with self.assertWarns(UserWarning):
+            beam_scorer = BeamSearchScorer(
+                batch_size=batch_size,
+                num_beams=num_beams,
+                device=torch_device,
+                max_length=10,
+            )
+
+        generated_ids = bart_model.beam_search(
+            input_ids,
+            num_beams=num_beams,
+            stopping_criteria=stopping_criteria,
+            beam_scorer=beam_scorer,
+            **model_kwargs,
+        )
+
+        beam_scorer_no_max_len = BeamSearchScorer(
+            batch_size=batch_size,
+            num_beams=num_beams,
+            device=torch_device,
+        )
+
+        generated_ids_no_max_len = bart_model.beam_search(
+            input_ids,
+            num_beams=num_beams,
+            stopping_criteria=stopping_criteria,
+            beam_scorer=beam_scorer_no_max_len,
+            **model_kwargs,
+        )
+
+        # BeamSearchScorer max_length should not influence "real" max_length
+        self.assertEqual(generated_ids.tolist(), generated_ids_no_max_len.tolist())

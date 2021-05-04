@@ -22,30 +22,41 @@ import os
 from typing import Any, Dict, Tuple, Union
 
 from . import __version__
-from .file_utils import CONFIG_NAME, cached_path, hf_bucket_url, is_offline_mode, is_remote_url
+from .file_utils import CONFIG_NAME, PushToHubMixin, cached_path, hf_bucket_url, is_offline_mode, is_remote_url
 from .utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class PretrainedConfig(object):
+class PretrainedConfig(PushToHubMixin):
     r"""
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
     methods for loading/downloading/saving configurations.
 
-    Note: A configuration file can be loaded and saved to disk. Loading the configuration file and using this file to
-    initialize a model does **not** load the model weights. It only affects the model's configuration.
+    Note:
+        A configuration file can be loaded and saved to disk. Loading the configuration file and using this file to
+        initialize a model does **not** load the model weights. It only affects the model's configuration.
 
     Class attributes (overridden by derived classes)
 
-        - **model_type** (:obj:`str`): An identifier for the model type, serialized into the JSON file, and used to
+        - **model_type** (:obj:`str`) -- An identifier for the model type, serialized into the JSON file, and used to
           recreate the correct object in :class:`~transformers.AutoConfig`.
-        - **is_composition** (:obj:`bool`): Whether the config class is composed of multiple sub-configs. In this case
-          the config has to be initialized from two or more configs of type :class:`~transformers.PretrainedConfig`
-          like: :class:`~transformers.EncoderDecoderConfig` or :class:`~RagConfig`.
-        - **keys_to_ignore_at_inference** (:obj:`List[str]`): A list of keys to ignore by default when looking at
+        - **is_composition** (:obj:`bool`) -- Whether the config class is composed of multiple sub-configs. In this
+          case the config has to be initialized from two or more configs of type
+          :class:`~transformers.PretrainedConfig` like: :class:`~transformers.EncoderDecoderConfig` or
+          :class:`~RagConfig`.
+        - **keys_to_ignore_at_inference** (:obj:`List[str]`) -- A list of keys to ignore by default when looking at
           dictionary outputs of the model during inference.
+
+    Common attributes (present in all subclasses)
+
+        - **vocab_size** (:obj:`int`) -- The number of tokens in the vocabulary, which is also the first dimension of
+          the embeddings matrix (this attribute may be missing for models that don't have a text modality like ViT).
+        - **hidden_size** (:obj:`int`) -- The hidden size of the model.
+        - **num_attention_heads** (:obj:`int`) -- The number of attention heads used in the multi-head attention layers
+          of the model.
+        - **num_hidden_layers** (:obj:`int`) -- The number of blocks in the model.
 
     Args:
         name_or_path (:obj:`str`, `optional`, defaults to :obj:`""`):
@@ -152,6 +163,14 @@ class PretrainedConfig(object):
           typically for a classification task.
         - **task_specific_params** (:obj:`Dict[str, Any]`, `optional`) -- Additional keyword arguments to store for the
           current task.
+        - **problem_type** (:obj:`str`, `optional`) -- Problem type for :obj:`XxxForSequenceClassification` models. Can
+          be one of (:obj:`"regression"`, :obj:`"single_label_classification"`, :obj:`"multi_label_classification"`).
+          Please note that this parameter is only available in the following models: `AlbertForSequenceClassification`,
+          `BertForSequenceClassification`, `BigBirdForSequenceClassification`, `ConvBertForSequenceClassification`,
+          `DistilBertForSequenceClassification`, `ElectraForSequenceClassification`, `FunnelForSequenceClassification`,
+          `LongformerForSequenceClassification`, `MobileBertForSequenceClassification`,
+          `ReformerForSequenceClassification`, `RobertaForSequenceClassification`,
+          `SqueezeBertForSequenceClassification`, `XLMForSequenceClassification` and `XLNetForSequenceClassification`.
 
     Parameters linked to the tokenizer
 
@@ -249,9 +268,18 @@ class PretrainedConfig(object):
         # task specific arguments
         self.task_specific_params = kwargs.pop("task_specific_params", None)
 
+        # regression / multi-label classification
+        self.problem_type = kwargs.pop("problem_type", None)
+        allowed_problem_types = ("regression", "single_label_classification", "multi_label_classification")
+        if self.problem_type is not None and self.problem_type not in allowed_problem_types:
+            raise ValueError(
+                f"The config parameter `problem_type` wasnot understood: received {self.problem_type}"
+                "but only 'regression', 'single_label_classification' and 'multi_label_classification' are valid."
+            )
+
         # TPU arguments
         if kwargs.pop("xla_device", None) is not None:
-            logger.warn(
+            logger.warning(
                 "The `xla_device` argument has been deprecated in v4.4.0 of Transformers. It is ignored and you can "
                 "safely remove it from your `config.json` file."
             )
@@ -260,14 +288,14 @@ class PretrainedConfig(object):
         self._name_or_path = str(kwargs.pop("name_or_path", ""))
 
         # Drop the transformers version info
-        kwargs.pop("transformers_version", None)
+        self.transformers_version = kwargs.pop("transformers_version", None)
 
         # Additional attributes without default values
         for key, value in kwargs.items():
             try:
                 setattr(self, key, value)
             except AttributeError as err:
-                logger.error("Can't set {} with value {} for {}".format(key, value, self))
+                logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
 
     @property
@@ -296,10 +324,10 @@ class PretrainedConfig(object):
     @num_labels.setter
     def num_labels(self, num_labels: int):
         if self.id2label is None or len(self.id2label) != num_labels:
-            self.id2label = {i: "LABEL_{}".format(i) for i in range(num_labels)}
+            self.id2label = {i: f"LABEL_{i}" for i in range(num_labels)}
             self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike]):
+    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
         """
         Save a configuration object to the directory ``save_directory``, so that it can be re-loaded using the
         :func:`~transformers.PretrainedConfig.from_pretrained` class method.
@@ -307,15 +335,24 @@ class PretrainedConfig(object):
         Args:
             save_directory (:obj:`str` or :obj:`os.PathLike`):
                 Directory where the configuration JSON file will be saved (will be created if it does not exist).
+            push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to push your model to the Hugging Face model hub after saving it.
+            kwargs:
+                Additional key word arguments passed along to the
+                :meth:`~transformers.file_utils.PushToHubMixin.push_to_hub` method.
         """
         if os.path.isfile(save_directory):
-            raise AssertionError("Provided path ({}) should be a directory, not a file".format(save_directory))
+            raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
         os.makedirs(save_directory, exist_ok=True)
         # If we save using the predefined names, we can load using `from_pretrained`
         output_config_file = os.path.join(save_directory, CONFIG_NAME)
 
         self.to_json_file(output_config_file, use_diff=True)
         logger.info(f"Configuration saved in {output_config_file}")
+
+        if push_to_hub:
+            url = self._push_to_hub(save_files=[output_config_file], **kwargs)
+            logger.info(f"Configuration pushed to the hub in this commit: {url}")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -388,10 +425,11 @@ class PretrainedConfig(object):
 
         """
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-        if config_dict.get("model_type", False) and hasattr(cls, "model_type"):
-            assert (
-                config_dict["model_type"] == cls.model_type
-            ), f"You tried to initiate a model of type '{cls.model_type}' with a pretrained model of type '{config_dict['model_type']}'"
+        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+            logger.warn(
+                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+            )
 
         return cls.from_dict(config_dict, **kwargs)
 
@@ -420,6 +458,12 @@ class PretrainedConfig(object):
         use_auth_token = kwargs.pop("use_auth_token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
+        from_pipeline = kwargs.pop("_from_pipeline", None)
+        from_auto_class = kwargs.pop("_from_auto", False)
+
+        user_agent = {"file_type": "config", "from_auto_class": from_auto_class}
+        if from_pipeline is not None:
+            user_agent["using_pipeline"] = from_pipeline
 
         if is_offline_mode() and not local_files_only:
             logger.info("Offline mode: forcing local_files_only=True")
@@ -445,6 +489,7 @@ class PretrainedConfig(object):
                 resume_download=resume_download,
                 local_files_only=local_files_only,
                 use_auth_token=use_auth_token,
+                user_agent=user_agent,
             )
             # Load config dict
             config_dict = cls._dict_from_json_file(resolved_config_file)
@@ -460,16 +505,16 @@ class PretrainedConfig(object):
 
         except json.JSONDecodeError:
             msg = (
-                "Couldn't reach server at '{}' to download configuration file or "
+                f"Couldn't reach server at '{config_file}' to download configuration file or "
                 "configuration file is not a valid JSON file. "
-                "Please check network or file content here: {}.".format(config_file, resolved_config_file)
+                f"Please check network or file content here: {resolved_config_file}."
             )
             raise EnvironmentError(msg)
 
         if resolved_config_file == config_file:
-            logger.info("loading configuration file {}".format(config_file))
+            logger.info(f"loading configuration file {config_file}")
         else:
-            logger.info("loading configuration file {} from cache at {}".format(config_file, resolved_config_file))
+            logger.info(f"loading configuration file {config_file} from cache at {resolved_config_file}")
 
         return config_dict, kwargs
 
@@ -505,7 +550,7 @@ class PretrainedConfig(object):
         for key in to_remove:
             kwargs.pop(key, None)
 
-        logger.info("Model config %s", str(config))
+        logger.info(f"Model config {config}")
         if return_unused_kwargs:
             return config, kwargs
         else:
@@ -537,7 +582,7 @@ class PretrainedConfig(object):
         return self.__dict__ == other.__dict__
 
     def __repr__(self):
-        return "{} {}".format(self.__class__.__name__, self.to_json_string())
+        return f"{self.__class__.__name__} {self.to_json_string()}"
 
     def to_diff_dict(self) -> Dict[str, Any]:
         """

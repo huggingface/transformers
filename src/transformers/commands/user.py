@@ -99,15 +99,15 @@ class ANSI:
 
     @classmethod
     def bold(cls, s):
-        return "{}{}{}".format(cls._bold, s, cls._reset)
+        return f"{cls._bold}{s}{cls._reset}"
 
     @classmethod
     def red(cls, s):
-        return "{}{}{}".format(cls._bold + cls._red, s, cls._reset)
+        return f"{cls._bold}{cls._red}{s}{cls._reset}"
 
     @classmethod
     def gray(cls, s):
-        return "{}{}{}".format(cls._gray, s, cls._reset)
+        return f"{cls._gray}{s}{cls._reset}"
 
 
 def tabulate(rows: List[List[Union[str, int]]], headers: List[str]) -> str:
@@ -268,8 +268,8 @@ class RepoCreateCommand(BaseUserCommand):
 
         user, _ = self._api.whoami(token)
         namespace = self.args.organization if self.args.organization is not None else user
-
-        print("You are about to create {}".format(ANSI.bold(namespace + "/" + self.args.name)))
+        full_name = f"{namespace}/{self.args.name}"
+        print(f"You are about to create {ANSI.bold(full_name)}")
 
         if not self.args.yes:
             choice = input("Proceed? [Y/n] ").lower()
@@ -283,7 +283,7 @@ class RepoCreateCommand(BaseUserCommand):
             print(ANSI.red(e.response.text))
             exit(1)
         print("\nYour repo now lives at:")
-        print("  {}".format(ANSI.bold(url)))
+        print(f"  {ANSI.bold(url)}")
         print("\nYou can clone it locally with the command below," " and commit/push as usual.")
         print(f"\n  git clone {url}")
         print("")
@@ -328,16 +328,15 @@ class UploadCommand(BaseUserCommand):
             filename = self.args.filename if self.args.filename is not None else os.path.basename(local_path)
             files = [(local_path, filename)]
         else:
-            raise ValueError("Not a valid file or directory: {}".format(local_path))
+            raise ValueError(f"Not a valid file or directory: {local_path}")
 
         if sys.platform == "win32":
             files = [(filepath, filename.replace(os.sep, "/")) for filepath, filename in files]
 
         if len(files) > UPLOAD_MAX_FILES:
             print(
-                "About to upload {} files to S3. This is probably wrong. Please filter files before uploading.".format(
-                    ANSI.bold(len(files))
-                )
+                f"About to upload {ANSI.bold(len(files))} files to S3. This is probably wrong. Please filter files "
+                "before uploading."
             )
             exit(1)
 
@@ -346,9 +345,8 @@ class UploadCommand(BaseUserCommand):
 
         for filepath, filename in files:
             print(
-                "About to upload file {} to S3 under filename {} and namespace {}".format(
-                    ANSI.bold(filepath), ANSI.bold(filename), ANSI.bold(namespace)
-                )
+                f"About to upload file {ANSI.bold(filepath)} to S3 under filename {ANSI.bold(filename)} and namespace "
+                f"{ANSI.bold(namespace)}"
             )
 
         if not self.args.yes:
