@@ -145,10 +145,12 @@ class PegasusTokenizer(PreTrainedTokenizer):
         }
 
         if self.mask_token_sent is not None:
-            self.encoder.update({
-                2: self.mask_token_sent,
-                3: self.mask_token,
-            })
+            self.encoder.update(
+                {
+                    2: self.mask_token_sent,
+                    3: self.mask_token,
+                }
+            )
 
         if self.offset > 0:
             # entries 2-104 are only used for pretraining and called <mask_1>, <mask_2>, unk_2, ...unk_102
@@ -216,9 +218,9 @@ class PegasusTokenizer(PreTrainedTokenizer):
         all_special_ids = set(self.all_special_ids)  # call it once instead of inside list comp
         all_special_ids.remove(self.unk_token_id)  # <unk> is only sometimes special
 
-#        assert all_special_ids == set(
-#            range(len(self.additional_special_tokens) + 3)
-#        ), f"There should be 3 special tokens: mask_token, pad_token, and eos_token + {len(self.additional_special_tokens)} additional_special_tokens, but got {all_special_ids}"
+        #        assert all_special_ids == set(
+        #            range(len(self.additional_special_tokens) + 3)
+        #        ), f"There should be 3 special tokens: mask_token, pad_token, and eos_token + {len(self.additional_special_tokens)} additional_special_tokens, but got {all_special_ids}"
 
         return [1 if x in all_special_ids else 0 for x in seq]
 

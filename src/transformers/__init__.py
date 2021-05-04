@@ -1535,10 +1535,7 @@ if TYPE_CHECKING:
     from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
     from .models.bertweet import BertweetTokenizer
     from .models.big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig, BigBirdTokenizer
-    from .models.bigbird_pegasus import (
-        BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        BigBirdPegasusConfig,
-    )
+    from .models.bigbird_pegasus import BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdPegasusConfig
     from .models.blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig, BlenderbotTokenizer
     from .models.blenderbot_small import (
         BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,

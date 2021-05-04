@@ -639,7 +639,7 @@ class PegasusConverter(SpmConverter):
 
         if self.original_tokenizer.mask_token_sent is not None:
             vocab += [
-                (self.original_tokenizer.mask_token_sent, 0.0), 
+                (self.original_tokenizer.mask_token_sent, 0.0),
                 (self.original_tokenizer.mask_token, 0.0),
             ]
 

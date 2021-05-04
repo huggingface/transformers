@@ -48,6 +48,7 @@ MODEL_ID = "vasudevgupta/bigbird-pegasus-large-pubmed"
 # TODO
 # bigbird fast tests will have problem of attention type switching
 
+
 def prepare_bigbird_pegasus_inputs_dict(
     config,
     input_ids,
@@ -372,7 +373,6 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 @require_tokenizers
 @slow
 class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
-
     def _get_dummy_input_ids(self):
         # fmt: off
         ids = torch.tensor(
@@ -439,7 +439,9 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
 
     def test_seq_to_seq_generation(self):
 
-        model = BigBirdPegasusForConditionalGeneration.from_pretrained(MODEL_ID, attention_type="block_sparse", block_size=16, num_random_blocks=3)
+        model = BigBirdPegasusForConditionalGeneration.from_pretrained(
+            MODEL_ID, attention_type="block_sparse", block_size=16, num_random_blocks=3
+        )
         model.to(torch_device)
         tokenizer = PegasusTokenizer.from_pretrained(MODEL_ID)
 

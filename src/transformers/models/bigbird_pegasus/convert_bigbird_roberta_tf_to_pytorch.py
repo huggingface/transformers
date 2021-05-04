@@ -20,7 +20,8 @@ import tensorflow as tf
 import torch
 from tqdm import tqdm
 
-from transformers import EncoderDecoderModel, EncoderDecoderConfig, BigBirdConfig
+from transformers import BigBirdConfig, EncoderDecoderConfig, EncoderDecoderModel
+
 
 PATTERNS = [
     # tf -> hf
@@ -87,7 +88,21 @@ def convert_bigbird_roberta(tf_weights: dict) -> EncoderDecoderModel:
         k
         for k in missing
         if k
-        not in ['encoder.embeddings.position_ids', 'encoder.pooler.weight', 'encoder.pooler.bias', 'decoder.bert.embeddings.position_ids', 'decoder.bert.pooler.weight', 'decoder.bert.pooler.bias', 'decoder.cls.predictions.bias', 'decoder.cls.predictions.transform.dense.weight', 'decoder.cls.predictions.transform.dense.bias', 'decoder.cls.predictions.transform.LayerNorm.weight', 'decoder.cls.predictions.transform.LayerNorm.bias', 'decoder.cls.predictions.decoder.weight', 'decoder.cls.predictions.decoder.bias']
+        not in [
+            "encoder.embeddings.position_ids",
+            "encoder.pooler.weight",
+            "encoder.pooler.bias",
+            "decoder.bert.embeddings.position_ids",
+            "decoder.bert.pooler.weight",
+            "decoder.bert.pooler.bias",
+            "decoder.cls.predictions.bias",
+            "decoder.cls.predictions.transform.dense.weight",
+            "decoder.cls.predictions.transform.dense.bias",
+            "decoder.cls.predictions.transform.LayerNorm.weight",
+            "decoder.cls.predictions.transform.LayerNorm.bias",
+            "decoder.cls.predictions.decoder.weight",
+            "decoder.cls.predictions.decoder.bias",
+        ]
     ]
     assert unexpected_missing == [], f"no matches found for the following torch keys {unexpected_missing}"
     assert extra == [], f"no matches found for the following tf keys {extra}"
