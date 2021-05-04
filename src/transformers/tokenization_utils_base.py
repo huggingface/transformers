@@ -1805,7 +1805,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
             # Sort added tokens by index
             added_tok_encoder_sorted = list(sorted(added_tok_encoder.items(), key=lambda x: x[1]))
-
             for token, index in added_tok_encoder_sorted:
                 assert index == len(tokenizer), (
                     f"Non-consecutive added token '{token}' found. "
