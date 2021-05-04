@@ -341,6 +341,67 @@ class FlaxBartEncoderLayer(nn.Module):
         return outputs
 
 
+class FlaxBartEncoderLayerCollection(nn.Module):
+    config: BartConfig
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        self.layers = [
+            FlaxBartEncoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
+        ]
+        self.layerdrop = self.config.encoder_layerdrop
+
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask,
+        head_mask,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        all_attentions = () if output_attentions else None
+        all_hidden_states = () if output_hidden_states else None
+
+        # check if head_mask has a correct number of layers specified if desired
+        if head_mask is not None:
+            assert head_mask.shape[0] == (
+                len(self.layers)
+            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.shape[0]}."
+
+        for idx, encoder_layer in enumerate(self.layers):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            dropout_probability = random.uniform(0, 1)
+            if deterministic and (dropout_probability < self.layerdrop):  # skip the layer
+                hidden_states, attn = (None, None)
+
+            hidden_states, attn = encoder_layer(
+                hidden_states,
+                attention_mask,
+                head_mask[idx] if head_mask is not None else None,
+                True,  # we want to always output attentions at this step (at least so far for debugging purposes :) )
+                deterministic,
+            )
+
+            if output_attentions:
+                all_attentions = all_attentions + (attn,)
+
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        outputs = (hidden_states, all_hidden_states, all_attentions)
+
+        if not return_dict:
+            return tuple(v for v in outputs if v is not None)
+
+        return FlaxBaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        )
+
+
 class FlaxBartDecoderLayer(nn.Module):
     config: BartConfig
     dtype: jnp.dtype = jnp.float32
@@ -459,6 +520,88 @@ class FlaxBartDecoderLayer(nn.Module):
             outputs += (present_key_value,)
 
         return outputs
+
+
+class FlaxBartDecoderLayerCollection(nn.Module):
+    config: BartConfig
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        self.layers = [
+            FlaxBartDecoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
+        ]
+        self.layerdrop = self.config.encoder_layerdrop
+
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask,
+        encoder_hidden_states,
+        encoder_attention_mask,
+        head_mask,
+        cross_attn_head_mask,
+        past_key_values,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        use_cache: bool = True,
+        return_dict: bool = True,
+    ):
+        # decoder layers
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
+        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
+        next_decoder_cache = () if use_cache else None
+
+        for idx, decoder_layer in enumerate(self.layers):
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+                # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            dropout_probability = random.uniform(0, 1)
+            if deterministic and (dropout_probability < self.layerdrop):
+                continue
+
+            past_key_value = past_key_values[idx] if past_key_values is not None else None
+
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                layer_head_mask=head_mask[idx] if head_mask is not None else None,
+                cross_attn_layer_head_mask=cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                deterministic=deterministic,
+            )
+            hidden_states = layer_outputs[0]
+
+            if use_cache:
+                next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
+
+            if output_attentions:
+                all_self_attns += (layer_outputs[1],)
+
+                if encoder_hidden_states is not None:
+                    all_cross_attentions += (layer_outputs[2],)
+
+        # add hidden states from the last decoder layer
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        outputs = [hidden_states, next_decoder_cache, all_hidden_states, all_self_attns, all_cross_attentions]
+
+        if not return_dict:
+            return tuple(v for v in outputs if v is not None)
+
+        return FlaxBaseModelOutputWithPastAndCrossAttentions(
+            last_hidden_state=hidden_states,
+            past_key_values=next_decoder_cache,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+            cross_attentions=all_cross_attentions,
+        )
 
 
 class FlaxBartClassificationHead(nn.Module):
@@ -726,7 +869,6 @@ class FlaxBartEncoder(nn.Module):
     def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
         self.layerdrop = self.config.encoder_layerdrop
-        self.layerdrop_layer = nn.Dropout(rate=self.config.encoder_layerdrop)
 
         embed_dim = self.config.d_model
         self.padding_idx = self.config.pad_token_id
@@ -741,14 +883,18 @@ class FlaxBartEncoder(nn.Module):
                 dtype=self.dtype,
             )
 
-        self.embed_positions = FlaxBartLearnedPositionalEmbedding(
-            self.config.max_position_embeddings,
+        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # and adjust num_embeddings appropriately. Other models don't have this hack
+        self.offset = 2
+
+        self.embed_positions = nn.Embed(
+            self.config.max_position_embeddings + self.offset,
             embed_dim,
-            self.config,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            dtype=self.dtype,
         )
-        self.layers = [
-            FlaxBartEncoderLayer(self.config, dtype=self.dtype) for _ in range(self.config.num_hidden_layers)
-        ]
+
+        self.layers = FlaxBartEncoderLayerCollection(self.config, self.dtype)
         self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
 
     def __call__(
@@ -819,7 +965,7 @@ class FlaxBartEncoder(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        embed_pos = self.embed_positions(input_shape)
+        embed_pos = self.embed_positions(jnp.arange(input_shape[1], dtype=jnp.uint32) + self.offset)
 
         hidden_states = inputs_embeds + embed_pos
         hidden_states = self.layernorm_embedding(hidden_states)
@@ -830,40 +976,13 @@ class FlaxBartEncoder(nn.Module):
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
 
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
-        # check if head_mask has a correct number of layers specified if desired
-        if head_mask is not None:
-            assert head_mask.shape[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.shape[0]}."
-        for idx, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
-            if deterministic and (dropout_probability < self.layerdrop):  # skip the layer
-                hidden_states, attn = (None, None)
-
-            hidden_states, attn = encoder_layer(
-                hidden_states,
-                attention_mask,
-                head_mask[idx] if head_mask is not None else None,
-                True,  # we want to always output attentions at this step (at least so far for debugging purposes :) )
-                deterministic,
-            )
-
-            if output_attentions:
-                all_attentions = all_attentions + (attn,)
-
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
+        outputs = self.layers(hidden_states, attention_mask, head_mask, deterministic=deterministic, output_attentions=output_attentions, output_hidden_states=output_hidden_states, return_dict=return_dict)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
+            return outputs
+
         return FlaxBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+            last_hidden_state=outputs.last_hidden_state, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
 
 
@@ -883,7 +1002,6 @@ class FlaxBartDecoder(nn.Module):
     def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
         self.layerdrop = self.config.decoder_layerdrop
-        self.layerdrop_layer = nn.Dropout(rate=self.layerdrop)
 
         embed_dim = self.config.d_model
         self.padding_idx = self.config.pad_token_id
@@ -898,12 +1016,18 @@ class FlaxBartDecoder(nn.Module):
                 dtype=self.dtype,
             )
 
-        self.embed_positions = FlaxBartLearnedPositionalEmbedding(
-            self.config.max_position_embeddings,
+        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # and adjust num_embeddings appropriately. Other models don't have this hack
+        self.offset = 2
+
+        self.embed_positions = nn.Embed(
+            self.config.max_position_embeddings + self.offset,
             embed_dim,
-            self.config,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            dtype=self.dtype,
         )
-        self.layers = [FlaxBartDecoderLayer(self.config, dtype=self.dtype) for _ in range(self.config.decoder_layers)]
+
+        self.layers = FlaxBartDecoderLayerCollection(self.config, self.dtype)
         self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
 
     def get_input_embeddings(self):
@@ -1042,75 +1166,37 @@ class FlaxBartDecoder(nn.Module):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # embed positions
-        positions = self.embed_positions(input_shape, past_key_values_length)
+        positions = self.embed_positions(jnp.arange(past_key_values_length, input_shape[1] + past_key_values_length, dtype=jnp.uint32) + self.offset)
 
         hidden_states = inputs_embeds + positions
         hidden_states = self.layernorm_embedding(hidden_states)
 
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
 
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
-        next_decoder_cache = () if use_cache else None
+        outputs = self.layers(
+            hidden_states,
+            attention_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
+            head_mask=head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            past_key_values=past_key_values,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            use_cache=use_cache,
+            return_dict=return_dict,
+        )
 
-        # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
-        for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
-            if attn_mask is not None:
-                assert attn_mask.shape[0] == (
-                    len(self.layers)
-                ), f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.shape[0]}."
-        for idx, decoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-                # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
-            if deterministic and (dropout_probability < self.layerdrop):
-                continue
-
-            past_key_value = past_key_values[idx] if past_key_values is not None else None
-
-            layer_outputs = decoder_layer(
-                hidden_states,
-                attention_mask=attention_mask,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask,
-                layer_head_mask=head_mask[idx] if head_mask is not None else None,
-                cross_attn_layer_head_mask=cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                past_key_value=past_key_value,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
-                deterministic=deterministic,
-            )
-            hidden_states = layer_outputs[0]
-
-            if use_cache:
-                next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
-                if encoder_hidden_states is not None:
-                    all_cross_attentions += (layer_outputs[2],)
-
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_cross_attentions]
-                if v is not None
-            )
+            return outputs
+
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=hidden_states,
-            past_key_values=next_cache,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-            cross_attentions=all_cross_attentions,
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
         )
 
 
@@ -1234,7 +1320,7 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
     def setup(self):
         self.model = FlaxBartModule(config=self.config, dtype=self.dtype)
         self.lm_head = nn.Dense(self.model.shared.num_embeddings, use_bias=False, dtype=self.dtype)
-        self.final_logits_bias = self.param("final_logits_bias", self.bias_init, self.model.shared.num_embeddings)
+        self.final_logits_bias = self.param("final_logits_bias", self.bias_init, (1, self.model.shared.num_embeddings))
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     def __call__(
@@ -1275,7 +1361,15 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
             deterministic=deterministic,
         )
 
-        lm_logits = self.lm_head(outputs[0]) + self.final_logits_bias
+        hidden_states = outputs[0]
+
+        if self.config.tie_word_embeddings:
+            shared_embedding = self.model.variables["params"]["shared"]["embedding"]
+            lm_logits = self.lm_head.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
+        else:
+            lm_logits = self.lm_head(hidden_states)
+
+        lm_logits += self.final_logits_bias[0]
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
