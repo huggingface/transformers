@@ -1192,10 +1192,12 @@ class Trainer:
                 if self.is_local_process_zero() and not args.disable_tqdm:
                     steps_trained_progress_bar = tqdm(total=steps_trained_in_current_epoch)
                     steps_trained_progress_bar.set_description("Skipping the first batches")
-        
+
         # RNG states
         checkpoint_rng_state = None
-        if resume_from_checkpoint is not None and os.path.isfile(os.path.join(resume_from_checkpoint, "rng_state.pth")):
+        if resume_from_checkpoint is not None and os.path.isfile(
+            os.path.join(resume_from_checkpoint, "rng_state.pth")
+        ):
             checkpoint_rng_state = torch.load(os.path.join(resume_from_checkpoint, "rng_state.pth"))
 
         # Update the references
@@ -1227,7 +1229,7 @@ class Trainer:
                 # We just need to begin an iteration to create the randomization of the sampler.
                 for _ in train_dataloader:
                     break
-        
+
         for epoch in range(epochs_trained, num_train_epochs):
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
@@ -1260,7 +1262,24 @@ class Trainer:
                         # We're finished skipping so set the RNG states to be exactly as they were at the
                         # checkpoint time.
                         torch.random.set_rng_state(checkpoint_rng_state["cpu"])
-                        torch.cuda.random.set_rng_state(checkpoint_rng_state["cuda"])
+                        if torch.cuda.is_available():
+                            if args.local_rank != -1:
+                                if f"cuda_{args.local_rank}" not in checkpoint_rng_state:
+                                    logger.warn(
+                                        "You are resuming a training that was launched in a distributed fashion in a "
+                                        "non-distributed way. Reproducibility cannot be guaranteed."
+                                    )
+                                else:
+                                    torch.cuda.random.set_rng_state(checkpoint_rng_state[f"cuda_{args.local_rank}"])
+                            else:
+                                if f"cuda" not in checkpoint_rng_state:
+                                    logger.warn(
+                                        "You are resuming a training that was launched in a non-distributed fashion "
+                                        "with GPUs on either in a distributed fashion or not on GPUs. Reproducibility "
+                                        "cannot be guaranteed."
+                                    )
+                                else:
+                                    torch.cuda.random.set_rng_state_all(checkpoint_rng_state["cuda"])
                     continue
                 elif steps_trained_progress_bar is not None:
                     steps_trained_progress_bar.close()
@@ -1495,12 +1514,19 @@ class Trainer:
         # Maybe delete some older checkpoints.
         if self.is_world_process_zero():
             self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
-        
+
         # Save RNG state in non-distributed training
-        if self.args.world_size <= 1:
-            rng_states = {"cpu": torch.random.get_rng_state(), "cuda": torch.cuda.random.get_rng_state()}
+        if self.is_local_process_zero():
+            rng_states = {"cpu": torch.random.get_rng_state()}
+            if torch.cuda.is_available():
+                if self.args.local_rank == -1:
+                    # In non distributed, we save the global CUDA RNG state (will take care of DataParallel)
+                    rng_states["cuda"] = torch.cuda.random.get_rng_state_all()
+                else:
+                    # In distributed, we save the CUDA RNG states individually.
+                    for i in range(torch.cuda.device_count()):
+                        rng_states[f"cuda_{i}"] = torch.cuda.random.get_rng_state(i)
             torch.save(rng_states, os.path.join(output_dir, "rng_state.pth"))
-        
 
     def _load_optimizer_and_scheduler(self, checkpoint):
         """If optimizer and scheduler states exist, load them."""
