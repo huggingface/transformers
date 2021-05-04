@@ -20,6 +20,7 @@ import collections
 import inspect
 import math
 import os
+import random
 import re
 import shutil
 import sys
@@ -1400,6 +1401,8 @@ class Trainer:
             return
 
         checkpoint_rng_state = torch.load(os.path.join(checkpoint, "rng_state.pth"))
+        random.setstate(checkpoint_rng_state["python"])
+        np.random.set_state(checkpoint_rng_state["numpy"])
         torch.random.set_rng_state(checkpoint_rng_state["cpu"])
         if torch.cuda.is_available():
             if self.args.local_rank != -1:
@@ -1500,7 +1503,11 @@ class Trainer:
 
         # Save RNG state in non-distributed training
         if self.is_local_process_zero():
-            rng_states = {"cpu": torch.random.get_rng_state()}
+            rng_states = {
+                "python": random.getstate(),
+                "numpy": np.random.get_state(),
+                "cpu": torch.random.get_rng_state(),
+            }
             if torch.cuda.is_available():
                 if self.args.local_rank == -1:
                     # In non distributed, we save the global CUDA RNG state (will take care of DataParallel)
