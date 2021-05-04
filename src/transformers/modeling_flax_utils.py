@@ -57,10 +57,6 @@ ACT2FN = {
 }
 
 
-def identity(x, **kwargs):
-    return x
-
-
 class FlaxPreTrainedModel(PushToHubMixin):
     r"""
     Base class for all models.
@@ -429,113 +425,6 @@ class FlaxPreTrainedModel(PushToHubMixin):
             saved_files = [os.path.join(save_directory, CONFIG_NAME), output_model_file]
             url = self._push_to_hub(save_files=saved_files, **kwargs)
             logger.info(f"Model pushed to the hub in this commit: {url}")
-
-
-class SequenceSummary(nn.Module):
-    r"""
-    Compute a single vector summary of a sequence hidden states.
-
-    Args:
-        config (:class:`~transformers.PretrainedConfig`):
-            The config used by the model. Relevant arguments in the config class of the model are (refer to the actual
-            config class of your model for the default values it uses):
-
-            - **summary_type** (:obj:`str`) -- The method to use to make this summary. Accepted values are:
-
-                - :obj:`"last"` -- Take the last token hidden state (like XLNet)
-                - :obj:`"first"` -- Take the first token hidden state (like Bert)
-                - :obj:`"mean"` -- Take the mean of all tokens hidden states
-                - :obj:`"cls_index"` -- Supply a Tensor of classification token position (GPT/GPT-2)
-                - :obj:`"attn"` -- Not implemented now, use multi-head attention
-
-            - **summary_use_proj** (:obj:`bool`) -- Add a projection after the vector extraction.
-            - **summary_proj_to_labels** (:obj:`bool`) -- If :obj:`True`, the projection outputs to
-              :obj:`config.num_labels` classes (otherwise to :obj:`config.hidden_size`).
-            - **summary_activation** (:obj:`Optional[str]`) -- Set to :obj:`"tanh"` to add a tanh activation to the
-              output, another string or :obj:`None` will add no activation.
-            - **summary_first_dropout** (:obj:`float`) -- Optional dropout probability before the projection and
-              activation.
-            - **summary_last_dropout** (:obj:`float`)-- Optional dropout probability after the projection and
-              activation.
-    """
-    config: PretrainedConfig
-    dtype: jnp.dtype = jnp.float32
-
-    def setup(self):
-
-        self.summary_type = getattr(self.config, "summary_type", "last")
-        if self.summary_type == "attn":
-            # We should use a standard multi-head attention module with absolute positional embedding for that.
-            # Cf. https://github.com/zihangdai/xlnet/blob/master/modeling.py#L253-L276
-            # We can probably just use the multi-head attention module of PyTorch >=1.1.0
-            raise NotImplementedError
-
-        self.summary = identity
-        if hasattr(self.config, "summary_use_proj") and self.config.summary_use_proj:
-            if (
-                hasattr(self.config, "summary_proj_to_labels")
-                and self.config.summary_proj_to_labels
-                and self.config.num_labels > 0
-            ):
-                num_classes = self.config.num_labels
-            else:
-                num_classes = self.config.hidden_size
-            self.summary = nn.Dense(num_classes, dtype=self.dtype)
-
-        activation_string = getattr(self.config, "summary_activation", None)
-        self.activation = ACT2FN[activation_string] if activation_string else lambda x: x
-
-        self.first_dropout = identity
-        if hasattr(self.config, "summary_first_dropout") and self.config.summary_first_dropout > 0:
-            self.first_dropout = nn.Dropout(self.config.summary_first_dropout)
-
-        self.last_dropout = identity
-        if hasattr(self.config, "summary_last_dropout") and self.config.summary_last_dropout > 0:
-            self.last_dropout = nn.Dropout(self.config.summary_last_dropout)
-
-    def __call__(self, hidden_states, cls_index=None, deterministic: bool = True):
-        """
-        Compute a single vector summary of a sequence hidden states.
-
-        Args:
-            hidden_states (:obj:`jnp.array` of shape :obj:`[batch_size, seq_len, hidden_size]`):
-                The hidden states of the last layer.
-            cls_index (:obj:`jnp.array` of shape :obj:`[batch_size]` or :obj:`[batch_size, ...]` where ... are optional leading dimensions of :obj:`hidden_states`, `optional`):
-                Used if :obj:`summary_type == "cls_index"` and takes the last token of the sequence as classification
-                token.
-
-        Returns:
-            :obj:`jnp.array`: The summary of the sequence hidden states.
-        """
-        if self.summary_type == "last":
-            output = hidden_states[:, -1]
-        elif self.summary_type == "first":
-            output = hidden_states[:, 0]
-        elif self.summary_type == "mean":
-            output = hidden_states.mean(dim=1)
-        elif self.summary_type == "cls_index":
-            if cls_index is None:
-                cls_index = jnp.full_like(
-                    hidden_states[..., :1, :],
-                    hidden_states.shape[-2] - 1,
-                    dtype=jnp.long,
-                )
-            else:
-                # TODO:
-                raise NotImplementedError
-                # cls_index = cls_index.unsqueeze(-1).unsqueeze(-1)
-                # cls_index = cls_index.expand((-1,) * (cls_index.dim() - 1) + (hidden_states.size(-1),))
-            # shape of cls_index: (bsz, XX, 1, hidden_size) where XX are optional leading dim of hidden_states
-            output = hidden_states.gather(-2, cls_index).squeeze(-2)  # shape (bsz, XX, hidden_size)
-        elif self.summary_type == "attn":
-            raise NotImplementedError
-
-        output = self.first_dropout(output, deterministic=deterministic)
-        output = self.summary(output)
-        output = self.activation(output)
-        output = self.last_dropout(output, deterministic=deterministic)
-
-        return output
 
 
 def overwrite_call_docstring(model_class, docstring):
