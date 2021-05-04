@@ -18,7 +18,13 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_available, is_torch_available
+from ...file_utils import (
+    _BaseLazyModule,
+    is_flax_available,
+    is_tf_available,
+    is_tokenizers_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
@@ -56,6 +62,18 @@ if is_tf_available():
         "TFElectraPreTrainedModel",
     ]
 
+if is_flax_available():
+    _import_structure["modeling_flax_electra"] = [
+        "FlaxElectraForMaskedLM",
+        "FlaxElectraForMultipleChoice",
+        "FlaxElectraForPreTraining",
+        "FlaxElectraForQuestionAnswering",
+        "FlaxElectraForSequenceClassification",
+        "FlaxElectraForTokenClassification",
+        "FlaxElectraModel",
+        "FlaxElectraPreTrainedModel",
+    ]
+
 
 if TYPE_CHECKING:
     from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
@@ -89,6 +107,18 @@ if TYPE_CHECKING:
             TFElectraForTokenClassification,
             TFElectraModel,
             TFElectraPreTrainedModel,
+        )
+
+    if is_flax_available():
+        from .modeling_flax_electra import (
+            FlaxElectraForMaskedLM,
+            FlaxElectraForMultipleChoice,
+            FlaxElectraForPreTraining,
+            FlaxElectraForQuestionAnswering,
+            FlaxElectraForSequenceClassification,
+            FlaxElectraForTokenClassification,
+            FlaxElectraModel,
+            FlaxElectraPreTrainedModel,
         )
 
 else:
