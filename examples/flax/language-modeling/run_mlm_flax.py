@@ -105,6 +105,12 @@ class ModelArguments:
         default=True,
         metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
     )
+    dtype: Optional[str] = field(
+        default="float32",
+        metadata={
+            "help": "Floating-point format in which the model weights should be initialized and trained. Choose one of `[float32, float16, bfloat16]`."
+        },
+    )
 
 
 @dataclass
@@ -161,14 +167,6 @@ class DataTrainingArguments:
             "help": "Whether to pad all samples to `max_seq_length`. "
             "If False, will pad the samples dynamically when batching to the maximum length in the batch."
         },
-    )
-    train_batch_size: int = field(
-        default=32,
-        metadata={"help": "Effective batch size for training over all TPUs"},
-    )
-    eval_batch_size: int = field(
-        default=32,
-        metadata={"help": "Effective batch size for training over all TPUs"},
     )
     line_by_line: bool = field(
         default=False,
@@ -632,7 +630,7 @@ if __name__ == "__main__":
     rng = jax.random.PRNGKey(training_args.seed)
     dropout_rngs = jax.random.split(rng, jax.local_device_count())
 
-    model = FlaxAutoModelForMaskedLM(config, seed=training_args.seed, dtype=model_args.dtype)
+    model = FlaxAutoModelForMaskedLM.from_config(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
 
     # Setup optimizer
     optimizer = Adam(

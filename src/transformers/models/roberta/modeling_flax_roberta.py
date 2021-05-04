@@ -816,7 +816,6 @@ class FlaxRobertaForMultipleChoiceModule(nn.Module):
         return_dict: bool = True,
     ):
         num_choices = input_ids.shape[1]
-
         input_ids = input_ids.reshape(-1, input_ids.shape[-1]) if input_ids is not None else None
         attention_mask = attention_mask.reshape(-1, attention_mask.shape[-1]) if attention_mask is not None else None
         token_type_ids = token_type_ids.reshape(-1, token_type_ids.shape[-1]) if token_type_ids is not None else None
