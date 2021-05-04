@@ -459,16 +459,12 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
             return_tensors="pt",
         )
 
-        hypotheses_batch = model.generate(
-            input_ids=dct["input_ids"].to(torch_device),
-            num_beams=5,
-            length_penalty=0.8,
-        )
+        hypotheses_batch = model.generate(input_ids=dct["input_ids"].to(torch_device))
         generated = tokenizer.batch_decode(hypotheses_batch.tolist())
 
         # fmt: off
         expected = [
-            "<s> the authors present results for properties of short - term periodicities of various indices of solar activity "  # noqa: E231
+            "<s> the properties of the short - term periodicities of various indices of solar activity are studied."
         ]
         # fmt: on
 
