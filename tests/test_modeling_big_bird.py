@@ -433,6 +433,7 @@ class BigBirdModelTest(ModelTesterMixin, unittest.TestCase):
     # head masking & pruning is currently not supported for big bird
     test_head_masking = False
     test_pruning = False
+    test_sequence_classification_problem_types = True
 
     # torchscript should be possible, but takes prohibitively long to test.
     # Also torchscript is not an important feature to have in the beginning.
