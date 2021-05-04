@@ -85,13 +85,15 @@ class BigBirdPegasusConfig(PretrainedConfig):
             Whether to use block sparse attention (with n complexity) as introduced in paper or original attention
             layer (with n^2 complexity) in encoder. Possible values are :obj:`"original_full"` and
             :obj:`"block_sparse"`.
-        use_bias (:obj:`bool`, `optional`, defaults to :obj:`True`)
+        use_bias (:obj:`bool`, `optional`, defaults to :obj:`False`)
             Whether to use bias in query, key, value.
         block_size (:obj:`int`, `optional`, defaults to 64)
             Size of each block. Useful only when :obj:`attention_type == "block_sparse"`.
         num_random_blocks (:obj:`int`, `optional`, defaults to 3)
             Each query is going to attend these many number of random blocks. Useful only when :obj:`attention_type ==
             "block_sparse"`.
+        scale_embeddings (:obj:`bool`, `optional`, defaults to :obj:`True`)
+            Whether to rescale embeddings with (hidden_size ** 0.5).
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
 

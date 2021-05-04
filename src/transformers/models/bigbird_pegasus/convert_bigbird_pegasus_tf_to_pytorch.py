@@ -33,7 +33,6 @@ INIT_COMMON = [
     ("pegasus", "model"),
 ]
 END_COMMON = [
-    # ffn
     (".output.dense", ".fc2"),
     ("intermediate.LayerNorm", "final_layer_norm"),
     ("intermediate.dense", "fc1"),
@@ -42,11 +41,9 @@ END_COMMON = [
 DECODER_PATTERNS = (
     INIT_COMMON
     + [
-        # self-attn
         ("attention.self.LayerNorm", "self_attn_layer_norm"),
         ("attention.output.dense", "self_attn.out_proj"),
         ("attention.self", "self_attn"),
-        # cross-attn
         ("attention.encdec.LayerNorm", "encoder_attn_layer_norm"),
         ("attention.encdec_output.dense", "encoder_attn.out_proj"),
         ("attention.encdec", "encoder_attn"),
@@ -61,10 +58,8 @@ DECODER_PATTERNS = (
 REMAINING_PATTERNS = (
     INIT_COMMON
     + [
-        # embedding
         ("embeddings.word_embeddings", "shared.weight"),
         ("embeddings.position_embeddings", "embed_positions.weight"),
-        # self-attn
         ("attention.self.LayerNorm", "self_attn_layer_norm"),
         ("attention.output.dense", "self_attn.output"),
         ("attention.self", "self_attn.self"),
@@ -98,7 +93,7 @@ def convert_bigbird_pegasus(tf_weights: dict, config_update: dict) -> BigBirdPeg
     sd = torch_model.state_dict()
     mapping = {}
 
-    # seperating decoder weights
+    # separating decoder weights
     decoder_weights = {k: tf_weights[k] for k in tf_weights if k.startswith("pegasus/decoder")}
     remaining_weights = {k: tf_weights[k] for k in tf_weights if not k.startswith("pegasus/decoder")}
 
@@ -108,7 +103,6 @@ def convert_bigbird_pegasus(tf_weights: dict, config_update: dict) -> BigBirdPeg
             continue
         patterns = DECODER_PATTERNS
         new_k = rename_state_dict_key(k, patterns)
-        # print(k, " -> ", new_k)
         if new_k not in sd:
             raise ValueError(f"could not find new key {new_k} in state dict. (converted from {k})")
         if any([True if i in k else False for i in ["dense", "query", "key", "value"]]):
@@ -122,7 +116,6 @@ def convert_bigbird_pegasus(tf_weights: dict, config_update: dict) -> BigBirdPeg
             continue
         patterns = REMAINING_PATTERNS
         new_k = rename_state_dict_key(k, patterns)
-        # print(k, " -> ", new_k)
         if new_k not in sd and k != "pegasus/embeddings/position_embeddings":
             raise ValueError(f"could not find new key {new_k} in state dict. (converted from {k})")
         if any([True if i in k else False for i in ["dense", "query", "key", "value"]]):
@@ -131,8 +124,6 @@ def convert_bigbird_pegasus(tf_weights: dict, config_update: dict) -> BigBirdPeg
         if k != "pegasus/embeddings/position_embeddings":
             assert v.shape == sd[new_k].shape, f"{new_k}, {k}, {v.shape}, {sd[new_k].shape}"
 
-    # make sure embedding.padding_idx is respected
-    # mapping["shared.weight"][cfg.pad_token_id] = torch.zeros_like(mapping["shared.weight"][cfg.pad_token_id + 1])
     mapping["model.encoder.embed_positions.weight"] = mapping["model.embed_positions.weight"]
     mapping["model.decoder.embed_positions.weight"] = mapping.pop("model.embed_positions.weight")
     missing, extra = torch_model.load_state_dict(mapping, strict=False)
@@ -173,7 +164,6 @@ def convert_bigbird_pegasus_ckpt_to_pytorch(ckpt_path: str, save_dir: str, confi
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    # Required parameters
     parser.add_argument("--tf_ckpt_path", type=str, help="passed to tf.train.list_variables")
     parser.add_argument("--save_dir", default=None, type=str, help="Path to the output PyTorch model.")
     args = parser.parse_args()

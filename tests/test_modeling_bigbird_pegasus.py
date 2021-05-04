@@ -44,7 +44,7 @@ if is_torch_available():
         BigBirdPegasusEncoder,
     )
 
-MODEL_ID = "vasudevgupta/bigbird-pegasus-large-pubmed"
+MODEL_ID = "google/bigbird-pegasus-large-pubmed"
 # TODO
 # bigbird fast tests will have problem of attention type switching
 
