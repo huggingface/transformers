@@ -129,8 +129,8 @@ which should make the non-stop training as close as possible to "stop and resume
 However, due to various default non-deterministic pytorch settings this might not fully work. If you want full
 determinism please refer to `Controlling sources of randomness
 <https://pytorch.org/docs/stable/notes/randomness.html>`__. As explained in the document, that some of those settings
-that make things determinstic (.e.g., `torch.backends.cudnn.deterministic`) may slow things down, therefore you can
-enable those if you need to.
+that make things determinstic (.e.g., `torch.backends.cudnn.deterministic`) may slow things down, therefore this can't
+be done by default, but you can enable those yourself if needed.
 
 
 Trainer Integrations
