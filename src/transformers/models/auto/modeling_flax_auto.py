@@ -28,7 +28,14 @@ from ..bert.modeling_flax_bert import (
     FlaxBertForTokenClassification,
     FlaxBertModel,
 )
-from ..roberta.modeling_flax_roberta import FlaxRobertaModel
+from ..roberta.modeling_flax_roberta import (
+    FlaxRobertaForMaskedLM,
+    FlaxRobertaForMultipleChoice,
+    FlaxRobertaForQuestionAnswering,
+    FlaxRobertaForSequenceClassification,
+    FlaxRobertaForTokenClassification,
+    FlaxRobertaModel,
+)
 from .auto_factory import auto_class_factory
 from .configuration_auto import BertConfig, RobertaConfig
 
@@ -47,6 +54,7 @@ FLAX_MODEL_MAPPING = OrderedDict(
 FLAX_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
         # Model for pre-training mapping
+        (RobertaConfig, FlaxRobertaForMaskedLM),
         (BertConfig, FlaxBertForPreTraining),
     ]
 )
@@ -54,6 +62,7 @@ FLAX_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 FLAX_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
+        (RobertaConfig, FlaxRobertaForMaskedLM),
         (BertConfig, FlaxBertForMaskedLM),
     ]
 )
@@ -61,6 +70,7 @@ FLAX_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
 FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        (RobertaConfig, FlaxRobertaForSequenceClassification),
         (BertConfig, FlaxBertForSequenceClassification),
     ]
 )
@@ -68,6 +78,7 @@ FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
+        (RobertaConfig, FlaxRobertaForQuestionAnswering),
         (BertConfig, FlaxBertForQuestionAnswering),
     ]
 )
@@ -75,6 +86,7 @@ FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
 FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
+        (RobertaConfig, FlaxRobertaForTokenClassification),
         (BertConfig, FlaxBertForTokenClassification),
     ]
 )
@@ -82,6 +94,7 @@ FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
+        (RobertaConfig, FlaxRobertaForMultipleChoice),
         (BertConfig, FlaxBertForMultipleChoice),
     ]
 )
