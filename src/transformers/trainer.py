@@ -1406,20 +1406,20 @@ class Trainer:
 
     def _load_rng_state(self, checkpoint):
         # Load RNG states from `checkpoint`
-        if resume_from_checkpoint is None or not os.path.isfile(os.path.join(checkpoint, "rng_state.pth")):
+        if checkpoint is None or not os.path.isfile(os.path.join(checkpoint, "rng_state.pth")):
             return
 
         checkpoint_rng_state = torch.load(os.path.join(checkpoint, "rng_state.pth"))
         torch.random.set_rng_state(checkpoint_rng_state["cpu"])
         if torch.cuda.is_available():
-            if args.local_rank != -1:
-                if f"cuda_{args.local_rank}" not in checkpoint_rng_state:
+            if self.args.local_rank != -1:
+                if f"cuda_{self.args.local_rank}" not in checkpoint_rng_state:
                     logger.warn(
                         "You are resuming a training that was launched in a distributed fashion in a "
                         "non-distributed way. Reproducibility cannot be guaranteed."
                     )
                 else:
-                    torch.cuda.random.set_rng_state(checkpoint_rng_state[f"cuda_{args.local_rank}"])
+                    torch.cuda.random.set_rng_state(checkpoint_rng_state[f"cuda_{self.args.local_rank}"])
             else:
                 if "cuda" not in checkpoint_rng_state:
                     logger.warn(
