@@ -23,7 +23,7 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...file_utils import TensorType, is_flax_available, is_tf_available, is_torch_available
+from ...file_utils import TensorType, is_torch_available
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import logging
 
@@ -36,18 +36,19 @@ logger = logging.get_logger(__name__)
 
 
 # 2 functions below inspired by https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
-def box_cxcywh_to_xyxy(x):
+def center_to_corners_format(x):
     """
-    Converts a PyTorch tensor of bounding boxes of format (center_x, center_y, width, height) to (x_0, y_0, x_1, y_1).
+    Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to 
+    corners format (x_0, y_0, x_1, y_1).
     """
     x_c, y_c, w, h = x.unbind(-1)
     b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
     return torch.stack(b, dim=-1)
 
-def box_xyxy_to_cxcywh(x):
+def corners_to_center_format(x):
     """
-    Converts a NumPy array of bounding boxes of shape (number of bounding boxes, 4) of format (x_0, y_0, x_1, y_1) to
-    (center_x, center_y, width, height).
+    Converts a NumPy array of bounding boxes of shape (number of bounding boxes, 4) of corners format (x_0, y_0, x_1, y_1) to
+    center format (center_x, center_y, width, height).
     """
     x_transposed = x.T
     x0, y0, x1, y1 = x_transposed[0], x_transposed[1], x_transposed[2], x_transposed[3]
@@ -60,7 +61,7 @@ def masks_to_boxes(masks):
     
     The masks should be in format [N, H, W] where N is the number of masks, (H, W) are the spatial dimensions.
     
-    Returns a [N, 4] tensor, with the boxes in xyxy format.
+    Returns a [N, 4] tensor, with the boxes in corner (xyxy) format.
     """
     if masks.size == 0:
         return np.zeros((0, 4))
@@ -129,9 +130,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             Whether to resize the input to a certain :obj:`size`.
         size (:obj:`int`, `optional`, defaults to 800):
             Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`. If size
-            is a sequence like (w, h), output size will be matched to this. If size is an int, smaller edge of the
-            image will be matched to this number. i.e, if height > width, then image will be rescaled to (size * height
-            / width, size).
+            is a sequence like (:obj:`widht`, :obj:`height`), output size will be matched to this. If size is an int, 
+            smaller edge of the image will be matched to this number. i.e, if :obj:`height` > :obj:`width`, then image 
+            will be rescaled to (:obj:`size` * :obj:`height` / :obj:`width`, :obj:`size`).
         max_size (:obj:`int`, `optional`, defaults to :obj:`1333`):
             The largest size an image dimension can have (otherwise it's capped). Only has an effect if
             :obj:`do_resize` is set to :obj:`True`.
@@ -166,7 +167,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             image, target = self.prepare_panoptic_segmentation(image, target, masks_path)
             return image, target
         else:
-            raise ValueError(f"Task {task} not supported")
+            raise ValueError(f"Task {self.task} not supported")
 
     # inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L33
     def convert_coco_poly_to_mask(segmentations, height, width):
@@ -369,19 +370,11 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         if "boxes" in target:
             boxes = target["boxes"]
-            boxes = box_xyxy_to_cxcywh(boxes)
+            boxes = corners_to_center_format(boxes)
             boxes = boxes / np.asarray([w, h, w, h], dtype=np.float32)
             target["boxes"] = boxes
 
         return image, target
-
-    def _max_by_axis(self, the_list):
-        # type: (List[List[int]]) -> List[int]
-        maxes = the_list[0]
-        for sublist in the_list[1:]:
-            for index, item in enumerate(sublist):
-                maxes[index] = max(maxes[index], item)
-        return maxes
 
     def __call__(
         self,
@@ -438,7 +431,6 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         Returns:
             :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
-
 
             - **pixel_values** -- Pixel values to be fed to a model.
         """
@@ -588,6 +580,14 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return encoded_inputs
 
+    def _max_by_axis(self, the_list):
+        # type: (List[List[int]]) -> List[int]
+        maxes = the_list[0]
+        for sublist in the_list[1:]:
+            for index, item in enumerate(sublist):
+                maxes[index] = max(maxes[index], item)
+        return maxes
+    
     def pad_and_create_pixel_mask(self, tensor_list):
         """
         Pad images up to the largest image in a batch and create a corresponding pixel_mask.
@@ -611,6 +611,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return tensor, mask
 
+    ### POSTPROCESSING METHODS ###
+    
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/detr.py#L258
     def post_process(self, outputs, target_sizes):
         """
@@ -635,7 +637,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         scores, labels = prob[..., :-1].max(-1)
 
         # convert to [x0, y0, x1, y1] format
-        boxes = box_cxcywh_to_xyxy(out_bbox)
+        boxes = center_to_corners_format(out_bbox)
         # and from relative [0, 1] to absolute [0, height] coordinates
         img_h, img_w = target_sizes.unbind(1)
         scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
@@ -718,7 +720,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             cur_classes = cur_classes[keep]
             cur_masks = cur_masks[keep]
             cur_masks = F.interpolate(cur_masks[:, None], to_tuple(size), mode="bilinear").squeeze(1)
-            cur_boxes = box_cxcywh_to_xyxy(cur_boxes[keep])
+            cur_boxes = center_to_corners_format(cur_boxes[keep])
 
             h, w = cur_masks.shape[-2:]
             assert len(cur_boxes) == len(cur_classes)

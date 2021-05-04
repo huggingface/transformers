@@ -41,7 +41,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttenti
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_detr import DetrConfig
-from .feature_extraction_detr import box_cxcywh_to_xyxy
+from .feature_extraction_detr import center_to_corners_format
 
 
 logger = logging.get_logger(__name__)
@@ -55,7 +55,7 @@ DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 @dataclass
-class BaseModelOutputWithCrossAttentionsAndIntermediateHiddenStates(BaseModelOutputWithCrossAttentions):
+class DetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     """
     This class adds one attribute to BaseModelOutputWithCrossAttentions, namely an optional stack of intermediate
     decoder activations, i.e. the output of each decoder layer, each of them gone through a layernorm.
@@ -68,7 +68,7 @@ class BaseModelOutputWithCrossAttentionsAndIntermediateHiddenStates(BaseModelOut
 
 
 @dataclass
-class Seq2SeqModelOutputWithIntermediateHiddenStates(Seq2SeqModelOutput):
+class DetrModelOutput(Seq2SeqModelOutput):
     """
     This class adds one attribute to Seq2SeqModelOutput, namely an optional stack of intermediate decoder activations,
     i.e. the output of each decoder layer, each of them gone through a layernorm.
@@ -146,7 +146,7 @@ class DetrForPanopticSegmentationOutput(DetrObjectDetectionOutput):
     This class adds one attribute to DetrObjectDetectionOutput, namely predicted masks.
 
     Args:
-        pred_masks (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, ...)`):
+        pred_masks (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, width, height)`):
             ...
     """
 
@@ -443,19 +443,12 @@ class DetrAttention(nn.Module):
 
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
-        assert attn_weights.size() == (
-            bsz * self.num_heads,
-            tgt_len,
-            src_len,
-        ), f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
+            raise ValueError(f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}")
 
         if attention_mask is not None:
-            assert attention_mask.size() == (
-                bsz,
-                1,
-                tgt_len,
-                src_len,
-            ), f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
+                raise ValueError(f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}")
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
@@ -475,17 +468,12 @@ class DetrAttention(nn.Module):
 
         attn_output = torch.bmm(attn_probs, value_states)
 
-        assert attn_output.size() == (
-            bsz * self.num_heads,
-            tgt_len,
-            self.head_dim,
-        ), f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
+            raise ValueError(f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}")
 
-        attn_output = (
-            attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-            .transpose(1, 2)
-            .reshape(bsz, tgt_len, embed_dim)
-        )
+        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
+        attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
 
         attn_output = self.out_proj(attn_output)
 
@@ -697,16 +685,6 @@ class DetrPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    @property
-    def dummy_inputs(self):
-        pad_token = self.config.pad_token_id
-        input_ids = torch.tensor([[0, 6, 10, 4, 2], [0, 8, 12, 2, pad_token]], device=self.device)
-        dummy_inputs = {
-            "attention_mask": input_ids.ne(pad_token),
-            "input_ids": input_ids,
-        }
-        return dummy_inputs
-
 
 DETR_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
@@ -819,7 +797,6 @@ class DetrEncoder(DetrPreTrainedModel):
 
     def forward(
         self,
-        # input_ids=None,
         inputs_embeds=None,
         attention_mask=None,
         position_embeddings=None,
@@ -966,7 +943,6 @@ class DetrDecoder(DetrPreTrainedModel):
 
     def forward(
         self,
-        # input_ids=None,
         inputs_embeds=None,
         attention_mask=None,
         encoder_hidden_states=None,
@@ -1131,16 +1107,10 @@ class DetrDecoder(DetrPreTrainedModel):
         if not return_dict:
             return tuple(
                 v
-                for v in [
-                    hidden_states,
-                    all_hidden_states,
-                    all_self_attns,
-                    all_cross_attentions,
-                    intermediate,
-                ]
+                for v in [hidden_states, all_hidden_states, all_self_attns, all_cross_attentions, intermediate]
                 if v is not None
             )
-        return BaseModelOutputWithCrossAttentionsAndIntermediateHiddenStates(
+        return DetrDecoderOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
@@ -1182,7 +1152,7 @@ class DetrModel(DetrPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=DetrModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values,
@@ -1283,7 +1253,7 @@ class DetrModel(DetrPreTrainedModel):
         if not return_dict:
             return decoder_outputs + encoder_outputs
 
-        return Seq2SeqModelOutputWithIntermediateHiddenStates(
+        return DetrModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
@@ -1313,7 +1283,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         self.class_labels_classifier = nn.Linear(
             config.d_model, config.num_labels + 1
         )  # We add one for the "no object" class
-        self.bbox_predictor = MLP(input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3)
+        self.bbox_predictor = DetrMLPPredictionHead(input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3)
 
         self.init_weights()
 
@@ -1467,8 +1437,8 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
 
         # segmentation head
         hidden_size, number_of_heads = config.d_model, config.encoder_attention_heads
-        self.bbox_attention = MHAttentionMap(hidden_size, hidden_size, number_of_heads, dropout=0.0)
-        self.mask_head = MaskHeadSmallConv(hidden_size + number_of_heads, [1024, 512, 256], hidden_size)
+        self.bbox_attention = DetrMHAttentionMap(hidden_size, hidden_size, number_of_heads, dropout=0.0)
+        self.mask_head = DetrMaskHeadSmallConv(hidden_size + number_of_heads, [1024, 512, 256], hidden_size)
 
     @add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=DetrForPanopticSegmentationOutput, config_class=_CONFIG_FOR_DOC)
@@ -1663,7 +1633,7 @@ def _expand(tensor, length: int):
 
 
 # taken from https://github.com/facebookresearch/detr/blob/master/models/segmentation.py
-class MaskHeadSmallConv(nn.Module):
+class DetrMaskHeadSmallConv(nn.Module):
     """
     Simple convolutional head, using group norm.
     Upsampling is done using a FPN approach
@@ -1740,7 +1710,7 @@ class MaskHeadSmallConv(nn.Module):
         return x
 
 
-class MHAttentionMap(nn.Module):
+class DetrMHAttentionMap(nn.Module):
     """This is a 2D attention module, which only returns the attention softmax (no multiplication by value)"""
 
     def __init__(self, query_dim, hidden_dim, num_heads, dropout=0.0, bias=True):
@@ -1908,7 +1878,7 @@ class SetCriterion(nn.Module):
         losses["loss_bbox"] = loss_bbox.sum() / num_boxes
 
         loss_giou = 1 - torch.diag(
-            generalized_box_iou(box_cxcywh_to_xyxy(src_boxes), box_cxcywh_to_xyxy(target_boxes))
+            generalized_box_iou(center_to_corners_format(src_boxes), center_to_corners_format(target_boxes))
         )
         losses["loss_giou"] = loss_giou.sum() / num_boxes
         return losses
@@ -1962,7 +1932,7 @@ class SetCriterion(nn.Module):
             "boxes": self.loss_boxes,
             "masks": self.loss_masks,
         }
-        assert loss in loss_map, f"do you really want to compute {loss} loss?"
+        assert loss in loss_map, f"Loss {loss} not supported"
         return loss_map[loss](outputs, targets, indices, num_boxes)
 
     def forward(self, outputs, targets):
@@ -2009,9 +1979,9 @@ class SetCriterion(nn.Module):
 
 
 # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-class MLP(nn.Module):
+class DetrMLPPredictionHead(nn.Module):
     """
-    Very simple multi-layer perceptron (also called FFN), used to predict the normalized center coordinates, height and
+    Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates, height and
     width of a bounding box w.r.t. an image.
 
     Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
@@ -2095,7 +2065,7 @@ class HungarianMatcher(nn.Module):
         bbox_cost = torch.cdist(out_bbox, tgt_bbox, p=1)
 
         # Compute the giou cost between boxes
-        giou_cost = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox))
+        giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(tgt_bbox))
 
         # Final cost matrix
         C = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
@@ -2127,7 +2097,7 @@ def box_iou(boxes1, boxes2):
 
 def generalized_box_iou(boxes1, boxes2):
     """
-    Generalized IoU from https://giou.stanford.edu/ The boxes should be in [x0, y0, x1, y1] format.
+    Generalized IoU from https://giou.stanford.edu/. The boxes should be in [x0, y0, x1, y1] (corner) format.
 
     Returns:
         a [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
