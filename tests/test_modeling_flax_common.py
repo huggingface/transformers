@@ -137,7 +137,9 @@ class FlaxModelTesterMixin:
     def test_equivalence_pt_to_flax(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in self.all_model_classes[:-2]:  # TODO(Patrick, Daniel) - ForSeqClassification and QA doesn't work yet -> need to investigate
+        for model_class in self.all_model_classes[
+            :-2
+        ]:  # TODO(Patrick, Daniel) - ForSeqClassification and QA doesn't work yet -> need to investigate
             with self.subTest(model_class.__name__):
                 # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
@@ -171,14 +173,18 @@ class FlaxModelTesterMixin:
                     len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
                 )
                 for fx_output_loaded, pt_output in zip(fx_outputs_loaded, pt_outputs):
-                    if not isinstance(fx_output_loaded, tuple):  # TODO(Patrick, Daniel) - let's discard use_cache for now
+                    if not isinstance(
+                        fx_output_loaded, tuple
+                    ):  # TODO(Patrick, Daniel) - let's discard use_cache for now
                         self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 1e-3)
 
     @is_pt_flax_cross_test
     def test_equivalence_flax_to_pt(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in self.all_model_classes[:-2]:  # TODO(Patrick, Daniel) - ForSeqClassification and QA doesn't work yet -> need to investigate
+        for model_class in self.all_model_classes[
+            :-2
+        ]:  # TODO(Patrick, Daniel) - ForSeqClassification and QA doesn't work yet -> need to investigate
             with self.subTest(model_class.__name__):
                 # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
@@ -233,8 +239,19 @@ class FlaxModelTesterMixin:
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
                 outputs = model(**prepared_inputs_dict).to_tuple()
 
+                # verify that normal save_pretrained works as expected
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     model.save_pretrained(tmpdirname)
+                    model_loaded = model_class.from_pretrained(tmpdirname)
+
+                outputs_loaded = model_loaded(**prepared_inputs_dict).to_tuple()
+                for output_loaded, output in zip(outputs_loaded, outputs):
+                    self.assert_almost_equals(output_loaded, output, 1e-3)
+
+                # verify that save_pretrained for distributed training
+                # with `params=params` works as expected
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname, params=model.params)
                     model_loaded = model_class.from_pretrained(tmpdirname)
 
                 outputs_loaded = model_loaded(**prepared_inputs_dict).to_tuple()

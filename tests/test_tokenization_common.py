@@ -2872,6 +2872,34 @@ class TokenizerTesterMixin:
                 for key in python_output:
                     self.assertEqual(python_output[key], rust_output[key])
 
+    def test_special_tokens_initialization(self):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+
+                added_tokens = [AddedToken("<special>", lstrip=True)]
+
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, additional_special_tokens=added_tokens, **kwargs
+                )
+                tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, additional_special_tokens=added_tokens, **kwargs, from_slow=True
+                )
+                tokenizer_p = self.tokenizer_class.from_pretrained(
+                    pretrained_name, additional_special_tokens=added_tokens, **kwargs
+                )
+
+                p_output = tokenizer_p.encode("Hey this is a <special> token")
+                r_output = tokenizer_r.encode("Hey this is a <special> token")
+                cr_output = tokenizer_cr.encode("Hey this is a <special> token")
+
+                special_token_id = tokenizer_r.encode("<special>", add_special_tokens=False)[0]
+
+                self.assertEqual(p_output, r_output)
+                self.assertEqual(cr_output, r_output)
+                self.assertTrue(special_token_id in p_output)
+                self.assertTrue(special_token_id in r_output)
+                self.assertTrue(special_token_id in cr_output)
+
 
 @is_staging_test
 class TokenizerPushToHubTester(unittest.TestCase):

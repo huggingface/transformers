@@ -347,7 +347,8 @@ class FlaxBartEncoderLayerCollection(nn.Module):
 
     def setup(self):
         self.layers = [
-            FlaxBartEncoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
+            FlaxBartEncoderLayer(self.config, name=str(i), dtype=self.dtype)
+            for i in range(self.config.num_hidden_layers)
         ]
         self.layerdrop = self.config.encoder_layerdrop
 
@@ -528,7 +529,8 @@ class FlaxBartDecoderLayerCollection(nn.Module):
 
     def setup(self):
         self.layers = [
-            FlaxBartDecoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
+            FlaxBartDecoderLayer(self.config, name=str(i), dtype=self.dtype)
+            for i in range(self.config.num_hidden_layers)
         ]
         self.layerdrop = self.config.encoder_layerdrop
 
@@ -976,13 +978,23 @@ class FlaxBartEncoder(nn.Module):
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
 
-        outputs = self.layers(hidden_states, attention_mask, head_mask, deterministic=deterministic, output_attentions=output_attentions, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        outputs = self.layers(
+            hidden_states,
+            attention_mask,
+            head_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
         if not return_dict:
             return outputs
 
         return FlaxBaseModelOutput(
-            last_hidden_state=outputs.last_hidden_state, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+            last_hidden_state=outputs.last_hidden_state,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1166,7 +1178,9 @@ class FlaxBartDecoder(nn.Module):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # embed positions
-        positions = self.embed_positions(jnp.arange(past_key_values_length, input_shape[1] + past_key_values_length, dtype=jnp.uint32) + self.offset)
+        positions = self.embed_positions(
+            jnp.arange(past_key_values_length, input_shape[1] + past_key_values_length, dtype=jnp.uint32) + self.offset
+        )
 
         hidden_states = inputs_embeds + positions
         hidden_states = self.layernorm_embedding(hidden_states)
