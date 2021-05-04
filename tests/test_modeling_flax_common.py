@@ -150,7 +150,7 @@ class FlaxModelTesterMixin:
                 fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-3)
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     pt_model.save_pretrained(tmpdirname)
@@ -161,7 +161,7 @@ class FlaxModelTesterMixin:
                     len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
                 )
                 for fx_output_loaded, pt_output in zip(fx_outputs_loaded, pt_outputs):
-                    self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 1e-3)
+                    self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 4e-2)
 
     @is_pt_flax_cross_test
     def test_equivalence_flax_to_pt(self):
@@ -191,7 +191,7 @@ class FlaxModelTesterMixin:
                 fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-3)
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     fx_model.save_pretrained(tmpdirname)
@@ -204,7 +204,7 @@ class FlaxModelTesterMixin:
                     len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch"
                 )
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs_loaded):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 5e-3)
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
 
     def test_from_pretrained_save_pretrained(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -219,8 +219,19 @@ class FlaxModelTesterMixin:
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
                 outputs = model(**prepared_inputs_dict).to_tuple()
 
+                # verify that normal save_pretrained works as expected
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     model.save_pretrained(tmpdirname)
+                    model_loaded = model_class.from_pretrained(tmpdirname)
+
+                outputs_loaded = model_loaded(**prepared_inputs_dict).to_tuple()
+                for output_loaded, output in zip(outputs_loaded, outputs):
+                    self.assert_almost_equals(output_loaded, output, 1e-3)
+
+                # verify that save_pretrained for distributed training
+                # with `params=params` works as expected
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname, params=model.params)
                     model_loaded = model_class.from_pretrained(tmpdirname)
 
                 outputs_loaded = model_loaded(**prepared_inputs_dict).to_tuple()
