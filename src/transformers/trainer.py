@@ -1400,11 +1400,12 @@ class Trainer:
         if checkpoint is None:
             return
 
-        if self.args.local_rank != -1:
-            rng_file = os.path.join(checkpoint, f"rng_state_{self.args.local_rank}.pth")
+        local_rank = xm.get_local_ordinal() if is_torch_tpu_available() else self.args.local_rank
+        if local_rank != -1:
+            rng_file = os.path.join(checkpoint, f"rng_state_{local_rank}.pth")
             if not os.path.isfile(os.path.join(checkpoint, rng_file)):
                 logger.info(
-                    f"Didn't find an RNG file for process {self.args.local_rank}, if you are resuming a training that "
+                    f"Didn't find an RNG file for process {local_rank}, if you are resuming a training that "
                     "wasn't launched in a distributed fashion, reproducibility is not guaranteed."
                 )
                 return
@@ -1523,10 +1524,11 @@ class Trainer:
         if is_torch_tpu_available():
             rng_states["xla"] = xm.get_rng_state()
 
-        if self.args.local_rank == -1:
+        local_rank = xm.get_local_ordinal() if is_torch_tpu_available() else self.args.local_rank
+        if local_rank == -1:
             torch.save(rng_states, os.path.join(output_dir, "rng_state.pth"))
         else:
-            torch.save(rng_states, os.path.join(output_dir, f"rng_state_{self.args.local_rank}.pth"))
+            torch.save(rng_states, os.path.join(output_dir, f"rng_state_{local_rank}.pth"))
 
     def _load_optimizer_and_scheduler(self, checkpoint):
         """If optimizer and scheduler states exist, load them."""
