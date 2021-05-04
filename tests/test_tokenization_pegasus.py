@@ -114,7 +114,7 @@ class BigBirdPegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @cached_property
     def _large_tokenizer(self):
-        return PegasusTokenizer.from_pretrained("../add_big_bird/bigbird-pegasus-large-arxiv")
+        return PegasusTokenizer.from_pretrained("vasudevgupta/bigbird-pegasus-large-arxiv")
 
     def get_tokenizer(self, **kwargs) -> PegasusTokenizer:
         return PegasusTokenizer.from_pretrained(self.tmpdirname, **kwargs)
