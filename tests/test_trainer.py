@@ -45,6 +45,7 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
 )
+from transformers.trainer_utils import set_seed
 from transformers.utils.hp_naming import TrialShortNamer
 
 
@@ -208,9 +209,7 @@ if is_torch_available():
 
         def forward(self, input_x, labels=None, **kwargs):
             y = input_x * self.a + self.b
-            if self.training:
-                # Add random noise from torch, numpy and random
-                y += 0.05 * torch.randn(1).squeeze() + 0.05 * torch.tensor(np.random.rand() + random.random())
+            y += 0.05 * torch.randn(1).squeeze() + 0.05 * torch.tensor(np.random.rand() + random.random())
 
             if labels is None:
                 return (y,)
@@ -722,6 +721,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue("No valid checkpoint found in output directory" in str(context.exception))
 
     def test_resume_training_with_randomness(self):
+        set_seed(63)
         train_dataset = RegressionDataset(length=128)
         eval_dataset = RegressionDataset()
 
