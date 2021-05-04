@@ -184,16 +184,6 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def recursive_print(state_dict, prefix=""):
-    for key, value in state_dict.items():
-        if isinstance(value, dict):
-            recursive_print(value, prefix=key)
-        elif isinstance(value, torch.Tensor):
-            print(f"{prefix}/{key}: {value.shape}, {value.view(-1,).tolist()[:10]}")
-        else:
-            print(f"{prefix}/{key}: {value}")
-
-
 class Trainer:
     """
     Trainer is a simple but feature-complete training and eval loop for PyTorch, optimized for 🤗 Transformers.
