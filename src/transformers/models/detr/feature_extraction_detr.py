@@ -127,7 +127,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     Args:
         format (:obj:`str`, `optional`, defaults to :obj:`"coco_detection"`):
-            Data format of the annotations. One of "coco_detection" or "coco_panoptic".  
+            Data format of the annotations. One of "coco_detection" or "coco_panoptic".
         do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to resize the input to a certain :obj:`size`.
         size (:obj:`int`, `optional`, defaults to 800):
@@ -160,7 +160,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         **kwargs
     ):
         super().__init__(**kwargs)
-        self.format = format
+        self.format = self._is_valid_format(format)
         self.do_resize = do_resize
         self.size = size
         self.max_size = max_size
@@ -168,6 +168,11 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.image_mean = image_mean if image_mean is not None else [0.485, 0.456, 0.406]
         self.image_std = image_std if image_std is not None else [0.229, 0.224, 0.225]
 
+    def _is_valid_format(self, format):
+        if format not in ["coco_detection", "coco_panoptic"]:
+            raise ValueError(f"Format {format} not supported")
+        return format
+    
     def prepare(self, image, target, return_segmentation_masks=False, masks_path=None):
         if self.format == "coco_detection":
             image, target = self.prepare_coco_detection(image, target, return_segmentation_masks)
@@ -181,8 +186,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     # inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L33
     def convert_coco_poly_to_mask(self, segmentations, height, width):
 
-        from pycocotools import mask as coco_mask
-        
+        try:
+            from pycocotools import mask as coco_mask
+        except ImportError("Pycocotools is not installed in your environment.")
+
         masks = []
         for polygons in segmentations:
             rles = coco_mask.frPyObjects(polygons, height, width)
@@ -418,21 +425,22 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 number of channels, H and W are image height and width.
 
             annotations (:obj:`Dict`, :obj:`List[Dict]`, `optional`):
-                The corresponding annotations in COCO format. 
-                
-                In case :obj:`format` = :obj:`"coco_detection"`, the annotations for each image should have the following
-                format: {'image_id': int, 'annotations': [annotation]}, with the annotations being a list of COCO object annotations.
+                The corresponding annotations in COCO format.
 
-                In case :obj:`format` = :obj:`"coco_panoptic"`, the annotations for each image should have the following
-                format: {'image_id': int, 'file_name': str, 'segments_info': [segment_info]} with segments_info being a list 
-                of COCO panoptic annotations.
+                In case :obj:`format` = :obj:`"coco_detection"`, the annotations for each image should have the
+                following format: {'image_id': int, 'annotations': [annotation]}, with the annotations being a list of
+                COCO object annotations.
+
+                In case :obj:`format` = :obj:`"coco_panoptic"`, the annotations for each image should have the
+                following format: {'image_id': int, 'file_name': str, 'segments_info': [segment_info]} with
+                segments_info being a list of COCO panoptic annotations.
 
             return_segmentation_masks (:obj:`Dict`, :obj:`List[Dict]`, `optional`, defaults to :obj:`False`):
-                Whether to also return instance segmentation masks in case :obj:`format` = :obj:`"coco_detection"`. 
-            
+                Whether to also return instance segmentation masks in case :obj:`format` = :obj:`"coco_detection"`.
+
             masks_path (:obj:`pathlib.Path`, `optional`):
-                Path to the directory containing the PNG files that store the class-agnostic image segmentations.
-                Only relevant in case :obj:`format` = :obj:`"coco_panoptic"`. 
+                Path to the directory containing the PNG files that store the class-agnostic image segmentations. Only
+                relevant in case :obj:`format` = :obj:`"coco_panoptic"`.
 
             pad_and_return_pixel_mask (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to pad images up to the largest image in a batch and create a pixel mask.

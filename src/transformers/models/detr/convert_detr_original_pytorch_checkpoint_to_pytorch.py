@@ -168,9 +168,8 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
     Copy/paste/tweak model's weights to our DETR structure.
     """
 
-    # load default config, feature extractor
+    # load default config
     config = DetrConfig()
-    feature_extractor = DetrFeatureExtractor()
     # set backbone and dilation attributes
     if "resnet101" in model_name:
         config.backbone = "resnet101"
@@ -184,6 +183,10 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
         config.num_labels = 91
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
+
+    # load feature extractor
+    format = "coco_panoptic" if is_panoptic else "coco_detection"
+    feature_extractor = DetrFeatureExtractor(format=format)
 
     # prepare image
     img = prepare_img()
