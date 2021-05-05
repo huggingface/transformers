@@ -277,7 +277,7 @@ def create_train_state(
     return TrainState.create(apply_fn=model.__call__, params=model.params, tx=tx, logits_fn=logits_fn, loss_fn=loss_fn)
 
 
-def get_batches(rng: PRNGKey, dataset: Dataset, batch_size: int, task: GlueTask):
+def get_batches(rng: PRNGKey, dataset: Dataset, batch_size: int, task: GlueTask, return_inputs: bool = False):
     """Returns batches of size `batch_size` from `dataset`, sharded over all local devices."""
     train_ds_size = len(dataset)
     steps_per_epoch = train_ds_size // batch_size
@@ -290,6 +290,9 @@ def get_batches(rng: PRNGKey, dataset: Dataset, batch_size: int, task: GlueTask)
         inputs = zip(*[batch.pop(i) for i in task.inputs])
         batch = {k: jnp.array(v) for k, v in batch.items()}
         batch = shard(batch)
+        
+        if return_inputs: 
+            yield batch, inputs
         yield batch
 
 
