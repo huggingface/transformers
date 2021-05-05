@@ -197,7 +197,7 @@ def get_model_list():
     # If the introduction or the conclusion of the list change, the prompts may need to be updated.
     _start_prompt = "🤗 Transformers currently provides the following architectures"
     _end_prompt = "1. Want to contribute a new model?"
-    with open(os.path.join(REPO_PATH, "README.md"), "r", encoding="utf-8", newline="\n") as f:
+    with open(os.path.join(REPO_PATH, "README.md"), "r", encoding="utf-8", newline=None) as f:
         lines = f.readlines()
     # Find the start of the list.
     start_index = 0
