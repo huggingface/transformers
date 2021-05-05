@@ -176,18 +176,18 @@ class ModelTesterMixin:
                 for k in _keys_to_ignore_on_save:
                     self.assertNotIn(k, state_dict_saved)
 
+    def _mock_init_weights(self, module):
+        if hasattr(module, "weight") and module.weight is not None:
+            module.weight.data.fill_(3)
+        if hasattr(module, "bias") and module.bias is not None:
+            module.bias.data.fill_(3)
+
     def test_save_load_fast_init_from_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         base_class = MODEL_MAPPING[config.__class__]
 
         if isinstance(base_class, tuple):
             base_class = base_class[0]
-
-        def _mock_init_weights(self, module):
-            if hasattr(module, "weight") and module.weight is not None:
-                module.weight.data.fill_(3)
-            if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.fill_(3)
 
         for model_class in self.all_model_classes:
             if model_class == base_class:
@@ -205,7 +205,7 @@ class ModelTesterMixin:
 
             # make init deterministic, but make sure that
             # non-initialized weights throw errors nevertheless
-            model_class_copy._init_weights = _mock_init_weights
+            model_class_copy._init_weights = self._mock_init_weights
 
             model = base_class(config)
             state_dict = model.state_dict()
@@ -234,12 +234,6 @@ class ModelTesterMixin:
         if isinstance(base_class, tuple):
             base_class = base_class[0]
 
-        def _mock_init_weights(self, module):
-            if hasattr(module, "weight") and module.weight is not None:
-                module.weight.data.fill_(3)
-            if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.fill_(3)
-
         for model_class in self.all_model_classes:
 
             if model_class == base_class:
@@ -257,7 +251,7 @@ class ModelTesterMixin:
 
             # make init deterministic, but make sure that
             # non-initialized weights throw errors nevertheless
-            base_class_copy._init_weights = _mock_init_weights
+            base_class_copy._init_weights = self._mock_init_weights
 
             model = model_class(config)
             state_dict = model.state_dict()
