@@ -16,6 +16,8 @@ requirements:
     - pip
     - numpy >=1.17
     - dataclasses
+    - importlib_metadata
+    - huggingface_hub
     - packaging
     - filelock
     - requests
@@ -28,6 +30,8 @@ requirements:
     - python
     - numpy >=1.17
     - dataclasses
+    - importlib_metadata
+    - huggingface_hub
     - packaging
     - filelock
     - requests
