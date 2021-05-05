@@ -308,6 +308,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         context_layer = context_layer.contiguous().view(batch_size, from_seq_length, -1)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+    
         return outputs
 
     @staticmethod
@@ -1177,8 +1178,8 @@ class BigBirdPegasusEncoderAttention(nn.Module):
                 hidden_states,
                 attention_mask,
                 head_mask,
-                past_key_value,
-                output_attentions,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
             )
         else:
             self_outputs = self.self(
