@@ -732,7 +732,7 @@ class ModelTesterMixin:
         if not self.test_pruning:
             return
 
-        for model_class in self.all_model_classes[:1]:
+        for model_class in self.all_model_classes:
             (
                 config,
                 inputs_dict,

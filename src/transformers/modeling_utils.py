@@ -783,7 +783,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def init_weights(self):
         """
-        Maybe initializes and prunes weights if needed.
+        If needed prunes and maybe initializes weights.
         """
         # Prune heads if needed
         if self.config.pruned_heads:
@@ -1143,8 +1143,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             # this immediately partitions the model across all gpus, to avoid the overhead in time
             # and memory copying it on CPU or each GPU first
-            with deepspeed.zero.Init(config=deepspeed_config()) and no_init_weights(_disable=_no_fast_init):
-                model = cls(config, *model_args, **model_kwargs)
+            with deepspeed.zero.Init(config=deepspeed_config()):
+                with no_init_weights(_disable=_no_fast_init):
+                    model = cls(config, *model_args, **model_kwargs)
         else:
             with no_init_weights(_disable=_no_fast_init):
                 model = cls(config, *model_args, **model_kwargs)
