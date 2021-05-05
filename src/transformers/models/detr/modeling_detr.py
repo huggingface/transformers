@@ -23,7 +23,6 @@ from typing import Dict, List, Optional, Tuple
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
-from torchvision.ops.boxes import box_area
 
 from scipy.optimize import linear_sum_assignment
 from timm import create_model
@@ -224,12 +223,12 @@ class Backbone(nn.Module):
             out = []
             for x in feature_maps:
                 mask = pixel_mask
-                assert mask is not None
+                assert mask is not None, "No intermediate mask provided"
                 mask = F.interpolate(mask[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
                 out.append((x, mask))
             return out
 
-        assert pixel_mask is not None
+        assert pixel_mask is not None, "No pixel mask provided"
         # get final feature map
         feature_map = feature_maps[-1]
         # we downsample the pixel_mask to match the shape of the feature map
@@ -293,13 +292,12 @@ class DetrSinePositionEmbedding(nn.Module):
     def forward(self, pixel_values, pixel_mask):
         x = pixel_values
         mask = pixel_mask
-        assert mask is not None
+        assert mask is not None, "No pixel mask provided"
         y_embed = mask.cumsum(1, dtype=torch.float32)
         x_embed = mask.cumsum(2, dtype=torch.float32)
         if self.normalize:
-            eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
+            y_embed = y_embed / (y_embed[:, -1:, :] + 1e-6) * self.scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + 1e-6) * self.scale
 
         dim_t = torch.arange(self.embedding_dim, dtype=torch.float32, device=x.device)
         dim_t = self.temperature ** (2 * (dim_t // 2) / self.embedding_dim)
@@ -1203,7 +1201,7 @@ class DetrModel(DetrPreTrainedModel):
         # pixel_mask should be of shape (batch_size, height, width)
         feature_map, mask, position_embeddings = self.backbone(pixel_values, pixel_mask)
 
-        assert mask is not None
+        assert mask is not None, "Backbone does not return downsampled pixel mask"
 
         # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
         projected_feature_map = self.input_projection(feature_map)
@@ -1876,7 +1874,7 @@ class SetCriterion(nn.Module):
         Targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]. The target boxes
         are expected in format (center_x, center_y, w, h), normalized by the image size.
         """
-        assert "pred_boxes" in outputs
+        assert "pred_boxes" in outputs, "No predicted boxes found in outputs"
         idx = self._get_src_permutation_idx(indices)
         src_boxes = outputs["pred_boxes"][idx]
         target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
@@ -1898,7 +1896,7 @@ class SetCriterion(nn.Module):
 
         Targets dicts must contain the key "masks" containing a tensor of dim [nb_target_boxes, h, w].
         """
-        assert "pred_masks" in outputs
+        assert "pred_masks" in outputs, "No predicted masks found in outputs"
 
         src_idx = self._get_src_permutation_idx(indices)
         tgt_idx = self._get_tgt_permutation_idx(indices)
@@ -2089,6 +2087,30 @@ class HungarianMatcher(nn.Module):
 
 # below: bounding box utilities taken from https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
 
+
+def _upcast(t: Tensor) -> Tensor:
+    # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
+    if t.is_floating_point():
+        return t if t.dtype in (torch.float32, torch.float64) else t.float()
+    else:
+        return t if t.dtype in (torch.int32, torch.int64) else t.int()
+
+
+def box_area(boxes: Tensor) -> Tensor:
+    """
+    Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
+
+    Args:
+        boxes (Tensor[N, 4]): boxes for which the area will be computed. They
+            are expected to be in (x1, y1, x2, y2) format with ``0 <= x1 < x2`` and ``0 <= y1 < y2``.
+
+    Returns:
+        area (Tensor[N]): area for each box
+    """
+    boxes = _upcast(boxes)
+    return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+
+
 # modified from torchvision to also return the union
 def box_iou(boxes1, boxes2):
     area1 = box_area(boxes1)
@@ -2150,7 +2172,6 @@ class NestedTensor(object):
         cast_tensor = self.tensors.to(device)
         mask = self.mask
         if mask is not None:
-            assert mask is not None
             cast_mask = mask.to(device)
         else:
             cast_mask = None

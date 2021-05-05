@@ -172,7 +172,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if format not in ["coco_detection", "coco_panoptic"]:
             raise ValueError(f"Format {format} not supported")
         return format
-    
+
     def prepare(self, image, target, return_segmentation_masks=False, masks_path=None):
         if self.format == "coco_detection":
             image, target = self.prepare_coco_detection(image, target, return_segmentation_masks)
@@ -188,7 +188,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         try:
             from pycocotools import mask as coco_mask
-        except ImportError("Pycocotools is not installed in your environment.")
+        except ImportError:
+            print("Pycocotools is not installed in your environment.")
 
         masks = []
         for polygons in segmentations:
