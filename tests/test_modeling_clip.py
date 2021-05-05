@@ -423,7 +423,7 @@ class CLIPModelTester:
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
         vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
 
-        config = CLIPConfig.from_text_vision_configs(text_config, vision_config, output_dim=64)
+        config = CLIPConfig.from_text_vision_configs(text_config, vision_config, projection_dim=64)
 
         return config, input_ids, attention_mask, pixel_values
 

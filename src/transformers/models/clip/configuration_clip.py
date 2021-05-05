@@ -217,8 +217,8 @@ class CLIPConfig(PretrainedConfig):
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
     Args:
-        output_dim: (:obj:`int`, `optional`, defaults to 512):
-            some explanatiom
+        projection_dim: (:obj:`int`, `optional`, defaults to 512):
+            Dimentionality of text and vision projection layers.
         kwargs (`optional`):
             Dictionary of keyword arguments. Notably:
 
@@ -231,7 +231,7 @@ class CLIPConfig(PretrainedConfig):
     model_type = "clip"
     is_composition = True
 
-    def __init__(self, output_dim=512, **kwargs):
+    def __init__(self, projection_dim=512, **kwargs):
         super().__init__(**kwargs)
         text_config_dict = kwargs.pop("text_config")
         vision_config_dict = kwargs.pop("vision_config")
@@ -239,7 +239,7 @@ class CLIPConfig(PretrainedConfig):
         self.text_config = CLIPTextConfig(**text_config_dict)
         self.vision_config = CLIPVisionConfig(**vision_config_dict)
 
-        self.output_dim = output_dim
+        self.projection_dim = projection_dim
 
     @classmethod
     def from_text_vision_configs(cls, text_config: CLIPTextConfig, vision_config: CLIPVisionConfig, **kwargs):
