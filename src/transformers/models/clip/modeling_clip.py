@@ -597,7 +597,7 @@ class CLIPTextTransformer(nn.Module):
         bsz, seq_len = input_shape
         # CLIP's text model uses causal mask, prepare it here.
         # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
-        causal_attention_mask = self._build_causal_attention_mask(bsz, seq_len)
+        causal_attention_mask = self._build_causal_attention_mask(bsz, seq_len).to(hidden_states.device)
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
