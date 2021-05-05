@@ -80,7 +80,7 @@ class ClipTextConfig(PretrainedConfig):
         >>> # Accessing the model configuration
         >>> configuration = model.config
     """
-    model_type = "clip"
+    model_type = "clip_text_model"
 
     def __init__(
         self,
@@ -94,6 +94,7 @@ class ClipTextConfig(PretrainedConfig):
         max_position_embeddings=77,
         attention_dropout=0.0,
         initializer_range=0.02,  # TODO(PS): this should be changed
+        initializer_factor=1.0,
         layer_norm_eps=1e-5,
         pad_token_id=1,
         bos_token_id=0,
@@ -113,6 +114,7 @@ class ClipTextConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
+        self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
         self.gradient_checkpointing = gradient_checkpointing
 
@@ -169,7 +171,7 @@ class ClipVisionConfig(PretrainedConfig):
         >>> configuration = model.config
     """
 
-    model_type = "clip"
+    model_type = "clip_vision_model"
 
     def __init__(
         self,
@@ -182,6 +184,7 @@ class ClipVisionConfig(PretrainedConfig):
         patch_size=32,
         image_size=224,
         initializer_range=0.02,
+        initializer_factor=1.0,
         attention_dropout=0.0,
         layer_norm_eps=1e-5,
         gradient_checkpointing=False,
@@ -198,6 +201,7 @@ class ClipVisionConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.image_size = image_size
         self.initializer_range = initializer_range
+        self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.gradient_checkpointing = gradient_checkpointing

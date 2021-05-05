@@ -110,6 +110,7 @@ class QuickGELU(nn.Module):
 class ClipVisionEmbeddings(nn.Module):
     def __init__(self, config: ClipVisionConfig):
         super().__init__()
+        self.config = config
         self.embed_dim = config.hidden_size
         self.image_size = config.image_size
         self.patch_size = config.patch_size
@@ -125,7 +126,6 @@ class ClipVisionEmbeddings(nn.Module):
 
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
-        # TODO (PS): Copy init logic from CLIP repo
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
 
@@ -143,7 +143,7 @@ class ClipVisionEmbeddings(nn.Module):
 class ClipTextEmbeddings(nn.Module):
     def __init__(self, config: ClipTextConfig):
         super().__init__()
-
+        self.config = config
         embed_dim = config.hidden_size
 
         self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
@@ -358,27 +358,38 @@ class ClipPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, ClipTextEmbeddings):
-            nn.init.normal_(module.token_embedding.weight, std=0.02)
-            nn.init.normal_(module.position_embedding.weight, std=0.01)
+            module.token_embedding.weight.data.normal_(mean=0.0, std=module.config.initializer_factor * 0.02)
+            module.position_embedding.weight.data.normal_(mean=0.0, std=module.config.initializer_factor * 0.02)
         elif isinstance(module, ClipVisionEmbeddings):
-            nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim ** -0.5)
-            nn.init.normal_(module.patch_embedding.weight, std=self.config.initializer_range)
-            nn.init.normal_(module.position_embedding.weight, std=self.config.initializer_range)
+            factor = module.config.initializer_factor
+            nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim ** -0.5 * factor)
+            nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
+            nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
         elif isinstance(module, ClipAttention):
-            in_proj_std = (module.embed_dim ** -0.5) * ((2 * module.config.num_hidden_layers) ** -0.5)
-            out_proj_std = module.embed_dim ** -0.5
+            factor = module.config.initializer_factor
+            in_proj_std = (module.embed_dim ** -0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            out_proj_std = (module.embed_dim ** -0.5) * factor
             nn.init.normal_(module.q_proj.weight, std=in_proj_std)
             nn.init.normal_(module.k_proj.weight, std=in_proj_std)
             nn.init.normal_(module.v_proj.weight, std=in_proj_std)
             nn.init.normal_(module.out_proj.weight, std=out_proj_std)
         elif isinstance(module, ClipMLP):
-            in_proj_std = (module.config.hidden_size ** -0.5) * ((2 * module.config.num_hidden_layers) ** -0.5)
-            fc_std = (2 * module.config.hidden_size) ** -0.5
+            factor = module.config.initializer_factor
+            in_proj_std = (
+                (module.config.hidden_size ** -0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            )
+            fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
         elif isinstance(module, ClipModel):
-            nn.init.normal_(module.text_projection.weight, std=module.text_embed_dim ** -0.5)
-            nn.init.normal_(module.visual_projection.weight, std=module.vision_embed_dim ** -0.5)
+            nn.init.normal_(
+                module.text_projection.weight,
+                std=module.text_embed_dim ** -0.5 * module.config.text_config.initializer_factor,
+            )
+            nn.init.normal_(
+                module.visual_projection.weight,
+                std=module.vision_embed_dim ** -0.5 * module.config.vision_config.initializer_factor,
+            )
 
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
@@ -450,11 +461,9 @@ class ClipEncoder(nn.Module):
     """
 
     def __init__(self, config: ClipConfig):
-        super().__init__(config)
-
+        super().__init__()
+        self.config = config
         self.layers = nn.ModuleList([ClipEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-
-        self.init_weights()
 
     def forward(
         self,
@@ -552,36 +561,15 @@ class ClipEncoder(nn.Module):
         )
 
 
-class ClipTextModel(ClipPreTrainedModel):
-    """
-    Transformer encoder consisting of *config.num_hidden_layers* self attention layers. Each layer is a
-    :class:`ClipEncoderLayer`.
-
-    Args:
-        config: ClipConfig
-        embed_tokens (torch.nn.Embedding): output embedding
-    """
-
-    config_class = ClipTextConfig
-
+class ClipTextTransformer(nn.Module):
     def __init__(self, config: ClipTextConfig):
-        super().__init__(config)
-
+        super().__init__()
+        self.config = config
         embed_dim = config.hidden_size
-
         self.embeddings = ClipTextEmbeddings(config)
         self.encoder = ClipEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim)
 
-        self.init_weights()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.embeddings.token_embedding
-
-    def set_input_embeddings(self, value):
-        self.embeddings.token_embedding = value
-
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ClipTextConfig)
     def forward(
         self,
         input_ids=None,
@@ -591,35 +579,6 @@ class ClipTextModel(ClipPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
-        r"""
-        Args:
-            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using :class:`~transformers.ClipTokenizer`. See
-                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
-                for details.
-
-                `What are input IDs? <../glossary.html#input-ids>`__
-            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
-                returned tensors for more detail.
-            output_hidden_states (:obj:`bool`, `optional`):
-                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
-                for more detail.
-            return_dict (:obj:`bool`, `optional`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
-
-        Returns:
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -679,31 +638,79 @@ class ClipTextModel(ClipPreTrainedModel):
         return mask
 
 
-class ClipVisionModel(ClipPreTrainedModel):
-    """
-    Transformer encoder consisting of *config.num_hidden_layers* self attention layers. Each layer is a
-    :class:`ClipEncoderLayer`.
+class ClipTextModel(ClipPreTrainedModel):
+    config_class = ClipTextConfig
 
-    Args:
-        config: ClipConfig
-        embed_tokens (torch.nn.Embedding): output embedding
-    """
-
-    config_class = ClipVisionConfig
-
-    def __init__(self, config: ClipVisionConfig):
+    def __init__(self, config: ClipTextConfig):
         super().__init__(config)
+        self.text_model = ClipTextTransformer(config)
+        self.init_weights()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.text_model.embeddings.token_embedding
+
+    def set_input_embeddings(self, value):
+        self.text_model.embeddings.token_embedding = value
+
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ClipTextConfig)
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        position_ids=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        Args:
+            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
+                provide it.
+
+                Indices can be obtained using :class:`~transformers.ClipTokenizer`. See
+                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
+                for details.
+
+                `What are input IDs? <../glossary.html#input-ids>`__
+            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                `What are attention masks? <../glossary.html#attention-mask>`__
+            output_attentions (:obj:`bool`, `optional`):
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more detail.
+            output_hidden_states (:obj:`bool`, `optional`):
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
+                for more detail.
+            return_dict (:obj:`bool`, `optional`):
+                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+
+        Returns:
+        """
+        return self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+
+class ClipVisionTransformer(nn.Module):
+    def __init__(self, config: ClipVisionConfig):
+        super().__init__()
+        self.config = config
         embed_dim = config.hidden_size
 
         self.embeddings = ClipVisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(embed_dim)
         self.encoder = ClipEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim)
-
-        self.init_weights()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.embeddings.patch_embedding
 
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ClipVisionConfig)
     def forward(
@@ -766,8 +773,55 @@ class ClipVisionModel(ClipPreTrainedModel):
         )
 
 
+class ClipVisionModel(ClipPreTrainedModel):
+    config_class = ClipVisionConfig
+
+    def __init__(self, config: ClipVisionConfig):
+        super().__init__(config)
+        self.vision_model = ClipVisionTransformer(config)
+        self.init_weights()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.vision_model.embeddings.patch_embedding
+
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ClipVisionConfig)
+    def forward(
+        self,
+        pixel_values=None,
+        attention_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        Args:
+            pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
+                Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained
+                using :class:`~transformers.ClipFeatureExtractor`. See
+                :meth:`transformers.ClipFeatureExtractor.__call__` for details.
+            output_attentions (:obj:`bool`, `optional`):
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more detail.
+            output_hidden_states (:obj:`bool`, `optional`):
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
+                for more detail.
+            return_dict (:obj:`bool`, `optional`):
+                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+
+        Returns:
+        """
+        return self.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+
 @add_start_docstrings(CLIP_START_DOCSTRING)
 class ClipModel(ClipPreTrainedModel):
+    config_class = ClipConfig
+
     def __init__(self, config: ClipConfig):
         super().__init__(config)
 
@@ -778,16 +832,14 @@ class ClipModel(ClipPreTrainedModel):
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
-        self.text_model = ClipTextModel(text_config)
+        self.text_model = ClipTextTransformer(text_config)
         self.vision_model = ClipVisionModel(vision_config)
 
-        self.visual_projection = nn.Linear(
-            self.vision_embed_dim, self.output_dim, bias=False
-        )  # TODO (PS): Copy init logic from CLIP repo
-        self.text_projection = nn.Linear(
-            self.text_embed_dim, self.output_dim, bias=False
-        )  # TODO (PS): Copy init logic from CLIP repo
+        self.visual_projection = nn.Linear(self.vision_embed_dim, self.output_dim, bias=False)
+        self.text_projection = nn.Linear(self.text_embed_dim, self.output_dim, bias=False)
         self.logit_scale = nn.Parameter(torch.ones([]))
+
+        self.init_weights()
 
     def encode_text(
         self,

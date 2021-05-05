@@ -289,6 +289,9 @@ class ClipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
+    def test_training_gradient_checkpointing(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -394,6 +397,9 @@ class ClipTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_training(self):
+        pass
+
+    def test_training_gradient_checkpointing(self):
         pass
 
     def test_inputs_embeds(self):
