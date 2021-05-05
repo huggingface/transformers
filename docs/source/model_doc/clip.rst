@@ -89,7 +89,7 @@ CLIPConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.CLIPConfig
-    :members:
+    :members: from_text_vision_configs
 
 
 CLIPTextConfig
@@ -140,4 +140,4 @@ CLIPVisionModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.CLIPVisionModel
-    :members: forward
+    :members: forward, encode_text, encode_image
