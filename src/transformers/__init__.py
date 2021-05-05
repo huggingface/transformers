@@ -164,10 +164,10 @@ _import_structure = {
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "ClipConfig",
-        "ClipTextConfig",
-        "ClipTokenizer",
-        "ClipVisionConfig",
+        "CLIPConfig",
+        "CLIPTextConfig",
+        "CLIPTokenizer",
+        "CLIPVisionConfig",
     ],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.cpm": ["CpmTokenizer"],
@@ -315,7 +315,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
-    _import_structure["models.clip"].append("ClipTokenizerFast")
+    _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
@@ -389,8 +389,8 @@ else:
 # Vision-specific objects
 if is_vision_available():
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
-    _import_structure["models.clip"].append("ClipFeatureExtractor")
-    _import_structure["models.clip"].append("ClipProcessor")
+    _import_structure["models.clip"].append("CLIPFeatureExtractor")
+    _import_structure["models.clip"].append("CLIPProcessor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
 else:
@@ -582,10 +582,10 @@ if is_torch_available():
     _import_structure["models.clip"].extend(
         [
             "CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ClipModel",
-            "ClipPreTrainedModel",
-            "ClipTextModel",
-            "ClipVisionModel",
+            "CLIPModel",
+            "CLIPPreTrainedModel",
+            "CLIPTextModel",
+            "CLIPVisionModel",
         ]
     )
     _import_structure["models.convbert"].extend(
@@ -1535,10 +1535,10 @@ if TYPE_CHECKING:
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.clip import (
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        ClipConfig,
-        ClipTextConfig,
-        ClipTokenizer,
-        ClipVisionConfig,
+        CLIPConfig,
+        CLIPTextConfig,
+        CLIPTokenizer,
+        CLIPVisionConfig,
     )
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.cpm import CpmTokenizer
@@ -1685,7 +1685,7 @@ if TYPE_CHECKING:
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast
         from .models.camembert import CamembertTokenizerFast
-        from .models.clip import ClipTokenizerFast
+        from .models.clip import CLIPTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.distilbert import DistilBertTokenizerFast
         from .models.dpr import DPRContextEncoderTokenizerFast, DPRQuestionEncoderTokenizerFast, DPRReaderTokenizerFast
@@ -1733,7 +1733,7 @@ if TYPE_CHECKING:
 
     if is_vision_available():
         from .image_utils import ImageFeatureExtractionMixin
-        from .models.clip import ClipFeatureExtractor, ClipProcessor
+        from .models.clip import CLIPFeatureExtractor, CLIPProcessor
         from .models.deit import DeiTFeatureExtractor
         from .models.vit import ViTFeatureExtractor
     else:
@@ -1900,10 +1900,10 @@ if TYPE_CHECKING:
         )
         from .models.clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ClipModel,
-            ClipPreTrainedModel,
-            ClipTextModel,
-            ClipVisionModel,
+            CLIPModel,
+            CLIPPreTrainedModel,
+            CLIPTextModel,
+            CLIPVisionModel,
         )
         from .models.convbert import (
             CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

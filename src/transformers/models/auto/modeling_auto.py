@@ -74,7 +74,7 @@ from ..camembert.modeling_camembert import (
 )
 
 # Add modeling imports here
-from ..clip.modeling_clip import ClipModel
+from ..clip.modeling_clip import CLIPModel
 from ..convbert.modeling_convbert import (
     ConvBertForMaskedLM,
     ConvBertForMultipleChoice,
@@ -291,7 +291,7 @@ from .configuration_auto import (
     BlenderbotConfig,
     BlenderbotSmallConfig,
     CamembertConfig,
-    ClipConfig,
+    CLIPConfig,
     ConvBertConfig,
     CTRLConfig,
     DebertaConfig,
@@ -344,7 +344,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
-        (ClipConfig, ClipModel),
+        (CLIPConfig, CLIPModel),
         (DeiTConfig, DeiTModel),
         (GPTNeoConfig, GPTNeoModel),
         (BigBirdConfig, BigBirdModel),

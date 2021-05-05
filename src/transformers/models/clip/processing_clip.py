@@ -13,36 +13,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Image/Text processor class for Clip
+Image/Text processor class for CLIP
 """
 from contextlib import contextmanager
 
-from .feature_extraction_clip import ClipFeatureExtractor
-from .tokenization_clip import ClipTokenizer
+from .feature_extraction_clip import CLIPFeatureExtractor
+from .tokenization_clip import CLIPTokenizer
 
 
-class ClipProcessor:
+class CLIPProcessor:
     r"""
-    Constructs a Clip processor which wraps a Clip feature extractor and a Clip tokenizer into a single processor.
+    Constructs a CLIP processor which wraps a CLIP feature extractor and a CLIP tokenizer into a single processor.
 
-    :class:`~transformers.ClipProcessor` offers all the functionalities of :class:`~transformers.ClipFeatureExtractor`
-    and :class:`~transformers.ClipTokenizer`. See the :meth:`~transformers.ClipProcessor.__call__` and
-    :meth:`~transformers.ClipProcessor.decode` for more information.
+    :class:`~transformers.CLIPProcessor` offers all the functionalities of :class:`~transformers.CLIPFeatureExtractor`
+    and :class:`~transformers.CLIPTokenizer`. See the :meth:`~transformers.CLIPProcessor.__call__` and
+    :meth:`~transformers.CLIPProcessor.decode` for more information.
 
     Args:
-        feature_extractor (:obj:`ClipFeatureExtractor`):
-            An instance of :class:`~transformers.ClipFeatureExtractor`. The feature extractor is a required input.
-        tokenizer (:obj:`ClipTokenizer`):
-            An instance of :class:`~transformers.ClipTokenizer`. The tokenizer is a required input.
+        feature_extractor (:obj:`CLIPFeatureExtractor`):
+            An instance of :class:`~transformers.CLIPFeatureExtractor`. The feature extractor is a required input.
+        tokenizer (:obj:`CLIPTokenizer`):
+            An instance of :class:`~transformers.CLIPTokenizer`. The tokenizer is a required input.
     """
 
     def __init__(self, feature_extractor, tokenizer):
-        if not isinstance(feature_extractor, ClipFeatureExtractor):
+        if not isinstance(feature_extractor, CLIPFeatureExtractor):
             raise ValueError(
-                f"`feature_extractor` has to be of type {ClipFeatureExtractor.__class__}, but is {type(feature_extractor)}"
+                f"`feature_extractor` has to be of type {CLIPFeatureExtractor.__class__}, but is {type(feature_extractor)}"
             )
-        if not isinstance(tokenizer, ClipTokenizer):
-            raise ValueError(f"`tokenizer` has to be of type {ClipTokenizer.__class__}, but is {type(tokenizer)}")
+        if not isinstance(tokenizer, CLIPTokenizer):
+            raise ValueError(f"`tokenizer` has to be of type {CLIPTokenizer.__class__}, but is {type(tokenizer)}")
 
         self.feature_extractor = feature_extractor
         self.tokenizer = tokenizer
@@ -50,8 +50,8 @@ class ClipProcessor:
 
     def save_pretrained(self, save_directory):
         """
-        Save a Clip feature extractor object and Clip tokenizer object to the directory ``save_directory``, so that it
-        can be re-loaded using the :func:`~transformers.ClipProcessor.from_pretrained` class method.
+        Save a CLIP feature extractor object and CLIP tokenizer object to the directory ``save_directory``, so that it
+        can be re-loaded using the :func:`~transformers.CLIPProcessor.from_pretrained` class method.
 
         .. note::
 
@@ -71,12 +71,12 @@ class ClipProcessor:
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         r"""
-        Instantiate a :class:`~transformers.ClipProcessor` from a pretrained Clip processor.
+        Instantiate a :class:`~transformers.CLIPProcessor` from a pretrained CLIP processor.
 
         .. note::
 
-            This class method is simply calling ClipFeatureExtractor's
-            :meth:`~transformers.PreTrainedFeatureExtractor.from_pretrained` and ClipTokenizer's
+            This class method is simply calling CLIPFeatureExtractor's
+            :meth:`~transformers.PreTrainedFeatureExtractor.from_pretrained` and CLIPTokenizer's
             :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained`. Please refer to the
             docstrings of the methods above for more information.
 
@@ -96,24 +96,24 @@ class ClipProcessor:
                 Additional keyword arguments passed along to both :class:`~transformers.PreTrainedFeatureExtractor` and
                 :class:`~transformers.PreTrainedTokenizer`
         """
-        feature_extractor = ClipFeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        tokenizer = ClipTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        feature_extractor = CLIPFeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        tokenizer = CLIPTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
     def __call__(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to ClipFeatureExtractor's
-        :meth:`~transformers.ClipFeatureExtractor.__call__` and returns its output. If used in the context
-        :meth:`~transformers.ClipProcessor.as_target_processor` this method forwards all its arguments to
-        ClipTokenizer's :meth:`~transformers.ClipTokenizer.__call__`. Please refer to the doctsring of the above two
+        When used in normal mode, this method forwards all its arguments to CLIPFeatureExtractor's
+        :meth:`~transformers.CLIPFeatureExtractor.__call__` and returns its output. If used in the context
+        :meth:`~transformers.CLIPProcessor.as_target_processor` this method forwards all its arguments to
+        CLIPTokenizer's :meth:`~transformers.CLIPTokenizer.__call__`. Please refer to the doctsring of the above two
         methods for more information.
         """
         return self.current_processor(*args, **kwargs)
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to ClipTokenizer's
+        This method forwards all its arguments to CLIPTokenizer's
         :meth:`~transformers.PreTrainedTokenizer.batch_decode`. Please refer to the docstring of this method for more
         information.
         """
@@ -121,7 +121,7 @@ class ClipProcessor:
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to ClipTokenizer's :meth:`~transformers.PreTrainedTokenizer.decode`.
+        This method forwards all its arguments to CLIPTokenizer's :meth:`~transformers.PreTrainedTokenizer.decode`.
         Please refer to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
@@ -129,7 +129,7 @@ class ClipProcessor:
     @contextmanager
     def as_target_processor(self):
         """
-        Temporarily sets the tokenizer for processing the input. Useful for encoding the labels when fine-tuning Clip.
+        Temporarily sets the tokenizer for processing the input. Useful for encoding the labels when fine-tuning CLIP.
         """
         self.current_processor = self.tokenizer
         yield

@@ -29,7 +29,7 @@ from ..blenderbot_small.configuration_blenderbot_small import (
     BlenderbotSmallConfig,
 )
 from ..camembert.configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
-from ..clip.configuration_clip import CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, ClipConfig
+from ..clip.configuration_clip import CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, CLIPConfig
 from ..convbert.configuration_convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig
 from ..ctrl.configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from ..deberta.configuration_deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig
@@ -139,7 +139,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
-        ("clip", ClipConfig),
+        ("clip", CLIPConfig),
         ("deit", DeiTConfig),
         ("gpt_neo", GPTNeoConfig),
         ("big_bird", BigBirdConfig),
@@ -198,7 +198,7 @@ CONFIG_MAPPING = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-        ("clip", "Clip"),
+        ("clip", "CLIP"),
         ("deit", "DeiT"),
         ("gpt_neo", "GPT Neo"),
         ("big_bird", "BigBird"),

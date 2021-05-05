@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Clip model. """
+""" Testing suite for the PyTorch CLIP model. """
 
 
 import inspect
@@ -29,13 +29,13 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        ClipConfig,
-        ClipModel,
-        ClipTextConfig,
-        ClipTextModel,
-        ClipTokenizer,
-        ClipVisionConfig,
-        ClipVisionModel,
+        CLIPConfig,
+        CLIPModel,
+        CLIPTextConfig,
+        CLIPTextModel,
+        CLIPTokenizer,
+        CLIPVisionConfig,
+        CLIPVisionModel,
     )
     from transformers.models.clip.modeling_clip import CLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -43,10 +43,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ClipFeatureExtractor
+    from transformers import CLIPFeatureExtractor
 
 
-class ClipVisionModelTester:
+class CLIPVisionModelTester:
     def __init__(
         self,
         parent,
@@ -81,7 +81,7 @@ class ClipVisionModelTester:
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-        config = ClipVisionConfig(
+        config = CLIPVisionConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -98,7 +98,7 @@ class ClipVisionModelTester:
         return config, pixel_values
 
     def create_and_check_model(self, config, pixel_values):
-        model = ClipVisionModel(config=config)
+        model = CLIPVisionModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -117,13 +117,13 @@ class ClipVisionModelTester:
 
 
 @require_torch
-class ClipVisionModelTest(ModelTesterMixin, unittest.TestCase):
+class CLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as Clip does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as CLIP does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (ClipVisionModel,) if is_torch_available() else ()
+    all_model_classes = (CLIPVisionModel,) if is_torch_available() else ()
 
     test_pruning = False
     test_torchscript = False
@@ -131,14 +131,14 @@ class ClipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = ClipVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ClipVisionConfig, has_text_modality=False, hidden_size=37)
+        self.model_tester = CLIPVisionModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=CLIPVisionConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
     def test_inputs_embeds(self):
-        # Clip does not use inputs_embeds
+        # CLIP does not use inputs_embeds
         pass
 
     def test_model_common_attributes(self):
@@ -170,7 +170,7 @@ class ClipVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
-        # in Clip, the seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
+        # in CLIP, the seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
         image_size = (self.model_tester.image_size, self.model_tester.image_size)
         patch_size = (self.model_tester.patch_size, self.model_tester.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
@@ -263,7 +263,7 @@ class ClipVisionModelTest(ModelTesterMixin, unittest.TestCase):
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
-            # Clip has a different seq_length
+            # CLIP has a different seq_length
             image_size = (self.model_tester.image_size, self.model_tester.image_size)
             patch_size = (self.model_tester.patch_size, self.model_tester.patch_size)
             num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
@@ -295,11 +295,11 @@ class ClipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ClipVisionModel.from_pretrained(model_name)
+            model = CLIPVisionModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
-class ClipTextModelTester:
+class CLIPTextModelTester:
     def __init__(
         self,
         parent,
@@ -343,7 +343,7 @@ class ClipTextModelTester:
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
-        config = ClipTextConfig(
+        config = CLIPTextConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -359,7 +359,7 @@ class ClipTextModelTester:
         return config, input_ids, input_mask
 
     def create_and_check_model(self, config, input_ids, input_mask):
-        model = ClipTextModel(config=config)
+        model = CLIPTextModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -379,15 +379,15 @@ class ClipTextModelTester:
 
 
 @require_torch
-class ClipTextModelTest(ModelTesterMixin, unittest.TestCase):
+class CLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (ClipTextModel,) if is_torch_available() else ()
+    all_model_classes = (CLIPTextModel,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = ClipTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ClipTextConfig, hidden_size=37)
+        self.model_tester = CLIPTextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=CLIPTextConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -403,32 +403,32 @@ class ClipTextModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     def test_inputs_embeds(self):
-        # Clip does not use inputs_embeds
+        # CLIP does not use inputs_embeds
         pass
 
     @slow
     def test_model_from_pretrained(self):
         for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ClipTextModel.from_pretrained(model_name)
+            model = CLIPTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
-class ClipModelTester:
+class CLIPModelTester:
     def __init__(self, parent):
         self.parent = parent
-        self.text_model_tester = ClipTextModelTester(parent)
-        self.vision_model_tester = ClipVisionModelTester(parent)
+        self.text_model_tester = CLIPTextModelTester(parent)
+        self.vision_model_tester = CLIPVisionModelTester(parent)
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
         vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
 
-        config = ClipConfig.from_text_vision_configs(text_config, vision_config, output_dim=64)
+        config = CLIPConfig.from_text_vision_configs(text_config, vision_config, output_dim=64)
 
         return config, input_ids, attention_mask, pixel_values
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
-        model = ClipModel(config).to(torch_device).eval()
+        model = CLIPModel(config).to(torch_device).eval()
         result = model(input_ids, attention_mask, pixel_values=pixel_values)
         self.parent.assertEqual(
             result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
@@ -450,9 +450,9 @@ class ClipModelTester:
 
 
 @require_torch
-class ClipModelTest(unittest.TestCase):
+class CLIPModelTest(unittest.TestCase):
     def setUp(self):
-        self.model_tester = ClipModelTester(self)
+        self.model_tester = CLIPModelTester(self)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -461,7 +461,7 @@ class ClipModelTest(unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ClipModel.from_pretrained(model_name)
+            model = CLIPModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -472,13 +472,13 @@ def prepare_img():
 
 
 @require_vision
-class ClipModelIntegrationTest(unittest.TestCase):
+class CLIPModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model_name = "valhalla/clip-vit-base"
-        model = ClipModel.from_pretrained(model_name)
-        tokenizer = ClipTokenizer.from_pretrained(model_name)
-        feature_extractor = ClipFeatureExtractor.from_pretrained(model_name)
+        model = CLIPModel.from_pretrained(model_name)
+        tokenizer = CLIPTokenizer.from_pretrained(model_name)
+        feature_extractor = CLIPFeatureExtractor.from_pretrained(model_name)
 
         image = prepare_img()
         vision_inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)

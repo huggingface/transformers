@@ -47,7 +47,7 @@ class CamembertTokenizerFast:
         requires_backends(self, ["tokenizers"])
 
 
-class ClipTokenizerFast:
+class CLIPTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tokenizers"])
 

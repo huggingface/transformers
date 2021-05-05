@@ -18,7 +18,7 @@ import json
 import os
 import unittest
 
-from transformers import ClipTokenizer
+from transformers import CLIPTokenizer
 from transformers.models.clip.tokenization_clip import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers
 
@@ -26,10 +26,10 @@ from .test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
-class ClipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
-    tokenizer_class = ClipTokenizer
-    # rust_tokenizer_class = ClipTokenizerFast
+    tokenizer_class = CLIPTokenizer
+    # rust_tokenizer_class = CLIPTokenizerFast
     # test_rust_tokenizer = True
     from_pretrained_kwargs = {"add_prefix_space": True}
     test_seq2seq = False
@@ -71,11 +71,11 @@ class ClipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def get_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
-        return ClipTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+        return CLIPTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     # def get_rust_tokenizer(self, **kwargs):
     #     kwargs.update(self.special_tokens_map)
-    #     return ClipTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+    #     return CLIPTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
@@ -83,7 +83,7 @@ class ClipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        tokenizer = ClipTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
+        tokenizer = CLIPTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
         text = "lower newer"
         bpe_tokens = ["lo", "w", "er</w>", "n", "e", "w", "er</w>"]
         tokens = tokenizer.tokenize(text, add_prefix_space=True)
@@ -125,7 +125,7 @@ class ClipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_pretokenized_inputs(self, *args, **kwargs):
         # It's very difficult to mix/test pretokenization with byte-level
-        # And get both Clip and Roberta to work at the same time (mostly an issue of adding a space before the string)
+        # And get both CLIP and Roberta to work at the same time (mostly an issue of adding a space before the string)
         pass
 
     def test_padding(self, max_length=15):

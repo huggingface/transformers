@@ -838,7 +838,7 @@ class CamembertModel:
 CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class ClipModel:
+class CLIPModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -847,7 +847,7 @@ class ClipModel:
         requires_backends(self, ["torch"])
 
 
-class ClipPreTrainedModel:
+class CLIPPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -856,7 +856,7 @@ class ClipPreTrainedModel:
         requires_backends(self, ["torch"])
 
 
-class ClipTextModel:
+class CLIPTextModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -865,7 +865,7 @@ class ClipTextModel:
         requires_backends(self, ["torch"])
 
 
-class ClipVisionModel:
+class CLIPVisionModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 

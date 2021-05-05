@@ -18,7 +18,7 @@ import argparse
 import torch
 
 from clip import load
-from transformers import ClipConfig, ClipModel
+from transformers import CLIPConfig, CLIPModel
 
 
 def copy_attn_layer(hf_attn_layer, pt_attn_layer):
@@ -111,11 +111,11 @@ def convert_clip_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_pa
     Copy/paste/tweak model's weights to transformers design.
     """
     if config_path is not None:
-        config = ClipConfig.from_pretrained(config_path)
+        config = CLIPConfig.from_pretrained(config_path)
     else:
-        config = ClipConfig(output_dim=512, text_config={}, vision_config={})
+        config = CLIPConfig(output_dim=512, text_config={}, vision_config={})
 
-    hf_model = ClipModel(config).eval()
+    hf_model = CLIPModel(config).eval()
 
     pt_model, _ = load(checkpoint_path, jit=False)
     pt_model = pt_model.eval()

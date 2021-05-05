@@ -30,10 +30,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ClipFeatureExtractor
+    from transformers import CLIPFeatureExtractor
 
 
-class ClipFeatureExtractionTester(unittest.TestCase):
+class CLIPFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -108,12 +108,12 @@ class ClipFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class ClipFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class CLIPFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
-    feature_extraction_class = ClipFeatureExtractor if is_vision_available() else None
+    feature_extraction_class = CLIPFeatureExtractor if is_vision_available() else None
 
     def setUp(self):
-        self.feature_extract_tester = ClipFeatureExtractionTester(self)
+        self.feature_extract_tester = CLIPFeatureExtractionTester(self)
 
     @property
     def feat_extract_dict(self):

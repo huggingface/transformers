@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Clip model configuration """
+""" CLIP model configuration """
 
 import copy
 
@@ -24,15 +24,15 @@ logger = logging.get_logger(__name__)
 
 CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "clip_ViT_B_32": "https://huggingface.co/clip_ViT_B_32/resolve/main/config.json",
-    # See all Clip models at https://huggingface.co/models?filter=clip
+    # See all CLIP models at https://huggingface.co/models?filter=clip
 }
 
 
-class ClipTextConfig(PretrainedConfig):
+class CLIPTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.ClipModel`. It is used to
-    instantiate an Clip model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Clip `clip_ViT_B_32
+    This is the configuration class to store the configuration of a :class:`~transformers.CLIPModel`. It is used to
+    instantiate an CLIP model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the CLIP `clip_ViT_B_32
     <https://huggingface.co/clip_ViT_B_32>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
@@ -41,10 +41,10 @@ class ClipTextConfig(PretrainedConfig):
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 49408):
-            Vocabulary size of the Clip text model. Defines the number of different tokens that can be represented by
-            the :obj:`inputs_ids` passed when calling :class:`~transformers.ClipModel`. Defines the different tokens
+            Vocabulary size of the CLIP text model. Defines the number of different tokens that can be represented by
+            the :obj:`inputs_ids` passed when calling :class:`~transformers.CLIPModel`. Defines the different tokens
             that can be represented by the `inputs_ids` passed to the forward method of
-            :class:`~transformers.ClipTextModel`.
+            :class:`~transformers.CLIPTextModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 512):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
@@ -69,13 +69,13 @@ class ClipTextConfig(PretrainedConfig):
 
         Example::
 
-        >>> from transformers import ClipTextModel, ClipTextConfig
+        >>> from transformers import CLIPTextModel, CLIPTextConfig
 
-        >>> # Initializing a ClipTextModel with clip_ViT_B_32 style configuration
-        >>> configuration = ClipConfig()
+        >>> # Initializing a CLIPTextModel with clip_ViT_B_32 style configuration
+        >>> configuration = CLIPConfig()
 
         >>> # Initializing a model from the clip_ViT_B_32 style configuration
-        >>> model = ClipTextModel(configuration)
+        >>> model = CLIPTextModel(configuration)
 
         >>> # Accessing the model configuration
         >>> configuration = model.config
@@ -119,11 +119,11 @@ class ClipTextConfig(PretrainedConfig):
         self.gradient_checkpointing = gradient_checkpointing
 
 
-class ClipVisionConfig(PretrainedConfig):
+class CLIPVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.ClipModel`. It is used to
-    instantiate an Clip model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Clip `clip_ViT_B_32
+    This is the configuration class to store the configuration of a :class:`~transformers.CLIPModel`. It is used to
+    instantiate an CLIP model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the CLIP `clip_ViT_B_32
     <https://huggingface.co/clip_ViT_B_32>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
@@ -159,13 +159,13 @@ class ClipVisionConfig(PretrainedConfig):
 
         Example::
 
-        >>> from transformers import ClipVisionModel, ClipTextConfig
+        >>> from transformers import CLIPVisionModel, CLIPTextConfig
 
-        >>> # Initializing a ClipVisionModel with clip_ViT_B_32 style configuration
-        >>> configuration = ClipConfig()
+        >>> # Initializing a CLIPVisionModel with clip_ViT_B_32 style configuration
+        >>> configuration = CLIPConfig()
 
         >>> # Initializing a model from the clip_ViT_B_32 style configuration
-        >>> model = ClipVisionModel(configuration)
+        >>> model = CLIPVisionModel(configuration)
 
         >>> # Accessing the model configuration
         >>> configuration = model.config
@@ -207,10 +207,10 @@ class ClipVisionConfig(PretrainedConfig):
         self.gradient_checkpointing = gradient_checkpointing
 
 
-class ClipConfig(PretrainedConfig):
+class CLIPConfig(PretrainedConfig):
     r"""
-    :class:`~transformers.ClipConfig` is the configuration class to store the configuration of a
-    :class:`~transformers.ClipModel`. It is used to instantiate CLIP model according to the specified arguments,
+    :class:`~transformers.CLIPConfig` is the configuration class to store the configuration of a
+    :class:`~transformers.CLIPModel`. It is used to instantiate CLIP model according to the specified arguments,
     defining the text model and vision model configs.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
@@ -222,9 +222,9 @@ class ClipConfig(PretrainedConfig):
         kwargs (`optional`):
             Dictionary of keyword arguments. Notably:
 
-                - **text_config** (:class:`~transformers.ClipTextConfig`, `optional`) -- An instance of a configuration
+                - **text_config** (:class:`~transformers.CLIPTextConfig`, `optional`) -- An instance of a configuration
                   object that defines the text model config.
-                - **vision_config** (:class:`~transformers.ClipVisionConfig`, `optional`) -- An instance of a
+                - **vision_config** (:class:`~transformers.CLIPVisionConfig`, `optional`) -- An instance of a
                   configuration object that defines the vision model config.
     """
 
@@ -236,19 +236,19 @@ class ClipConfig(PretrainedConfig):
         text_config_dict = kwargs.pop("text_config")
         vision_config_dict = kwargs.pop("vision_config")
 
-        self.text_config = ClipTextConfig(**text_config_dict)
-        self.vision_config = ClipVisionConfig(**vision_config_dict)
+        self.text_config = CLIPTextConfig(**text_config_dict)
+        self.vision_config = CLIPVisionConfig(**vision_config_dict)
 
         self.output_dim = output_dim
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: ClipTextConfig, vision_config: ClipVisionConfig, **kwargs):
+    def from_text_vision_configs(cls, text_config: CLIPTextConfig, vision_config: CLIPVisionConfig, **kwargs):
         r"""
-        Instantiate a :class:`~transformers.ClipConfig` (or a derived class) from clip text model configuration and
+        Instantiate a :class:`~transformers.CLIPConfig` (or a derived class) from clip text model configuration and
         clip vision model configuration.
 
         Returns:
-            :class:`ClipConfig`: An instance of a configuration object
+            :class:`CLIPConfig`: An instance of a configuration object
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)

@@ -21,45 +21,45 @@ from ...file_utils import _BaseLazyModule, is_tokenizers_available, is_torch_ava
 
 
 _import_structure = {
-    "configuration_clip": ["CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "ClipConfig", "ClipTextConfig", "ClipVisionConfig"],
-    "tokenization_clip": ["ClipTokenizer"],
+    "configuration_clip": ["CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "CLIPConfig", "CLIPTextConfig", "CLIPVisionConfig"],
+    "tokenization_clip": ["CLIPTokenizer"],
 }
 
 if is_tokenizers_available():
-    _import_structure["tokenization_clip_fast"] = ["ClipTokenizerFast"]
+    _import_structure["tokenization_clip_fast"] = ["CLIPTokenizerFast"]
 
 if is_vision_available():
-    _import_structure["feature_extraction_clip"] = ["ClipFeatureExtractor"]
-    _import_structure["processing_clip"] = ["ClipProcessor"]
+    _import_structure["feature_extraction_clip"] = ["CLIPFeatureExtractor"]
+    _import_structure["processing_clip"] = ["CLIPProcessor"]
 
 if is_torch_available():
     _import_structure["modeling_clip"] = [
         "CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "ClipModel",
-        "ClipPreTrainedModel",
-        "ClipTextModel",
-        "ClipVisionModel",
+        "CLIPModel",
+        "CLIPPreTrainedModel",
+        "CLIPTextModel",
+        "CLIPVisionModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_clip import CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, ClipConfig, ClipTextConfig, ClipVisionConfig
-    from .tokenization_clip import ClipTokenizer
+    from .configuration_clip import CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, CLIPConfig, CLIPTextConfig, CLIPVisionConfig
+    from .tokenization_clip import CLIPTokenizer
 
     if is_tokenizers_available():
-        from .tokenization_clip_fast import ClipTokenizerFast
+        from .tokenization_clip_fast import CLIPTokenizerFast
 
     if is_vision_available():
-        from .feature_extraction_clip import ClipFeatureExtractor
-        from .processing_clip import ClipProcessor
+        from .feature_extraction_clip import CLIPFeatureExtractor
+        from .processing_clip import CLIPProcessor
 
     if is_torch_available():
         from .modeling_clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ClipModel,
-            ClipPreTrainedModel,
-            ClipTextModel,
-            ClipVisionModel,
+            CLIPModel,
+            CLIPPreTrainedModel,
+            CLIPTextModel,
+            CLIPVisionModel,
         )
 
 

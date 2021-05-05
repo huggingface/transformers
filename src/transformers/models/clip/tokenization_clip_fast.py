@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for Clip."""
+"""Tokenization classes for CLIP."""
 from ...utils import logging
 from ..bert.tokenization_bert_fast import BertTokenizerFast
 from .tokenization_clip import clipTokenizer
@@ -40,7 +40,7 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class clipTokenizerFast(BertTokenizerFast):
     r"""
-    Construct a "fast" Clip tokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" CLIP tokenizer (backed by HuggingFace's `tokenizers` library).
 
     :class:`~transformers.clipTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
     end-to-end tokenization: punctuation splitting and wordpiece.

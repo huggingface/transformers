@@ -28,7 +28,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class ClipFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
+class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a CLIP feature extractor.
 

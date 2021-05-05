@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for Clip."""
+"""Tokenization classes for CLIP."""
 
 import json
 import os
@@ -97,7 +97,7 @@ def whitespace_clean(text):
     return text
 
 
-class ClipTokenizer(PreTrainedTokenizer):
+class CLIPTokenizer(PreTrainedTokenizer):
     """
     Construct a CLIP tokenizer. Based on byte-level Byte-Pair-Encoding.
 
