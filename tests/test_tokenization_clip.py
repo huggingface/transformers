@@ -29,8 +29,6 @@ from .test_tokenization_common import TokenizerTesterMixin
 class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = CLIPTokenizer
-    # rust_tokenizer_class = CLIPTokenizerFast
-    # test_rust_tokenizer = True
     from_pretrained_kwargs = {"add_prefix_space": True}
     test_seq2seq = False
 
@@ -72,10 +70,6 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def get_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
         return CLIPTokenizer.from_pretrained(self.tmpdirname, **kwargs)
-
-    # def get_rust_tokenizer(self, **kwargs):
-    #     kwargs.update(self.special_tokens_map)
-    #     return CLIPTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
@@ -171,7 +165,3 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     max_length=max_length,
                     padding="max_length",
                 )
-
-    # tokenizer has no padding token
-    def test_padding_different_model_input_name(self):
-        pass
