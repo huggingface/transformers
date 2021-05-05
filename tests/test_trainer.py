@@ -15,7 +15,9 @@
 
 import dataclasses
 import gc
+import math
 import os
+import random
 import re
 import tempfile
 import unittest
@@ -194,6 +196,28 @@ if is_torch_available():
                 return (y, y) if self.double_output else (y,)
             loss = torch.nn.functional.mse_loss(y, labels)
             return (loss, y, y) if self.double_output else (loss, y)
+
+    class RegressionRandomPreTrainedModel(PreTrainedModel):
+        config_class = RegressionModelConfig
+        base_model_prefix = "regression"
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.a = torch.nn.Parameter(torch.tensor(config.a).float())
+            self.b = torch.nn.Parameter(torch.tensor(config.b).float())
+
+        def forward(self, input_x, labels=None, **kwargs):
+            y = input_x * self.a + self.b
+            torch_rand = torch.randn(1).squeeze()
+            np_rand = np.random.rand()
+            rand_rand = random.random()
+
+            y += 0.05 * torch_rand + 0.05 * torch.tensor(np_rand + rand_rand)
+
+            if labels is None:
+                return (y,)
+            loss = torch.nn.functional.mse_loss(y, labels)
+            return (loss, y)
 
     class TstLayer(torch.nn.Module):
         def __init__(self, hidden_size):
@@ -698,6 +722,34 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         with self.assertRaises(Exception) as context:
             trainer.train(resume_from_checkpoint=True)
         self.assertTrue("No valid checkpoint found in output directory" in str(context.exception))
+
+    def test_resume_training_with_randomness(self):
+        if torch.cuda.device_count() >= 2:
+            # This test will fail flakily for more than 2 GPUs since the result will be slightly more different.
+            return
+
+        if torch.cuda.is_available():
+            torch.backends.cudnn.deterministic = True
+        train_dataset = RegressionDataset(length=128)
+        eval_dataset = RegressionDataset()
+
+        config = RegressionModelConfig(a=0, b=2)
+        model = RegressionRandomPreTrainedModel(config)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        args = RegressionTrainingArguments(tmp_dir, save_steps=5, learning_rate=0.1)
+        trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+
+        trainer.train()
+        (a, b) = trainer.model.a.item(), trainer.model.b.item()
+
+        model = RegressionRandomPreTrainedModel(config)
+        trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+        trainer.train(resume_from_checkpoint=os.path.join(tmp_dir, "checkpoint-15"))
+        (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+
+        self.assertTrue(math.isclose(a, a1, rel_tol=1e-8))
+        self.assertTrue(math.isclose(b, b1, rel_tol=1e-8))
 
     def test_resume_training_with_gradient_accumulation(self):
         if torch.cuda.device_count() > 2:
