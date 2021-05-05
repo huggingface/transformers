@@ -364,7 +364,7 @@ def parse_log_history(log_history):
     # If there are no training logs
     if idx == len(log_history):
         idx -= 1
-        while "eval_loss" not in log_history[idx]:
+        while idx >=0 and "eval_loss" not in log_history[idx]:
             idx -= 1
 
         if idx > 0:
