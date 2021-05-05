@@ -113,7 +113,7 @@ def convert_clip_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_pa
     if config_path is not None:
         config = CLIPConfig.from_pretrained(config_path)
     else:
-        config = CLIPConfig(output_dim=512, text_config={}, vision_config={})
+        config = CLIPConfig(projection_dim=512, text_config={}, vision_config={})
 
     hf_model = CLIPModel(config).eval()
 
