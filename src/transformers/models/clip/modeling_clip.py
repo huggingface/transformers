@@ -833,7 +833,7 @@ class CLIPModel(CLIPPreTrainedModel):
         self.vision_embed_dim = vision_config.hidden_size
 
         self.text_model = CLIPTextTransformer(text_config)
-        self.vision_model = CLIPVisionModel(vision_config)
+        self.vision_model = CLIPVisionTransformer(vision_config)
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.output_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.output_dim, bias=False)
