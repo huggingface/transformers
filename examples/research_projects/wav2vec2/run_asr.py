@@ -343,6 +343,10 @@ def main():
 
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
     configure_logger(model_args, training_args)
+    # from pprint import pprint
+    # pprint(vars(training_args))
+    # die
+
 
     orthography = Orthography.from_name(data_args.orthography.lower())
     processor = orthography.create_processor(model_args)

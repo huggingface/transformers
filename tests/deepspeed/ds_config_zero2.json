@@ -29,6 +29,7 @@
 
     "zero_optimization": {
         "stage": 2,
+        "find_unused_parameters": true,
         "allgather_partitions": true,
         "allgather_bucket_size": 2e8,
         "overlap_comm": true,
@@ -36,6 +37,7 @@
         "reduce_bucket_size": 2e8,
         "contiguous_gradients": true,
         "cpu_offload": true
+
     },
 
     "gradient_accumulation_steps": "auto",

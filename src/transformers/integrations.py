@@ -27,9 +27,9 @@ from pathlib import Path
 from .dependency_versions_check import dep_version_check
 from .utils import logging
 
+from .file_utils import is_torch_available
 
 logger = logging.get_logger(__name__)
-
 
 # comet_ml requires to be imported before any ML frameworks
 _has_comet = importlib.util.find_spec("comet_ml") is not None and os.getenv("COMET_MODE", "").upper() != "DISABLED"
@@ -270,9 +270,11 @@ def rewrite_logs(d):
 
 
 def _is_true(config, key):
-    if config is None:
-        return False
     return bool(config.get(key))
+
+
+def _is_false(config, key):
+    return not bool(config.get(key))
 
 
 def _set_if_auto(config, key, val):
@@ -297,6 +299,7 @@ class DeepSpeedConfigHF:
         self.config = None
         self.stage = 0
         self.offload = False
+        self._dtype = None
 
         dep_version_check("deepspeed")
 
@@ -310,6 +313,9 @@ class DeepSpeedConfigHF:
 
     def is_zero3(self):
         return self.stage == 3
+
+    def dtype(self):
+        return self._dtype
 
     def is_offload(self):
         return self.offload
@@ -371,10 +377,20 @@ class DeepSpeedConfigHF:
         else:
             fp16_backend = None
 
+        if is_torch_available():
+            import torch
+
         # amp: similar to the pytorch native amp - it has a bunch of optional params but we won't set
         # any here unless the user did the work
-        config_fp16 = config.get("fp16")
+        config_fp16 = config.get("fp16", {})
         _set_if_auto(config_fp16, "enabled", fp16_backend == "amp")
+        # only if we have an explicit fp16.enabled = False then it's fp32, if it's True or this
+        # whole config section is missing then the fallback is fp16
+        self._dtype = torch.float16
+        if config_fp16 != {} and _is_false(config_fp16, "enabled"):
+            self._dtype = torch.float32
+        # later there will be other dtypes besides just fp16 and fp32
+        # also not quite sure what dtype should be under apex, defaulting to fp16 for now
 
         # apex: delegates amp work to apex (which needs to be available), but it cannot be used with any
         # ZeRO features, so probably best to be avoided.

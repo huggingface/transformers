@@ -61,7 +61,7 @@ def default_logdir() -> str:
     return os.path.join("runs", current_time + "_" + socket.gethostname())
 
 
-@dataclass
+@dataclass()
 class TrainingArguments:
     """
     TrainingArguments is the subset of the arguments we use in our example scripts **which relate to the training loop

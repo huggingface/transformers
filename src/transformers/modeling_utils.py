@@ -1203,6 +1203,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     # because zero3 puts placeholders in model params, this context
                     # manager gathers (unpartitions) the params of the current layer, then loads from
                     # the state dict and then re-partitions them again
+                    print(f"params = {[name for name, v in module.named_parameters(recurse=False)]}")
                     with deepspeed.zero.GatheredParameters(list(module.parameters(recurse=False)), modifier_rank=0):
                         if torch.distributed.get_rank() == 0:
                             module._load_from_state_dict(*args)

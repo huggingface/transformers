@@ -197,6 +197,55 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 trainer.train()
             self.assertIn("DeepSpeed info", cs.out, "expected DeepSpeed logger output but got none")
 
+
+    def test_audio_models(self):
+        # test non-nlp models - unique quality - inputs aren't int64 and they don't get
+        # automatically converted into the corresponding model weights dtype via embedding
+
+        from datasets import load_dataset
+        from transformers import Wav2Vec2ForCTC
+        import torchaudio
+        import torch
+
+        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+
+        model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2_tiny_random")
+
+        def load_audio(batch):
+            batch["samples"], _ = torchaudio.load(batch["file"])
+            return batch
+
+        ds = ds.map(load_audio)
+
+        input_values = torch.nn.utils.rnn.pad_sequence([torch.tensor(x[0]) for x in ds["samples"][:10]], batch_first=True)
+
+        # forward
+        logits = model(input_values).logits
+        pred_ids = torch.argmax(logits, dim=-1)
+
+        # dummy loss
+        dummy_labels = pred_ids.clone()
+        dummy_labels[dummy_labels == model.config.pad_token_id] = 1  # can't have CTC blank token in label
+        dummy_labels = dummy_labels[:, -(dummy_labels.shape[1] // 4):] # make sure labels are shorter to avoid "inf" loss (can still happen though...)
+        loss = model(input_values, labels=dummy_labels).loss
+
+
+        with mockenv_context(**self.dist_env_1_gpu):
+            # this actually doesn't have to be on NVMe, any storage will do since this test only
+            # runs a simple check that we can use some directory as if it were NVMe
+            nvme_path = self.get_auto_remove_tmp_dir()
+            nvme_config = dict(device="nvme", nvme_path=nvme_path)
+            ds_config_zero3_dict = self.get_config_dict(ZERO3)
+            ds_config_zero3_dict["zero_optimization"]["offload_optimizer"] = nvme_config
+            ds_config_zero3_dict["zero_optimization"]["offload_param"] = nvme_config
+            trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_zero3_dict)
+            with CaptureLogger(deepspeed_logger) as cs:
+                trainer.train()
+            self.assertIn("DeepSpeed info", cs.out, "expected DeepSpeed logger output but got none")
+
+
+
+
     # --- These tests need to run on both zero stages --- #
 
     @parameterized.expand(stages)
@@ -740,7 +789,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
         execute_subprocess_async(cmd, env=self.get_env())
 
-        return output_dir
 
     def get_launcher(self, distributed=False):
         # 1. explicitly set --num_nodes=1 just in case these tests end up run on a multi-node setup
@@ -749,3 +797,60 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         # results with mode gpus because we use very little data)
         num_gpus = min(2, get_gpu_count()) if distributed else 1
         return f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
+
+
+    def test_wav2vec2(self):
+
+        # XXX: zero2 config file needs to be split off because it needs
+        # zero_optimization.find_unused_parameters = True
+
+    #     # XXX: test with fp16 and w/o
+    #     self.run_wav2vec2_trainer()
+
+    # def run_wav2vec2_trainer(
+    #     self,
+    #     stage: str,
+    #     model_name: str,
+    #     eval_steps: int = 10,
+    #     num_train_epochs: int = 1,
+    #     do_train: bool = False,
+    #     do_eval: bool = True,
+    #     distributed: bool = True,
+    #     fp16: bool = True,
+    #     extra_args_str: str = None,
+    #     remove_args_str: str = None,
+    # ):
+        # ZERO2
+        data_dir = self.tests_dir / "fixtures"
+        output_dir = self.get_auto_remove_tmp_dir()
+        args = f"""
+            --model_name_or_path patrickvonplaten/wav2vec2_tiny_random_robust
+            --dataset_name patrickvonplaten/librispeech_asr_dummy
+            --dataset_config_name clean
+            --train_split_name validation
+            --validation_split_name validation
+            --output_dir {output_dir}
+            --num_train_epochs 1
+            --per_device_train_batch_size 2
+            --per_device_eval_batch_size 2
+            --evaluation_strategy steps
+            --learning_rate 5e-4
+            --warmup_steps 8
+            --orthography timit
+            --preprocessing_num_workers 1
+            --group_by_length
+            --freeze_feature_extractor
+            --fp16
+            --report_to none
+            """.split()
+
+        ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_zero2.json".split()
+        script = [f"{self.examples_dir_str}/research_projects/wav2vec2/run_asr.py"]
+        launcher = self.get_launcher(distributed=True)
+
+        cmd = launcher + script + args + ds_args
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        execute_subprocess_async(cmd, env=self.get_env())
+
+        return output_dir

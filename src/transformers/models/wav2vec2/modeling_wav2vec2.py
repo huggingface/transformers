@@ -197,7 +197,17 @@ class Wav2Vec2PositionalConvEmbedding(nn.Module):
             padding=config.num_conv_pos_embeddings // 2,
             groups=config.num_conv_pos_embedding_groups,
         )
-        self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
+
+        from transformers.integrations import is_deepspeed_zero3_enabled
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+            with deepspeed.zero.GatheredParameters(self.conv.weight):
+                self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
+            deepspeed.zero.register_external_parameter(self, self.conv.weight_v)
+            deepspeed.zero.register_external_parameter(self, self.conv.weight_g)
+        else:
+            self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
+
         self.padding = Wav2Vec2SamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
 
@@ -689,7 +699,18 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
-            torch.nn.init.kaiming_normal_(module.weight.data)
+            print(f"shape={module.weight.shape}")
+            from transformers.integrations import is_deepspeed_zero3_enabled
+            #if is_deepspeed_zero3_enabled() and
+            if hasattr(module, "weight_v") and hasattr(module, "weight_g"):
+                import deepspeed
+                with deepspeed.zero.GatheredParameters([module.weight_v, module.weight_g]):
+                    torch.nn.init.kaiming_normal_(module.weight.data)
+            else:
+                import deepspeed
+                with deepspeed.zero.GatheredParameters(module.weight):
+                    torch.nn.init.kaiming_normal_(module.weight.data)
+
         if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
 
@@ -1070,7 +1091,8 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
             target_lengths = labels_mask.sum(-1)
             flattened_targets = labels.masked_select(labels_mask)
 
-            log_probs = F.log_softmax(logits, dim=-1).transpose(0, 1)
+            # ctc_loss doesn't support fp16
+            log_probs = F.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
 
             with torch.backends.cudnn.flags(enabled=False):
                 loss = F.ctc_loss(
