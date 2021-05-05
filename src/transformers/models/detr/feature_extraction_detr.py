@@ -126,8 +126,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
 
     Args:
-        task (:obj:`str`, `optional`, defaults to :obj:`object_detection`):
-            Task for which to prepare features for.
+        format (:obj:`str`, `optional`, defaults to :obj:`"coco_detection"`):
+            Data format of the annotations. One of "coco_detection" or "coco_panoptic".  
         do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to resize the input to a certain :obj:`size`.
         size (:obj:`int`, `optional`, defaults to 800):
@@ -150,7 +150,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     def __init__(
         self,
-        task="object_detection",
+        format="coco_detection",
         do_resize=True,
         size=800,
         max_size=1333,
@@ -160,7 +160,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         **kwargs
     ):
         super().__init__(**kwargs)
-        self.task = task
+        self.format = format
         self.do_resize = do_resize
         self.size = size
         self.max_size = max_size
@@ -168,19 +168,21 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.image_mean = image_mean if image_mean is not None else [0.485, 0.456, 0.406]
         self.image_std = image_std if image_std is not None else [0.229, 0.224, 0.225]
 
-    def prepare(self, image, target, masks_path=None):
-        if self.task == "object_detection":
-            image, target = self.prepare_object_detection(image, target)
+    def prepare(self, image, target, return_segmentation_masks=False, masks_path=None):
+        if self.format == "coco_detection":
+            image, target = self.prepare_coco_detection(image, target, return_segmentation_masks)
             return image, target
-        elif self.task == "panoptic_segmentation":
-            image, target = self.prepare_panoptic_segmentation(image, target, masks_path)
+        elif self.format == "coco_panoptic":
+            image, target = self.prepare_coco_panoptic(image, target, masks_path)
             return image, target
         else:
-            raise ValueError(f"Task {self.task} not supported")
+            raise ValueError(f"Format {self.format} not supported")
 
     # inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L33
     def convert_coco_poly_to_mask(self, segmentations, height, width):
 
+        from pycocotools import mask as coco_mask
+        
         masks = []
         for polygons in segmentations:
             rles = coco_mask.frPyObjects(polygons, height, width)
@@ -198,7 +200,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         return masks
 
     # inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L50
-    def prepare_object_detection(self, image, target, return_segmentation_masks=False):
+    def prepare_coco_detection(self, image, target, return_segmentation_masks=False):
         """
         Convert the target in COCO format into the format expected by DETR.
         """
@@ -262,7 +264,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return image, target
 
-    def prepare_panoptic_segmentation(self, image, target, masks_path, return_masks=True):
+    def prepare_coco_panoptic(self, image, target, masks_path, return_masks=True):
         w, h = image.size
         ann_info = target.copy()
         ann_path = pathlib.Path(masks_path) / ann_info["file_name"]
@@ -393,6 +395,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
         ],
         annotations: Union[List[Dict], List[List[Dict]]] = None,
+        return_segmentation_masks: Optional[bool] = False,
         masks_path: Optional[pathlib.Path] = None,
         pad_and_return_pixel_mask: Optional[bool] = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -401,7 +404,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         """
         Main method to prepare for the model one or several image(s) and optional annotations. Images are by default
         padded up to the largest image in a batch, and a pixel mask is created that indicates which pixels are
-        read/which are padding.
+        real/which are padding.
 
         .. warning::
 
@@ -415,14 +418,21 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 number of channels, H and W are image height and width.
 
             annotations (:obj:`Dict`, :obj:`List[Dict]`, `optional`):
-                The corresponding annotations in COCO format. The annotations for each image should have the following
-                format: {'image_id': image_id, 'annotations': target}, in other words a dictionary with 2 keys:
+                The corresponding annotations in COCO format. 
+                
+                In case :obj:`format` = :obj:`"coco_detection"`, the annotations for each image should have the following
+                format: {'image_id': int, 'annotations': [annotation]}, with the annotations being a list of COCO object annotations.
 
-                * image_id
-                * annotations, which is a list of COCO annotations.
+                In case :obj:`format` = :obj:`"coco_panoptic"`, the annotations for each image should have the following
+                format: {'image_id': int, 'file_name': str, 'segments_info': [segment_info]} with segments_info being a list 
+                of COCO panoptic annotations.
 
+            return_segmentation_masks (:obj:`Dict`, :obj:`List[Dict]`, `optional`, defaults to :obj:`False`):
+                Whether to also return instance segmentation masks in case :obj:`format` = :obj:`"coco_detection"`. 
+            
             masks_path (:obj:`pathlib.Path`, `optional`):
                 Path to the directory containing the PNG files that store the class-agnostic image segmentations.
+                Only relevant in case :obj:`format` = :obj:`"coco_panoptic"`. 
 
             pad_and_return_pixel_mask (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to pad images up to the largest image in a batch and create a pixel mask.
@@ -472,13 +482,13 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         # Check that annotations has a valid type
         if annotations is not None:
             if not is_batched:
-                if self.task == "object_detection":
+                if self.format == "coco_detection":
                     if isinstance(annotations, dict) and "image_id" in annotations and "annotations" in annotations:
                         if isinstance(annotations["annotations"], (list, tuple)):
                             # an image can have no annotations
                             if len(annotations["annotations"]) == 0 or isinstance(annotations["annotations"][0], dict):
                                 valid_annotations = True
-                elif self.task == "panoptic_segmentation":
+                elif self.format == "coco_panoptic":
                     if isinstance(annotations, dict) and "image_id" in annotations and "segments_info" in annotations:
                         if isinstance(annotations["segments_info"], (list, tuple)):
                             # an image can have no segments (?)
@@ -490,10 +500,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 if isinstance(annotations, (list, tuple)):
                     assert len(images) == len(annotations), "There must be as many annotations as there are images"
                     if isinstance(annotations[0], Dict):
-                        if self.task == "object_detection":
+                        if self.format == "coco_detection":
                             if isinstance(annotations[0]["annotations"], (list, tuple)):
                                 valid_annotations = True
-                        elif self.task == "panoptic_segmentation":
+                        elif self.format == "coco_panoptic":
                             if isinstance(annotations[0]["segments_info"], (list, tuple)):
                                 valid_annotations = True
 
@@ -509,7 +519,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 )
 
         # Check that masks_path has a valid type
-        if self.task == "panoptic_segmentation":
+        if self.format == "coco_panoptic":
             if isinstance(masks_path, pathlib.Path):
                 valid_masks_path = True
             if not valid_masks_path:
@@ -527,7 +537,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             for idx, (image, target) in enumerate(zip(images, annotations)):
                 if not isinstance(image, Image.Image):
                     image = self.to_pil_image(image)
-                image, target = self.prepare(image, target, masks_path)
+                image, target = self.prepare(image, target, return_segmentation_masks, masks_path)
                 images[idx] = image
                 annotations[idx] = target
 
@@ -666,7 +676,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/segmentation.py#L218
     def post_process_segmentation(self, results, outputs, orig_target_sizes, max_target_sizes, threshold=0.5):
         """
-        Converts the output of :class:`~transformers.DetrForPanopticSegmentation` into actual instance segmentation
+        Converts the output of :class:`~transformers.DetrForSegmentation` into actual instance segmentation
         predictions.
 
         Only supports PyTorch.
@@ -690,12 +700,12 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/segmentation.py#L241
     def post_process_panoptic(self, outputs, processed_sizes, target_sizes=None, is_thing_map=None, threshold=0.85):
         """
-        Converts the output of :class:`~transformers.DetrForPanopticSegmentation` into actual panoptic predictions.
+        Converts the output of :class:`~transformers.DetrForSegmentation` into actual panoptic predictions.
 
         Only supports PyTorch.
 
         Parameters:
-            outputs (:class:`~transformers.DetrForPanopticSegmentation`):
+            outputs (:class:`~transformers.DetrForSegmentation`):
                 Raw outputs of the model.
             processed_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)` or :obj:`List[Tuple]` of length :obj:`batch_size`):
                 Torch Tensor (or list) containing the size (h, w) of each image of the batch, i.e. the size after data

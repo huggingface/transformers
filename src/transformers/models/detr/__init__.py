@@ -32,7 +32,7 @@ if is_torch_available():
     _import_structure["modeling_detr"] = [
         "DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DetrForObjectDetection",
-        "DetrForPanopticSegmentation",
+        "DetrForSegmentation",
         "DetrModel",
         "DetrPreTrainedModel",
     ]
@@ -48,7 +48,7 @@ if TYPE_CHECKING:
         from .modeling_detr import (
             DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
             DetrForObjectDetection,
-            DetrForPanopticSegmentation,
+            DetrForSegmentation,
             DetrModel,
             DetrPreTrainedModel,
         )

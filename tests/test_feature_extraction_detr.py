@@ -315,7 +315,7 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
 
         # encode them
         # TODO replace by .from_pretrained facebook/detr-resnet-50-panoptic
-        feature_extractor = DetrFeatureExtractor(task="panoptic_segmentation")
+        feature_extractor = DetrFeatureExtractor(format="coco_panoptic")
         encoding = feature_extractor(images=image, annotations=target, masks_path=masks_path, return_tensors="pt")
 
         # verify pixel values

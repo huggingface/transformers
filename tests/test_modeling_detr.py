@@ -31,7 +31,7 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor
 if is_torch_available():
     import torch
 
-    from transformers import DetrConfig, DetrForObjectDetection, DetrForPanopticSegmentation, DetrModel
+    from transformers import DetrConfig, DetrForObjectDetection, DetrForSegmentation, DetrModel
 
 
 if is_vision_available():
@@ -156,7 +156,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         (
             DetrModel,
             DetrForObjectDetection,
-            DetrForPanopticSegmentation,
+            DetrForSegmentation,
         )
         if is_torch_available()
         else ()
@@ -172,7 +172,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ in ["DetrForObjectDetection", "DetrForPanopticSegmentation"]:
+            if model_class.__name__ in ["DetrForObjectDetection", "DetrForSegmentation"]:
                 labels = []
                 for i in range(self.model_tester.batch_size):
                     target = {}
@@ -282,7 +282,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 if model_class.__name__ == "DetrForObjectDetection":
                     correct_outlen += 1
                 # Panoptic Segmentation model returns pred_logits, pred_boxes, pred_masks
-                if model_class.__name__ == "DetrForPanopticSegmentation":
+                if model_class.__name__ == "DetrForSegmentation":
                     correct_outlen += 2
                 if "past_key_values" in outputs:
                     correct_outlen += 1  # past_key_values have been returned
@@ -430,7 +430,7 @@ class DetrModelIntegrationTests(unittest.TestCase):
 
     def test_inference_panoptic_segmentation_head(self):
         # TODO replace by facebook/detr-resnet-50-panoptic
-        model = DetrForPanopticSegmentation.from_pretrained("nielsr/detr-testje").to(torch_device)
+        model = DetrForSegmentation.from_pretrained("nielsr/detr-testje").to(torch_device)
         model.eval()
 
         feature_extractor = self.default_feature_extractor

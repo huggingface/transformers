@@ -139,7 +139,7 @@ class DetrObjectDetectionOutput(ModelOutput):
 
 
 @dataclass
-class DetrForPanopticSegmentationOutput(DetrObjectDetectionOutput):
+class DetrForSegmentationOutput(DetrObjectDetectionOutput):
     """
     This class adds one attribute to DetrObjectDetectionOutput, namely predicted masks.
 
@@ -1431,7 +1431,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
     """,
     DETR_START_DOCSTRING,
 )
-class DetrForPanopticSegmentation(DetrPreTrainedModel):
+class DetrForSegmentation(DetrPreTrainedModel):
     def __init__(self, config: DetrConfig):
         super().__init__(config)
 
@@ -1445,7 +1445,7 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
         self.mask_head = DetrMaskHeadSmallConv(hidden_size + number_of_heads, [1024, 512, 256], hidden_size)
 
     @add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DetrForPanopticSegmentationOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=DetrForSegmentationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values,
@@ -1472,7 +1472,7 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import DetrFeatureExtractor, DetrForPanopticSegmentation
+            >>> from transformers import DetrFeatureExtractor, DetrForSegmentation
             >>> from PIL import Image
             >>> import requests
 
@@ -1480,7 +1480,7 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
             >>> feature_extractor = DetrFeatureExtractor.from_pretrained('facebook/detr-resnet-50-panoptic')
-            >>> model = DetrForPanopticSegmentation.from_pretrained('facebook/detr-resnet-50-panoptic')
+            >>> model = DetrForSegmentation.from_pretrained('facebook/detr-resnet-50-panoptic')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -1617,7 +1617,7 @@ class DetrForPanopticSegmentation(DetrPreTrainedModel):
                 output = (logits, pred_boxes, pred_masks) + decoder_outputs + encoder_outputs
             return ((loss, loss_dict) + output) if loss is not None else output
 
-        return DetrForPanopticSegmentationOutput(
+        return DetrForSegmentationOutput(
             loss=loss,
             loss_dict=loss_dict,
             logits=logits,
@@ -1800,7 +1800,7 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
 # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
 class SetCriterion(nn.Module):
     """
-    This class computes the losses for DetrForObjectDetection/DetrForPanopticSegmentation. The process happens in two
+    This class computes the losses for DetrForObjectDetection/DetrForSegmentation. The process happens in two
     steps: 1) we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise
     each pair of matched ground-truth / prediction (supervise class and box)
     """
