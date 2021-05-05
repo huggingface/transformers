@@ -88,6 +88,7 @@ if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VA
             "tf-nightly-cpu",
             "tf-nightly-gpu",
             "intel-tensorflow",
+            "tensorflow-rocm",
         )
         _tf_version = None
         # For the metadata, we have to look for both tensorflow and tensorflow-cpu
