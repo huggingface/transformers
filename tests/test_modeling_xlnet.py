@@ -600,7 +600,7 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         if hasattr(module, "bias") and module.bias is not None:
             module.bias.data.fill_(3)
 
-        for param in ["q", "k", "v", "o", "r", "r_r_bias", "r_s_bias", "r_w_bias", "seg_embed"]:
+        for param in ["q", "k", "v", "o", "r", "r_r_bias", "r_s_bias", "r_w_bias", "seg_embed", "mask_emb"]:
             if hasattr(module, param) and getattr(module, param) is not None:
                 weight = getattr(module, param)
                 weight.data.fill_(3)
