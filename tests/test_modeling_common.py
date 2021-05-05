@@ -221,7 +221,7 @@ class ModelTesterMixin:
                 torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
 
                 model_fast_init = model_class_copy.from_pretrained(tmpdirname)
-                model_slow_init = model_class_copy.from_pretrained(tmpdirname, _no_fast_init=True)
+                model_slow_init = model_class_copy.from_pretrained(tmpdirname, _fast_init=False)
 
                 for key in model_fast_init.state_dict().keys():
                     max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
@@ -267,7 +267,7 @@ class ModelTesterMixin:
                 torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
 
                 model_fast_init = base_class_copy.from_pretrained(tmpdirname)
-                model_slow_init = base_class_copy.from_pretrained(tmpdirname, _no_fast_init=True)
+                model_slow_init = base_class_copy.from_pretrained(tmpdirname, _fast_init=False)
 
                 for key in model_fast_init.state_dict().keys():
                     max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()

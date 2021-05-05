@@ -334,7 +334,7 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
         if hasattr(module, "weight") and module.weight is not None:
             module.weight.data.fill_(3)
         if hasattr(module, "weight_g") and module.weight is not None:
-            module.weight.data.fill_(3)
+            module.weight_g.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
             module.bias.data.fill_(3)
 
@@ -460,7 +460,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         if hasattr(module, "weight") and module.weight is not None:
             module.weight.data.fill_(3)
         if hasattr(module, "weight_g") and module.weight is not None:
-            module.weight.data.fill_(3)
+            module.weight_g.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
             module.bias.data.fill_(3)
 

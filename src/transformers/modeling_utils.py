@@ -56,10 +56,14 @@ _init_weights = True
 
 
 @contextmanager
-def no_init_weights(_disable=False):
+def no_init_weights(_enable=True):
+    """
+    Context manager to globally disable weight initialization to speed up loading large models.
+
+    TODO(Patrick): Delete safety argument `_enable=True` at next major version. .
+    """
     global _init_weights
-    # delete later after sufficient testing
-    if not _disable:
+    if _enable:
         _init_weights = False
     try:
         yield
@@ -973,6 +977,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Mirror source to accelerate downloads in China. If you are from China and have an accessibility
                 problem, you can set this option to resolve it. Note that we do not guarantee the timeliness or safety.
                 Please refer to the mirror site for more information.
+            _fast_init(:obj:`bool`, `optional`, defaults to `:obj:`True`):
+                Whether or not to disable fast initialization.
+
+                .. warning::
+
+                    One should only disable `_fast_init` to ensure backwards compatibility with
+                    ``transformers.__version__ < 4.6.0`` for seeded model initialization. This argument will be removed
+                    at the next major version. See `pull request 11471
+                    <https://github.com/huggingface/transformers/pull/11471>`__ for more information.
+
             kwargs (remaining dictionary of keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or
@@ -1029,7 +1043,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         mirror = kwargs.pop("mirror", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
-        _no_fast_init = kwargs.pop("_no_fast_init", False)
+        _fast_init = kwargs.pop("_fast_init", True)
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -1144,10 +1158,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # this immediately partitions the model across all gpus, to avoid the overhead in time
             # and memory copying it on CPU or each GPU first
             with deepspeed.zero.Init(config=deepspeed_config()):
-                with no_init_weights(_disable=_no_fast_init):
+                with no_init_weights(_enable=_fast_init):
                     model = cls(config, *model_args, **model_kwargs)
         else:
-            with no_init_weights(_disable=_no_fast_init):
+            with no_init_weights(_enable=_fast_init):
                 model = cls(config, *model_args, **model_kwargs)
 
         if from_tf:
