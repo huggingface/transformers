@@ -414,10 +414,11 @@ class CLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class CLIPModelTester:
-    def __init__(self, parent):
+    def __init__(self, parent, is_training=True):
         self.parent = parent
         self.text_model_tester = CLIPTextModelTester(parent)
         self.vision_model_tester = CLIPVisionModelTester(parent)
+        self.is_training = is_training
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -445,18 +446,41 @@ class CLIPModelTester:
             attention_mask,
             pixel_values,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, "pixel_values": pixel_values}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "pixel_values": pixel_values,
+            "return_loss": True,
+        }
         return config, inputs_dict
 
 
 @require_torch
-class CLIPModelTest(unittest.TestCase):
+class CLIPModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (CLIPModel,) if is_torch_available() else ()
+    test_head_masking = False
+    test_pruning = False
+    test_resize_embeddings = False
+    test_attention_outputs = False
+
     def setUp(self):
         self.model_tester = CLIPModelTester(self)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    # hidden_states are tested in individual model tests
+    def test_hidden_states_output(self):
+        pass
+
+    # input_embeds are tested in individual model tests
+    def test_inputs_embeds(self):
+        pass
+
+    # tested in individual model tests
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
 
     @slow
     def test_model_from_pretrained(self):

@@ -35,20 +35,20 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "clip-vit-base-patch32": "https://huggingface.co/clip-vit-base-patch32/resolve/main/vocab.json",
+        "valhalla/clip-vit-base-patch32": "https://huggingface.co/valhalla/clip-vit-base-patch32/resolve/main/vocab.json",
     },
     "merges_file": {
-        "clip-vit-base-patch32": "https://huggingface.co/clip-vit-base-patch32/resolve/main/merges.txt",
+        "valhalla/clip-vit-base-patch32": "https://huggingface.co/valhalla/clip-vit-base-patch32/resolve/main/merges.txt",
     },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "clip-vit-base-patch32": 77,
+    "valhalla/clip-vit-base-patch32": 77,
 }
 
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "clip-vit-base-patch32": {"do_lower_case": True},
+    "valhalla/clip-vit-base-patch32": {"do_lower_case": True},
 }
 
 

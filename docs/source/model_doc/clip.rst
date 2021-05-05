@@ -115,11 +115,19 @@ CLIPTokenizer
         create_token_type_ids_from_sequences, save_vocabulary
 
 
-CLIPTokenizerFast
+CLIPFeatureExtractor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.CLIPTokenizerFast
+.. autoclass:: transformers.CLIPFeatureExtractor
     :members:
+
+
+CLIPProcessor
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.CLIPProcessor
+    :members:
+
 
 
 CLIPModel

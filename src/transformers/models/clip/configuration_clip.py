@@ -23,7 +23,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "clip-vit-base-patch32": "https://huggingface.co/clip-vit-base-patch32/resolve/main/config.json",
+    "valhalla/clip-vit-base-patch32": "https://huggingface.co/valhalla/clip-vit-base-patch32/resolve/main/config.json",
     # See all CLIP models at https://huggingface.co/models?filter=clip
 }
 
@@ -32,8 +32,8 @@ class CLIPTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.CLIPModel`. It is used to
     instantiate an CLIP model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the CLIP `clip-vit-base-patch32
-    <https://huggingface.co/clip-vit-base-patch32>`__ architecture.
+    configuration with the defaults will yield a similar configuration to that of the CLIP
+    `valhalla/clip-vit-base-patch32 <https://huggingface.co/valhalla/clip-vit-base-patch32>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -71,10 +71,10 @@ class CLIPTextConfig(PretrainedConfig):
 
         >>> from transformers import CLIPTextModel, CLIPTextConfig
 
-        >>> # Initializing a CLIPTextModel with clip-vit-base-patch32 style configuration
+        >>> # Initializing a CLIPTextModel with valhalla/clip-vit-base-patch32 style configuration
         >>> configuration = CLIPConfig()
 
-        >>> # Initializing a model from the clip-vit-base-patch32 style configuration
+        >>> # Initializing a model from the valhalla/clip-vit-base-patch32 style configuration
         >>> model = CLIPTextModel(configuration)
 
         >>> # Accessing the model configuration
@@ -123,8 +123,8 @@ class CLIPVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.CLIPModel`. It is used to
     instantiate an CLIP model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the CLIP `clip-vit-base-patch32
-    <https://huggingface.co/clip-vit-base-patch32>`__ architecture.
+    configuration with the defaults will yield a similar configuration to that of the CLIP
+    `valhalla/clip-vit-base-patch32 <https://huggingface.co/valhalla/clip-vit-base-patch32>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -161,10 +161,10 @@ class CLIPVisionConfig(PretrainedConfig):
 
         >>> from transformers import CLIPVisionModel, CLIPTextConfig
 
-        >>> # Initializing a CLIPVisionModel with clip-vit-base-patch32 style configuration
+        >>> # Initializing a CLIPVisionModel with valhalla/clip-vit-base-patch32 style configuration
         >>> configuration = CLIPConfig()
 
-        >>> # Initializing a model from the clip-vit-base-patch32 style configuration
+        >>> # Initializing a model from the valhalla/clip-vit-base-patch32 style configuration
         >>> model = CLIPVisionModel(configuration)
 
         >>> # Accessing the model configuration
@@ -240,6 +240,7 @@ class CLIPConfig(PretrainedConfig):
         self.vision_config = CLIPVisionConfig(**vision_config_dict)
 
         self.projection_dim = projection_dim
+        self.initializer_factor = 1.0
 
     @classmethod
     def from_text_vision_configs(cls, text_config: CLIPTextConfig, vision_config: CLIPVisionConfig, **kwargs):
