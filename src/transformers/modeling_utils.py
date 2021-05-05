@@ -783,7 +783,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def init_weights(self):
         """
-        Maybe initializes and prunes weights if needed.
+        If needed prunes and maybe initializes weights.
         """
         # Prune heads if needed
         if self.config.pruned_heads:
