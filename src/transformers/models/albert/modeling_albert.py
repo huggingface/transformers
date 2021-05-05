@@ -449,7 +449,7 @@ class AlbertTransformer(nn.Module):
 
         all_hidden_states = (hidden_states,) if output_hidden_states else None
         all_attentions = () if output_attentions else None
-        
+
         head_mask = [None] * self.config.num_hidden_layers if head_mask is None else head_mask
 
         for i in range(self.config.num_hidden_layers):
