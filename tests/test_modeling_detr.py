@@ -19,7 +19,7 @@ import inspect
 import math
 import unittest
 
-from transformers import is_torch_available, is_vision_available
+from transformers import is_timm_available, is_vision_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -28,7 +28,7 @@ from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, floats_tensor
 
 
-if is_torch_available():
+if is_timm_available():
     import torch
 
     from transformers import DetrConfig, DetrForObjectDetection, DetrForSegmentation, DetrModel
@@ -158,7 +158,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             DetrForObjectDetection,
             DetrForSegmentation,
         )
-        if is_torch_available()
+        if is_timm_available()
         else ()
     )
     is_encoder_decoder = True

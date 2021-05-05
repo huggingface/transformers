@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_torch_available, is_vision_available
+from ...file_utils import _BaseLazyModule, is_timm_available, is_vision_available
 
 
 _import_structure = {
@@ -28,7 +28,7 @@ _import_structure = {
 if is_vision_available():
     _import_structure["feature_extraction_detr"] = ["DetrFeatureExtractor"]
 
-if is_torch_available():
+if is_timm_available():
     _import_structure["modeling_detr"] = [
         "DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DetrForObjectDetection",
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     if is_vision_available():
         from .feature_extraction_detr import DetrFeatureExtractor
 
-    if is_torch_available():
+    if is_timm_available():
         from .modeling_detr import (
             DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
             DetrForObjectDetection,

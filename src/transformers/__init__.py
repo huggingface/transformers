@@ -403,6 +403,23 @@ else:
         name for name in dir(dummy_vision_objects) if not name.startswith("_")
     ]
 
+# Timm-backed objects
+if is_timm_available():
+    _import_structure["models.detr"].extend(
+        [
+            "DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DetrForObjectDetection",
+            "DetrForSegmentation",
+            "DetrModel",
+        ]
+    )
+else:
+    from .utils import dummy_timm_objects
+
+    _import_structure["utils.dummy_timm_objects"] = [
+        name for name in dir(dummy_timm_objects) if not name.startswith("_")
+    ]
+
 # PyTorch-backed objects
 if is_torch_available():
     _import_structure["benchmark.benchmark"] = ["PyTorchBenchmark"]
@@ -645,14 +662,6 @@ if is_torch_available():
             "DeiTForImageClassificationWithTeacher",
             "DeiTModel",
             "DeiTPreTrainedModel",
-        ]
-    )
-    _import_structure["models.detr"].extend(
-        [
-            "DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "DetrForObjectDetection",
-            "DetrForSegmentation",
-            "DetrModel",
         ]
     )
     _import_structure["models.distilbert"].extend(
@@ -1784,6 +1793,16 @@ if TYPE_CHECKING:
         from .utils.dummy_vision_objects import *
 
     # Modeling
+    if is_timm_available():
+        from .models.detr import (
+            DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DetrForObjectDetection,
+            DetrForSegmentation,
+            DetrModel,
+        )
+    else:
+        from .utils.dummy_timm_objects import *
+
     if is_torch_available():
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
@@ -1994,12 +2013,6 @@ if TYPE_CHECKING:
             DeiTForImageClassificationWithTeacher,
             DeiTModel,
             DeiTPreTrainedModel,
-        )
-        from .models.detr import (
-            DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DetrForObjectDetection,
-            DetrForSegmentation,
-            DetrModel,
         )
         from .models.distilbert import (
             DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

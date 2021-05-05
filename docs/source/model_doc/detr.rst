@@ -117,8 +117,8 @@ DetrForObjectDetection
     :members: forward
 
 
-DetrForPanopticSegmentation
+DetrForSegmentation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.DetrForPanopticSegmentation
+.. autoclass:: transformers.DetrForSegmentation
     :members: forward
