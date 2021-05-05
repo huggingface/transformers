@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
 from ..configuration_utils import PretrainedConfig
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..file_utils import is_tf_available, is_torch_available
-from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
@@ -383,7 +382,19 @@ def pipeline(
         # At that point framework might still be undetermined
         model = get_default_model(targeted_task, framework, task_options)
 
-    model_name = model if isinstance(model, str) else None
+    # Try to infer tokenizer from model or config name (if provided as str)
+    if tokenizer is None:
+        if isinstance(model, str):
+            tokenizer = model
+        elif isinstance(config, str):
+            tokenizer = config
+        else:
+            # Impossible to guest what is the right tokenizer here
+            raise Exception(
+                "Impossible to guess which tokenizer to use. "
+                "Please provided a PreTrainedTokenizer class or a path/identifier to a pretrained tokenizer."
+            )
+
     modelcard = None
     # Try to infer modelcard from model or config name (if provided as str)
     if isinstance(model, str):
@@ -403,10 +414,6 @@ def pipeline(
     # Instantiate config if needed
     if isinstance(config, str):
         config = AutoConfig.from_pretrained(config, revision=revision, _from_pipeline=task, **model_kwargs)
-
-    # Instantiate modelcard if needed
-    if isinstance(modelcard, str):
-        modelcard = ModelCard.from_pretrained(modelcard, revision=revision, _from_pipeline=task)
 
     # Instantiate model if needed
     if isinstance(model, str):
@@ -504,10 +511,4 @@ def pipeline(
     if feature_extractor is not None:
         kwargs["feature_extractor"] = feature_extractor
 
-    return task_class(
-        model=model,
-        modelcard=modelcard,
-        framework=framework,
-        task=task,
-        **kwargs,
-    )
+    return task_class(model=model, framework=framework, task=task, **kwargs)
