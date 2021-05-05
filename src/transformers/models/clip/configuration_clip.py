@@ -23,7 +23,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "clip_ViT_B_32": "https://huggingface.co/clip_ViT_B_32/resolve/main/config.json",
+    "clip-vit-base-patch32": "https://huggingface.co/clip-vit-base-patch32/resolve/main/config.json",
     # See all CLIP models at https://huggingface.co/models?filter=clip
 }
 
@@ -32,8 +32,8 @@ class CLIPTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.CLIPModel`. It is used to
     instantiate an CLIP model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the CLIP `clip_ViT_B_32
-    <https://huggingface.co/clip_ViT_B_32>`__ architecture.
+    configuration with the defaults will yield a similar configuration to that of the CLIP `clip-vit-base-patch32
+    <https://huggingface.co/clip-vit-base-patch32>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -71,10 +71,10 @@ class CLIPTextConfig(PretrainedConfig):
 
         >>> from transformers import CLIPTextModel, CLIPTextConfig
 
-        >>> # Initializing a CLIPTextModel with clip_ViT_B_32 style configuration
+        >>> # Initializing a CLIPTextModel with clip-vit-base-patch32 style configuration
         >>> configuration = CLIPConfig()
 
-        >>> # Initializing a model from the clip_ViT_B_32 style configuration
+        >>> # Initializing a model from the clip-vit-base-patch32 style configuration
         >>> model = CLIPTextModel(configuration)
 
         >>> # Accessing the model configuration
@@ -123,8 +123,8 @@ class CLIPVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.CLIPModel`. It is used to
     instantiate an CLIP model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the CLIP `clip_ViT_B_32
-    <https://huggingface.co/clip_ViT_B_32>`__ architecture.
+    configuration with the defaults will yield a similar configuration to that of the CLIP `clip-vit-base-patch32
+    <https://huggingface.co/clip-vit-base-patch32>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -161,10 +161,10 @@ class CLIPVisionConfig(PretrainedConfig):
 
         >>> from transformers import CLIPVisionModel, CLIPTextConfig
 
-        >>> # Initializing a CLIPVisionModel with clip_ViT_B_32 style configuration
+        >>> # Initializing a CLIPVisionModel with clip-vit-base-patch32 style configuration
         >>> configuration = CLIPConfig()
 
-        >>> # Initializing a model from the clip_ViT_B_32 style configuration
+        >>> # Initializing a model from the clip-vit-base-patch32 style configuration
         >>> model = CLIPVisionModel(configuration)
 
         >>> # Accessing the model configuration

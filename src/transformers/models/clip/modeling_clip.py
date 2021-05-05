@@ -38,7 +38,7 @@ logger = logging.get_logger(__name__)
 
 
 CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "clip_CLIP_B_32",
+    "clip-vit-base-patch32",
     # See all CLIP models at https://huggingface.co/models?filter=clip
 ]
 
