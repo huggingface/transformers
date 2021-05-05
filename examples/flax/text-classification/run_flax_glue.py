@@ -19,7 +19,6 @@ import logging
 import os
 import random
 import time
-from functools import partial
 from itertools import chain
 from typing import Any, Callable, Dict, Tuple
 
@@ -37,7 +36,6 @@ from flax.metrics import tensorboard
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
 from transformers import AutoConfig, AutoTokenizer, FlaxAutoModelForSequenceClassification, PretrainedConfig
-from transformers.utils import logging as hf_logging
 
 
 logger = logging.getLogger(__name__)
@@ -45,129 +43,6 @@ logger = logging.getLogger(__name__)
 Array = Any
 Dataset = datasets.arrow_dataset.Dataset
 PRNGKey = Any
-
-
-def create_train_state(
-    model: FlaxAutoModelForSequenceClassification,
-    learning_rate_fn: Callable[[int], float],
-    is_regression: bool,
-    num_labels: int,
-) -> train_state.TrainState:
-    """Create initial training state."""
-
-    class TrainState(train_state.TrainState):
-        """Train state with an Optax optimizer.
-
-        The two functions below differ depending on whether the task is classification
-        or regression.
-
-        Args:
-          logits_fn: Applied to last layer to obtain the logits.
-          loss_fn: Function to compute the loss.
-        """
-
-        logits_fn: Callable = struct.field(pytree_node=False)
-        loss_fn: Callable = struct.field(pytree_node=False)
-
-    # Creates a multi-optimizer consisting of two "Adam with weight decay" optimizers.
-    def adamw(weight_decay):
-        return optax.adamw(learning_rate=learning_rate_fn, b1=0.9, b2=0.999, eps=1e-6, weight_decay=weight_decay)
-
-    def traverse(fn):
-        def mask(data):
-            flat = traverse_util.flatten_dict(data)
-            return traverse_util.unflatten_dict({k: fn(k, v) for k, v in flat.items()})
-
-        return mask
-
-    # We use Optax's "masking" functionality to create a multi-optimizer, one
-    # with weight decay and the other without. Note masking means the optimizer
-    # will ignore these paths.
-    decay_path = lambda p: not any(x in p for x in ["bias", "LayerNorm.weight"])  # noqa: E731
-
-    tx = optax.chain(
-        optax.masked(adamw(0.0), mask=traverse(lambda path, _: decay_path(path))),
-        optax.masked(adamw(0.01), mask=traverse(lambda path, _: not decay_path(path))),
-    )
-
-    if is_regression:
-
-        def mse_loss(logits, labels):
-            return jnp.mean((logits[..., 0] - labels) ** 2)
-
-        return TrainState.create(
-            apply_fn=model.__call__,
-            params=model.params,
-            tx=tx,
-            logits_fn=lambda logits: logits[..., 0],
-            loss_fn=mse_loss,
-        )
-    else:  # Classification.
-
-        def cross_entropy_loss(logits, labels):
-            logits = nn.log_softmax(logits)
-            xentropy = optax.softmax_cross_entropy(logits, onehot(labels, num_classes=num_labels))
-            return -jnp.mean(xentropy)
-
-        return TrainState.create(
-            apply_fn=model.__call__,
-            params=model.params,
-            tx=tx,
-            logits_fn=lambda logits: logits.argmax(-1),
-            loss_fn=cross_entropy_loss,
-        )
-
-
-def log_prediction(task, inputs, prediction):
-    prediction_type = "SIMILARITY (1-5)"
-    if not task.is_regression:
-        prediction_type = "CLASS"
-        prediction = task.labels[prediction]
-    for field_name, input_str in zip(task.inputs, inputs):
-        logger.info(f"{field_name}:\t{input_str}")
-    logger.info(f"PREDICTED {prediction_type}: {prediction}\n")
-
-
-def write_metrics(train_metrics, eval_metrics, train_time, step, summary_writer):
-    summary_writer.scalar("train_time", train_time, step)
-
-    train_metrics = get_metrics(train_metrics)
-    for key, vals in train_metrics.items():
-        tag = f"train_{key}"
-        for i, val in enumerate(vals):
-            summary_writer.scalar(tag, val, step - len(vals) + i + 1)
-
-    for metric_name, value in eval_metrics.items():
-        summary_writer.scalar(f"eval_{metric_name}", value, step)
-
-
-def create_learning_rate_fn(
-    train_ds_size: int, train_batch_size: int, num_train_epochs: int, num_warmup_steps: int, learning_rate: float
-) -> Callable[[int], jnp.array]:
-    """Returns a linear warmup, linear_decay learning rate function."""
-    steps_per_epoch = train_ds_size // train_batch_size
-    num_train_steps = steps_per_epoch * num_train_epochs
-    warmup_fn = optax.linear_schedule(init_value=0.0, end_value=learning_rate, transition_steps=num_warmup_steps)
-    decay_fn = optax.linear_schedule(
-        init_value=learning_rate, end_value=0, transition_steps=num_train_steps - num_warmup_steps
-    )
-    schedule_fn = optax.join_schedules(schedules=[warmup_fn, decay_fn], boundaries=[num_warmup_steps])
-    return schedule_fn
-
-
-def glue_data_collator(rng: PRNGKey, dataset: Dataset, batch_size: int):
-    """Returns batches of size `batch_size` from `dataset`, sharded over all local devices."""
-    steps_per_epoch = len(dataset) // batch_size
-    perms = jax.random.permutation(rng, len(dataset))
-    perms = perms[: steps_per_epoch * batch_size]  # Skip incomplete batch.
-    perms = perms.reshape((steps_per_epoch, batch_size))
-
-    for perm in perms:
-        batch = dataset[perm]
-        batch = {k: jnp.array(v) for k, v in batch.items()}
-        batch = shard(batch)
-
-        yield batch
 
 
 task_to_keys = {
@@ -276,6 +151,116 @@ def parse_args():
         os.makedirs(args.output_dir, exist_ok=True)
 
     return args
+
+
+def create_train_state(
+    model: FlaxAutoModelForSequenceClassification,
+    learning_rate_fn: Callable[[int], float],
+    is_regression: bool,
+    num_labels: int,
+) -> train_state.TrainState:
+    """Create initial training state."""
+
+    class TrainState(train_state.TrainState):
+        """Train state with an Optax optimizer.
+
+        The two functions below differ depending on whether the task is classification
+        or regression.
+
+        Args:
+          logits_fn: Applied to last layer to obtain the logits.
+          loss_fn: Function to compute the loss.
+        """
+
+        logits_fn: Callable = struct.field(pytree_node=False)
+        loss_fn: Callable = struct.field(pytree_node=False)
+
+    # Creates a multi-optimizer consisting of two "Adam with weight decay" optimizers.
+    def adamw(weight_decay):
+        return optax.adamw(learning_rate=learning_rate_fn, b1=0.9, b2=0.999, eps=1e-6, weight_decay=weight_decay)
+
+    def traverse(fn):
+        def mask(data):
+            flat = traverse_util.flatten_dict(data)
+            return traverse_util.unflatten_dict({k: fn(k, v) for k, v in flat.items()})
+
+        return mask
+
+    # We use Optax's "masking" functionality to create a multi-optimizer, one
+    # with weight decay and the other without. Note masking means the optimizer
+    # will ignore these paths.
+    decay_path = lambda p: not any(x in p for x in ["bias", "LayerNorm.weight"])  # noqa: E731
+
+    tx = optax.chain(
+        optax.masked(adamw(0.0), mask=traverse(lambda path, _: decay_path(path))),
+        optax.masked(adamw(0.01), mask=traverse(lambda path, _: not decay_path(path))),
+    )
+
+    if is_regression:
+
+        def mse_loss(logits, labels):
+            return jnp.mean((logits[..., 0] - labels) ** 2)
+
+        return TrainState.create(
+            apply_fn=model.__call__,
+            params=model.params,
+            tx=tx,
+            logits_fn=lambda logits: logits[..., 0],
+            loss_fn=mse_loss,
+        )
+    else:  # Classification.
+
+        def cross_entropy_loss(logits, labels):
+            logits = nn.log_softmax(logits)
+            xentropy = optax.softmax_cross_entropy(logits, onehot(labels, num_classes=num_labels))
+            return -jnp.mean(xentropy)
+
+        return TrainState.create(
+            apply_fn=model.__call__,
+            params=model.params,
+            tx=tx,
+            logits_fn=lambda logits: logits.argmax(-1),
+            loss_fn=cross_entropy_loss,
+        )
+
+
+def log_prediction(task, inputs, prediction):
+    prediction_type = "SIMILARITY (1-5)"
+    if not task.is_regression:
+        prediction_type = "CLASS"
+        prediction = task.labels[prediction]
+    for field_name, input_str in zip(task.inputs, inputs):
+        logger.info(f"{field_name}:\t{input_str}")
+    logger.info(f"PREDICTED {prediction_type}: {prediction}\n")
+
+
+def create_learning_rate_fn(
+    train_ds_size: int, train_batch_size: int, num_train_epochs: int, num_warmup_steps: int, learning_rate: float
+) -> Callable[[int], jnp.array]:
+    """Returns a linear warmup, linear_decay learning rate function."""
+    steps_per_epoch = train_ds_size // train_batch_size
+    num_train_steps = steps_per_epoch * num_train_epochs
+    warmup_fn = optax.linear_schedule(init_value=0.0, end_value=learning_rate, transition_steps=num_warmup_steps)
+    decay_fn = optax.linear_schedule(
+        init_value=learning_rate, end_value=0, transition_steps=num_train_steps - num_warmup_steps
+    )
+    schedule_fn = optax.join_schedules(schedules=[warmup_fn, decay_fn], boundaries=[num_warmup_steps])
+    return schedule_fn
+
+
+def glue_data_collator(rng: PRNGKey, dataset: Dataset, batch_size: int):
+    """Returns batches of size `batch_size` from `dataset`, sharded over all local devices."""
+    steps_per_epoch = len(dataset) // batch_size
+    perms = jax.random.permutation(rng, len(dataset))
+    perms = perms[: steps_per_epoch * batch_size]  # Skip incomplete batch.
+    perms = perms.reshape((steps_per_epoch, batch_size))
+
+    for perm in perms:
+        batch = dataset[perm]
+        batch = {k: jnp.array(v) for k, v in batch.items()}
+        batch = shard(batch)
+
+        yield batch
 
 
 def main():
@@ -420,19 +405,32 @@ def main():
     for index in random.sample(range(len(train_dataset)), 3):
         logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
 
+    # Define a summary writer
+    summary_writer = tensorboard.SummaryWriter(args.output_dir)
+    summary_writer.hparams(vars(args))
+
+    def write_metric(train_metrics, eval_metrics, train_time, step):
+        summary_writer.scalar("train_time", train_time, step)
+
+        train_metrics = get_metrics(train_metrics)
+        for key, vals in train_metrics.items():
+            tag = f"train_{key}"
+            for i, val in enumerate(vals):
+                summary_writer.scalar(tag, val, step - len(vals) + i + 1)
+
+        for metric_name, value in eval_metrics.items():
+            summary_writer.scalar(f"eval_{metric_name}", value, step)
+
     num_epochs = int(args.num_train_epochs)
     rng = jax.random.PRNGKey(args.seed)
 
-    summary_writer = tensorboard.SummaryWriter(args.output_dir)
-    summary_writer.hparams(vars(args))
-    write_metric = partial(write_metrics, summary_writer=summary_writer)
-
-    train_batch_size = args.per_device_train_batch_size * jax.device_count()
-    eval_batch_size = args.per_device_eval_batch_size * jax.device_count()
+    train_batch_size = args.per_device_train_batch_size * jax.local_device_count()
+    eval_batch_size = args.per_device_eval_batch_size * jax.local_device_count()
 
     learning_rate_fn = create_learning_rate_fn(
         len(train_dataset), train_batch_size, args.num_train_epochs, args.num_warmup_steps, args.learning_rate
     )
+
     state = create_train_state(model, learning_rate_fn, is_regression, num_labels=num_labels)
     state = replicate(state)
 
@@ -463,6 +461,11 @@ def main():
 
     p_eval_step = jax.pmap(eval_step, axis_name="batch")
 
+    if args.task_name is not None:
+        metric = load_metric("glue", args.task_name)
+    else:
+        metric = load_metric("accuracy")
+
     logger.info(f"===== Starting training ({num_epochs} epochs) =====")
     train_time = 0
 
@@ -480,30 +483,29 @@ def main():
             logger.info(f"    Done! Training metrics: {unreplicate(metrics)}")
 
         logger.info("  Evaluating...")
-        eval_metrics = load_metric("glue", args.task.datasets_name("validation"))
         rng, input_rng = jax.random.split(rng)
         for batch in glue_data_collator(input_rng, eval_dataset, eval_batch_size):
             labels = batch.pop("labels")
             predictions = p_eval_step(state, batch)
-            eval_metrics.add_batch(predictions=chain(*predictions), references=chain(*labels))
-        eval_metrics = eval_metrics.compute()
-        logger.info(f"    Done! Eval metrics: {eval_metrics}")
+            metric.add_batch(predictions=chain(*predictions), references=chain(*labels))
+
+        eval_metric = metric.compute()
+        logger.info(f"    Done! Eval metrics: {eval_metric}")
 
         cur_step = epoch * (len(train_dataset) // train_batch_size)
-        write_metric(train_metrics, eval_metrics, train_time, cur_step)
+        write_metric(train_metrics, eval_metric, train_time, cur_step)
 
     logger.info("===== Finished training =====")
-
     logger.info("===== Running inference =====")
+
     rng, input_rng = jax.random.split(rng)
-    num_predictions = jax.local_device_count() * 4  # Get 4 predictions from each device.
-    batch = next(glue_data_collator(input_rng, predict_dataset, num_predictions))
-    _ = batch.pop("labels")  # Test sets do not have labels.
-    predictions = p_eval_step(state, batch)
+    for batch in glue_data_collator(input_rng, predict_dataset, eval_batch_size):
+        labels = batch.pop("labels")
+        predictions = p_eval_step(state, batch)
+        metric.add_batch(predictions=chain(*predictions), references=chain(*labels))
 
-
-#    for inp, prediction in zip(inputs, chain(*predictions)):
-#        log_prediction(args.task_name, inp, prediction)
+    predict_metric = metric.compute()
+    logger.info(f"    Done! Prediction metrics: {predict_metric}")
 
 
 if __name__ == "__main__":
