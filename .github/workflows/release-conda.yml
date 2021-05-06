@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - v*
+    branches:
+      - v4.5.0-release
 
 env:
   ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_API_TOKEN }}
@@ -25,6 +27,7 @@ jobs:
           auto-update-conda: true
           auto-activate-base: false
           activate-environment: "build-transformers"
+          python-version: 3.8
           channels: huggingface
 
       - name: Setup conda env
