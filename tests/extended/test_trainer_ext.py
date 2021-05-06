@@ -167,8 +167,8 @@ class TestTrainerExt(TestCasePlus):
         # test if do_predict saves generations and metrics
         contents = os.listdir(output_dir)
         contents = {os.path.basename(p) for p in contents}
-        assert "test_generations.txt" in contents
-        assert "test_results.json" in contents
+        assert "generated_predictions.txt" in contents
+        assert "predict_results.json" in contents
 
     def run_trainer(
         self,
