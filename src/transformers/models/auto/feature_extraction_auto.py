@@ -21,11 +21,13 @@ from transformers import DeiTFeatureExtractor, Speech2TextFeatureExtractor, ViTF
 
 from ... import DeiTConfig, PretrainedConfig, Speech2TextConfig, ViTConfig, Wav2Vec2Config
 from ...feature_extraction_utils import FeatureExtractionMixin
+
+# Build the list of all feature extractors
+from ...file_utils import FEATURE_EXTRACTOR_NAME
 from ..wav2vec2.feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
 from .configuration_auto import AutoConfig, replace_list_option_in_docstrings
 
 
-# Build the list of all feature extractors
 FEATURE_EXTRACTOR_MAPPING = OrderedDict(
     [
         (DeiTConfig, DeiTFeatureExtractor),
@@ -129,7 +131,7 @@ class AutoFeatureExtractor:
 
         is_feature_extraction_file = os.path.isfile(pretrained_model_name_or_path)
         is_directory = os.path.isdir(pretrained_model_name_or_path) and os.path.exists(
-            os.path.join(pretrained_model_name_or_path, "preprocessor_config.json")
+            os.path.join(pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME)
         )
 
         if not is_feature_extraction_file and not is_directory:
@@ -147,6 +149,6 @@ class AutoFeatureExtractor:
 
         raise ValueError(
             f"Unrecognized model in {pretrained_model_name_or_path}. Should have a `feature_extractor_type` key in "
-            "its preprocessor_config.json, or contain one of the following strings "
+            f"its {FEATURE_EXTRACTOR_NAME}, or contain one of the following strings "
             f"in its name: {', '.join(FEATURE_EXTRACTOR_MAPPING.keys())}"
         )

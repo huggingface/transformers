@@ -326,8 +326,8 @@ def pipeline(
             identifier or an actual pretrained feature extractor inheriting from
             :class:`~transformers.PreTrainedFeatureExtractor`.
 
-            Feature extractors are used for non-NLP models, such as Speech or Vision models. If multi-modal, will also
-            require a tokenizer to be passed.
+            Feature extractors are used for non-NLP models, such as Speech or Vision models as well as multi-modal
+            models. Multi-modal models will also require a tokenizer to be passed.
 
             If not provided, the default feature extractor for the given :obj:`model` will be loaded (if it is a
             string). If :obj:`model` is not specified or not a string, then the default feature extractor for
@@ -466,8 +466,6 @@ def pipeline(
             tokenizer = AutoTokenizer.from_pretrained(
                 tokenizer_identifier, revision=revision, use_fast=use_fast, _from_pipeline=task, **tokenizer_kwargs
             )
-    else:
-        tokenizer = None
 
     if load_feature_extractor:
         # Try to infer feature extractor from model or config name (if provided as str)
@@ -489,8 +487,6 @@ def pipeline(
             feature_extractor = AutoFeatureExtractor.from_pretrained(
                 feature_extractor, revision=revision, _from_pipeline=task, **model_kwargs
             )
-    else:
-        feature_extractor = None
 
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:
