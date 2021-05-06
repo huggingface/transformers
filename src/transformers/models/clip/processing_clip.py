@@ -39,10 +39,10 @@ class CLIPProcessor:
     def __init__(self, feature_extractor, tokenizer):
         if not isinstance(feature_extractor, CLIPFeatureExtractor):
             raise ValueError(
-                f"`feature_extractor` has to be of type {CLIPFeatureExtractor.__class__}, but is {type(feature_extractor)}"
+                f"`feature_extractor` has to be of type CLIPFeatureExtractor, but is {type(feature_extractor)}"
             )
         if not isinstance(tokenizer, CLIPTokenizer):
-            raise ValueError(f"`tokenizer` has to be of type {CLIPTokenizer.__class__}, but is {type(tokenizer)}")
+            raise ValueError(f"`tokenizer` has to be of type CLIPTokenizer, but is {type(tokenizer)}")
 
         self.feature_extractor = feature_extractor
         self.tokenizer = tokenizer

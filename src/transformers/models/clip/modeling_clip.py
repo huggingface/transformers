@@ -219,11 +219,8 @@ class CLIPAttention(nn.Module):
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
-        assert attn_weights.size() == (
-            bsz * self.num_heads,
-            tgt_len,
-            src_len,
-        ), f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
+            raise ValueError(f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}")
 
         # apply the causal_attention_mask first
         if causal_attention_mask is not None:
@@ -268,11 +265,9 @@ class CLIPAttention(nn.Module):
             self.head_dim,
         ), f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
 
-        attn_output = (
-            attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-            .transpose(1, 2)
-            .reshape(bsz, tgt_len, embed_dim)
-        )
+        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
+        attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
 
         attn_output = self.out_proj(attn_output)
 
@@ -453,8 +448,8 @@ CLIP_INPUTS_DOCSTRING = r"""
 
 class CLIPEncoder(nn.Module):
     """
-    Transformer encoder consisting of *config.num_hidden_layers* self attention layers. Each layer is a
-    :class:`CLIPEncoderLayer`.
+    Transformer encoder consisting of :obj:`config.num_hidden_layers` self attention layers. Each layer is a
+    :class:`~transformers.CLIPEncoderLayer`.
 
     Args:
         config: CLIPConfig

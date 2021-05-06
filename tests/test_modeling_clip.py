@@ -369,11 +369,7 @@ class CLIPTextModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            input_mask,
-        ) = config_and_inputs
+        config, input_ids, input_mask = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
@@ -440,12 +436,7 @@ class CLIPModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            attention_mask,
-            pixel_values,
-        ) = config_and_inputs
+        config, input_ids, attention_mask, pixel_values = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
@@ -506,9 +497,8 @@ class CLIPModelIntegrationTest(unittest.TestCase):
 
         image = prepare_img()
         vision_inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
-        text_inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt").to(
-            torch_device
-        )
+        text_inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+        text_inputs = text_inputs.to(torch_device)
 
         # forward pass
         outputs = model(**text_inputs, **vision_inputs)

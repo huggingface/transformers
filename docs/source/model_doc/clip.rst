@@ -42,7 +42,7 @@ model weights at this https URL.*
 Usage
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-CLIP is a multi-modal vision + language model. It can be used for image-text similarity and for zero-shot image
+CLIP is a multi-modal vision and language model. It can be used for image-text similarity and for zero-shot image
 classification. CLIP uses a ViT like transformer to get visual features and a causal language model to get the text
 features. Both the text and visual features are then projected to a latent space with similar dimentions. The dot
 product between the projected image and text features is then used as a similar score.
@@ -50,7 +50,7 @@ product between the projected image and text features is then used as a similar 
 To feed images to the Transformer encoder, each image is split into a sequence of fixed-size non-overlapping patches,
 which are then linearly embedded. A [CLS] token is added to serve as representation of an entire image. The authors
 also add absolute position embeddings, and feed the resulting sequence of vectors to a standard Transformer encoder.
-The :class:`~transformers.ViTFeatureExtractor` can be used to resize (or rescale) and normalize images for the model.
+The :class:`~transformers.CLIPFeatureExtractor` can be used to resize (or rescale) and normalize images for the model.
 
 The :class:`~transformers.CLIPTokenizer` is used to encode the text. The following example shows how to get the
 image-text similarity scores.

@@ -127,12 +127,12 @@ def convert_clip_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_pa
     input_ids = torch.arange(0, 77).unsqueeze(0)
     pixel_values = torch.randn(1, 3, 224, 224)
 
-    hf_logits_per_imamge, hf_logits_per_text = hf_model(
+    hf_logits_per_image, hf_logits_per_text = hf_model(
         input_ids=input_ids, pixel_values=pixel_values, return_dict=True
     )[1:3]
-    pt_logits_per_imamge, pt_logits_per_text = pt_model(pixel_values, input_ids)
+    pt_logits_per_image, pt_logits_per_text = pt_model(pixel_values, input_ids)
 
-    assert torch.allclose(hf_logits_per_imamge, pt_logits_per_imamge, atol=1e-3)
+    assert torch.allclose(hf_logits_per_image, pt_logits_per_image, atol=1e-3)
     assert torch.allclose(hf_logits_per_text, pt_logits_per_text, atol=1e-3)
 
     hf_model.save_pretrained(pytorch_dump_folder_path)

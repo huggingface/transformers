@@ -42,9 +42,7 @@ class CLIPTextConfig(PretrainedConfig):
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 49408):
             Vocabulary size of the CLIP text model. Defines the number of different tokens that can be represented by
-            the :obj:`inputs_ids` passed when calling :class:`~transformers.CLIPModel`. Defines the different tokens
-            that can be represented by the `inputs_ids` passed to the forward method of
-            :class:`~transformers.CLIPTextModel`.
+            the :obj:`inputs_ids` passed when calling :class:`~transformers.CLIPModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 512):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
