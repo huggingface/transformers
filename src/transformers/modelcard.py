@@ -303,7 +303,7 @@ class TrainingSummary:
             model_card += make_markdown_table(self.eval_lines)
             model_card += "\n"
 
-        model_card += "\n ## Framework versions\n\n"
+        model_card += "\n## Framework versions\n\n"
         model_card += f"- Transformers {__version__}\n"
         if is_torch_available():
             import torch
@@ -413,7 +413,7 @@ def parse_log_history(log_history):
         return train_log, lines, None
 
 
-def _maybe_round(v, decimals=6):
+def _maybe_round(v, decimals=4):
     if isinstance(v, float) and len(str(v).split(".")) > 1 and len(str(v).split(".")[1]) > decimals:
         return f"{v:.6f}"
     return str(v)
