@@ -283,7 +283,7 @@ class AdamW(Optimizer):
         weight_decay (:obj:`float`, `optional`, defaults to 0):
             Decoupled weight decay to apply.
         correct_bias (:obj:`bool`, `optional`, defaults to `True`):
-            Whether ot not to correct bias in Adam (for instance, in Bert TF repository they use :obj:`False`).
+            Whether or not to correct bias in Adam (for instance, in Bert TF repository they use :obj:`False`).
     """
 
     def __init__(
