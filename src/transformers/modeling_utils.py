@@ -1249,6 +1249,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         has_prefix_module = any(s.startswith(prefix) for s in loaded_keys)
         expects_prefix_module = any(s.startswith(prefix) for s in expected_keys)
+
+        # key re-naming operations are never done on the keys
+        # that are loaded, but always on the keys of the newly initialized model
         remove_prefix = not has_prefix_module and expects_prefix_module
         add_prefix = has_prefix_module and not expects_prefix_module
 
@@ -1347,13 +1350,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     def retrieve_modules_from_names(self, names, add_prefix=False, remove_prefix=False):
         module_keys = set([".".join(key.split(".")[:-1]) for key in names])
 
+        # torch.nn.ParameterList is a special case where two parameter keywords
+        # are appended to the module name, *e.g.* bert.special_embeddings.0
+        module_keys = module_keys.union(set([".".join(key.split(".")[:-2]) for key in names if key[-1].isdigit()]))
+
         retrieved_modules = []
         # retrieve all modules that has at least one missing weight name
         for name, module in self.named_modules():
             if remove_prefix:
                 name = ".".join(name.split(".")[1:]) if name.startswith(self.base_model_prefix) else name
             elif add_prefix:
-                name = ".".join([self.base_model_prefix, name])
+                name = ".".join([self.base_model_prefix, name]) if len(name) > 0 else self.base_model_prefix
 
             if name in module_keys:
                 retrieved_modules.append(module)
