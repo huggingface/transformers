@@ -727,10 +727,7 @@ class BigBirdPegasusStandaloneDecoderModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_ids, attention_mask, lm_labels = config_and_inputs
 
-        inputs_dict = {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
 
 

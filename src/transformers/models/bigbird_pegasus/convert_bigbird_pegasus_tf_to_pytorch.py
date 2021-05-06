@@ -90,7 +90,7 @@ def convert_bigbird_pegasus(tf_weights: dict, config_update: dict) -> BigBirdPeg
 
     cfg = BigBirdPegasusConfig(**config_update)
     torch_model = BigBirdPegasusForConditionalGeneration(cfg)
-    sd = torch_model.state_dict()
+    state_dict = torch_model.state_dict()
     mapping = {}
 
     # separating decoder weights
@@ -103,12 +103,12 @@ def convert_bigbird_pegasus(tf_weights: dict, config_update: dict) -> BigBirdPeg
             continue
         patterns = DECODER_PATTERNS
         new_k = rename_state_dict_key(k, patterns)
-        if new_k not in sd:
+        if new_k not in state_dict:
             raise ValueError(f"could not find new key {new_k} in state dict. (converted from {k})")
         if any([True if i in k else False for i in ["dense", "query", "key", "value"]]):
             v = v.T
         mapping[new_k] = torch.from_numpy(v)
-        assert v.shape == sd[new_k].shape, f"{new_k}, {k}, {v.shape}, {sd[new_k].shape}"
+        assert v.shape == state_dict[new_k].shape, f"{new_k}, {k}, {v.shape}, {state_dict[new_k].shape}"
 
     for k, v in tqdm(remaining_weights.items(), "tf -> hf conversion"):
         conditions = [k.endswith(ending) for ending in KEYS_TO_IGNORE]
@@ -116,13 +116,13 @@ def convert_bigbird_pegasus(tf_weights: dict, config_update: dict) -> BigBirdPeg
             continue
         patterns = REMAINING_PATTERNS
         new_k = rename_state_dict_key(k, patterns)
-        if new_k not in sd and k != "pegasus/embeddings/position_embeddings":
+        if new_k not in state_dict and k != "pegasus/embeddings/position_embeddings":
             raise ValueError(f"could not find new key {new_k} in state dict. (converted from {k})")
         if any([True if i in k else False for i in ["dense", "query", "key", "value"]]):
             v = v.T
         mapping[new_k] = torch.from_numpy(v)
         if k != "pegasus/embeddings/position_embeddings":
-            assert v.shape == sd[new_k].shape, f"{new_k}, {k}, {v.shape}, {sd[new_k].shape}"
+            assert v.shape == state_dict[new_k].shape, f"{new_k}, {k}, {v.shape}, {state_dict[new_k].shape}"
 
     mapping["model.encoder.embed_positions.weight"] = mapping["model.embed_positions.weight"]
     mapping["model.decoder.embed_positions.weight"] = mapping.pop("model.embed_positions.weight")
