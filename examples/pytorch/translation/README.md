@@ -167,7 +167,7 @@ pip install accelerate
 then
 
 ```bash
-python run_tranlation_no_trainer.py \
+python run_translation_no_trainer.py \
     --model_name_or_path Helsinki-NLP/opus-mt-en-ro \
     --source_lang en \
     --target_lang ro \
