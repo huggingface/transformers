@@ -1687,7 +1687,6 @@ if TYPE_CHECKING:
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast
-        from .models.bigbird_pegasus import BigBirdPegasusTokenizerFast
         from .models.camembert import CamembertTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.deberta import DebertaTokenizerFast
