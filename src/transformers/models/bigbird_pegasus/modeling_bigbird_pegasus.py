@@ -1121,9 +1121,11 @@ class BigBirdPegasusEncoderAttention(nn.Module):
         self.config = config
         self.seed = seed
 
-        if self.config.attention_type == "original_full":
+        self.attention_type = config.attention_type
+
+        if self.attention_type == "original_full":
             self.self = BigBirdPegasusSelfAttention(config)
-        elif self.config.attention_type == "block_sparse":
+        elif self.attention_type == "block_sparse":
             self.self = BigBirdPegasusBlockSparseAttention(config, seed)
         else:
             raise ValueError(
@@ -1336,6 +1338,7 @@ class BigBirdPegasusDecoderAttention(nn.Module):
 class BigBirdPegasusEncoderLayer(nn.Module):
     def __init__(self, config: BigBirdPegasusConfig, seed=None):
         super().__init__()
+        self.attention_type = config.attention_type
         self.embed_dim = config.d_model
         self.self_attn = BigBirdPegasusEncoderAttention(config, seed=seed)
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -1405,6 +1408,17 @@ class BigBirdPegasusEncoderLayer(nn.Module):
             outputs += (self_attention_outputs[1],)
 
         return outputs
+
+    def set_attention_type(self, value: str):
+        if value not in ["original_full", "block_sparse"]:
+            raise ValueError(
+                f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
+            )
+        # attention type is already correctly set
+        if value == self.attention_type:
+            return
+        self.attention_type = value
+        self.self_attn.set_attention_type(value)
 
 
 class BigBirdPegasusDecoderLayer(nn.Module):
@@ -1815,6 +1829,33 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
 
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=hidden_states.device)
+        attention_mask = attention_mask.long()
+
+        # in order to use block_sparse attention, sequence_length has to be at least
+        # bigger than all global attentions: 2 * block_size
+        # + sliding tokens: 3 * block_size
+        # + random tokens: 2 * num_random_blocks * block_size
+        max_tokens_to_attend = (5 + 2 * self.config.num_random_blocks) * self.config.block_size
+        if self.attention_type == "block_sparse" and input_shape[1] <= max_tokens_to_attend:
+            # change attention_type from block_sparse to original_full
+            sequence_length = input_shape[1]
+            logger.warning(
+                "Attention type 'block_sparse' is not possible if sequence_length: "
+                f"{sequence_length} <= num global tokens: 2 * config.block_size "
+                "+ min. num sliding tokens: 3 * config.block_size "
+                "+ config.num_random_blocks * config.block_size "
+                "+ additional buffer: config.num_random_blocks * config.block_size "
+                f"= {max_tokens_to_attend} with config.block_size "
+                f"= {self.config.block_size}, config.num_random_blocks "
+                f"= {self.config.num_random_blocks}."
+                "Changing attention type to 'original_full'..."
+            )
+            self.set_attention_type("original_full")
+
+        if self.attention_type == "block_sparse":
+            padding_len, hidden_states, attention_mask = self._pad_to_block_size(hidden_states, attention_mask)
+        else:
+            padding_len = 0
 
         # expand attention_mask
         if self.attention_type == "original_full":
@@ -1890,6 +1931,10 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
+        if padding_len > 0:
+            # unpad `sequence_output` because the calling function is expecting a length == input_ids.size(1)
+            hidden_states = hidden_states[:, :-padding_len]
+
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
 
@@ -1898,6 +1943,18 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
+
+    def set_attention_type(self, value: str):
+        if value not in ["original_full", "block_sparse"]:
+            raise ValueError(
+                f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
+            )
+        # attention type is already correctly set
+        if value == self.attention_type:
+            return
+        self.attention_type = value
+        for layer in self.layers:
+            layer.set_attention_type(value)
 
     @staticmethod  # Copied from transformers.models.big_bird.modeling_big_bird.BigBirdModel.create_masks_for_block_sparse_attn
     def create_masks_for_block_sparse_attn(attention_mask: torch.Tensor, block_size: int):
@@ -1936,22 +1993,11 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
 
         return blocked_encoder_mask, band_mask, from_mask, to_mask
 
-    # Copied from transformers.models.big_bird.modeling_big_bird.BigBirdModel._pad_to_block_size
-    def _pad_to_block_size(
-        self,
-        input_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
-        token_type_ids: torch.Tensor,
-        position_ids: torch.Tensor,
-        inputs_embeds: torch.Tensor,
-        pad_token_id: int,
-    ):
+    def _pad_to_block_size(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor):
         """A helper function to pad tokens and mask to work with implementation of BigBird block-sparse attention."""
         # padding
         block_size = self.config.block_size
-
-        input_shape = input_ids.shape if input_ids is not None else inputs_embeds.shape
-        batch_size, seq_len = input_shape[:2]
+        batch_size, seq_len = hidden_states.shape[:2]
 
         padding_len = (block_size - seq_len % block_size) % block_size
         if padding_len > 0:
@@ -1959,24 +2005,16 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
                 f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
                 f"`config.block_size`: {block_size}"
             )
-            if input_ids is not None:
-                input_ids = F.pad(input_ids, (0, padding_len), value=pad_token_id)
-            if position_ids is not None:
-                # pad with position_id = pad_token_id as in modeling_bigbird.BigBirdEmbeddings
-                position_ids = F.pad(position_ids, (0, padding_len), value=pad_token_id)
-            if inputs_embeds is not None:
-                input_ids_padding = inputs_embeds.new_full(
-                    (batch_size, padding_len),
-                    self.config.pad_token_id,
-                    dtype=torch.long,
-                )
-                inputs_embeds_padding = self.embeddings(input_ids_padding)
-                inputs_embeds = torch.cat([inputs_embeds, inputs_embeds_padding], dim=-2)
+            input_ids_padding = (
+                torch.ones((batch_size, padding_len), dtype=torch.long, device=hidden_states.device)
+                * self.config.pad_token_id
+            )
+            inputs_embeds_padding = self.embed_tokens(input_ids_padding)
+            hidden_states = torch.cat([hidden_states, inputs_embeds_padding], dim=-2)
 
-            attention_mask = F.pad(attention_mask, (0, padding_len), value=False)  # no attention on the padding tokens
-            token_type_ids = F.pad(token_type_ids, (0, padding_len), value=0)  # pad with token_type_id = 0
+            attention_mask = F.pad(attention_mask, (0, padding_len), value=0)  # no attention on the padding tokens
 
-        return padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds
+        return padding_len, hidden_states, attention_mask
 
 
 class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):

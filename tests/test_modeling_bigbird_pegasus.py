@@ -55,15 +55,18 @@ def prepare_bigbird_pegasus_inputs_dict(
     decoder_attention_mask=None,
 ):
     if attention_mask is None:
-        attention_mask = input_ids.ne(config.pad_token_id).long()
+        attention_mask = input_ids.ne(config.pad_token_id)
     if decoder_attention_mask is None:
-        decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id).long()
-    return {
-        "input_ids": input_ids.to(torch_device),
-        "decoder_input_ids": decoder_input_ids.to(torch_device),
-        "attention_mask": attention_mask.to(torch_device),
-        "decoder_attention_mask": attention_mask.to(torch_device),
+        decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
+
+    input_dict = {
+        "input_ids": input_ids,
+        "decoder_input_ids": decoder_input_ids,
+        "attention_mask": attention_mask,
+        "decoder_attention_mask": attention_mask,
     }
+    input_dict = {k: input_dict[k].to(torch_device) for k in input_dict}
+    return input_dict
 
 
 @require_torch
@@ -226,40 +229,6 @@ class BigBirdPegasusModelTester:
         result = model(input_ids, decoder_input_ids=decoder_input_ids, use_cache=True)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    # def create_and_check_for_auto_padding(
-    #     self,
-    #     config,
-    #     input_ids,
-    #     token_type_ids,
-    #     input_mask,
-    #     sequence_labels,
-    #     token_labels,
-    #     choice_labels,
-    # ):
-    #     model = BigBirdModel(config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     result = model(input_ids)
-    #     self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    # def create_and_check_for_change_to_full_attn(
-    #     self,
-    #     config,
-    #     input_ids,
-    #     token_type_ids,
-    #     input_mask,
-    #     sequence_labels,
-    #     token_labels,
-    #     choice_labels,
-    # ):
-    #     model = BigBirdModel(config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     result = model(input_ids)
-    #     self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-    #     # the config should not be changed
-    #     self.parent.assertTrue(model.config.attention_type == "block_sparse")
-
 
 @require_torch
 class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -279,7 +248,7 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     test_pruning = False
     test_head_masking = False
 
-    # torchscript are not passing for now.
+    # torchscript tests are not passing for now.
     # Also torchscript is not an important feature to have in the beginning.
     test_torchscript = False
 
@@ -394,34 +363,34 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         print(output1["logits"][0], output2["logits"], (output2["logits"] - output1["logits"][0]).max())
         self.assertTrue(torch.allclose(output1["logits"][0], output2["logits"], atol=1e-4))
 
-    def test_correct_missing_keys(self):
-        if not self.test_missing_keys:
-            return
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+    def test_auto_padding(self):
+        ids = [[2, 6, 9] * 65]
+        config, input_dict = self.model_tester.prepare_config_and_inputs()
+        input_dict["input_ids"] = torch.tensor(ids, device=torch_device, dtype=torch.long)
+        input_dict["attention_mask"] = input_dict["input_ids"].new_ones(input_dict["input_ids"].shape)
+        print(input_dict["input_ids"].shape, input_dict["attention_mask"].shape)
+        config.block_size = 8
+        model = BigBirdPegasusForConditionalGeneration(config).eval().to(torch_device)
+        outputs1 = model(**input_dict)["logits"]
 
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            base_model_prefix = model.base_model_prefix
+        print(outputs1.shape)
 
-            if hasattr(model, base_model_prefix):
-                with tempfile.TemporaryDirectory() as temp_dir_name:
-                    model.base_model.save_pretrained(temp_dir_name)
-                    model, loading_info = model_class.from_pretrained(temp_dir_name, output_loading_info=True)
-                    
-                    print("LOADING INFO", loading_info)
+    def test_for_change_to_full_attn(self):
+        self.model_tester.seq_length = 9
+        config, input_dict = self.model_tester.prepare_config_and_inputs()
 
-                    with self.subTest(msg=f"Missing keys for {model.__class__.__name__}"):
-                        self.assertGreater(len(loading_info["missing_keys"]), 0)
+        # automatic switch will happen
+        config.attention_type = "block_sparse"
+        model = BigBirdPegasusForConditionalGeneration(config).eval().to(torch_device)
+        state_dict = model.state_dict()
+        outputs1 = model(**input_dict)["logits"]
 
-    # def test_auto_padding(self):
-    #     self.model_tester.seq_length = 241
-    #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
-    #     self.model_tester.create_and_check_for_auto_padding(*config_and_inputs)
+        config.attention_type = "original_full"
+        model = BigBirdPegasusForConditionalGeneration(config).eval().to(torch_device)
+        model.load_state_dict(state_dict)
+        outputs2 = model(**input_dict)["logits"]
 
-    # def test_for_change_to_full_attn(self):
-    #     self.model_tester.seq_length = 9
-    #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
-    #     self.model_tester.create_and_check_for_change_to_full_attn(*config_and_inputs)
+        self.assertTrue(torch.allclose(outputs1, outputs2, atol=1e-5))
 
 
 @require_torch
