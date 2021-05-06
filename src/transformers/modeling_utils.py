@@ -1206,9 +1206,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     #print(f"params = {[name for name, v in module.named_parameters(recurse=False)]}")
                     for name, param in module.named_parameters(recurse=False):
                         print(f"NAME={name} {param.shape}", vars(param))
-                    #params = [p for p in module.parameters(recurse=False) if hasattr(p, "ds_id")]
-                    #with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
-                    with deepspeed.zero.GatheredParameters(list(module.parameters(recurse=False)), modifier_rank=0):
+                    # remove the following 2 lines and uncomment the next line after, once this PR
+                    # is merged: https://github.com/microsoft/DeepSpeed/pull/1044
+                    params = [p for p in module.parameters(recurse=False) if hasattr(p, "ds_id")]
+                    with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
+                    #with deepspeed.zero.GatheredParameters(list(module.parameters(recurse=False)), modifier_rank=0):
                         if torch.distributed.get_rank() == 0:
                             module._load_from_state_dict(*args)
                 else:
