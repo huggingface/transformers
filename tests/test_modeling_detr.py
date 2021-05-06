@@ -363,6 +363,28 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 expected_arg_names = ["pixel_values", "pixel_mask"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    def test_different_timm_backbone(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # let's pick a random timm backbone
+        config.backbone = "tf_mobilenetv3_small_075"
+
+        for model_class in self.all_model_classes:
+            # the mask head of DetrForSegmentation does not support any timm backbone
+            if model_class.__name__ == "DetrForSegmentation":
+                continue
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            
+            if model_class.__name__ == "DetrForObjectDetection":
+                expected_shape = (self.model_tester.batch_size, self.model_tester.num_queries, self.model_tester.num_labels + 1)
+                self.assertEqual(outputs.logits.shape, expected_shape)
+            
+            self.assertTrue(outputs)
+
 
 TOLERANCE = 1e-4
 

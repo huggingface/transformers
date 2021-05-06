@@ -472,6 +472,7 @@ Flax), PyTorch, and/or TensorFlow.
     model_doc/deberta
     model_doc/deberta_v2
     model_doc/deit
+    model_doc/detr
     model_doc/dialogpt
     model_doc/distilbert
     model_doc/dpr

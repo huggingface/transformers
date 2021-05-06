@@ -1268,7 +1268,7 @@ class DetrModel(DetrPreTrainedModel):
 @add_start_docstrings(
     """
     DETR Model (consisting of a backbone and encoder-decoder Transformer) with an object detection head on top, for
-    tasks such as COCO.
+    tasks such as COCO detection.
     """,
     DETR_START_DOCSTRING,
 )
@@ -1424,7 +1424,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
 @add_start_docstrings(
     """
     DETR Model (consisting of a backbone and encoder-decoder Transformer) with a segmentation head on top, for tasks
-    such as COCO panoptic. Should have config.return_intermediate_layers = True.
+    such as COCO panoptic. 
 
     """,
     DETR_START_DOCSTRING,

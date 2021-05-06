@@ -368,7 +368,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         if "masks" in target:
             # use PyTorch as current workaround
-            # TODO make this better
+            # TODO replace by self.resize
             masks = torch.from_numpy(target["masks"][:, None]).float()
             interpolated_masks = F.interpolate(masks, size=(h, w), mode="nearest")[:, 0] > 0.5
             target["masks"] = interpolated_masks.numpy()
