@@ -1143,7 +1143,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         super().__init__(config)
 
         self.visual_bert = VisualBertModel(config)
-        self.classifier = VisualBertPreTrainingHeads(config)
+        self.cls = VisualBertPreTrainingHeads(config)
 
         # UNUSED
         # self.cut_first = cut_first
@@ -1152,10 +1152,10 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         self.init_weights()
 
     def get_output_embeddings(self):
-        return self.classifier.predictions.decoder
+        return self.cls.predictions.decoder
 
     def set_output_embeddings(self, new_embeddings):
-        self.classifier.predictions.decoder = new_embeddings
+        self.cls.predictions.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=VisualBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -1234,7 +1234,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         )
 
         sequence_output, pooled_output = outputs[:2]
-        prediction_scores, seq_relationship_score = self.classifier(sequence_output, pooled_output)
+        prediction_scores, seq_relationship_score = self.cls(sequence_output, pooled_output)
 
         total_loss = None
         if labels is not None and sentence_image_label is not None:
@@ -1300,7 +1300,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
         self.visual_bert = VisualBertModel(config)
         # TO-CHECK
         # self.sequence_summary = SequenceSummary(config)
-        self.classifier = nn.Linear(config.hidden_size, 1)
+        self.cls = nn.Linear(config.hidden_size, 1)
 
         self.init_weights()
 
@@ -1380,7 +1380,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
         sequence_output, pooled_output = outputs[0], outputs[1]
 
         # pooled_output = self.sequence_summary(sequence_output)
-        logits = self.classifier(pooled_output)
+        logits = self.cls(pooled_output)
         reshaped_logits = logits.view(-1, num_choices)
 
         loss = None
@@ -1414,7 +1414,7 @@ class VisualBertForVQA(VisualBertPreTrainedModel):
 
         self.visual_bert = VisualBertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+        self.cls = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
 
@@ -1489,7 +1489,7 @@ class VisualBertForVQA(VisualBertPreTrainedModel):
         # input_ids = torch.gather(input_ids, 1, index_to_gather.unsqueeze(-1).expand(index_to_gather.size(0), 1))
 
         pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
+        logits = self.cls(pooled_output)
         reshaped_logits = logits.view(-1, self.num_labels)
 
         loss = None
@@ -1523,7 +1523,7 @@ class VisualBertForVQAAdvanced(VisualBertPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.visual_bert = VisualBertModel(config)
-        self.classifier = VisualBertPreTrainingHeads(config)
+        self.cls = VisualBertPreTrainingHeads(config)
 
         self.init_weights()
 
@@ -1588,7 +1588,7 @@ class VisualBertForVQAAdvanced(VisualBertPreTrainedModel):
         sequence_output = outputs[0]
         pooled_output = outputs[1]
 
-        prediction_scores, seq_relationship_score = self.classifier(sequence_output, pooled_output)
+        prediction_scores, seq_relationship_score = self.cls(sequence_output, pooled_output)
         loss = None
 
         if labels is not None:
@@ -1625,7 +1625,7 @@ class VisualBertForNLVR(VisualBertPreTrainedModel):
 
         self.visual_bert = VisualBertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)  # 2
+        self.cls = nn.Linear(config.hidden_size, config.num_labels)  # 2
 
         self.init_weights()
 
@@ -1690,7 +1690,7 @@ class VisualBertForNLVR(VisualBertPreTrainedModel):
         # sequence_output = outputs[0]
         pooled_output = outputs[1]
         pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
+        logits = self.cls(pooled_output)
         reshaped_logits = logits.contiguous()
 
         loss = None
@@ -1773,7 +1773,7 @@ class VisualBertForFlickr(VisualBertPreTrainedModel):
 
         self.visual_bert = VisualBertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = VisualBertPreTrainingHeads(config)
+        self.cls = VisualBertPreTrainingHeads(config)
         self.flickr_attention = FlickrAttention(config)
 
         self.init_weights()
