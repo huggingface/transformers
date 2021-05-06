@@ -50,7 +50,7 @@ def _compute_mask_indices(
     mask_length: int,
     attention_mask: Optional[torch.Tensor] = None,
     min_masks: int = 0,
-    device = "cpu"
+    device="cpu",
 ) -> torch.Tensor:
     """
     Computes random mask spans for a given shape
@@ -69,18 +69,18 @@ def _compute_mask_indices(
     <https://github.com/pytorch/fairseq/blob/e0788f7007a8473a76db573985031f3c94201e79/fairseq/data/data_utils.py#L376>`__.
     """
     bsz, all_sz = shape
-    mask = torch.full((bsz, all_sz), False, device = device)
+    mask = torch.full((bsz, all_sz), False, device=device)
     min_len_unique, mask_idcs = float("Inf"), []
     padding_mask = attention_mask.ne(1) if attention_mask is not None else None
     if padding_mask is not None:
         sz = all_sz - torch.sum(padding_mask, 1)
-        num_mask = (((sz * mask_prob) / mask_length) + torch.rand(bsz, device = device)).int()
+        num_mask = (((sz * mask_prob) / mask_length) + torch.rand(bsz, device=device)).int()
     else:
-        sz = torch.full([bsz], all_sz, device = device)
+        sz = torch.full([bsz], all_sz, device=device)
         all_num_mask = ((all_sz * mask_prob) / mask_length) + torch.rand(1, device=device)[0]
-        num_mask = torch.full([bsz], all_num_mask, device = device, dtype = torch.int32)
+        num_mask = torch.full([bsz], all_num_mask, device=device, dtype=torch.int32)
 
-    num_mask[num_mask < min_masks ] = min_masks
+    num_mask[num_mask < min_masks] = min_masks
     for i in range(bsz):
         curr_num_mask = int(num_mask[i])
         curr_sz = sz[i]
@@ -849,7 +849,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                     self.config.mask_time_length,
                     attention_mask=attention_mask,
                     min_masks=2,
-                    device = hidden_states.device
+                    device=hidden_states.device,
                 )
                 hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
 
@@ -859,7 +859,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                     (batch_size, hidden_size),
                     self.config.mask_feature_prob,
                     self.config.mask_feature_length,
-                    device = hidden_states.device
+                    device=hidden_states.device,
                 )
                 mask_feature_indices = mask_feature_indices.to(hidden_states.device)
                 hidden_states[mask_feature_indices[:, None].expand(-1, sequence_length, -1)] = 0

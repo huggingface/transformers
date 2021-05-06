@@ -478,7 +478,7 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         mask_prob = 0.5
         mask_length = 1
 
-        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length, device = torch_device)
+        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length, device=torch_device)
 
         self.assertListEqual(mask.sum(axis=-1).tolist(), [mask_prob * sequence_length for _ in range(batch_size)])
 
@@ -486,7 +486,7 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         attention_mask[:, -sequence_length // 2 :] = 0
 
         mask = _compute_mask_indices(
-            (batch_size, sequence_length), mask_prob, mask_length, attention_mask=attention_mask, device = torch_device
+            (batch_size, sequence_length), mask_prob, mask_length, attention_mask=attention_mask, device=torch_device
         )
 
         self.assertListEqual(mask.sum(axis=-1).tolist(), [mask_prob * sequence_length // 2 for _ in range(batch_size)])
@@ -497,7 +497,7 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         mask_prob = 0.5
         mask_length = 4
 
-        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length, device = torch_device)
+        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length, device=torch_device)
 
         # because of overlap there is a range of possible masks
         for batch_sum in mask.sum(axis=-1):
@@ -510,7 +510,7 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         attention_mask[:, -sequence_length // 2 :] = 0
 
         mask = _compute_mask_indices(
-            (batch_size, sequence_length), mask_prob, mask_length, attention_mask=attention_mask, device = torch_device
+            (batch_size, sequence_length), mask_prob, mask_length, attention_mask=attention_mask, device=torch_device
         )
 
         # because of overlap there is a range of possible masks
