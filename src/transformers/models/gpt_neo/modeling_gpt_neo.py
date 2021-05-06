@@ -295,7 +295,7 @@ class GPTNeoAttentionMixin:
 
 
 class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
-    def __init__(self, config):
+    def __init__(self, attention_type, config):
         super().__init__()
 
         max_positions = config.max_position_embeddings
@@ -306,6 +306,10 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
             ),
         )
         self.register_buffer("masked_bias", torch.tensor(-1e9))
+
+        self.window_size = None
+        if attention_type == "local":
+            self.window_size = config.window_size
 
         self.attn_dropout = nn.Dropout(config.attention_dropout)
         self.resid_dropout = nn.Dropout(config.resid_dropout)
@@ -354,6 +358,8 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
 
         query_length, key_length = query.size(-2), key.size(-2)
         causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
+        if self.window_size is not None:
+            causal_mask = (causal_mask ^ torch.tril(causal_mask, self.window_size))
 
         attn_output, attn_weights = self._attn(
             query, key, value, causal_mask, self.masked_bias, self.attn_dropout, attention_mask, head_mask
@@ -475,10 +481,8 @@ class GPTNeoAttention(nn.Module):
         self.attention_layers = config.attention_layers
         self.attention_type = self.attention_layers[layer_id]
 
-        if self.attention_type == "global":
-            self.attention = GPTNeoSelfAttention(config)
-        elif self.attention_type == "local":
-            self.attention = GPTNeoLocalSelfAttention(config)
+        if self.attention_type in ["global", "local"]:
+            self.attention = GPTNeoSelfAttention(self.attention_type, config)
         else:
             raise NotImplementedError(
                 "Only attn layer types 'global' and 'local' exist, but got `config.attention_layers`: "
