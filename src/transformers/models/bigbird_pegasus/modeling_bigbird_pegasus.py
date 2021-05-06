@@ -377,6 +377,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
 
         rsqrt_d = 1 / math.sqrt(attention_head_size)
         bsz = batch_size
+        attn_mask_penalty = -10000.0
 
         # generate random attention and corresponding masks
         np.random.seed(seed)
@@ -434,7 +435,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         first_product = self.torch_bmm_nd_transpose(blocked_query_matrix[:, :, 0], key_layer, ndim=4)
 
         first_product = first_product * rsqrt_d
-        first_product += (1.0 - to_mask) * -10000.0
+        first_product += (1.0 - to_mask) * attn_mask_penalty
         first_attn_weights = F.softmax(first_product, dim=-1)  # [bsz, n_heads, from_block_size, to_seq_len]
 
         # [bsz, n_heads, from_block_size, to_seq_len] x [bsz, n_heads, to_seq_len, -1] ==> [bsz, n_heads, from_block_size, -1]
@@ -486,7 +487,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
             dim=3,
         )
         second_product = second_product * rsqrt_d
-        second_product += (1.0 - torch.minimum(second_seq_pad, second_rand_pad)) * -10000.0
+        second_product += (1.0 - torch.minimum(second_seq_pad, second_rand_pad)) * attn_mask_penalty
         second_attn_weights = F.softmax(
             second_product, dim=-1
         )  # [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size]
@@ -537,10 +538,10 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         last_band_product = last_band_product * rsqrt_d
 
         # masking padded tokens
-        inner_band_product += (1.0 - band_mask) * -10000.0
-        first_band_product += (1.0 - to_mask[:, :, :, :to_block_size].unsqueeze(3)) * -10000.0
-        last_band_product += (1.0 - to_mask[:, :, :, -to_block_size:].unsqueeze(3)) * -10000.0
-        rand_band_product += (1.0 - rand_mask[:, :, 1:-1]) * -10000.0
+        inner_band_product += (1.0 - band_mask) * attn_mask_penalty
+        first_band_product += (1.0 - to_mask[:, :, :, :to_block_size].unsqueeze(3)) * attn_mask_penalty
+        last_band_product += (1.0 - to_mask[:, :, :, -to_block_size:].unsqueeze(3)) * attn_mask_penalty
+        rand_band_product += (1.0 - rand_mask[:, :, 1:-1]) * attn_mask_penalty
 
         # completing attention scores matrix for all q[-2:2]
         band_product = torch.cat(
@@ -620,7 +621,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
             dim=3,
         )
         second_last_product = second_last_product * rsqrt_d
-        second_last_product += (1.0 - torch.minimum(second_last_seq_pad, second_last_rand_pad)) * -10000.0
+        second_last_product += (1.0 - torch.minimum(second_last_seq_pad, second_last_rand_pad)) * attn_mask_penalty
         second_last_attn_weights = F.softmax(
             second_last_product, dim=-1
         )  # [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size]
@@ -636,7 +637,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         # [bsz, n_heads, from_block_size, -1] x [bsz, n_heads, to_seq_len, -1] ==> [bsz, n_heads, from_block_size, to_seq_len]
         last_product = self.torch_bmm_nd_transpose(blocked_query_matrix[:, :, -1], key_layer, ndim=4)
         last_product = last_product * rsqrt_d
-        last_product += (1.0 - to_mask) * -10000.0
+        last_product += (1.0 - to_mask) * attn_mask_penalty
         last_attn_weights = F.softmax(last_product, dim=-1)  # [bsz, n_heads, from_block_size, n]
 
         # [bsz, n_heads, from_block_size, to_seq_len] x [bsz, n_heads, to_seq_len, -1] ==> [bsz, n_heads, from_block_size, -1]

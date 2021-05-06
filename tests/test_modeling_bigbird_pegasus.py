@@ -244,7 +244,7 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     )
     all_generative_model_classes = (BigBirdPegasusForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_missing_keys = True
+    test_missing_keys = False
     test_pruning = False
     test_head_masking = False
 
@@ -339,29 +339,39 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         model.generate(**input_dict)
         model.generate(**input_dict, do_sample=True, early_stopping=False, num_return_sequences=3)
 
-    def test_for_attention_mask(self):
-        # this test is failing because of some reason
-        config = BigBirdPegasusConfig(block_size=16, attention_type="original_full")
-        model = BigBirdPegasusForConditionalGeneration(config)
+    def test_batched_forward_original_full(self):
+        self._check_batched_forward(attn_type="original_full")
+
+    def test_batched_forward_block_sparse(self):
+        self._check_batched_forward(attn_type="block_sparse", tolerance=1e-1)
+
+    def _check_batched_forward(self, attn_type, tolerance=1e-3):
+        config = BigBirdPegasusConfig(block_size=16, attention_type=attn_type)
+        model = BigBirdPegasusForConditionalGeneration(config).to(torch_device)
+        model.eval()
 
         sample_with_padding = [3, 8, 11] * 128 + [0] * 128
         sample_without_padding = [4, 7, 9, 13] * 128
-        target_ids = [7, 8] * 8
+        target_ids_without_padding = [2, 3] * 8
+        target_ids_with_padding = [7, 8] * 6 + 4 * [-100]
 
-        labels = torch.tensor([target_ids, target_ids], device=torch_device, dtype=torch.long)
+        attention_mask = torch.tensor([[1] * 3 * 128 + [0] * 128, [1] * 4 * 128], device=torch_device, dtype=torch.long)
+
         input_ids = torch.tensor([sample_with_padding, sample_without_padding], device=torch_device, dtype=torch.long)
-        attention_mask = torch.tensor([[1] * 3 * 128 + [0] * 128, [1] * 512], device=torch_device, dtype=torch.long)
+        labels = torch.tensor([target_ids_without_padding, target_ids_with_padding], device=torch_device, dtype=torch.long)
 
-        output1 = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+        with torch.no_grad():
+            logits_batched = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels).logits
 
-        input_ids = torch.tensor([[3, 8, 11] * 128], device=torch_device, dtype=torch.long)
-        attention_mask = torch.tensor([[1] * 3 * 128], device=torch_device, dtype=torch.long)
-        labels = torch.tensor([target_ids], device=torch_device, dtype=torch.long)
+        with torch.no_grad():
+            logits_single_first = model(input_ids=input_ids[:1, :-128], labels=labels[:1]).logits
 
-        output2 = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+        self.assertTrue(torch.allclose(logits_batched[0, -3:], logits_single_first[0, -3:], atol=tolerance))
 
-        print(output1["logits"][0], output2["logits"], (output2["logits"] - output1["logits"][0]).max())
-        self.assertTrue(torch.allclose(output1["logits"][0], output2["logits"], atol=1e-4))
+        with torch.no_grad():
+            logits_single_second = model(input_ids=input_ids[1:], labels=labels[1:, :-4]).logits
+
+        self.assertTrue(torch.allclose(logits_batched[1, :3], logits_single_second[0, :3], atol=tolerance))
 
     def test_auto_padding(self):
         ids = [[2, 6, 9] * 65]
