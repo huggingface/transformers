@@ -45,23 +45,26 @@ class CLIPTextConfig(PretrainedConfig):
             the :obj:`inputs_ids` passed when calling :class:`~transformers.CLIPModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 512):
             Dimensionality of the encoder layers and the pooler layer.
+        intermediate_size (:obj:`int`, `optional`, defaults to 2048):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (:obj:`int`, `optional`, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (:obj:`int`, `optional`, defaults to 2048):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        dropout (:obj:`float`, `optional`, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (:obj:`float`, `optional`, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 77):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        initializer_range (:obj:`float`, `optional`, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
+        attention_dropout (:obj:`float`, `optional`, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        dropout (:obj:`float`, `optional`, defaults to 0.0):
+            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+        initializer_range (:obj:`float`, `optional`, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        initializer_factor (:obj:`float`, `optional`, defaults to 1):
+            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
+            testing).
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
 
@@ -85,15 +88,14 @@ class CLIPTextConfig(PretrainedConfig):
         vocab_size=49408,
         hidden_size=512,
         intermediate_size=2048,
-        output_dim=512,
-        dropout=0.0,
         num_hidden_layers=12,
         num_attention_heads=8,
         max_position_embeddings=77,
-        attention_dropout=0.0,
-        initializer_range=0.02,  # TODO(PS): this should be changed
-        initializer_factor=1.0,
         layer_norm_eps=1e-5,
+        dropout=0.0,
+        attention_dropout=0.0,
+        initializer_range=0.02,
+        initializer_factor=1.0,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -105,7 +107,6 @@ class CLIPTextConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
-        self.output_dim = output_dim
         self.dropout = dropout
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -131,6 +132,8 @@ class CLIPVisionConfig(PretrainedConfig):
     Args:
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
+        intermediate_size (:obj:`int`, `optional`, defaults to 3072):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (:obj:`int`, `optional`, defaults to 12):
@@ -139,19 +142,17 @@ class CLIPVisionConfig(PretrainedConfig):
             The size (resolution) of each image.
         patch_size (:obj:`int`, `optional`, defaults to :obj:`32`):
             The size (resolution) of each patch.
-        intermediate_size (:obj:`int`, `optional`, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-5):
+            The epsilon used by the layer normalization layers.
         dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        max_position_embeddings (:obj:`int`, `optional`, defaults to 77):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-5):
-            The epsilon used by the layer normalization layers.
+        initializer_factor (:obj:`float`, `optional`, defaults to 1):
+            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
+            testing).
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
 
@@ -175,16 +176,15 @@ class CLIPVisionConfig(PretrainedConfig):
         self,
         hidden_size=768,
         intermediate_size=3072,
-        output_dim=512,
-        dropout=0.0,
         num_hidden_layers=12,
         num_attention_heads=12,
-        patch_size=32,
         image_size=224,
+        patch_size=32,
+        layer_norm_eps=1e-5,
+        dropout=0.0,
+        attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
-        attention_dropout=0.0,
-        layer_norm_eps=1e-5,
         gradient_checkpointing=False,
         **kwargs
     ):
@@ -192,7 +192,6 @@ class CLIPVisionConfig(PretrainedConfig):
 
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
-        self.output_dim = output_dim
         self.dropout = dropout
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
