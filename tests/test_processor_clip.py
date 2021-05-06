@@ -36,26 +36,9 @@ class CLIPProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        vocab = [
-            "l",
-            "o",
-            "w",
-            "e",
-            "r",
-            "s",
-            "t",
-            "i",
-            "d",
-            "n",
-            "lo",
-            "low</w>",
-            "er</w>",
-            "lowest</w>",
-            "newer</w>",
-            "wider",
-            "<unk>",
-            "<|endoftext|>",
-        ]
+        # fmt: off
+        vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "lo", "low</w>", "er</w>", "lowest</w>", "newer</w>", "wider", "<unk>", "<|endoftext|>" ]
+        # fmt: on
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "l o", "lo w</w>", "e r</w>", ""]
         self.special_tokens_map = {"unk_token": "<unk>"}
