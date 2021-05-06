@@ -699,19 +699,17 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
-            print(f"shape={module.weight.shape}")
             from transformers.integrations import is_deepspeed_zero3_enabled
-            #if is_deepspeed_zero3_enabled() and
-            if hasattr(module, "weight_v") and hasattr(module, "weight_g"):
+            if is_deepspeed_zero3_enabled():
                 import deepspeed
-                with deepspeed.zero.GatheredParameters([module.weight_v, module.weight_g], modifier_rank=0):
-                    #print(f"{module.weight_v.ds_id}")
-                    #print(f"{module.weight_v.ds_tensor}")
-                    torch.nn.init.kaiming_normal_(module.weight.data)
+                if hasattr(module, "weight_v") and hasattr(module, "weight_g"):
+                    with deepspeed.zero.GatheredParameters([module.weight_v, module.weight_g], modifier_rank=0):
+                        torch.nn.init.kaiming_normal_(module.weight.data)
+                else:
+                    with deepspeed.zero.GatheredParameters(module.weight, modifier_rank=0):
+                        torch.nn.init.kaiming_normal_(module.weight.data)
             else:
-                import deepspeed
-                with deepspeed.zero.GatheredParameters(module.weight, modifier_rank=0):
-                    torch.nn.init.kaiming_normal_(module.weight.data)
+                torch.nn.init.kaiming_normal_(module.weight.data)
 
         if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
