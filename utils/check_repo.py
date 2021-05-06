@@ -122,10 +122,15 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "XLMForQuestionAnswering",
     "XLNetForQuestionAnswering",
     "SeparableConv1D",
+<<<<<<< HEAD
     "VisualBertForRegionToPhraseAlignment",
     "VisualBertForVisualReasoning",
     "VisualBertForQuestionAnswering",
     "VisualBertForMultipleChoice",
+=======
+    "TFWav2Vec2ForCTC",
+    "TFWav2Vec2Model",
+>>>>>>> [WIP] Add TFWav2Vec2Model
 ]
 
 # This is to make sure the transformers module imported is the one in the repo.
