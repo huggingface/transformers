@@ -473,6 +473,10 @@ class CLIPModelTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
+    # CLIPModel does not have input/output embeddings
+    def test_model_common_attributes(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
