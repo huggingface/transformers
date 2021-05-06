@@ -244,7 +244,7 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     )
     all_generative_model_classes = (BigBirdPegasusForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_missing_keys = True
+    test_missing_keys = False
     test_pruning = False
     test_head_masking = False
 
@@ -364,16 +364,22 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         self.assertTrue(torch.allclose(output1["logits"][0], output2["logits"], atol=1e-4))
 
     def test_auto_padding(self):
-        ids = [[2, 6, 9] * 65]
-        config, input_dict = self.model_tester.prepare_config_and_inputs()
-        input_dict["input_ids"] = torch.tensor(ids, device=torch_device, dtype=torch.long)
-        input_dict["attention_mask"] = input_dict["input_ids"].new_ones(input_dict["input_ids"].shape)
-        print(input_dict["input_ids"].shape, input_dict["attention_mask"].shape)
+        ids = [[7, 6, 9] * 65]
+        config, _ = self.model_tester.prepare_config_and_inputs()
+        input_ids = torch.tensor(ids, device=torch_device, dtype=torch.long)
+        attention_mask = input_ids.new_ones(input_ids.shape)
+        decoder_input_ids = torch.tensor([[33, 5, 8]*3], device=torch_device, dtype=torch.long)
+
         config.block_size = 8
         model = BigBirdPegasusForConditionalGeneration(config).eval().to(torch_device)
-        outputs1 = model(**input_dict)["logits"]
+        output1 = model(input_ids=input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids)["logits"]
 
-        print(outputs1.shape)
+        ids = [[7, 6, 9] * 65 + [0]*5]
+        input_ids = torch.tensor(ids, device=torch_device, dtype=torch.long)
+        attention_mask = torch.tensor([[1]*3*65 + [0]*5], device=torch_device, dtype=torch.long)
+        output2 = model(input_ids=input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids)["logits"]
+
+        self.assertTrue(torch.allclose(output1, output2, atol=1e-5))
 
     def test_for_change_to_full_attn(self):
         self.model_tester.seq_length = 9
