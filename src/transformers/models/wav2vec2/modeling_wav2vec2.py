@@ -201,7 +201,7 @@ class Wav2Vec2PositionalConvEmbedding(nn.Module):
         from transformers.integrations import is_deepspeed_zero3_enabled
         if is_deepspeed_zero3_enabled():
             import deepspeed
-            with deepspeed.zero.GatheredParameters(self.conv.weight):
+            with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
                 self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
             deepspeed.zero.register_external_parameter(self, self.conv.weight_v)
             deepspeed.zero.register_external_parameter(self, self.conv.weight_g)
@@ -704,11 +704,13 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             #if is_deepspeed_zero3_enabled() and
             if hasattr(module, "weight_v") and hasattr(module, "weight_g"):
                 import deepspeed
-                with deepspeed.zero.GatheredParameters([module.weight_v, module.weight_g]):
+                with deepspeed.zero.GatheredParameters([module.weight_v, module.weight_g], modifier_rank=0):
+                    #print(f"{module.weight_v.ds_id}")
+                    #print(f"{module.weight_v.ds_tensor}")
                     torch.nn.init.kaiming_normal_(module.weight.data)
             else:
                 import deepspeed
-                with deepspeed.zero.GatheredParameters(module.weight):
+                with deepspeed.zero.GatheredParameters(module.weight, modifier_rank=0):
                     torch.nn.init.kaiming_normal_(module.weight.data)
 
         if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
