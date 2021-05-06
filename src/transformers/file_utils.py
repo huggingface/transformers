@@ -88,6 +88,7 @@ if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VA
             "tf-nightly-cpu",
             "tf-nightly-gpu",
             "intel-tensorflow",
+            "tensorflow-rocm",
         )
         _tf_version = None
         # For the metadata, we have to look for both tensorflow and tensorflow-cpu
@@ -1608,9 +1609,9 @@ def is_tensor(x):
 
     if is_flax_available():
         import jaxlib.xla_extension as jax_xla
-        from jax.interpreters.partial_eval import DynamicJaxprTracer
+        from jax.core import Tracer
 
-        if isinstance(x, (jax_xla.DeviceArray, DynamicJaxprTracer)):
+        if isinstance(x, (jax_xla.DeviceArray, Tracer)):
             return True
 
     return isinstance(x, np.ndarray)

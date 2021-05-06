@@ -1419,7 +1419,29 @@ if is_flax_available():
             "FlaxBertPreTrainedModel",
         ]
     )
-    _import_structure["models.roberta"].append("FlaxRobertaModel")
+    _import_structure["models.electra"].extend(
+        [
+            "FlaxElectraForMaskedLM",
+            "FlaxElectraForMultipleChoice",
+            "FlaxElectraForPreTraining",
+            "FlaxElectraForQuestionAnswering",
+            "FlaxElectraForSequenceClassification",
+            "FlaxElectraForTokenClassification",
+            "FlaxElectraModel",
+            "FlaxElectraPreTrainedModel",
+        ]
+    )
+    _import_structure["models.roberta"].extend(
+        [
+            "FlaxRobertaForMaskedLM",
+            "FlaxRobertaForMultipleChoice",
+            "FlaxRobertaForQuestionAnswering",
+            "FlaxRobertaForSequenceClassification",
+            "FlaxRobertaForTokenClassification",
+            "FlaxRobertaModel",
+            "FlaxRobertaPreTrainedModel",
+        ]
+    )
 else:
     from .utils import dummy_flax_objects
 
@@ -2606,7 +2628,25 @@ if TYPE_CHECKING:
             FlaxBertModel,
             FlaxBertPreTrainedModel,
         )
-        from .models.roberta import FlaxRobertaModel
+        from .models.electra import (
+            FlaxElectraForMaskedLM,
+            FlaxElectraForMultipleChoice,
+            FlaxElectraForPreTraining,
+            FlaxElectraForQuestionAnswering,
+            FlaxElectraForSequenceClassification,
+            FlaxElectraForTokenClassification,
+            FlaxElectraModel,
+            FlaxElectraPreTrainedModel,
+        )
+        from .models.roberta import (
+            FlaxRobertaForMaskedLM,
+            FlaxRobertaForMultipleChoice,
+            FlaxRobertaForQuestionAnswering,
+            FlaxRobertaForSequenceClassification,
+            FlaxRobertaForTokenClassification,
+            FlaxRobertaModel,
+            FlaxRobertaPreTrainedModel,
+        )
     else:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.
