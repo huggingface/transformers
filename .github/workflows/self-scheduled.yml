@@ -261,6 +261,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          apt -y update && apt install -y libaio-dev
           pip install --upgrade pip
           pip install .[testing,deepspeed]
 
@@ -301,6 +302,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          apt -y update && apt install -y libaio-dev
           pip install --upgrade pip
           pip install .[testing,deepspeed,fairscale]
 
