@@ -318,7 +318,8 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             yes_grad_accum_b = yes_grad_accum_trainer.model.b.item()
             self.assertNotEqual(yes_grad_accum_a, a)
 
-        # training with half the batch size but accumulation steps as 2 should give the same weights, but sometimes get a slight difference still of 1-6
+        # training with half the batch size but accumulation steps as 2 should give the same
+        # weights, but sometimes get a slight difference still of 1e-6
         self.assertAlmostEqual(no_grad_accum_a, yes_grad_accum_a, places=5)
         self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, places=5)
 
