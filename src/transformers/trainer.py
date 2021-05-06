@@ -1527,8 +1527,8 @@ class Trainer:
         if is_torch_tpu_available():
             rng_states["xla"] = xm.get_rng_state()
 
-        # A process can arrive here before the process 0 has a chance to save the model, in which output_dir may not
-        # exist yet.
+        # A process can arrive here before the process 0 has a chance to save the model, in which case output_dir may
+        # not yet exist.
         os.makedirs(output_dir, exist_ok=True)
         local_rank = xm.get_local_ordinal() if is_torch_tpu_available() else self.args.local_rank
         if local_rank == -1:
