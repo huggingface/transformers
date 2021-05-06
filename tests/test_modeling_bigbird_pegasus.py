@@ -368,16 +368,20 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         config, _ = self.model_tester.prepare_config_and_inputs()
         input_ids = torch.tensor(ids, device=torch_device, dtype=torch.long)
         attention_mask = input_ids.new_ones(input_ids.shape)
-        decoder_input_ids = torch.tensor([[33, 5, 8]*3], device=torch_device, dtype=torch.long)
+        decoder_input_ids = torch.tensor([[33, 5, 8] * 3], device=torch_device, dtype=torch.long)
 
         config.block_size = 8
         model = BigBirdPegasusForConditionalGeneration(config).eval().to(torch_device)
-        output1 = model(input_ids=input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids)["logits"]
+        output1 = model(input_ids=input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids)[
+            "logits"
+        ]
 
-        ids = [[7, 6, 9] * 65 + [0]*5]
+        ids = [[7, 6, 9] * 65 + [0] * 5]
         input_ids = torch.tensor(ids, device=torch_device, dtype=torch.long)
-        attention_mask = torch.tensor([[1]*3*65 + [0]*5], device=torch_device, dtype=torch.long)
-        output2 = model(input_ids=input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids)["logits"]
+        attention_mask = torch.tensor([[1] * 3 * 65 + [0] * 5], device=torch_device, dtype=torch.long)
+        output2 = model(input_ids=input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids)[
+            "logits"
+        ]
 
         self.assertTrue(torch.allclose(output1, output2, atol=1e-5))
 
