@@ -56,7 +56,9 @@ Examples of use:
     >>> model = AutoModel.from_pretrained("allegro/herbert-klej-cased-v1")
 
 
-The original code can be found `here <https://github.com/allegro/HerBERT>`__.
+This model was contributed by `rmroczkowski <https://huggingface.co/rmroczkowski>`__. The original code can be found
+`here <https://github.com/allegro/HerBERT>`__.
+
 
 HerbertTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -15,17 +15,26 @@
 
 import dataclasses
 import gc
+import math
 import os
+import random
+import re
 import tempfile
 import unittest
 
 import numpy as np
 
+from huggingface_hub import HfApi
+from requests.exceptions import HTTPError
 from transformers import AutoTokenizer, IntervalStrategy, PretrainedConfig, TrainingArguments, is_torch_available
 from transformers.file_utils import WEIGHTS_NAME
 from transformers.testing_utils import (
+    ENDPOINT_STAGING,
+    PASS,
+    USER,
     TestCasePlus,
     get_tests_dir,
+    is_staging_test,
     require_datasets,
     require_optuna,
     require_ray,
@@ -188,6 +197,28 @@ if is_torch_available():
             loss = torch.nn.functional.mse_loss(y, labels)
             return (loss, y, y) if self.double_output else (loss, y)
 
+    class RegressionRandomPreTrainedModel(PreTrainedModel):
+        config_class = RegressionModelConfig
+        base_model_prefix = "regression"
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.a = torch.nn.Parameter(torch.tensor(config.a).float())
+            self.b = torch.nn.Parameter(torch.tensor(config.b).float())
+
+        def forward(self, input_x, labels=None, **kwargs):
+            y = input_x * self.a + self.b
+            torch_rand = torch.randn(1).squeeze()
+            np_rand = np.random.rand()
+            rand_rand = random.random()
+
+            y += 0.05 * torch_rand + 0.05 * torch.tensor(np_rand + rand_rand)
+
+            if labels is None:
+                return (y,)
+            loss = torch.nn.functional.mse_loss(y, labels)
+            return (loss, y)
+
     class TstLayer(torch.nn.Module):
         def __init__(self, hidden_size):
             super().__init__()
@@ -206,16 +237,21 @@ if is_torch_available():
         label_names = kwargs.get("label_names", None)
         train_dataset = RegressionDataset(length=train_len, label_names=label_names)
         eval_dataset = RegressionDataset(length=eval_len, label_names=label_names)
-        if pretrained:
-            config = RegressionModelConfig(a=a, b=b, double_output=double_output)
-            model = RegressionPreTrainedModel(config)
+
+        model_init = kwargs.pop("model_init", None)
+        if model_init is not None:
+            model = None
         else:
-            model = RegressionModel(a=a, b=b, double_output=double_output)
+            if pretrained:
+                config = RegressionModelConfig(a=a, b=b, double_output=double_output)
+                model = RegressionPreTrainedModel(config)
+            else:
+                model = RegressionModel(a=a, b=b, double_output=double_output)
+
         compute_metrics = kwargs.pop("compute_metrics", None)
         data_collator = kwargs.pop("data_collator", None)
         optimizers = kwargs.pop("optimizers", (None, None))
         output_dir = kwargs.pop("output_dir", "./regression")
-        model_init = kwargs.pop("model_init", None)
 
         args = RegressionTrainingArguments(output_dir, a=a, b=b, **kwargs)
         return Trainer(
@@ -687,6 +723,34 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train(resume_from_checkpoint=True)
         self.assertTrue("No valid checkpoint found in output directory" in str(context.exception))
 
+    def test_resume_training_with_randomness(self):
+        if torch.cuda.device_count() >= 2:
+            # This test will fail flakily for more than 2 GPUs since the result will be slightly more different.
+            return
+
+        if torch.cuda.is_available():
+            torch.backends.cudnn.deterministic = True
+        train_dataset = RegressionDataset(length=128)
+        eval_dataset = RegressionDataset()
+
+        config = RegressionModelConfig(a=0, b=2)
+        model = RegressionRandomPreTrainedModel(config)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        args = RegressionTrainingArguments(tmp_dir, save_steps=5, learning_rate=0.1)
+        trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+
+        trainer.train()
+        (a, b) = trainer.model.a.item(), trainer.model.b.item()
+
+        model = RegressionRandomPreTrainedModel(config)
+        trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+        trainer.train(resume_from_checkpoint=os.path.join(tmp_dir, "checkpoint-15"))
+        (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+
+        self.assertTrue(math.isclose(a, a1, rel_tol=1e-8))
+        self.assertTrue(math.isclose(b, b1, rel_tol=1e-8))
+
     def test_resume_training_with_gradient_accumulation(self):
         if torch.cuda.device_count() > 2:
             # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
@@ -719,6 +783,46 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             )
 
             trainer.train(resume_from_checkpoint=checkpoint)
+            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            state1 = dataclasses.asdict(trainer.state)
+            self.assertEqual(a, a1)
+            self.assertEqual(b, b1)
+            self.check_trainer_state_are_the_same(state, state1)
+
+    def test_resume_training_with_frozen_params(self):
+        if torch.cuda.device_count() > 2:
+            # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
+            # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
+            # won't be the same since the training dataloader is shuffled).
+            return
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                train_len=128,
+                per_device_train_batch_size=4,
+                save_steps=5,
+                learning_rate=0.1,
+            )
+            trainer.model.a.requires_grad_(False)
+            trainer.train()
+            (a, b) = trainer.model.a.item(), trainer.model.b.item()
+            state = dataclasses.asdict(trainer.state)
+
+            checkpoint = os.path.join(tmpdir, "checkpoint-5")
+
+            # Reinitialize trainer
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                train_len=128,
+                per_device_train_batch_size=4,
+                save_steps=5,
+                learning_rate=0.1,
+            )
+            trainer.model.a.requires_grad_(False)
+
+            trainer.train(resume_from_checkpoint=checkpoint)
+
+            self.assertFalse(trainer.model.a.requires_grad)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
@@ -819,35 +923,64 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         self.assertEqual(len(dataset), 31)
 
-    def test_trainer_iterable_dataset(self):
+    def test_training_iterable_dataset(self):
         config = RegressionModelConfig()
         model = RegressionPreTrainedModel(config)
         train_dataset = SampleIterableDataset()
 
-        args = RegressionTrainingArguments(output_dir="./examples", max_steps=2)
+        args = RegressionTrainingArguments(output_dir="./examples", max_steps=4)
         trainer = Trainer(model=model, args=args, train_dataset=train_dataset)
         trainer.train()
+        self.assertEqual(trainer.state.global_step, 4)
 
         loader = trainer.get_train_dataloader()
         self.assertIsInstance(loader, torch.utils.data.DataLoader)
         self.assertIsInstance(loader.sampler, torch.utils.data.dataloader._InfiniteConstantSampler)
 
-        # Exception if giving iterable dataset and no max_steps
-        with self.assertRaises(ValueError):
-            args1 = RegressionTrainingArguments(output_dir="./examples")
-            _ = Trainer(model=model, args=args1, train_dataset=train_dataset)
+    def test_evaluation_iterable_dataset(self):
+        config = RegressionModelConfig(a=1.5, b=2.5)
+        model = RegressionPreTrainedModel(config)
+        eval_dataset = SampleIterableDataset()
 
-        # Exception if eval_dataset is iterable in __init__
-        with self.assertRaises(ValueError):
-            _ = Trainer(model=model, args=args, train_dataset=train_dataset, eval_dataset=train_dataset)
+        args = RegressionTrainingArguments(output_dir="./examples")
+        trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset, compute_metrics=AlmostAccuracy())
+        results = trainer.evaluate()
 
-        # Exception if predicting with iterable dataset
-        with self.assertRaises(ValueError):
-            trainer.predict(train_dataset)
+        x, y = trainer.eval_dataset.dataset.x, trainer.eval_dataset.dataset.ys[0]
+        pred = 1.5 * x + 2.5
+        expected_loss = ((pred - y) ** 2).mean()
+        self.assertAlmostEqual(results["eval_loss"], expected_loss)
+        expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
+        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
-        # Exception if evaluating with iterable dataset
-        with self.assertRaises(ValueError):
-            trainer.evaluate(train_dataset)
+        # With a number of elements not a round multiple of the batch size
+        eval_dataset = SampleIterableDataset(length=66)
+        results = trainer.evaluate(eval_dataset)
+
+        x, y = eval_dataset.dataset.x, eval_dataset.dataset.ys[0]
+        pred = 1.5 * x + 2.5
+        expected_loss = ((pred - y) ** 2).mean()
+        self.assertAlmostEqual(results["eval_loss"], expected_loss)
+        expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
+        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
+
+    def test_predict_iterable_dataset(self):
+        config = RegressionModelConfig(a=1.5, b=2.5)
+        model = RegressionPreTrainedModel(config)
+        eval_dataset = SampleIterableDataset()
+
+        args = RegressionTrainingArguments(output_dir="./examples")
+        trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset, compute_metrics=AlmostAccuracy())
+
+        preds = trainer.predict(trainer.eval_dataset).predictions
+        x = eval_dataset.dataset.x
+        self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
+
+        # With a number of elements not a round multiple of the batch size
+        test_dataset = SampleIterableDataset(length=66)
+        preds = trainer.predict(test_dataset).predictions
+        x = test_dataset.dataset.x
+        self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
 
     def test_num_train_epochs_in_training(self):
         # len(train_dl) < gradient_accumulation_steps shouldn't give ``ZeroDivisionError`` when ``max_steps`` is given.
@@ -1010,6 +1143,62 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         no_wd_params = [p for n, p in model.named_parameters() if n not in wd_names]
         self.assertListEqual(trainer.optimizer.param_groups[0]["params"], wd_params)
         self.assertListEqual(trainer.optimizer.param_groups[1]["params"], no_wd_params)
+
+
+@require_torch
+@is_staging_test
+class TrainerIntegrationWithHubTester(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
+        cls._token = cls._api.login(username=USER, password=PASS)
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-trainer")
+        except HTTPError:
+            pass
+
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-trainer-org", organization="valid_org")
+        except HTTPError:
+            pass
+
+    def test_push_to_hub(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(output_dir=tmp_dir)
+            trainer.save_model()
+            url = trainer.push_to_hub(repo_name="test-trainer", use_auth_token=self._token)
+
+            # Extract repo_name from the url
+            re_search = re.search(ENDPOINT_STAGING + r"/([^/]+/[^/]+)/", url)
+            self.assertTrue(re_search is not None)
+            repo_name = re_search.groups()[0]
+
+            self.assertEqual(repo_name, f"{USER}/test-trainer")
+
+            model = RegressionPreTrainedModel.from_pretrained(repo_name)
+            self.assertEqual(model.a.item(), trainer.model.a.item())
+            self.assertEqual(model.b.item(), trainer.model.b.item())
+
+    def test_push_to_hub_in_organization(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(output_dir=tmp_dir)
+            trainer.save_model()
+            url = trainer.push_to_hub(
+                repo_name="test-trainer-org", organization="valid_org", use_auth_token=self._token
+            )
+
+            # Extract repo_name from the url
+            re_search = re.search(ENDPOINT_STAGING + r"/([^/]+/[^/]+)/", url)
+            self.assertTrue(re_search is not None)
+            repo_name = re_search.groups()[0]
+            self.assertEqual(repo_name, "valid_org/test-trainer-org")
+
+            model = RegressionPreTrainedModel.from_pretrained("valid_org/test-trainer-org")
+            self.assertEqual(model.a.item(), trainer.model.a.item())
+            self.assertEqual(model.b.item(), trainer.model.b.item())
 
 
 @require_torch

@@ -112,10 +112,24 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
     prefix_tokens: List[int] = []
     suffix_tokens: List[int] = []
 
-    def __init__(self, *args, tokenizer_file=None, src_lang=None, tgt_lang=None, **kwargs):
-        super().__init__(*args, tokenizer_file=tokenizer_file, src_lang=src_lang, tgt_lang=tgt_lang, **kwargs)
+    def __init__(
+        self, *args, tokenizer_file=None, src_lang=None, tgt_lang=None, additional_special_tokens=None, **kwargs
+    ):
+        super().__init__(
+            *args,
+            tokenizer_file=tokenizer_file,
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
+            additional_special_tokens=additional_special_tokens,
+            **kwargs,
+        )
 
-        self.add_special_tokens({"additional_special_tokens": FAIRSEQ_LANGUAGE_CODES})
+        _additional_special_tokens = FAIRSEQ_LANGUAGE_CODES.copy()
+
+        if additional_special_tokens is not None:
+            _additional_special_tokens.extend(additional_special_tokens)
+
+        self.add_special_tokens({"additional_special_tokens": _additional_special_tokens})
 
         self._src_lang = src_lang if src_lang is not None else "en_XX"
         self.cur_lang_code = self.convert_tokens_to_ids(self._src_lang)
@@ -159,6 +173,16 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
             return self.prefix_tokens + token_ids_0 + self.suffix_tokens
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
+
+    def _build_translation_inputs(self, raw_inputs, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs):
+        """Used by translation pipeline, to prepare inputs for the generate function"""
+        if src_lang is None or tgt_lang is None:
+            raise ValueError("Translation requires a `src_lang` and a `tgt_lang` for this model")
+        self.src_lang = src_lang
+        inputs = self(raw_inputs, add_special_tokens=True, return_tensors="pt", **extra_kwargs)
+        tgt_lang_id = self.convert_tokens_to_ids(tgt_lang)
+        inputs["forced_bos_token_id"] = tgt_lang_id
+        return inputs
 
     def prepare_seq2seq_batch(
         self,

@@ -1,0 +1,3 @@
+seqeval
+datasets >= 1.1.3
+torch >= 1.3

@@ -70,7 +70,7 @@ class TFAttention(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
-        # [switch nx => n_state from Block to Attention to keep identical to TF implem]
+        # [switch nx => n_state from Block to Attention to keep identical to TF implementation]
         assert n_state % config.n_head == 0
         self.n_ctx = n_ctx
         self.n_head = config.n_head

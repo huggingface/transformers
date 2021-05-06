@@ -63,7 +63,7 @@ if is_torch_available():
 
 
 class TapasModelTester:
-    """You can also import this e.g from .test_modeling_tapas import TapasModelTester """
+    """You can also import this e.g from .test_modeling_tapas import TapasModelTester"""
 
     def __init__(
         self,
