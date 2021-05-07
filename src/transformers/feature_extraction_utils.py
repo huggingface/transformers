@@ -226,7 +226,7 @@ class FeatureExtractionMixin:
                   :func:`~transformers.feature_extraction_utils.FeatureExtractionMixin.save_pretrained` method, e.g.,
                   ``./my_model_directory/``.
                 - a path or url to a saved feature extractor JSON `file`, e.g.,
-                  ``./my_model_directory/feature_extraction_config.json``.
+                  ``./my_model_directory/preprocessor_config.json``.
             cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
                 Path to a directory in which a downloaded pretrained model feature extractor should be cached if the
                 standard cache should not be used.
