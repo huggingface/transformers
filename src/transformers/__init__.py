@@ -155,6 +155,10 @@ _import_structure = {
     "models.bert_japanese": ["BertJapaneseTokenizer", "CharacterTokenizer", "MecabTokenizer"],
     "models.bertweet": ["BertweetTokenizer"],
     "models.big_bird": ["BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP", "BigBirdConfig", "BigBirdTokenizer"],
+    "models.bigbird_pegasus": [
+        "BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BigBirdPegasusConfig",
+    ],
     "models.blenderbot": ["BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BlenderbotConfig", "BlenderbotTokenizer"],
     "models.blenderbot_small": [
         "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -541,6 +545,16 @@ if is_torch_available():
             "BigBirdModel",
             "BigBirdPreTrainedModel",
             "load_tf_weights_in_big_bird",
+        ]
+    )
+    _import_structure["models.bigbird_pegasus"].extend(
+        [
+            "BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BigBirdPegasusForCausalLM",
+            "BigBirdPegasusForConditionalGeneration",
+            "BigBirdPegasusForQuestionAnswering",
+            "BigBirdPegasusForSequenceClassification",
+            "BigBirdPegasusModel",
         ]
     )
     _import_structure["models.blenderbot"].extend(
@@ -1541,6 +1555,7 @@ if TYPE_CHECKING:
     from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
     from .models.bertweet import BertweetTokenizer
     from .models.big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig, BigBirdTokenizer
+    from .models.bigbird_pegasus import BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdPegasusConfig
     from .models.blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig, BlenderbotTokenizer
     from .models.blenderbot_small import (
         BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -1884,6 +1899,14 @@ if TYPE_CHECKING:
             BigBirdModel,
             BigBirdPreTrainedModel,
             load_tf_weights_in_big_bird,
+        )
+        from .models.bigbird_pegasus import (
+            BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BigBirdPegasusForCausalLM,
+            BigBirdPegasusForConditionalGeneration,
+            BigBirdPegasusForQuestionAnswering,
+            BigBirdPegasusForSequenceClassification,
+            BigBirdPegasusModel,
         )
         from .models.blenderbot import (
             BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,
