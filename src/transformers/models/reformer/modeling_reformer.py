@@ -26,7 +26,7 @@ import numpy as np
 import torch
 from torch import nn
 from torch.autograd.function import Function
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -366,7 +366,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         past_buckets_states=None,
         use_cache=False,
         output_attentions=False,
-        **kwargs
+        **kwargs,
     ):
         sequence_length = hidden_states.shape[1]
         batch_size = hidden_states.shape[0]
@@ -1045,7 +1045,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         past_buckets_states=None,
         use_cache=False,
         output_attentions=False,
-        **kwargs
+        **kwargs,
     ):
         sequence_length = hidden_states.shape[1]
         batch_size = hidden_states.shape[0]
@@ -2381,6 +2381,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
+        self.config = config
 
         self.reformer = ReformerModel(config)
         self.classifier = ReformerClassificationHead(config)
@@ -2434,13 +2435,23 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
+                loss = loss_fct(logits.view(-1, self.num_labels), labels)
+            elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
