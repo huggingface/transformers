@@ -600,9 +600,6 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         # Local causal attention mask
         batch_size, seq_length = input_shape
         full_seq_length = seq_length + past_length
-        local_attention_mask = GPTNeoAttentionMixin.create_local_attention_mask(
-            batch_size, full_seq_length, self.config.window_size, device, attention_mask
-        )
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -628,7 +625,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
             attn_type = self.config.attention_layers[i]
-            attn_mask = global_attention_mask if attn_type == "global" else local_attention_mask
+            attn_mask = global_attention_mask
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
