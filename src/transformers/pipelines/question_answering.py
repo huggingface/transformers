@@ -342,8 +342,9 @@ class QuestionAnsweringPipeline(Pipeline):
                 # Mask CLS
                 start_[0] = end_[0] = 0.0
 
-                starts, ends, scores = self.decode(start_, end_, kwargs["topk"], kwargs["max_answer_len"],
-                                                   undesired_tokens)
+                starts, ends, scores = self.decode(
+                    start_, end_, kwargs["topk"], kwargs["max_answer_len"], undesired_tokens
+                )
                 if not self.tokenizer.is_fast:
                     char_to_word = np.array(example.char_to_word_offset)
 
@@ -405,8 +406,9 @@ class QuestionAnsweringPipeline(Pipeline):
             return all_answers[0]
         return all_answers
 
-    def decode(self, start: np.ndarray, end: np.ndarray, topk: int, max_answer_len: int,
-               undesired_tokens: np.ndarray) -> Tuple:
+    def decode(
+        self, start: np.ndarray, end: np.ndarray, topk: int, max_answer_len: int, undesired_tokens: np.ndarray
+    ) -> Tuple:
         """
         Take the output of any :obj:`ModelForQuestionAnswering` and will generate probabilities for each span to be the
         actual answer.

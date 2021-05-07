@@ -52,13 +52,16 @@ class QAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
     ]
 
     def get_pipelines(self):
-        question_answering_pipelines = [pipeline(
-            task=self.pipeline_task,
-            model=model,
-            tokenizer=model,
-            framework="pt",
-            **self.pipeline_loading_kwargs,
-        ) for model in self.small_models]
+        question_answering_pipelines = [
+            pipeline(
+                task=self.pipeline_task,
+                model=model,
+                tokenizer=model,
+                framework="pt",
+                **self.pipeline_loading_kwargs,
+            )
+            for model in self.small_models
+        ]
         return question_answering_pipelines
 
     @slow
