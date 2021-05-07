@@ -256,14 +256,13 @@ from ..tapas.modeling_tapas import (
 from ..transfo_xl.modeling_transfo_xl import TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
 
 # Add modeling imports here
-# Add modeling imports here
 from ..visual_bert.modeling_visual_bert import (
-    VisualBertForCausalLM,
-    VisualBertForMaskedLM,
     VisualBertForMultipleChoice,
-    VisualBertForQuestionAnswering,
-    VisualBertForSequenceClassification,
-    VisualBertForTokenClassification,
+    VisualBertForPreTraining,
+    VisualBertForVQA,
+    VisualBertForVQAAdvanced,
+    VisualBertForNLVR,
+    VisualBertForFlickr,
     VisualBertModel,
 )
 from ..vit.modeling_vit import ViTForImageClassification, ViTModel
@@ -423,6 +422,7 @@ MODEL_MAPPING = OrderedDict(
 MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
         # Model for pre-training mapping
+        (VisualBertConfig, VisualBertForPreTraining),
         (LayoutLMConfig, LayoutLMForMaskedLM),
         (RetriBertConfig, RetriBertModel),
         (T5Config, T5ForConditionalGeneration),
@@ -454,13 +454,13 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (IBertConfig, IBertForMaskedLM),
         (DebertaConfig, DebertaForMaskedLM),
         (DebertaV2Config, DebertaV2ForMaskedLM),
+
     ]
 )
 
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
-        (VisualBertConfig, VisualBertForMaskedLM),
         (BigBirdPegasusConfig, BigBirdPegasusForConditionalGeneration),
         (GPTNeoConfig, GPTNeoForCausalLM),
         (BigBirdConfig, BigBirdForMaskedLM),
@@ -508,7 +508,6 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Causal LM mapping
-        (VisualBertConfig, VisualBertForCausalLM),
         (BigBirdPegasusConfig, BigBirdPegasusForCausalLM),
         (GPTNeoConfig, GPTNeoForCausalLM),
         (BigBirdConfig, BigBirdForCausalLM),
@@ -550,7 +549,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
-        (VisualBertConfig, VisualBertForMaskedLM),
+        (VisualBertConfig, VisualBertForVQAAdvanced),
         (BigBirdConfig, BigBirdForMaskedLM),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
         (ConvBertConfig, ConvBertForMaskedLM),
@@ -604,7 +603,9 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
-        (VisualBertConfig, VisualBertForSequenceClassification),
+        (VisualBertConfig, VisualBertForFlickr),
+        (VisualBertConfig, VisualBertForNLVR),
+        (VisualBertConfig, VisualBertForVQA),
         (BigBirdPegasusConfig, BigBirdPegasusForSequenceClassification),
         (BigBirdConfig, BigBirdForSequenceClassification),
         (ConvBertConfig, ConvBertForSequenceClassification),
@@ -643,7 +644,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
-        (VisualBertConfig, VisualBertForQuestionAnswering),
         (BigBirdPegasusConfig, BigBirdPegasusForQuestionAnswering),
         (BigBirdConfig, BigBirdForQuestionAnswering),
         (ConvBertConfig, ConvBertForQuestionAnswering),
@@ -684,7 +684,6 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
-        (VisualBertConfig, VisualBertForTokenClassification),
         (BigBirdConfig, BigBirdForTokenClassification),
         (ConvBertConfig, ConvBertForTokenClassification),
         (LayoutLMConfig, LayoutLMForTokenClassification),
