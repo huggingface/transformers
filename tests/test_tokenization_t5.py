@@ -136,7 +136,6 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(tokenizer_new.sp_model_kwargs, sp_model_kwargs)
         self.assertTrue(TokenizerTesterMixin.does_subword_sampling(tokenizer_new))
 
-
     @cached_property
     def t5_base_tokenizer(self):
         return T5Tokenizer.from_pretrained("t5-base")
