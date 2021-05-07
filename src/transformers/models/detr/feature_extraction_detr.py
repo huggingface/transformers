@@ -132,7 +132,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             Whether to resize the input to a certain :obj:`size`.
         size (:obj:`int`, `optional`, defaults to 800):
             Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`. If size
-            is a sequence like (:obj:`widht`, :obj:`height`), output size will be matched to this. If size is an int,
+            is a sequence like (:obj:`width`, :obj:`height`), output size will be matched to this. If size is an int,
             smaller edge of the image will be matched to this number. i.e, if :obj:`height` > :obj:`width`, then image
             will be rescaled to (:obj:`size` * :obj:`height` / :obj:`width`, :obj:`size`).
         max_size (:obj:`int`, `optional`, defaults to :obj:`1333`):
