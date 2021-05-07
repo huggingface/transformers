@@ -35,7 +35,8 @@ if is_torch_available():
         "VisualBertLayer",
         "VisualBertModel",
         "VisualBertPreTrainedModel",
-        "load_tf_weights_in_visual_bert",
+        "VisualBertForPreTraining"
+        # "load_tf_weights_in_visual_bert",
     ]
 
 
@@ -53,7 +54,8 @@ if TYPE_CHECKING:
             VisualBertLayer,
             VisualBertModel,
             VisualBertPreTrainedModel,
-            load_tf_weights_in_visual_bert,
+            VisualBertForPreTraining,
+            # load_tf_weights_in_visual_bert,
         )
 
 

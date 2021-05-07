@@ -915,6 +915,7 @@ if is_torch_available():
             "VisualBertLayer",
             "VisualBertModel",
             "VisualBertPreTrainedModel",
+            "VisualBertForPreTraining"
             # "load_tf_weights_in_visual_bert",
         ]
     )
@@ -1748,7 +1749,6 @@ if TYPE_CHECKING:
         from .models.roberta import RobertaTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
-        from .models.visual_bert import VisualBertTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
         from .tokenization_utils_fast import PreTrainedTokenizerFast
@@ -2253,7 +2253,8 @@ if TYPE_CHECKING:
             VisualBertLayer,
             VisualBertModel,
             VisualBertPreTrainedModel,
-            load_tf_weights_in_visual_bert,
+            VisualBertForPreTraining,
+            # load_tf_weights_in_visual_bert,
         )
         from .models.vit import (
             VIT_PRETRAINED_MODEL_ARCHIVE_LIST,

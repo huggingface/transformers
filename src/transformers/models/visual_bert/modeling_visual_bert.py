@@ -57,7 +57,15 @@ _CONFIG_FOR_DOC = "VisualBertConfig"
 _TOKENIZER_FOR_DOC = "VisualBertTokenizer"
 
 VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "visual-bert-base-uncased",
+    "gchhablani/visualbert-vqa",
+    "gchhablani/visualbert-vqa-pre",
+    "gchhablani/visualbert-vqa-coco-pre",
+    "gchhablani/visualbert-vcr",
+    "gchhablani/visualbert-vcr-pre",
+    "gchhablani/visualbert-vcr-coco-pre",
+    "gchhablani/visualbert-nlvr2",
+    "gchhablani/visualbert-nlvr2-pre",
+    "gchhablani/visualbert-nlvr2-coco-pre"
     # See all VisualBERT models at https://huggingface.co/models?filter=visual_bert
 ]
 
