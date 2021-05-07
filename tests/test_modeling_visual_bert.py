@@ -30,12 +30,7 @@ if is_torch_available():
 
     from transformers import (
         VisualBertConfig,
-        VisualBertForCausalLM,
-        VisualBertForMaskedLM,
         VisualBertForMultipleChoice,
-        VisualBertForQuestionAnswering,
-        VisualBertForSequenceClassification,
-        VisualBertForTokenClassification,
         VisualBertModel,
     )
     from transformers.models.visual_bert.modeling_visual_bert import VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST

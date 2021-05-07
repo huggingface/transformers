@@ -17,26 +17,21 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_tokenizers_available, is_torch_available
+from ...file_utils import _BaseLazyModule, is_torch_available
 
 
 _import_structure = {
     "configuration_visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
-    "tokenization_visual_bert": ["VisualBertTokenizer"],
 }
-
-if is_tokenizers_available():
-    _import_structure["tokenization_visual_bert_fast"] = ["VisualBertTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_visual_bert"] = [
         "VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "VisualBertForMaskedLM",
-        "VisualBertForCausalLM",
         "VisualBertForMultipleChoice",
-        "VisualBertForQuestionAnswering",
-        "VisualBertForSequenceClassification",
-        "VisualBertForTokenClassification",
+        "VisualBertForVQA",
+        "VisualBertForVQAAdvanced",
+        "VisualBertForNLVR",
+        "VisualBertForFlickr",
         "VisualBertLayer",
         "VisualBertModel",
         "VisualBertPreTrainedModel",
@@ -46,20 +41,15 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .configuration_visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
-    from .tokenization_visual_bert import VisualBertTokenizer
-
-    if is_tokenizers_available():
-        from .tokenization_visual_bert_fast import VisualBertTokenizerFast
 
     if is_torch_available():
         from .modeling_visual_bert import (
             VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            VisualBertForCausalLM,
-            VisualBertForMaskedLM,
             VisualBertForMultipleChoice,
-            VisualBertForQuestionAnswering,
-            VisualBertForSequenceClassification,
-            VisualBertForTokenClassification,
+            VisualBertForVQA,
+            VisualBertForVQAAdvanced,
+            VisualBertForNLVR,
+            VisualBertForFlickr,
             VisualBertLayer,
             VisualBertModel,
             VisualBertPreTrainedModel,

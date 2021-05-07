@@ -37,17 +37,12 @@ from ...file_utils import (
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
-    QuestionAnsweringModelOutput,
-    SentenceImagePredictorOutput,
     SequenceClassifierOutput,
-    TokenClassifierOutput,
 )
 from ...modeling_utils import (
     PreTrainedModel,
-    SequenceSummary,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
@@ -148,8 +143,7 @@ def mish(x):
 # TO-CHECK: Vestige of the original code
 class BertLayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-12):
-        """Construct a layernorm module in the TF style (epsilon inside the square root).
-        """
+        """Construct a layernorm module in the TF style (epsilon inside the square root)."""
         super(BertLayerNorm, self).__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.bias = nn.Parameter(torch.zeros(hidden_size))
@@ -167,7 +161,9 @@ class VisualBertEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size)  # TO-CHECK: , padding_idx=config.pad_token_id
+        self.word_embeddings = nn.Embedding(
+            config.vocab_size, config.hidden_size
+        )  # TO-CHECK: , padding_idx=config.pad_token_id
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
@@ -175,7 +171,7 @@ class VisualBertEmbeddings(nn.Module):
         # any TensorFlow checkpoint file
 
         # TO-CHECK
-        #self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        # self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)  # original eps=1e-12
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -422,7 +418,7 @@ class VisualBertSelfOutput(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
 
         # TO-CHECK
-        #self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        # self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)  # original eps=1e-12
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -502,7 +498,7 @@ class VisualBertOutput(nn.Module):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         # TO-CHECK
-        #self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        # self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)  # original eps=1e-12
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -792,7 +788,7 @@ class VisualBertPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Embedding)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -929,7 +925,9 @@ class VisualBertModel(VisualBertPreTrainedModel):
         self.embeddings = VisualBertEmbeddings(config)
         self.encoder = VisualBertEncoder(config)
 
-        self.pooler = VisualBertPooler(config) if add_pooling_layer else None  # TO-DO: Check if pooler is needed necessarily.
+        self.pooler = (
+            VisualBertPooler(config) if add_pooling_layer else None
+        )  # TO-DO: Check if pooler is needed necessarily.
 
         self.bypass_transformer = config.bypass_transformer
 
@@ -1167,12 +1165,10 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-
         visual_embeds=None,
         visual_attention_mask=None,
         visual_token_type_ids=None,
         image_text_alignment=None,
-
         labels=None,
         sentence_image_label=None,
         output_attentions=None,
@@ -1213,7 +1209,9 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
 
         if visual_token_type_ids is None:
             if visual_attention_mask is not None:
-                visual_token_type_ids = torch.zeros_like(visual_attention_mask, dtype=torch.long, device=visual_attention_mask.device)
+                visual_token_type_ids = torch.zeros_like(
+                    visual_attention_mask, dtype=torch.long, device=visual_attention_mask.device
+                )
 
         if visual_attention_mask is not None:
             attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
@@ -1238,7 +1236,9 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
 
         total_loss = None
         if labels is not None and sentence_image_label is not None:
-            assert labels.size(-1) == attention_mask.size(-1), f"The labels provided should have same sequence length as attention mask. Found labels with sequence length {labels.size(-1)}, expected {attention_mask.size(-1)}."
+            assert labels.size(-1) == attention_mask.size(
+                -1
+            ), f"The labels provided should have same sequence length as attention mask. Found labels with sequence length {labels.size(-1)}, expected {attention_mask.size(-1)}."
 
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
@@ -1247,7 +1247,9 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
 
         # TO-CHECK
         if labels is not None and sentence_image_label is None:
-            assert labels.size(-1) == attention_mask.size(-1), f"The labels provided should have same sequence length as attention mask. Found labels with sequence length {labels.size(-1)}, expected {attention_mask.size(-1)}."
+            assert labels.size(-1) == attention_mask.size(
+                -1
+            ), f"The labels provided should have same sequence length as attention mask. Found labels with sequence length {labels.size(-1)}, expected {attention_mask.size(-1)}."
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             total_loss = masked_lm_loss
@@ -1351,13 +1353,27 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
             else None
         )
 
-        visual_embeds = visual_embeds.view(-1, visual_embeds.size(-2), visual_embeds.size(-1)) if visual_embeds is not None else None
-        visual_attention_mask = visual_attention_mask.view(-1, visual_attention_mask.size(-1)) if visual_attention_mask is not None else None
-        visual_token_type_ids = visual_token_type_ids.view(-1, visual_token_type_ids.size(-1)) if visual_token_type_ids is not None else None
+        visual_embeds = (
+            visual_embeds.view(-1, visual_embeds.size(-2), visual_embeds.size(-1))
+            if visual_embeds is not None
+            else None
+        )
+        visual_attention_mask = (
+            visual_attention_mask.view(-1, visual_attention_mask.size(-1))
+            if visual_attention_mask is not None
+            else None
+        )
+        visual_token_type_ids = (
+            visual_token_type_ids.view(-1, visual_token_type_ids.size(-1))
+            if visual_token_type_ids is not None
+            else None
+        )
 
         if visual_token_type_ids is None:
             if visual_attention_mask is not None:
-                visual_token_type_ids = torch.zeros_like(visual_attention_mask, dtype=torch.long, device=visual_attention_mask.device)
+                visual_token_type_ids = torch.zeros_like(
+                    visual_attention_mask, dtype=torch.long, device=visual_attention_mask.device
+                )
 
         if visual_attention_mask is not None:
             attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
@@ -1460,7 +1476,9 @@ class VisualBertForVQA(VisualBertPreTrainedModel):
 
         if visual_token_type_ids is None:
             if visual_attention_mask is not None:
-                visual_token_type_ids = torch.zeros_like(visual_attention_mask, dtype=torch.long, device=visual_attention_mask.device)
+                visual_token_type_ids = torch.zeros_like(
+                    visual_attention_mask, dtype=torch.long, device=visual_attention_mask.device
+                )
 
         if visual_attention_mask is not None:
             attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
@@ -1483,7 +1501,11 @@ class VisualBertForVQA(VisualBertPreTrainedModel):
         sequence_output = outputs[0]
         # pooled_output = outputs[1]  # TO-DO: Convert this to the gather code used by the original model.
 
-        pooled_output = torch.gather(sequence_output, 1, index_to_gather.unsqueeze(-1).unsqueeze(-1).expand(index_to_gather.size(0), 1, sequence_output.size(-1)))
+        pooled_output = torch.gather(
+            sequence_output,
+            1,
+            index_to_gather.unsqueeze(-1).unsqueeze(-1).expand(index_to_gather.size(0), 1, sequence_output.size(-1)),
+        )
 
         # UNUSED
         # input_ids = torch.gather(input_ids, 1, index_to_gather.unsqueeze(-1).expand(index_to_gather.size(0), 1))
@@ -1565,7 +1587,9 @@ class VisualBertForVQAAdvanced(VisualBertPreTrainedModel):
 
         if visual_token_type_ids is None:
             if visual_attention_mask is not None:
-                visual_token_type_ids = torch.zeros_like(visual_attention_mask, dtype=torch.long, device=visual_attention_mask.device)
+                visual_token_type_ids = torch.zeros_like(
+                    visual_attention_mask, dtype=torch.long, device=visual_attention_mask.device
+                )
 
         if visual_attention_mask is not None:
             attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
@@ -1667,7 +1691,9 @@ class VisualBertForNLVR(VisualBertPreTrainedModel):
 
         if visual_token_type_ids is None:
             if visual_attention_mask is not None:
-                visual_token_type_ids = torch.zeros_like(visual_attention_mask, dtype=torch.long, device=visual_attention_mask.device)
+                visual_token_type_ids = torch.zeros_like(
+                    visual_attention_mask, dtype=torch.long, device=visual_attention_mask.device
+                )
 
         if visual_attention_mask is not None:
             attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
@@ -1813,11 +1839,15 @@ class VisualBertForFlickr(VisualBertPreTrainedModel):
             Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
         """
+        assert flickr_position is not None, "`flickr_position` should not be None when using Flickr Model"
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if visual_token_type_ids is None:
             if visual_attention_mask is not None:
-                visual_token_type_ids = torch.zeros_like(visual_attention_mask, dtype=torch.long, device=visual_attention_mask.device)
+                visual_token_type_ids = torch.zeros_like(
+                    visual_attention_mask, dtype=torch.long, device=visual_attention_mask.device
+                )
 
         if visual_attention_mask is not None:
             combined_attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
@@ -1841,8 +1871,6 @@ class VisualBertForFlickr(VisualBertPreTrainedModel):
 
         sequence_output = outputs[0]
         # pooled_output = outputs[1]
-        assert (flickr_position is not None, "`flickr_position` should not be None when using Flickr Model")
-
         # UNUSED
         # entities_num = (flickr_position != -1).long().view(-1).sum(-1)
         flickr_position_mask = (flickr_position != -1).long()
