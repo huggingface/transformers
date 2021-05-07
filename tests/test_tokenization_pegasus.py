@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pickle
 import unittest
 
 from transformers import PegasusTokenizer, PegasusTokenizerFast
@@ -95,6 +96,28 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         assert batch.attention_mask.shape == (2, 1024)
         assert targets["input_ids"].shape == (2, 5)
         assert len(batch) == 2  # input_ids, attention_mask.
+
+    def test_subword_regularization_tokenizer(self):
+        # Subword regularization is only available for the slow tokenizer.
+        tokenizer = self.tokenizer_class.from_pretrained(
+            "google/pegasus-large", sp_model_kwargs={"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
+        )
+
+        self.assertTrue(TokenizerTesterMixin.does_subword_sampling(tokenizer))
+
+    def test_pickle_subword_regularization_tokenizer(self):
+        """Google pickle __getstate__ __setstate__ if you are struggling with this."""
+        # Subword regularization is only available for the slow tokenizer.
+        sp_model_kwargs = {"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
+        tokenizer = self.tokenizer_class.from_pretrained("google/pegasus-large", sp_model_kwargs=sp_model_kwargs)
+        tokenizer_bin = pickle.dumps(tokenizer)
+        del tokenizer
+        tokenizer_new = pickle.loads(tokenizer_bin)
+
+        self.assertIsNotNone(tokenizer_new.sp_model_kwargs)
+        self.assertTrue(isinstance(tokenizer_new.sp_model_kwargs, dict))
+        self.assertEqual(tokenizer_new.sp_model_kwargs, sp_model_kwargs)
+        self.assertTrue(TokenizerTesterMixin.does_subword_sampling(tokenizer_new))
 
 
 @require_sentencepiece
