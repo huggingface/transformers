@@ -262,7 +262,7 @@ def create_train_state(
     def cross_entropy_loss(logits, labels):
         logits = nn.log_softmax(logits)
         xentropy = optax.softmax_cross_entropy(logits, onehot(labels, num_classes=len(task.labels)))
-        return -jnp.mean(xentropy)
+        return jnp.mean(xentropy)
 
     if task.is_regression:
         logits_fn = lambda logits: logits[..., 0]
@@ -322,7 +322,7 @@ def train_step(
     return new_state, metrics
 
 
-def eval_step(state, batch):
+def eval_step(state: TrainState, batch: Dict[str, Any]):
     logits = state.apply_fn(**batch, params=state.params, train=False)[0]
     return state.logits_fn(logits)
 
@@ -340,14 +340,16 @@ def log_prediction(task, inputs, prediction):
 def write_metrics(train_metrics, eval_metrics, train_time, step, summary_writer):
     summary_writer.scalar("train_time", train_time, step)
 
-    train_metrics = get_metrics(train_metrics)
-    for key, vals in train_metrics.items():
-        tag = f"train_{key}"
-        for i, val in enumerate(vals):
-            summary_writer.scalar(tag, val, step - len(vals) + i + 1)
+    if train_metrics:
+        train_metrics = get_metrics(train_metrics)
+        for key, vals in train_metrics.items():
+            tag = f"train_{key}"
+            for i, val in enumerate(vals):
+                summary_writer.scalar(tag, val, step - len(vals) + i + 1)
 
-    for metric_name, value in eval_metrics.items():
-        summary_writer.scalar(f"eval_{metric_name}", value, step)
+    if eval_metrics:
+        for metric_name, value in eval_metrics.items():
+            summary_writer.scalar(f"eval_{metric_name}", value, step)
 
 
 def main():
@@ -416,6 +418,7 @@ def main():
     train_time = 0
     for epoch in range(1, num_epochs + 1):
         logger.info(f"Epoch {epoch}")
+        train_metrics = None
         if training_args.do_train:
             logger.info("  Training...")
             train_start = time.time()
@@ -428,6 +431,7 @@ def main():
             train_time += time.time() - train_start
             logger.info(f"    Done! Training metrics: {unreplicate(metrics)}")
 
+        eval_metrics = None
         if training_args.do_eval:
             logger.info("  Evaluating...")
             eval_metrics = load_metric("glue", task.datasets_name("validation"))

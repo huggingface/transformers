@@ -82,18 +82,18 @@ website. For QQP and WNLI, please refer to [FAQ #12](https://gluebenchmark.com/f
 
 ### Runtime evaluation
 
-We also ran each task once on a single P100 GPU, 8 P100 GPUs, and 8 Cloud v3 TPUs and report the
-overall training time below. 
+We also ran each task once on a single V100 GPU, 8 V100 GPUs, and 8 Cloud v3 TPUs and report the
+overall training time below. For comparison we ran Pytorch's [run_glue.py](https://github.com/huggingface/transformers/blob/master/examples/pytorch/text-classification/run_glue.py) on a single GPU (last column).
 
 
-| Task  | time (1 GPU) | time (8 GPU)  | time (8 TPU) |
-|-------|--------------|---------------|--------------|
-| CoLA  |     3m  6s   |  1m 26s       |  1m 46s      |
-| SST-2 |    22m  6s   |  6m 28s       |  5m 30s      |
-| MRPC  |     2m 17s   |  1m 14s       |  1m 32s      |
-| STS-B |     2m 11s   |  1m 12s       |  1m 33s      |
-| QQP   | 1u 20m 15s   | 31m 48s       | 24m 40s      |
-| MNLI  | 2u  7m 30s   | 33m 55s       | 26m 30s      | 
-| QNLI  |    34m 20s   |  9m 40s       |  8m          |
-| RTE   |     1m  8s   |     55s       |  1m 21s      |
-| WNLI  |        38s   |     48s       |  1m 12s      |
+| Task  | 8 TPU   | 8 GPU   | 1 GPU      | 1 GPU (Pytorch) |
+|-------|---------|---------|------------|-----------------|
+| CoLA  |  1m 46s |  1m 26s | 3m 6s      | 4m 6s           |
+| SST-2 |  5m 30s |  6m 28s | 22m 6s     | 34m 37s         |
+| MRPC  |  1m 32s |  1m 14s | 2m 17s     | 2m 56s          |
+| STS-B |  1m 33s |  1m 12s | 2m 11s     | 2m 48s          |
+| QQP   | 24m 40s | 31m 48s | 1h 20m 15s | 2h 54m          |
+| MNLI  | 26m 30s | 33m 55s | 2h 7m 30s  | 3u 7m 6s        |
+| QNLI  |  8m     |  9m 40s | 34m 20s    | 49m 8s          |
+| RTE   |  1m 21s |     55s | 1m 8s      | 1m 16s          |
+| WNLI  |  1m 12s |     48s | 38s        |  36s            |
