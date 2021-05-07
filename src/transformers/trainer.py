@@ -1597,8 +1597,8 @@ class Trainer:
         Prepare :obj:`inputs` before feeding them to the model, converting them to tensors if they are not already and
         handling potential state.
         """
-        #print("PREPARE INPUT")
-        #die
+        # print("PREPARE INPUT")
+        # die
         for k, v in inputs.items():
             if isinstance(v, torch.Tensor):
                 kwargs = dict(device=self.args.device)
@@ -1613,7 +1613,6 @@ class Trainer:
                     # print(f"After : {k} {inputs[k].device}")
 
                 inputs[k] = v.to(**kwargs)
-
 
         if self.args.past_index >= 0 and self._past is not None:
             inputs["mems"] = self._past

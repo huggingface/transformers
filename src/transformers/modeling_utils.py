@@ -1203,14 +1203,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     # because zero3 puts placeholders in model params, this context
                     # manager gathers (unpartitions) the params of the current layer, then loads from
                     # the state dict and then re-partitions them again
-                    #print(f"params = {[name for name, v in module.named_parameters(recurse=False)]}")
+                    # print(f"params = {[name for name, v in module.named_parameters(recurse=False)]}")
                     for name, param in module.named_parameters(recurse=False):
                         print(f"NAME={name} {param.shape}", vars(param))
                     # remove the following 2 lines and uncomment the next line after, once this PR
                     # is merged: https://github.com/microsoft/DeepSpeed/pull/1044
+                    # and a new deepspeed release is made
                     params = [p for p in module.parameters(recurse=False) if hasattr(p, "ds_id")]
                     with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
-                    #with deepspeed.zero.GatheredParameters(list(module.parameters(recurse=False)), modifier_rank=0):
+                        # with deepspeed.zero.GatheredParameters(list(module.parameters(recurse=False)), modifier_rank=0):
                         if torch.distributed.get_rank() == 0:
                             module._load_from_state_dict(*args)
                 else:

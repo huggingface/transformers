@@ -23,6 +23,8 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
+from transformers.integrations import is_deepspeed_zero3_enabled
+
 from ...activations import ACT2FN
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, MaskedLMOutput
@@ -198,9 +200,9 @@ class Wav2Vec2PositionalConvEmbedding(nn.Module):
             groups=config.num_conv_pos_embedding_groups,
         )
 
-        from transformers.integrations import is_deepspeed_zero3_enabled
         if is_deepspeed_zero3_enabled():
             import deepspeed
+
             with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
                 self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
             deepspeed.zero.register_external_parameter(self, self.conv.weight_v)
@@ -699,9 +701,9 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
-            from transformers.integrations import is_deepspeed_zero3_enabled
             if is_deepspeed_zero3_enabled():
                 import deepspeed
+
                 if hasattr(module, "weight_v") and hasattr(module, "weight_g"):
                     with deepspeed.zero.GatheredParameters([module.weight_v, module.weight_g], modifier_rank=0):
                         torch.nn.init.kaiming_normal_(module.weight.data)
@@ -798,7 +800,6 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         self.feature_projection = Wav2Vec2FeatureProjection(config)
 
         self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
-
         if config.do_stable_layer_norm:
             self.encoder = Wav2Vec2EncoderStableLayerNorm(config)
         else:

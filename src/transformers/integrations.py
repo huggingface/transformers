@@ -25,9 +25,9 @@ from copy import deepcopy
 from pathlib import Path
 
 from .dependency_versions_check import dep_version_check
+from .file_utils import is_torch_available
 from .utils import logging
 
-from .file_utils import is_torch_available
 
 logger = logging.get_logger(__name__)
 

@@ -42,7 +42,7 @@ from .file_utils import (
     is_torchaudio_available,
     is_vision_available,
 )
-from .integrations import is_optuna_available, is_ray_available
+from .integrations import is_deepspeed_available, is_optuna_available, is_ray_available
 
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
@@ -448,6 +448,16 @@ def require_soundfile(test_case):
     """
     if not is_soundfile_availble():
         return unittest.skip("test requires soundfile")(test_case)
+    else:
+        return test_case
+
+
+def require_deepspeed(test_case):
+    """
+    Decorator marking a test that requires deepspeed
+    """
+    if not is_deepspeed_available():
+        return unittest.skip("test requires deepspeed")(test_case)
     else:
         return test_case
 

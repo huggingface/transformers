@@ -347,6 +347,8 @@ def main():
     # pprint(vars(training_args))
     # die
 
+    # import faulthandler
+    # faulthandler.dump_traceback_later(20, repeat=True)
 
     orthography = Orthography.from_name(data_args.orthography.lower())
     processor = orthography.create_processor(model_args)
