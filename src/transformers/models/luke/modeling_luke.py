@@ -1309,8 +1309,10 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
             >>> inputs = tokenizer(text, entity_spans=entity_spans, return_tensors="pt")
             >>> outputs = model(**inputs)
             >>> logits = outputs.logits
-            >>> predicted_class_idx = logits.argmax(-1).item()
-            >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+            >>> predicted_class_indices = logits.argmax(-1).squeeze().tolist()
+            >>> for span, predicted_class_idx in zip(entity_spans, predicted_class_indices):
+            >>>     if predicted_class_idx != 0:
+            >>>        print(text[span[0]:span[1]], model.config.id2label[predicted_class_idx])
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
