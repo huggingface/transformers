@@ -39,8 +39,8 @@ from flax.metrics import tensorboard
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
 from transformers import (
-    BertConfig,
     AutoTokenizer,
+    BertConfig,
     FlaxAutoModelForSequenceClassification,
     HfArgumentParser,
     PreTrainedTokenizerBase,
@@ -220,11 +220,11 @@ def create_learning_rate_fn(config: FlaxTrainingArguments, train_ds_size: int) -
     steps_per_epoch = train_ds_size // config.train_batch_size
     num_train_steps = steps_per_epoch * config.num_train_epochs
     warmup_fn = optax.linear_schedule(
-        init_value=0., end_value=config.learning_rate,
-        transition_steps=config.warmup_steps)
+        init_value=0.0, end_value=config.learning_rate, transition_steps=config.warmup_steps
+    )
     decay_fn = optax.linear_schedule(
-        init_value=config.learning_rate, end_value=0,
-        transition_steps=num_train_steps-config.warmup_steps)
+        init_value=config.learning_rate, end_value=0, transition_steps=num_train_steps - config.warmup_steps
+    )
     schedule_fn = optax.join_schedules(schedules=[warmup_fn, decay_fn], boundaries=[config.warmup_steps])
     return schedule_fn
 
@@ -274,7 +274,7 @@ def create_train_state(
     return TrainState.create(apply_fn=model.__call__, params=model.params, tx=tx, logits_fn=logits_fn, loss_fn=loss_fn)
 
 
-def get_batches(rng: PRNGKey, dataset: Dataset, batch_size: int, task: GlueTask):
+def get_batches(rng: PRNGKey, dataset: Dataset, batch_size: int, task: GlueTask, return_inputs: bool = False):
     """Returns batches of size `batch_size` from `dataset`, sharded over all local devices."""
     train_ds_size = len(dataset)
     steps_per_epoch = train_ds_size // batch_size
@@ -287,6 +287,9 @@ def get_batches(rng: PRNGKey, dataset: Dataset, batch_size: int, task: GlueTask)
         inputs = zip(*[batch.pop(i) for i in task.inputs])
         batch = {k: jnp.array(v) for k, v in batch.items()}
         batch = shard(batch)
+
+        if return_inputs:
+            yield batch, inputs
         yield batch
 
 
