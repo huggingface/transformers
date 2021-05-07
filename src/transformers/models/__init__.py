@@ -26,6 +26,7 @@ from . import (
     bert_japanese,
     bertweet,
     big_bird,
+    bigbird_pegasus,
     blenderbot,
     blenderbot_small,
     camembert,

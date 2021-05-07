@@ -635,9 +635,17 @@ class PegasusConverter(SpmConverter):
         vocab = [
             (self.original_tokenizer.pad_token, 0.0),
             (self.original_tokenizer.eos_token, 0.0),
-            (self.original_tokenizer.mask_token_sent, 0.0),
-            (self.original_tokenizer.mask_token, 0.0),
         ]
+
+        if self.original_tokenizer.mask_token_sent is not None:
+            vocab += [(self.original_tokenizer.mask_token_sent, 0.0)]
+
+        if (
+            self.original_tokenizer.mask_token is not None
+            and self.original_tokenizer.mask_token_id < self.original_tokenizer.offset
+        ):
+            vocab += [(self.original_tokenizer.mask_token, 0.0)]
+
         vocab += [(f"<unk_{i}>", -100.0) for i in range(2, self.original_tokenizer.offset)]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[2:]]
         return vocab
