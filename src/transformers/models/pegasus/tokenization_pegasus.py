@@ -80,7 +80,6 @@ class PegasusTokenizer(PreTrainedTokenizer):
     """
     vocab_files_names = VOCAB_FILES_NAMES
 
-    offset = 103  # entries 2 - 104 are only used for pretraining
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
@@ -95,8 +94,11 @@ class PegasusTokenizer(PreTrainedTokenizer):
         mask_token="<mask_2>",
         mask_token_sent="<mask_1>",
         additional_special_tokens=None,
+        offset=103,  # entries 2 - 104 are only used for pretraining
         **kwargs
     ):
+        self.offset = offset
+
         if additional_special_tokens is not None:
             assert isinstance(
                 additional_special_tokens, list
@@ -104,7 +106,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
 
             additional_special_tokens_extended = (
                 ([mask_token_sent] + additional_special_tokens)
-                if mask_token_sent not in additional_special_tokens
+                if mask_token_sent not in additional_special_tokens and mask_token_sent is not None
                 else additional_special_tokens
             )
             # fill additional tokens with ..., <unk_token_102> in case not all additional tokens are already taken
@@ -118,7 +120,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
                 )
             additional_special_tokens = additional_special_tokens_extended
         else:
-            additional_special_tokens = [mask_token_sent]
+            additional_special_tokens = [mask_token_sent] if mask_token_sent is not None else []
             additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
 
         super().__init__(
@@ -127,24 +129,34 @@ class PegasusTokenizer(PreTrainedTokenizer):
             mask_token=mask_token,
             pad_token=pad_token,
             mask_token_sent=mask_token_sent,
+            offset=offset,
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
+        self.mask_token_sent = mask_token_sent
         self.vocab_file = vocab_file
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(vocab_file)
-        self.mask_token_sent = mask_token_sent
 
         # add special tokens to encoder dict
         self.encoder: Dict[int, str] = {
             0: self.pad_token,
             1: self.eos_token,
-            2: self.mask_token_sent,
-            3: self.mask_token,
         }
-        # entries 2-104 are only used for pretraining and called <mask_1>, <mask_2>, unk_2, ...unk_102
-        # mask_token_sent is already added to list -> so start at 1
-        self.encoder.update({i + 3: additional_special_tokens[i] for i in range(1, self.offset - 1)})
+
+        if self.mask_token_sent is not None:
+            self.encoder.update(
+                {
+                    2: self.mask_token_sent,
+                    3: self.mask_token,
+                }
+            )
+
+        if self.offset > 0:
+            # entries 2-104 are only used for pretraining and called <mask_1>, <mask_2>, unk_2, ...unk_102
+            # mask_token_sent is already added to list -> so start at 1
+            self.encoder.update({i + 3: additional_special_tokens[i] for i in range(1, self.offset - 1)})
+
         self.decoder: Dict[str, int] = {v: k for k, v in self.encoder.items()}
 
     @property
@@ -205,10 +217,6 @@ class PegasusTokenizer(PreTrainedTokenizer):
     def _special_token_mask(self, seq):
         all_special_ids = set(self.all_special_ids)  # call it once instead of inside list comp
         all_special_ids.remove(self.unk_token_id)  # <unk> is only sometimes special
-
-        assert all_special_ids == set(
-            range(len(self.additional_special_tokens) + 3)
-        ), f"There should be 3 special tokens: mask_token, pad_token, and eos_token + {len(self.additional_special_tokens)} additional_special_tokens, but got {all_special_ids}"
 
         return [1 if x in all_special_ids else 0 for x in seq]
 
