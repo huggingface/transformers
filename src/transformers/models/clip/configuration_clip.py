@@ -54,6 +54,9 @@ class CLIPTextConfig(PretrainedConfig):
         max_position_embeddings (:obj:`int`, `optional`, defaults to 77):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
+        hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"quick_gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string,
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` :obj:`"quick_gelu"` are supported.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
         attention_dropout (:obj:`float`, `optional`, defaults to 0.0):
@@ -73,9 +76,9 @@ class CLIPTextConfig(PretrainedConfig):
         >>> from transformers import CLIPTextModel, CLIPTextConfig
 
         >>> # Initializing a CLIPTextModel with valhalla/clip-vit-base-patch32 style configuration
-        >>> configuration = CLIPConfig()
+        >>> configuration = CLIPTextConfig()
 
-        >>> # Initializing a model from the valhalla/clip-vit-base-patch32 style configuration
+        >>> # Initializing a CLIPTextConfig from the valhalla/clip-vit-base-patch32 style configuration
         >>> model = CLIPTextModel(configuration)
 
         >>> # Accessing the model configuration
@@ -91,6 +94,7 @@ class CLIPTextConfig(PretrainedConfig):
         num_hidden_layers=12,
         num_attention_heads=8,
         max_position_embeddings=77,
+        hidden_act="quick_gelu",
         layer_norm_eps=1e-5,
         dropout=0.0,
         attention_dropout=0.0,
@@ -112,6 +116,7 @@ class CLIPTextConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.max_position_embeddings = max_position_embeddings
         self.layer_norm_eps = layer_norm_eps
+        self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
@@ -138,10 +143,13 @@ class CLIPVisionConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (:obj:`int`, `optional`, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        image_size (:obj:`int`, `optional`, defaults to :obj:`224`):
+        image_size (:obj:`int`, `optional`, defaults to 224):
             The size (resolution) of each image.
-        patch_size (:obj:`int`, `optional`, defaults to :obj:`32`):
+        patch_size (:obj:`int`, `optional`, defaults to 32):
             The size (resolution) of each patch.
+        hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"quick_gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string,
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` :obj:`"quick_gelu"` are supported.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
         dropout (:obj:`float`, `optional`, defaults to 0.0):
@@ -158,12 +166,12 @@ class CLIPVisionConfig(PretrainedConfig):
 
         Example::
 
-        >>> from transformers import CLIPVisionModel, CLIPTextConfig
+        >>> from transformers import CLIPVisionModel, CLIPVisionConfig
 
         >>> # Initializing a CLIPVisionModel with valhalla/clip-vit-base-patch32 style configuration
-        >>> configuration = CLIPConfig()
+        >>> configuration = CLIPVisionConfig()
 
-        >>> # Initializing a model from the valhalla/clip-vit-base-patch32 style configuration
+        >>> # Initializing a CLIPVisionModel model from the valhalla/clip-vit-base-patch32 style configuration
         >>> model = CLIPVisionModel(configuration)
 
         >>> # Accessing the model configuration
@@ -180,6 +188,7 @@ class CLIPVisionConfig(PretrainedConfig):
         num_attention_heads=12,
         image_size=224,
         patch_size=32,
+        hidden_act="quick_gelu",
         layer_norm_eps=1e-5,
         dropout=0.0,
         attention_dropout=0.0,
@@ -201,6 +210,7 @@ class CLIPVisionConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
+        self.hidden_act = hidden_act
         self.gradient_checkpointing = gradient_checkpointing
 
 
@@ -228,10 +238,16 @@ class CLIPConfig(PretrainedConfig):
     model_type = "clip"
     is_composition = True
 
-    def __init__(self, projection_dim=512, **kwargs):
+    def __init__(self, text_config_dict=None, vision_config_dict=None, projection_dim=512, **kwargs):
         super().__init__(**kwargs)
-        text_config_dict = kwargs.pop("text_config")
-        vision_config_dict = kwargs.pop("vision_config")
+
+        if text_config_dict is None:
+            text_config_dict = {}
+            logger.info("text_config_dict is None. Initializing the CLIPTextConfig with default values.")
+
+        if vision_config_dict is None:
+            vision_config_dict = {}
+            logger.info("vision_config_dict is None. initializing the CLIPVisionConfig with default values.")
 
         self.text_config = CLIPTextConfig(**text_config_dict)
         self.vision_config = CLIPVisionConfig(**vision_config_dict)
