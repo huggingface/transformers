@@ -309,14 +309,6 @@ class GPTNeoAttention(nn.Module):
             output_attentions=output_attentions,
         )
 
-        # cache the hidden_states instead of key_value_states
-        # for local attention layer
-        if self.attention_type == "local":
-            if layer_past is None:
-                past = hidden_states
-            else:
-                past = torch.cat([layer_past[0], hidden_states], dim=1)
-            outputs = (outputs[0], (past,)) + outputs[1:]
         return outputs
 
 
