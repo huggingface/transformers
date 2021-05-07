@@ -73,7 +73,6 @@ def parse_args():
     parser.add_argument(
         "--validation_file", type=str, default=None, help="A csv or a json file containing the validation data."
     )
-    parser.add_argument("--test_file", type=str, default=None, help="A csv or a json file containing the test data.")
     parser.add_argument(
         "--max_length",
         type=int,
@@ -143,9 +142,6 @@ def parse_args():
         if args.validation_file is not None:
             extension = args.validation_file.split(".")[-1]
             assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
-        if args.test_file is not None:
-            extension = args.test_file.split(".")[-1]
-            assert extension in ["csv", "json"], "`test_file` should be a csv or a json file."
 
     if args.output_dir is not None:
         os.makedirs(args.output_dir, exist_ok=True)
@@ -224,16 +220,6 @@ def create_train_state(
         )
 
 
-def log_prediction(task, inputs, prediction):
-    prediction_type = "SIMILARITY (1-5)"
-    if not task.is_regression:
-        prediction_type = "CLASS"
-        prediction = task.labels[prediction]
-    for field_name, input_str in zip(task.inputs, inputs):
-        logger.info(f"{field_name}:\t{input_str}")
-    logger.info(f"PREDICTED {prediction_type}: {prediction}\n")
-
-
 def create_learning_rate_fn(
     train_ds_size: int, train_batch_size: int, num_train_epochs: int, num_warmup_steps: int, learning_rate: float
 ) -> Callable[[int], jnp.array]:
@@ -304,8 +290,6 @@ def main():
             data_files["train"] = args.train_file
         if args.validation_file is not None:
             data_files["validation"] = args.validation_file
-        if args.test_file is not None:
-            data_files["test"] = args.test_file
         extension = (args.train_file if args.train_file is not None else args.valid_file).split(".")[-1]
         raw_datasets = load_dataset(extension, data_files=data_files)
     # See more about loading any type of standard or custom dataset at
@@ -399,7 +383,6 @@ def main():
 
     train_dataset = processed_datasets["train"]
     eval_dataset = processed_datasets["validation_matched" if args.task_name == "mnli" else "validation"]
-    predict_dataset = processed_datasets["test_matched" if args.task_name == "mnli" else "test"]
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 3):
@@ -496,18 +479,6 @@ def main():
 
         cur_step = epoch * (len(train_dataset) // train_batch_size)
         write_metric(train_metrics, eval_metric, train_time, cur_step)
-
-    logger.info("===== Finished training =====")
-    logger.info("===== Running inference =====")
-
-    rng, input_rng = jax.random.split(rng)
-    for batch in glue_data_collator(input_rng, predict_dataset, eval_batch_size):
-        labels = batch.pop("labels")
-        predictions = p_eval_step(state, batch)
-        metric.add_batch(predictions=chain(*predictions), references=chain(*labels))
-
-    predict_metric = metric.compute()
-    logger.info(f"    Done! Prediction metrics: {predict_metric}")
 
 
 if __name__ == "__main__":
