@@ -96,4 +96,4 @@ overall training time below. For comparison we ran Pytorch's [run_glue.py](https
 | MNLI  | 26m 30s | 33m 55s | 2h 7m 30s  | 3u 7m 6s        |
 | QNLI  |  8m     |  9m 40s | 34m 20s    | 49m 8s          |
 | RTE   |  1m 21s |     55s | 1m 8s      | 1m 16s          |
-| WNLI  |  1m 12s |     48s | 38s        |  36s            |
+| WNLI  |  1m 12s |     48s | 38s        | 36s             |

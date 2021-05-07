@@ -39,8 +39,8 @@ from flax.metrics import tensorboard
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
 from transformers import (
-    BertConfig,
     AutoTokenizer,
+    BertConfig,
     FlaxAutoModelForSequenceClassification,
     HfArgumentParser,
     PreTrainedTokenizerBase,
@@ -140,7 +140,8 @@ class FlaxTrainingArguments(TrainingArguments):
         return self.per_device_eval_batch_size * jax.local_device_count()
 
     per_device_num_predictions: int = field(
-        default=4, metadata={"help": "Number of predictions to run per device if --do_predict is true."},
+        default=4,
+        metadata={"help": "Number of predictions to run per device if --do_predict is true."},
     )
     # Set the seed to 2 by default, which produced the best run (see README.md).
     seed: int = field(default=2, metadata={"help": "Random seed that will be set at the beginning of training."})
@@ -152,7 +153,9 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
-    task_name: str = field(metadata={"help": "The name of the task to train on: " + ", ".join(task_to_fields.keys())},)
+    task_name: str = field(
+        metadata={"help": "The name of the task to train on: " + ", ".join(task_to_fields.keys())},
+    )
     max_seq_length: int = field(
         default=128,
         metadata={
@@ -220,11 +223,11 @@ def create_learning_rate_fn(config: FlaxTrainingArguments, train_ds_size: int) -
     steps_per_epoch = train_ds_size // config.train_batch_size
     num_train_steps = steps_per_epoch * config.num_train_epochs
     warmup_fn = optax.linear_schedule(
-        init_value=0., end_value=config.learning_rate,
-        transition_steps=config.warmup_steps)
+        init_value=0.0, end_value=config.learning_rate, transition_steps=config.warmup_steps
+    )
     decay_fn = optax.linear_schedule(
-        init_value=config.learning_rate, end_value=0,
-        transition_steps=num_train_steps-config.warmup_steps)
+        init_value=config.learning_rate, end_value=0, transition_steps=num_train_steps - config.warmup_steps
+    )
     schedule_fn = optax.join_schedules(schedules=[warmup_fn, decay_fn], boundaries=[config.warmup_steps])
     return schedule_fn
 
@@ -274,7 +277,7 @@ def create_train_state(
     return TrainState.create(apply_fn=model.__call__, params=model.params, tx=tx, logits_fn=logits_fn, loss_fn=loss_fn)
 
 
-def get_batches(rng: PRNGKey, dataset: Dataset, batch_size: int, task: GlueTask):
+def get_batches(rng: PRNGKey, dataset: Dataset, batch_size: int, task: GlueTask, return_inputs: bool = False):
     """Returns batches of size `batch_size` from `dataset`, sharded over all local devices."""
     train_ds_size = len(dataset)
     steps_per_epoch = train_ds_size // batch_size
@@ -287,6 +290,9 @@ def get_batches(rng: PRNGKey, dataset: Dataset, batch_size: int, task: GlueTask)
         inputs = zip(*[batch.pop(i) for i in task.inputs])
         batch = {k: jnp.array(v) for k, v in batch.items()}
         batch = shard(batch)
+        
+        if return_inputs: 
+            yield batch, inputs
         yield batch
 
 
@@ -375,7 +381,10 @@ def main():
         cache_dir=model_args.cache_dir,
     )
     model = FlaxAutoModelForSequenceClassification.from_pretrained(
-        model_args.model_name_or_path, config=config, cache_dir=model_args.cache_dir, seed=training_args.seed,
+        model_args.model_name_or_path,
+        config=config,
+        cache_dir=model_args.cache_dir,
+        seed=training_args.seed,
     )
 
     get_split = partial(
