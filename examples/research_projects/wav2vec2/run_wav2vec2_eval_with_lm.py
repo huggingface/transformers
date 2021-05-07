@@ -10,7 +10,6 @@ from typing import Optional
 
 import datasets
 import torch
-import torch.nn as nn
 
 import soundfile as sf
 from transformers import HfArgumentParser, Wav2Vec2ForCTC, Wav2Vec2Processor
@@ -32,10 +31,13 @@ class EvaluationArguments:
     test_dataset_name: Optional[str] = field(
         default="timit_asr", metadata={"help": "Specify the name of the dataset to be used."}
     )
+    test_dataset_type: Optional[str] = field(
+        default="clean", metadata={"help": "Specify the type of the dataset to be used."}
+    )
     lexicon: Optional[str] = field(default=None, metadata={"help": "Specify the path of the lexicon file."})
     criterion: str = field(default="ctc", metadata={"help": "Define criterion type."})
     lm_weight: Optional[float] = field(
-        default=0.2, metadata={"help": "Weight for lm while interpolating with neural score."}
+        default=0.1, metadata={"help": "Weight for lm while interpolating with neural score."}
     )
     gradient_checkpointing: Optional[bool] = field(
         default=False, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
@@ -45,13 +47,15 @@ class EvaluationArguments:
         metadata={"help": "Whether to log verbose messages or not."},
     )
     unit_lm: Optional[bool] = field(default=True, metadata={"help": "Whether using unit lm or not."})
-    beam: Optional[int] = field(default=100, metadata={"help": "Specify the size of the beam."})
-    beam_threshold: Optional[float] = field(default=25.0, metadata={"help": "."})
-    word_score: Optional[float] = field(default=1.0, metadata={"help": "."})
-    unk_weight: Optional[float] = field(default=-math.inf, metadata={"help": "."})
-    sil_weight: Optional[float] = field(default=0.0, metadata={"help": "."})
-    nbest: Optional[int] = field(default=1, metadata={"help": "."})
-    kenlm_model: Optional[str] = field(default=None, metadata={"help": "Specify the path of the kenlm .bin file."})
+    beam: Optional[int] = field(default=200, metadata={"help": "Specify the size of the beam."})
+    beam_threshold: Optional[float] = field(default=25.0, metadata={"help": "Specify the threshold for beam."})
+    word_score: Optional[float] = field(
+        default=1.0, metadata={"help": "Specify the score factor of a word while using lm."}
+    )
+    unk_weight: Optional[float] = field(default=-math.inf, metadata={"help": "Specify weight of unk token."})
+    sil_weight: Optional[float] = field(default=0.0, metadata={"help": "Specify the weight of sil."})
+    nbest: Optional[int] = field(default=1, metadata={"help": "Specify the number of beams to select from."})
+    kenlm_model: Optional[str] = field(default=None, metadata={"help": "Specify the path of the kenlm file."})
     use_cuda: Optional[bool] = field(default=False, metadata={"help": "Whether to use cuda or not."})
 
 
@@ -114,7 +118,7 @@ class W2lDecoder(object):
         if self.criterion_type == CriterionType.CTC:
             idxs = filter(lambda x: x != self.blank, idxs)
         else:
-            print("only ctc criterion is supported at the moment")
+            print("Only ctc criterion is supported at the moment")
             pass
         prefix_answer = ""
         for i in list(idxs):
@@ -128,7 +132,6 @@ class W2lViterbiDecoder(W2lDecoder):
 
     def decode(self, emissions):
         B, T, N = emissions.size()
-        # hypos = []
         transitions = torch.FloatTensor(N, N).zero_()
         viterbi_path = torch.IntTensor(B, T)
         workspace = torch.ByteTensor(CpuViterbiPath.get_workspace_size(B, T, N))
@@ -152,27 +155,18 @@ class W2lKenLMDecoder(W2lDecoder):
             self.lexicon = load_words(args.lexicon)
             self.word_dict = create_word_dict(self.lexicon)
             self.unk_word = self.word_dict.get_index("<unk>")
-            print(self.unk_word)
-            print(len(self.lexicon))
             self.lm = KenLM(args.kenlm_model, self.word_dict)
             self.trie = Trie(self.vocab_size, self.silence)
 
             start_state = self.lm.start(False)
             for i, (word, spellings) in enumerate(self.lexicon.items()):
-                print(word, spellings)
                 word_idx = self.word_dict.get_index(word)
-                print(word_idx)
                 _, score = self.lm.score(start_state, word_idx)
-                print(score)
                 for spelling in spellings:
-                    print(spelling)
                     spelling_idxs = [tgt_dict.index(token) for token in spelling]
-                    print(spelling_idxs)
                     assert tgt_dict.index("<unk>") not in spelling_idxs, f"{spelling} {spelling_idxs}"
                     self.trie.insert(spelling_idxs, word_idx, score)
-                print(i)
             self.trie.smear(SmearingMode.MAX)
-            print("complete")
 
             self.decoder_opts = LexiconDecoderOptions(
                 beam_size=args.beam,
@@ -185,10 +179,7 @@ class W2lKenLMDecoder(W2lDecoder):
                 log_add=False,
                 criterion_type=self.criterion_type,
             )
-            print("success")
             if self.asg_transitions is None:
-                # N = 768
-                # self.asg_transitions = torch.FloatTensor(N, N).zero_()
                 self.asg_transitions = []
 
             self.decoder = LexiconDecoder(
@@ -232,14 +223,14 @@ class W2lKenLMDecoder(W2lDecoder):
             hypos.append(
                 [
                     {
-                        "tokens": self.get_prefix(result.tokens),
+                        "prefix": self.get_prefix(result.tokens),
                         "score": result.score,
                         "words": [self.word_dict.get_entry(x) for x in result.words if x >= 0],
                     }
                     for result in nbest_results
                 ]
             )
-        return hypos
+        return hypos[0]
 
 
 def main():
@@ -265,19 +256,16 @@ def main():
 
         with torch.no_grad():
             logits = model(input_values).logits
-            softmax = nn.Softmax(dim=2)
-            logits = softmax(logits)
 
         target_dictionary = [t for t in processor.tokenizer.get_vocab().keys()]
         if eval_args.w2l_decoder == "viterbi":
             decoder = W2lViterbiDecoder(eval_args, target_dictionary)
+            batch["pred_str"] = decoder.decode(logits)[0]
         elif eval_args.w2l_decoder == "kenlm":
-            print("Work in progress")
+            decoder = W2lKenLMDecoder(eval_args, target_dictionary)
+            batch["pred_str"] = decoder.decode(logits)[0]["prefix"]
         else:
             sys.exit("W2l decoder not supported.")
-        batch["pred_str"] = decoder.decode(logits)[0]
-        print("\n Actual: " + str(batch["target_text"]))
-        print("Prefix: " + str(batch["pred_str"]))
         return batch
 
     def speech_file_to_array_fn(batch):
@@ -287,10 +275,10 @@ def main():
         batch["target_text"] = batch["text"]
         return batch
 
-    selected_dataset = datasets.load_dataset(eval_args.test_dataset_name)
+    selected_dataset = datasets.load_dataset(eval_args.test_dataset_name, eval_args.test_dataset_type, split="test")
     selected_dataset = selected_dataset.map(speech_file_to_array_fn, num_proc=4)
     wer_metric = datasets.load_metric("wer")
-    results = selected_dataset["test"].map(map_to_result)
+    results = selected_dataset.map(map_to_result)
     vocabulary_chars_str = "".join(t.lower() for t in processor.tokenizer.get_vocab().keys() if len(t) == 1)
     vocabulary_text_cleaner = re.compile(  # remove characters not in vocabulary
         f"[^\s{re.escape(vocabulary_chars_str)}]",  # allow space in addition to chars in vocabulary
