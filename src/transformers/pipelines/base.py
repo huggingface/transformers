@@ -23,6 +23,7 @@ from contextlib import contextmanager
 from os.path import abspath, exists
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
+from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
 from ..tokenization_utils import PreTrainedTokenizer, TruncationStrategy
@@ -522,7 +523,8 @@ class Pipeline(_ScikitCompat):
     def __init__(
         self,
         model: Union["PreTrainedModel", "TFPreTrainedModel"],
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: Optional[PreTrainedTokenizer] = None,
+        feature_extractor: Optional[PreTrainedFeatureExtractor] = None,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
         task: str = "",
@@ -537,6 +539,7 @@ class Pipeline(_ScikitCompat):
         self.task = task
         self.model = model
         self.tokenizer = tokenizer
+        self.feature_extractor = feature_extractor
         self.modelcard = modelcard
         self.framework = framework
         self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else f"cuda:{device}")
@@ -565,7 +568,13 @@ class Pipeline(_ScikitCompat):
         os.makedirs(save_directory, exist_ok=True)
 
         self.model.save_pretrained(save_directory)
-        self.tokenizer.save_pretrained(save_directory)
+
+        if self.tokenizer is not None:
+            self.tokenizer.save_pretrained(save_directory)
+
+        if self.feature_extractor is not None:
+            self.feature_extractor.save_pretrained(save_directory)
+
         if self.modelcard is not None:
             self.modelcard.save_pretrained(save_directory)
 
@@ -630,7 +639,14 @@ class Pipeline(_ScikitCompat):
                 The list of models supported by the pipeline, or a dictionary with model class values.
         """
         if not isinstance(supported_models, list):  # Create from a model mapping
-            supported_models = [item[1].__name__ for item in supported_models.items()]
+            supported_models_names = []
+            for config, model in supported_models.items():
+                # Mapping can now contain tuples of models for the same configuration.
+                if isinstance(model, tuple):
+                    supported_models_names.extend([_model.__name__ for _model in model])
+                else:
+                    supported_models_names.append(model.__name__)
+            supported_models = supported_models_names
         if self.model.__class__.__name__ not in supported_models:
             raise PipelineException(
                 self.task,
