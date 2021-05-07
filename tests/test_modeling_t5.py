@@ -596,7 +596,7 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 max_length=max_length,
                 output_attentions=True,
                 return_dict_in_generate=True,
-                **head_masks
+                **head_masks,
             )
             # We check the state of decoder_attentions and cross_attentions just from the last step
             attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
