@@ -23,6 +23,10 @@ from ..bart.configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartCo
 from ..bert.configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from ..bert_generation.configuration_bert_generation import BertGenerationConfig
 from ..big_bird.configuration_big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig
+from ..bigbird_pegasus.configuration_bigbird_pegasus import (
+    BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    BigBirdPegasusConfig,
+)
 from ..blenderbot.configuration_blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig
 from ..blenderbot_small.configuration_blenderbot_small import (
     BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -88,6 +92,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     for pretrained_map in [
         # Add archive maps here
         VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -142,6 +147,7 @@ CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
         ("visual_bert", VisualBertConfig),
+        ("bigbird_pegasus", BigBirdPegasusConfig),
         ("deit", DeiTConfig),
         ("luke", LukeConfig),
         ("gpt_neo", GPTNeoConfig),
@@ -202,6 +208,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
         ("visual_bert", "VisualBert"),
+        ("bigbird_pegasus", "BigBirdPegasus"),
         ("deit", "DeiT"),
         ("luke", "LUKE"),
         ("gpt_neo", "GPT Neo"),
