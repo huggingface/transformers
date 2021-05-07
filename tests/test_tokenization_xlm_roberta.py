@@ -130,7 +130,7 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         """Google pickle __getstate__ __setstate__ if you are struggling with this."""
         # Subword regularization is only available for the slow tokenizer.
         sp_model_kwargs = {"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
-        tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB, keep_accents=True, sp_model_kwargs=sp_model_kwargs)
+        tokenizer = self.tokenizer_class(SAMPLE_VOCAB, keep_accents=True, sp_model_kwargs=sp_model_kwargs)
         tokenizer_bin = pickle.dumps(tokenizer)
         del tokenizer
         tokenizer_new = pickle.loads(tokenizer_bin)
