@@ -15,6 +15,7 @@
 
 
 import os
+import pickle
 import unittest
 
 from transformers import BigBirdTokenizer, BigBirdTokenizerFast
@@ -40,7 +41,7 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        tokenizer = BigBirdTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = self.tokenizer_class(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
 
     def test_rust_and_python_full_tokenizers(self):
@@ -136,6 +137,28 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ".",
             ],
         )
+
+    def test_subword_regularization_tokenizer(self):
+        # Subword regularization is only available for the slow tokenizer.
+        tokenizer = self.tokenizer_class(
+            SAMPLE_VOCAB, keep_accents=True, sp_model_kwargs={"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
+        )
+
+        self.assertTrue(TokenizerTesterMixin.does_subword_sampling(tokenizer))
+
+    def test_pickle_subword_regularization_tokenizer(self):
+        """Google pickle __getstate__ __setstate__ if you are struggling with this."""
+        # Subword regularization is only available for the slow tokenizer.
+        sp_model_kwargs = {"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
+        tokenizer = self.tokenizer_class(SAMPLE_VOCAB, keep_accents=True, sp_model_kwargs=sp_model_kwargs)
+        tokenizer_bin = pickle.dumps(tokenizer)
+        del tokenizer
+        tokenizer_new = pickle.loads(tokenizer_bin)
+
+        self.assertIsNotNone(tokenizer_new.sp_model_kwargs)
+        self.assertTrue(isinstance(tokenizer_new.sp_model_kwargs, dict))
+        self.assertEqual(tokenizer_new.sp_model_kwargs, sp_model_kwargs)
+        self.assertTrue(TokenizerTesterMixin.does_subword_sampling(tokenizer_new))
 
     @cached_property
     def big_tokenizer(self):
