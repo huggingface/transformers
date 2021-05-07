@@ -20,9 +20,12 @@ import warnings
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
 
 from ..configuration_utils import PretrainedConfig
+from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..file_utils import is_tf_available, is_torch_available
 from ..modelcard import ModelCard
-from ..models.auto.tokenization_auto import AutoTokenizer
+from ..models.auto.configuration_auto import AutoConfig
+from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
+from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import logging
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
@@ -40,6 +43,7 @@ from .base import (
 from .conversational import Conversation, ConversationalPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
+from .image_classification import ImageClassificationPipeline
 from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
 from .text2text_generation import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
@@ -79,6 +83,7 @@ if is_torch_available():
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         AutoModel,
         AutoModelForCausalLM,
+        AutoModelForImageClassification,
         AutoModelForMaskedLM,
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
@@ -198,6 +203,12 @@ SUPPORTED_TASKS = {
         "pt": AutoModelForCausalLM if is_torch_available() else None,
         "default": {"model": {"pt": "microsoft/DialoGPT-medium", "tf": "microsoft/DialoGPT-medium"}},
     },
+    "image-classification": {
+        "impl": ImageClassificationPipeline,
+        "tf": None,
+        "pt": AutoModelForImageClassification if is_torch_available() else None,
+        "default": {"model": {"pt": "google/vit-base-patch16-224"}},
+    },
 }
 
 
@@ -252,6 +263,7 @@ def pipeline(
     model: Optional = None,
     config: Optional[Union[str, PretrainedConfig]] = None,
     tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
+    feature_extractor: Optional[Union[str, PreTrainedFeatureExtractor]] = None,
     framework: Optional[str] = None,
     revision: Optional[str] = None,
     use_fast: bool = True,
@@ -309,6 +321,18 @@ def pipeline(
             :obj:`model` is not specified or not a string, then the default tokenizer for :obj:`config` is loaded (if
             it is a string). However, if :obj:`config` is also not given or not a string, then the default tokenizer
             for the given :obj:`task` will be loaded.
+        feature_extractor (:obj:`str` or :obj:`~transformers.PreTrainedFeatureExtractor`, `optional`):
+            The feature extractor that will be used by the pipeline to encode data for the model. This can be a model
+            identifier or an actual pretrained feature extractor inheriting from
+            :class:`~transformers.PreTrainedFeatureExtractor`.
+
+            Feature extractors are used for non-NLP models, such as Speech or Vision models as well as multi-modal
+            models. Multi-modal models will also require a tokenizer to be passed.
+
+            If not provided, the default feature extractor for the given :obj:`model` will be loaded (if it is a
+            string). If :obj:`model` is not specified or not a string, then the default feature extractor for
+            :obj:`config` is loaded (if it is a string). However, if :obj:`config` is also not given or not a string,
+            then the default feature extractor for the given :obj:`task` will be loaded.
         framework (:obj:`str`, `optional`):
             The framework to use, either :obj:`"pt"` for PyTorch or :obj:`"tf"` for TensorFlow. The specified framework
             must be installed.
@@ -359,19 +383,7 @@ def pipeline(
         # At that point framework might still be undetermined
         model = get_default_model(targeted_task, framework, task_options)
 
-    # Try to infer tokenizer from model or config name (if provided as str)
-    if tokenizer is None:
-        if isinstance(model, str):
-            tokenizer = model
-        elif isinstance(config, str):
-            tokenizer = config
-        else:
-            # Impossible to guest what is the right tokenizer here
-            raise Exception(
-                "Impossible to guess which tokenizer to use. "
-                "Please provided a PreTrainedTokenizer class or a path/identifier to a pretrained tokenizer."
-            )
-
+    model_name = model if isinstance(model, str) else None
     modelcard = None
     # Try to infer modelcard from model or config name (if provided as str)
     if isinstance(model, str):
@@ -387,19 +399,6 @@ def pipeline(
 
     # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
     model_kwargs["use_auth_token"] = model_kwargs.get("use_auth_token", use_auth_token)
-
-    # Instantiate tokenizer if needed
-    if isinstance(tokenizer, (str, tuple)):
-        if isinstance(tokenizer, tuple):
-            # For tuple we have (tokenizer name, {kwargs})
-            use_fast = tokenizer[1].pop("use_fast", use_fast)
-            tokenizer = AutoTokenizer.from_pretrained(
-                tokenizer[0], use_fast=use_fast, revision=revision, _from_pipeline=task, **tokenizer[1]
-            )
-        else:
-            tokenizer = AutoTokenizer.from_pretrained(
-                tokenizer, revision=revision, use_fast=use_fast, _from_pipeline=task, **model_kwargs
-            )
 
     # Instantiate config if needed
     if isinstance(config, str):
@@ -434,6 +433,61 @@ def pipeline(
             model, config=config, revision=revision, _from_pipeline=task, **model_kwargs
         )
 
+    model_config = model.config
+
+    load_tokenizer = type(model_config) in TOKENIZER_MAPPING
+    load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING
+
+    if load_tokenizer:
+        # Try to infer tokenizer from model or config name (if provided as str)
+        if tokenizer is None:
+            if isinstance(model_name, str):
+                tokenizer = model_name
+            elif isinstance(config, str):
+                tokenizer = config
+            else:
+                # Impossible to guess what is the right tokenizer here
+                raise Exception(
+                    "Impossible to guess which tokenizer to use. "
+                    "Please provide a PreTrainedTokenizer class or a path/identifier to a pretrained tokenizer."
+                )
+
+        # Instantiate tokenizer if needed
+        if isinstance(tokenizer, (str, tuple)):
+            if isinstance(tokenizer, tuple):
+                # For tuple we have (tokenizer name, {kwargs})
+                use_fast = tokenizer[1].pop("use_fast", use_fast)
+                tokenizer_identifier = tokenizer[0]
+                tokenizer_kwargs = tokenizer[1]
+            else:
+                tokenizer_identifier = tokenizer
+                tokenizer_kwargs = model_kwargs
+
+            tokenizer = AutoTokenizer.from_pretrained(
+                tokenizer_identifier, revision=revision, use_fast=use_fast, _from_pipeline=task, **tokenizer_kwargs
+            )
+
+    if load_feature_extractor:
+        # Try to infer feature extractor from model or config name (if provided as str)
+        if feature_extractor is None:
+            if isinstance(model_name, str):
+                feature_extractor = model_name
+            elif isinstance(config, str):
+                feature_extractor = config
+            else:
+                # Impossible to guess what is the right feature_extractor here
+                raise Exception(
+                    "Impossible to guess which feature extractor to use. "
+                    "Please provide a PreTrainedFeatureExtractor class or a path/identifier "
+                    "to a pretrained feature extractor."
+                )
+
+        # Instantiate feature_extractor if needed
+        if isinstance(feature_extractor, (str, tuple)):
+            feature_extractor = AutoFeatureExtractor.from_pretrained(
+                feature_extractor, revision=revision, _from_pipeline=task, **model_kwargs
+            )
+
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:
             if key.startswith("translation"):
@@ -444,4 +498,16 @@ def pipeline(
                 )
                 break
 
-    return task_class(model=model, tokenizer=tokenizer, modelcard=modelcard, framework=framework, task=task, **kwargs)
+    if tokenizer is not None:
+        kwargs["tokenizer"] = tokenizer
+
+    if feature_extractor is not None:
+        kwargs["feature_extractor"] = feature_extractor
+
+    return task_class(
+        model=model,
+        modelcard=modelcard,
+        framework=framework,
+        task=task,
+        **kwargs,
+    )
