@@ -213,7 +213,7 @@ def create_train_state(
         def cross_entropy_loss(logits, labels):
             logits = nn.log_softmax(logits)
             xentropy = optax.softmax_cross_entropy(logits, onehot(labels, num_classes=num_labels))
-            return -jnp.mean(xentropy)
+            return jnp.mean(xentropy)
 
         return TrainState.create(
             apply_fn=model.__call__,
@@ -475,6 +475,7 @@ def main():
         train_start = time.time()
         train_metrics = []
         rng, input_rng, dropout_rng = jax.random.split(rng, 3)
+
         for batch in glue_data_collator(input_rng, train_dataset, train_batch_size):
             dropout_rngs = shard_prng_key(dropout_rng)
             state, metrics = p_train_step(state, batch, dropout_rngs)
@@ -484,6 +485,7 @@ def main():
 
         logger.info("  Evaluating...")
         rng, input_rng = jax.random.split(rng)
+
         for batch in glue_data_collator(input_rng, eval_dataset, eval_batch_size):
             labels = batch.pop("labels")
             predictions = p_eval_step(state, batch)
