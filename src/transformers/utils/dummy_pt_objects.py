@@ -376,6 +376,15 @@ class AutoModelForCausalLM:
         requires_backends(self, ["torch"])
 
 
+class AutoModelForImageClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class AutoModelForMaskedLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])

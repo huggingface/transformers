@@ -36,6 +36,7 @@ There are two categories of pipeline abstractions to be aware about:
     - :class:`~transformers.ZeroShotClassificationPipeline`
     - :class:`~transformers.Text2TextGenerationPipeline`
     - :class:`~transformers.TableQuestionAnsweringPipeline`
+    - :class:`~transformers.ImageClassificationPipeline`
 
 The pipeline abstraction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -76,6 +77,13 @@ FillMaskPipeline
 =======================================================================================================================
 
 .. autoclass:: transformers.FillMaskPipeline
+    :special-members: __call__
+    :members:
+
+ImageClassificationPipeline
+=======================================================================================================================
+
+.. autoclass:: transformers.ImageClassificationPipeline
     :special-members: __call__
     :members:
 

@@ -14,34 +14,26 @@
 # limitations under the License.
 """ AutoFeatureExtractor class. """
 
+import os
 from collections import OrderedDict
 
+from transformers import DeiTFeatureExtractor, Speech2TextFeatureExtractor, ViTFeatureExtractor
+
+from ... import DeiTConfig, PretrainedConfig, Speech2TextConfig, ViTConfig, Wav2Vec2Config
 from ...feature_extraction_utils import FeatureExtractionMixin
-from ...file_utils import is_speech_available, is_vision_available
-from ..wav2vec2.feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
-from .configuration_auto import replace_list_option_in_docstrings
-
-
-if is_speech_available():
-    from ..speech_to_text.feature_extraction_speech_to_text import Speech2TextFeatureExtractor
-else:
-    Speech2TextFeatureExtractor = None
-
-if is_vision_available():
-    from ..deit.feature_extraction_deit import DeiTFeatureExtractor
-    from ..vit.feature_extraction_vit import ViTFeatureExtractor
-else:
-    DeiTFeatureExtractor = None
-    ViTFeatureExtractor = None
-
 
 # Build the list of all feature extractors
+from ...file_utils import FEATURE_EXTRACTOR_NAME
+from ..wav2vec2.feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
+from .configuration_auto import AutoConfig, replace_list_option_in_docstrings
+
+
 FEATURE_EXTRACTOR_MAPPING = OrderedDict(
     [
-        ("deit", DeiTFeatureExtractor),
-        ("s2t", Speech2TextFeatureExtractor),
-        ("vit", ViTFeatureExtractor),
-        ("wav2vec2", Wav2Vec2FeatureExtractor),
+        (DeiTConfig, DeiTFeatureExtractor),
+        (Speech2TextConfig, Speech2TextFeatureExtractor),
+        (ViTConfig, ViTFeatureExtractor),
+        (Wav2Vec2Config, Wav2Vec2FeatureExtractor),
     ]
 )
 
@@ -89,7 +81,7 @@ class AutoFeatureExtractor:
                   :func:`~transformers.feature_extraction_utils.FeatureExtractionMixin.save_pretrained` method, e.g.,
                   ``./my_model_directory/``.
                 - a path or url to a saved feature extractor JSON `file`, e.g.,
-                  ``./my_model_directory/feature_extraction_config.json``.
+                  ``./my_model_directory/preprocessor_config.json``.
             cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
                 Path to a directory in which a downloaded pretrained model feature extractor should be cached if the
                 standard cache should not be used.
@@ -134,20 +126,29 @@ class AutoFeatureExtractor:
             >>> feature_extractor = AutoFeatureExtractor.from_pretrained('./test/saved_model/')
 
         """
+        config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
+
+        is_feature_extraction_file = os.path.isfile(pretrained_model_name_or_path)
+        is_directory = os.path.isdir(pretrained_model_name_or_path) and os.path.exists(
+            os.path.join(pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME)
+        )
+
+        if not is_feature_extraction_file and not is_directory:
+            if not isinstance(config, PretrainedConfig):
+                config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+
         kwargs["_from_auto"] = True
         config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
 
-        if "feature_extractor_type" in config_dict:
+        if type(config) in FEATURE_EXTRACTOR_MAPPING.keys():
+            return FEATURE_EXTRACTOR_MAPPING[type(config)].from_dict(config_dict, **kwargs)
+        elif "feature_extractor_type" in config_dict:
             feature_extractor_class = feature_extractor_class_from_name(config_dict["feature_extractor_type"])
             return feature_extractor_class.from_dict(config_dict, **kwargs)
-        else:
-            # Fallback: use pattern matching on the string.
-            for pattern, feature_extractor_class in FEATURE_EXTRACTOR_MAPPING.items():
-                if pattern in str(pretrained_model_name_or_path):
-                    return feature_extractor_class.from_dict(config_dict, **kwargs)
 
         raise ValueError(
             f"Unrecognized model in {pretrained_model_name_or_path}. Should have a `feature_extractor_type` key in "
-            "its feature_extraction_config.json, or contain one of the following strings "
+            f"its {FEATURE_EXTRACTOR_NAME}, or contain one of the following strings "
             f"in its name: {', '.join(FEATURE_EXTRACTOR_MAPPING.keys())}"
         )
