@@ -22,7 +22,7 @@ from os.path import abspath, dirname, join
 
 # allow having multiple repository checkouts and not needing to remember to rerun
 # 'pip install -e .[dev]' when switching between checkouts and running tests.
-git_repo_path = abspath(join(dirname(dirname(__file__)), "src"))
+git_repo_path = abspath(join(dirname(dirname(dirname(__file__))), "src"))
 sys.path.insert(1, git_repo_path)
 
 # silence FutureWarning warnings in tests since often we can't act on them until
