@@ -177,8 +177,8 @@ class QuestionAnsweringPipeline(Pipeline):
                 One or several context(s) associated with the question(s) (must be used in conjunction with the
                 :obj:`question` argument).
             topk (:obj:`int`, `optional`, defaults to 1):
-                The number of answers to return (will be chosen by order of likelihood). Note that we return less
-                 than topk answers if there are not enough options available within the context.
+                The number of answers to return (will be chosen by order of likelihood). Note that we return less than
+                topk answers if there are not enough options available within the context.
             doc_stride (:obj:`int`, `optional`, defaults to 128):
                 If the context is too long to fit with the question for the model, it will be split in several chunks
                 with some overlap. This argument controls the size of that overlap.
