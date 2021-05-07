@@ -257,8 +257,24 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
             ),
         )
 
+    def test_equivalence_pad_and_create_pixel_mask(self):
+        # Initialize feature_extractors
+        feature_extractor_1 = self.feature_extraction_class(**self.feat_extract_dict)
+        feature_extractor_2 = self.feature_extraction_class(do_resize=False, do_normalize=False)
+        # create random PyTorch tensors
+        image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False, torchify=True)
+        for image in image_inputs:
+            self.assertIsInstance(image, torch.Tensor)
+        
+        # Test whether the method "pad_and_return_pixel_mask" and calling the feature extractor return the same tensors
+        encoded_images_with_method = feature_extractor_1.pad_and_create_pixel_mask(image_inputs, return_tensors="pt")
+        encoded_images = feature_extractor_2(image_inputs, return_tensors="pt")
+
+        assert torch.allclose(encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], atol=1e-4)
+        assert torch.allclose(encoded_images_with_method["pixel_mask"], encoded_images["pixel_mask"], atol=1e-4)
+
     @slow
-    def test_call_pytorch_with_annotations_object_detection(self):
+    def test_call_pytorch_with_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
@@ -303,7 +319,7 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         assert torch.allclose(encoding["target"][0]["size"], expected_size)
 
     @slow
-    def test_call_pytorch_with_annotations_panoptic_segmentation(self):
+    def test_call_pytorch_with_coco_panoptic_annotations(self):
         # prepare image, target and masks_path
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt", "r") as f:

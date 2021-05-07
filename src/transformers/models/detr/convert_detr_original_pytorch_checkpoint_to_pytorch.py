@@ -22,7 +22,7 @@ import torch
 from PIL import Image
 
 import requests
-from transformers import DetrConfig, DetrFeatureExtractor, DetrForObjectDetection, DetrForPanopticSegmentation
+from transformers import DetrConfig, DetrFeatureExtractor, DetrForObjectDetection, DetrForSegmentation
 from transformers.utils import logging
 from transformers.utils.coco_classes import id2label
 
@@ -229,7 +229,7 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
                 val = state_dict.pop(key)
                 state_dict[prefix + key] = val
     # finally, create HuggingFace model and load state dict
-    model = DetrForPanopticSegmentation(config) if is_panoptic else DetrForObjectDetection(config)
+    model = DetrForSegmentation(config) if is_panoptic else DetrForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
     # verify our conversion

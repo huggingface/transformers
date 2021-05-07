@@ -93,6 +93,11 @@ Tips:
   library <https://github.com/rwightman/pytorch-image-models>`__. Initializing with a MobileNet backbone for example can be 
   done by setting the :obj:`backbone` attribute of :class:`~transformers.DetrConfig` to :obj:`"tf_mobilenetv3_small_075"`, 
   and then initializing :class:`~transformers.DetrForObjectDetection` with that config.
+- At inference time, DETR resizes the input images such that the shortest side is at least 800 pixels while the longest at most 
+  1333 pixels. One can use :class:`~transformers.DetrFeatureExtractor` to prepare images (and optional annotations in COCO format) 
+  for the model. Due to this, images in a batch can have different sizes. DETR solves this by padding images up to the largest 
+  size in a batch, and by creating a pixel mask that indicates which pixels are real/which are padding. Alternatively, one can also 
+  define a custom :obj:`collate_fn` in order to batch images together, using :meth:`~transformers.DetrFeatureExtractor.pad_and_create_pixel_mask`. 
 
 DetrConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -105,7 +110,7 @@ DetrFeatureExtractor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.DetrFeatureExtractor
-    :members: __call__
+    :members: __call__, pad_and_create_pixel_mask
 
 
 DetrModel

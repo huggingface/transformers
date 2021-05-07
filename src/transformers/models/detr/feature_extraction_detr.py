@@ -452,17 +452,16 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 - 0 for pixels that are padding (i.e. **masked**).
 
             return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
-                If set, will return tensors instead of list of python integers. Acceptable values are:
+                If set, will return tensors instead of NumPy arrays. Acceptable values are:
 
-                * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
                 * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
-                * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.s
-                * :obj:`'jax'`: Return JAX :obj:`jnp.ndarray` objects.
 
         Returns:
             :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
 
             - **pixel_values** -- Pixel values to be fed to a model.
+            - **pixel_mask** -- Pixel mask to be fed to a model (when :obj:`pad_and_return_pixel_mask=True` or if `"pixel_mask"` 
+              is in :obj:`self.model_input_names`).
         """
         # Input type checking for clearer error
 
@@ -624,28 +623,50 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 maxes[index] = max(maxes[index], item)
         return maxes
 
-    def pad_and_create_pixel_mask(self, tensor_list):
+    def pad_and_create_pixel_mask(self, 
+                                  pixel_values_list: List[torch.Tensor],
+                                  return_tensors: Optional[Union[str, TensorType]] = None):
         """
-        Pad images up to the largest image in a batch and create a corresponding pixel_mask.
-
-        Only supports PyTorch.
+        Pad images up to the largest image in a batch and create a corresponding :obj:`pixel_mask`.
 
         Args:
-            tensor_list (:obj:`List[torch.Tensor]`):
-                List of images to be padded. Each image should be a PyTorch tensor of shape (C, H, W).
-        """
-        max_size = self._max_by_axis([list(image.shape) for image in tensor_list])
-        batch_shape = [len(tensor_list)] + max_size
-        b, c, h, w = batch_shape
-        dtype = tensor_list[0].dtype
-        device = tensor_list[0].device
-        tensor = torch.zeros(batch_shape, dtype=dtype, device=device)
-        mask = torch.zeros((b, h, w), dtype=torch.bool, device=device)
-        for img, pad_img, m in zip(tensor_list, tensor, mask):
-            pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
-            m[: img.shape[1], : img.shape[2]] = True
+            pixel_values_list (:obj:`List[torch.Tensor]`):
+                List of images (pixel values) to be padded. Each image should be a tensor of shape (C, H, W).
+            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
+                If set, will return tensors instead of NumPy arrays. Acceptable values are:
 
-        return tensor, mask
+                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
+
+        Returns:
+            :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
+
+            - **pixel_values** -- Pixel values to be fed to a model.
+            - **pixel_mask** -- Pixel mask to be fed to a model (when :obj:`pad_and_return_pixel_mask=True` or if `"pixel_mask"` 
+              is in :obj:`self.model_input_names`).
+
+        """
+        for image in pixel_values_list:
+            print(type(image))
+        
+        max_size = self._max_by_axis([list(image.shape) for image in pixel_values_list])
+        c, h, w = max_size
+        padded_images = []
+        pixel_mask = []
+        for image in pixel_values_list:
+            # create padded image
+            padded_image = np.zeros((c, h, w), dtype=np.float32)
+            padded_image[: image.shape[0], : image.shape[1], : image.shape[2]] = np.copy(image)
+            padded_images.append(padded_image)
+            # create pixel mask
+            mask = np.zeros((h, w), dtype=np.int64)
+            mask[: image.shape[1], : image.shape[2]] = True
+            pixel_mask.append(mask)
+
+        # return as BatchFeature
+        data = {"pixel_values": padded_images, "pixel_mask": pixel_mask}
+        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
+
+        return encoded_inputs
 
     # POSTPROCESSING METHODS
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/detr.py#L258
