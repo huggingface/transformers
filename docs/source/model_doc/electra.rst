@@ -54,7 +54,8 @@ Tips:
   :class:`~transformers.ElectraForPreTraining` model (the classification head will be randomly initialized as it
   doesn't exist in the generator).
 
-The original code can be found `here <https://github.com/google-research/electra>`__.
+This model was contributed by `lysandre <https://huggingface.co/lysandre>`__. The original code can be found `here
+<https://github.com/google-research/electra>`__.
 
 
 ElectraConfig
@@ -184,3 +185,52 @@ TFElectraForQuestionAnswering
 
 .. autoclass:: transformers.TFElectraForQuestionAnswering
     :members: call
+
+
+FlaxElectraModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxElectraModel
+    :members: __call__
+
+
+FlaxElectraForPreTraining
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxElectraForPreTraining
+    :members: __call__
+
+
+FlaxElectraForMaskedLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxElectraForMaskedLM
+    :members: __call__
+
+
+FlaxElectraForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxElectraForSequenceClassification
+    :members: __call__
+
+
+FlaxElectraForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxElectraForMultipleChoice
+    :members: __call__
+
+
+FlaxElectraForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxElectraForTokenClassification
+    :members: __call__
+
+
+FlaxElectraForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxElectraForQuestionAnswering
+    :members: __call__

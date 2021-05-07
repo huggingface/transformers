@@ -6,6 +6,7 @@ from collections import OrderedDict
 
 MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
+        ("BigBirdPegasusConfig", "BigBirdPegasusForQuestionAnswering"),
         ("BigBirdConfig", "BigBirdForQuestionAnswering"),
         ("ConvBertConfig", "ConvBertForQuestionAnswering"),
         ("LEDConfig", "LEDForQuestionAnswering"),
@@ -21,6 +22,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("BertConfig", "BertForQuestionAnswering"),
         ("XLNetConfig", "XLNetForQuestionAnsweringSimple"),
         ("FlaubertConfig", "FlaubertForQuestionAnsweringSimple"),
+        ("MegatronBertConfig", "MegatronBertForQuestionAnswering"),
         ("MobileBertConfig", "MobileBertForQuestionAnswering"),
         ("XLMConfig", "XLMForQuestionAnsweringSimple"),
         ("ElectraConfig", "ElectraForQuestionAnswering"),

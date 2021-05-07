@@ -682,7 +682,8 @@ The `mbart-large-en-ro checkpoint <https://huggingface.co/facebook/mbart-large-e
 romanian translation.
 
 The `mbart-large-cc25 <https://huggingface.co/facebook/mbart-large-cc25>`_ checkpoint can be finetuned for other
-translation and summarization tasks, using code in ```examples/seq2seq/``` , but is not very useful without finetuning.
+translation and summarization tasks, using code in ```examples/pytorch/translation/``` , but is not very useful without
+finetuning.
 
 
 ProphetNet

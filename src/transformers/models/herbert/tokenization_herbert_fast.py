@@ -65,18 +65,28 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = HerbertTokenizer
 
-    def __init__(self, vocab_file, merges_file, tokenizer_file=None, **kwargs):
-
-        kwargs["cls_token"] = "<s>"
-        kwargs["unk_token"] = "<unk>"
-        kwargs["pad_token"] = "<pad>"
-        kwargs["mask_token"] = "<mask>"
-        kwargs["sep_token"] = "</s>"
+    def __init__(
+        self,
+        vocab_file,
+        merges_file,
+        tokenizer_file=None,
+        cls_token="<s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        mask_token="<mask>",
+        sep_token="</s>",
+        **kwargs
+    ):
 
         super().__init__(
             vocab_file,
             merges_file,
             tokenizer_file=tokenizer_file,
+            cls_token=cls_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            sep_token=sep_token,
             **kwargs,
         )
 
@@ -126,12 +136,9 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
             :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
         if already_has_special_tokens:
-            if token_ids_1 is not None:
-                raise ValueError(
-                    "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formatted with special tokens for the model."
-                )
-            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
+            return super().get_special_tokens_mask(
+                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+            )
 
         if token_ids_1 is None:
             return [1] + ([0] * len(token_ids_0)) + [1]

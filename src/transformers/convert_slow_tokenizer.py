@@ -24,7 +24,7 @@ from typing import Dict, List, Tuple
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
-from .file_utils import requires_protobuf, requires_sentencepiece
+from .file_utils import requires_backends
 
 
 class SentencePieceExtractor:
@@ -33,7 +33,7 @@ class SentencePieceExtractor:
     """
 
     def __init__(self, model: str):
-        requires_sentencepiece(self)
+        requires_backends(self, "sentencepiece")
         from sentencepiece import SentencePieceProcessor
 
         self.sp = SentencePieceProcessor()
@@ -296,16 +296,48 @@ class RobertaConverter(Converter):
         return tokenizer
 
 
+class DebertaConverter(Converter):
+    def converted(self) -> Tokenizer:
+        ot = self.original_tokenizer
+        vocab = ot.encoder
+        merges = list(ot.bpe_ranks.keys())
+
+        tokenizer = Tokenizer(
+            BPE(
+                vocab=vocab,
+                merges=merges,
+                dropout=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="",
+                fuse_unk=False,
+            )
+        )
+
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=ot.add_prefix_space)
+        tokenizer.decoder = decoders.ByteLevel()
+        tokenizer.post_processor = processors.TemplateProcessing(
+            single="[CLS]:0 $A:0 [SEP]:0",
+            pair="[CLS]:0 $A:0 [SEP]:0 $B:0 [SEP]:0",
+            special_tokens=[
+                ("[CLS]", self.original_tokenizer.convert_tokens_to_ids("[CLS]")),
+                ("[SEP]", self.original_tokenizer.convert_tokens_to_ids("[SEP]")),
+            ],
+        )
+
+        return tokenizer
+
+
 class SpmConverter(Converter):
     def __init__(self, *args):
-        requires_protobuf(self)
+        requires_backends(self, "protobuf")
 
         super().__init__(*args)
 
         from .utils import sentencepiece_model_pb2 as model_pb2
 
         m = model_pb2.ModelProto()
-        m.ParseFromString(open(self.original_tokenizer.vocab_file, "rb").read())
+        with open(self.original_tokenizer.vocab_file, "rb") as f:
+            m.ParseFromString(f.read())
         self.proto = m
 
     def vocab(self, proto):
@@ -606,9 +638,17 @@ class PegasusConverter(SpmConverter):
         vocab = [
             (self.original_tokenizer.pad_token, 0.0),
             (self.original_tokenizer.eos_token, 0.0),
-            (self.original_tokenizer.mask_token_sent, 0.0),
-            (self.original_tokenizer.mask_token, 0.0),
         ]
+
+        if self.original_tokenizer.mask_token_sent is not None:
+            vocab += [(self.original_tokenizer.mask_token_sent, 0.0)]
+
+        if (
+            self.original_tokenizer.mask_token is not None
+            and self.original_tokenizer.mask_token_id < self.original_tokenizer.offset
+        ):
+            vocab += [(self.original_tokenizer.mask_token, 0.0)]
+
         vocab += [(f"<unk_{i}>", -100.0) for i in range(2, self.original_tokenizer.offset)]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[2:]]
         return vocab
@@ -669,6 +709,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "BigBirdTokenizer": BigBirdConverter,
     "CamembertTokenizer": CamembertConverter,
     "ConvBertTokenizer": BertConverter,
+    "DebertaTokenizer": DebertaConverter,
     "DistilBertTokenizer": BertConverter,
     "DPRReaderTokenizer": BertConverter,
     "DPRQuestionEncoderTokenizer": BertConverter,

@@ -21,14 +21,7 @@ from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
 
-from ...file_utils import (
-    cached_path,
-    is_datasets_available,
-    is_faiss_available,
-    is_remote_url,
-    requires_datasets,
-    requires_faiss,
-)
+from ...file_utils import cached_path, is_datasets_available, is_faiss_available, is_remote_url, requires_backends
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
 from .configuration_rag import RagConfig
@@ -241,7 +234,7 @@ class CanonicalHFIndex(HFIndexBase):
     Args:
         vector_size (:obj:`int`): the dimension of the passages embeddings used by the index
         dataset_name (:obj:`str`, optional, defaults to ``wiki_dpr``):
-            A datatset identifier of the indexed dataset on HuggingFace AWS bucket (list all available datasets and ids
+            A dataset identifier of the indexed dataset on HuggingFace AWS bucket (list all available datasets and ids
             with ``datasets.list_datasets()``).
         dataset_split (:obj:`str`, optional, defaults to ``train``)
             Which split of the ``dataset`` to load.
@@ -372,8 +365,7 @@ class RagRetriever:
 
     def __init__(self, config, question_encoder_tokenizer, generator_tokenizer, index=None, init_retrieval=True):
         self._init_retrieval = init_retrieval
-        requires_datasets(self)
-        requires_faiss(self)
+        requires_backends(self, ["datasets", "faiss"])
         super().__init__()
         self.index = index or self._build_index(config)
         self.generator_tokenizer = generator_tokenizer
@@ -411,8 +403,7 @@ class RagRetriever:
 
     @classmethod
     def from_pretrained(cls, retriever_name_or_path, indexed_dataset=None, **kwargs):
-        requires_datasets(cls)
-        requires_faiss(cls)
+        requires_backends(cls, ["datasets", "faiss"])
         config = kwargs.pop("config", None) or RagConfig.from_pretrained(retriever_name_or_path, **kwargs)
         rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path, config=config)
         question_encoder_tokenizer = rag_tokenizer.question_encoder
@@ -451,7 +442,7 @@ class RagRetriever:
 
     def init_retrieval(self):
         """
-        Retriever initalization function. It loads the index into memory.
+        Retriever initialization function. It loads the index into memory.
         """
 
         logger.info("initializing retrieval")

@@ -44,7 +44,8 @@ Tips:
   separate your segments with the separation token :obj:`tokenizer.sep_token` (or :obj:`</s>`)
 - :doc:`CamemBERT <camembert>` is a wrapper around RoBERTa. Refer to this page for usage examples.
 
-The original code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/roberta>`_.
+This model was contributed by `julien-c <https://huggingface.co/julien-c>`__. The original code can be found `here
+<https://github.com/pytorch/fairseq/tree/master/examples/roberta>`_.
 
 
 RobertaConfig
@@ -164,4 +165,39 @@ FlaxRobertaModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.FlaxRobertaModel
+    :members: __call__
+
+
+FlaxRobertaForMaskedLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxRobertaForMaskedLM
+    :members: __call__
+
+
+FlaxRobertaForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxRobertaForSequenceClassification
+    :members: __call__
+
+
+FlaxRobertaForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxRobertaForMultipleChoice
+    :members: __call__
+
+
+FlaxRobertaForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxRobertaForTokenClassification
+    :members: __call__
+
+
+FlaxRobertaForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxRobertaForQuestionAnswering
     :members: __call__

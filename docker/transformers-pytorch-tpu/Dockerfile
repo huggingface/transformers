@@ -53,7 +53,7 @@ RUN git clone https://github.com/huggingface/transformers.git && \
     git checkout CI && \
     cd .. && \
     pip install ./transformers && \
-    pip install -r ./transformers/examples/requirements.txt && \
+    pip install -r ./transformers/examples/pytorch/_test_requirements.txt && \
     pip install pytest
 
 RUN python -c "import torch_xla; print(torch_xla.__version__)"

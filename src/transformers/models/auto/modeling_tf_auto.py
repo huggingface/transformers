@@ -91,6 +91,7 @@ from ..flaubert.modeling_tf_flaubert import (
     TFFlaubertWithLMHeadModel,
 )
 from ..funnel.modeling_tf_funnel import (
+    TFFunnelBaseModel,
     TFFunnelForMaskedLM,
     TFFunnelForMultipleChoice,
     TFFunnelForPreTraining,
@@ -242,7 +243,7 @@ TF_MODEL_MAPPING = OrderedDict(
         (XLMConfig, TFXLMModel),
         (CTRLConfig, TFCTRLModel),
         (ElectraConfig, TFElectraModel),
-        (FunnelConfig, TFFunnelModel),
+        (FunnelConfig, (TFFunnelModel, TFFunnelBaseModel)),
         (DPRConfig, TFDPRQuestionEncoder),
         (MPNetConfig, TFMPNetModel),
         (BartConfig, TFBartModel),
@@ -468,7 +469,7 @@ TFAutoModelForPreTraining = auto_class_factory(
     "TFAutoModelForPreTraining", TF_MODEL_FOR_PRETRAINING_MAPPING, head_doc="pretraining"
 )
 
-# Private on puprose, the public class will add the deprecation warnings.
+# Private on purpose, the public class will add the deprecation warnings.
 _TFAutoModelWithLMHead = auto_class_factory(
     "TFAutoModelWithLMHead", TF_MODEL_WITH_LM_HEAD_MAPPING, head_doc="language modeling"
 )

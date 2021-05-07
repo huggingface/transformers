@@ -31,26 +31,26 @@ Example of use:
 
 .. code-block::
 
-  import torch
-  from transformers import AutoModel, AutoTokenizer
+    >>> import torch
+    >>> from transformers import AutoModel, AutoTokenizer
 
-  phobert = AutoModel.from_pretrained("vinai/phobert-base")
-  tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base")
+    >>> phobert = AutoModel.from_pretrained("vinai/phobert-base")
+    >>> tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base")
 
-  # INPUT TEXT MUST BE ALREADY WORD-SEGMENTED!
-  line = "Tôi là sinh_viên trường đại_học Công_nghệ ."
+    >>> # INPUT TEXT MUST BE ALREADY WORD-SEGMENTED!
+    >>> line = "Tôi là sinh_viên trường đại_học Công_nghệ ."
 
-  input_ids = torch.tensor([tokenizer.encode(line)])
+    >>> input_ids = torch.tensor([tokenizer.encode(line)])
 
-  with torch.no_grad():
-      features = phobert(input_ids)  # Models outputs are now tuples
+    >>> with torch.no_grad():
+    ...     features = phobert(input_ids)  # Models outputs are now tuples
 
-  ## With TensorFlow 2.0+:
-  # from transformers import TFAutoModel
-  # phobert = TFAutoModel.from_pretrained("vinai/phobert-base")
+    >>> # With TensorFlow 2.0+:
+    >>> # from transformers import TFAutoModel
+    >>> # phobert = TFAutoModel.from_pretrained("vinai/phobert-base")
 
 
-The original code can be found `here <https://github.com/VinAIResearch/PhoBERT>`__.
+    This model was contributed by `dqnguyen <https://huggingface.co/dqnguyen>`__. The original code can be found `here <https://github.com/VinAIResearch/PhoBERT>`__.
 
 PhobertTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
