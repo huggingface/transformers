@@ -721,7 +721,9 @@ class BigBirdPegasusStandaloneDecoderModelTester:
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-1)
+        # big bird has extremely high logits which requires
+        # such a high error tolerance here
+        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=5e-1)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
