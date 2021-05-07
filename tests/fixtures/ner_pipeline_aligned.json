@@ -1,0 +1,197 @@
+{
+    "first": [
+        {
+            "word": "THe",
+            "score": 0.929590046,
+            "index": 1,
+            "start": 0,
+            "end": 1,
+            "is_subword": false,
+            "entity": "O"
+        },
+        {
+            "word": "quasiamerican",
+            "score": 0.62320358,
+            "index": 4,
+            "start": 4,
+            "end": 9,
+            "is_subword": false,
+            "entity": "B-LOC"
+        },
+        {
+            "word": "Mark",
+            "score": 0.9833675,
+            "index": 8,
+            "start": 18,
+            "end": 22,
+            "is_subword": false,
+            "entity": "B-MISC"
+        },
+        {
+            "word": "Musterman",
+            "score": 0.998437107,
+            "index": 9,
+            "start": 23,
+            "end": 27,
+            "is_subword": false,
+            "entity": "I-MISC"
+        },
+        {
+            "word": "works",
+            "score": 0.99952888,
+            "index": 11,
+            "start": 33,
+            "end": 38,
+            "is_subword": false,
+            "entity": "O"
+        },
+        {
+            "word": "at",
+            "score": 0.99974287,
+            "index": 12,
+            "start": 39,
+            "end": 41,
+            "is_subword": false,
+            "entity": "O"
+        },
+        {
+            "word": "Madeuppity",
+            "score": 0.7194587,
+            "index": 13,
+            "start": 42,
+            "end": 46,
+            "is_subword": false,
+            "entity": "B-ORG"
+        }
+    ],
+    "max": [
+        {
+            "word": "THe",
+            "score": 0.96568632,
+            "index": 1,
+            "start": 0,
+            "end": 1,
+            "is_subword": false,
+            "entity": "O"
+        },
+        {
+            "word": "quasiamerican",
+            "score": 0.89459532,
+            "index": 4,
+            "start": 4,
+            "end": 9,
+            "is_subword": false,
+            "entity": "I-LOC"
+        },
+        {
+            "word": "Mark",
+            "score": 0.9833675,
+            "index": 8,
+            "start": 18,
+            "end": 22,
+            "is_subword": false,
+            "entity": "B-MISC"
+        },
+        {
+            "word": "Musterman",
+            "score": 0.998437107,
+            "index": 9,
+            "start": 23,
+            "end": 27,
+            "is_subword": false,
+            "entity": "I-MISC"
+        },
+        {
+            "word": "works",
+            "score": 0.99952888,
+            "index": 11,
+            "start": 33,
+            "end": 38,
+            "is_subword": false,
+            "entity": "O"
+        },
+        {
+            "word": "at",
+            "score": 0.99974287,
+            "index": 12,
+            "start": 39,
+            "end": 41,
+            "is_subword": false,
+            "entity": "O"
+        },
+        {
+            "word": "Madeuppity",
+            "score": 0.7194587,
+            "index": 13,
+            "start": 42,
+            "end": 46,
+            "is_subword": false,
+            "entity": "B-ORG"
+        }
+    ],
+    "average": [
+        {
+            "word": "THe",
+            "score": 0.821620602,
+            "index": 1,
+            "start": 0,
+            "end": 1,
+            "is_subword": false,
+            "entity": "O"
+        },
+        {
+            "word": "quasiamerican",
+            "score": 0.49670231500000006,
+            "index": 4,
+            "start": 4,
+            "end": 9,
+            "is_subword": false,
+            "entity": "I-LOC"
+        },
+        {
+            "word": "Mark",
+            "score": 0.9833675,
+            "index": 8,
+            "start": 18,
+            "end": 22,
+            "is_subword": false,
+            "entity": "B-MISC"
+        },
+        {
+            "word": "Musterman",
+            "score": 0.9982705734999999,
+            "index": 9,
+            "start": 23,
+            "end": 27,
+            "is_subword": false,
+            "entity": "I-MISC"
+        },
+        {
+            "word": "works",
+            "score": 0.99952888,
+            "index": 11,
+            "start": 33,
+            "end": 38,
+            "is_subword": false,
+            "entity": "O"
+        },
+        {
+            "word": "at",
+            "score": 0.99974287,
+            "index": 12,
+            "start": 39,
+            "end": 41,
+            "is_subword": false,
+            "entity": "O"
+        },
+        {
+            "word": "Madeuppity",
+            "score": 0.6232144095,
+            "index": 13,
+            "start": 42,
+            "end": 46,
+            "is_subword": false,
+            "entity": "B-ORG"
+        }
+    ]
+}

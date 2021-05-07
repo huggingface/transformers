@@ -1824,6 +1824,17 @@ class _BaseLazyModule(ModuleType):
         raise NotImplementedError
 
 
+class AggregationStrategy(ExplicitEnum):
+    """
+    Possible values for the ``aggregation_strategy`` argument in :meth:`TokenClassificationPipeline.__init__`. Useful
+    for tab-completion in an IDE.
+    """
+
+    FIRST = "first"
+    MAX = "max"
+    AVERAGE = "average"
+
+
 def copy_func(f):
     """Returns a copy of a function f."""
     # Based on http://stackoverflow.com/a/6528148/190597 (Glenn Maynard)
