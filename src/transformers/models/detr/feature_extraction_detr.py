@@ -645,8 +645,6 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
               is in :obj:`self.model_input_names`).
 
         """
-        for image in pixel_values_list:
-            print(type(image))
         
         max_size = self._max_by_axis([list(image.shape) for image in pixel_values_list])
         c, h, w = max_size
