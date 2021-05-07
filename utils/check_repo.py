@@ -35,6 +35,9 @@ PATH_TO_DOC = "docs/source"
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = [
     # models to ignore for not tested
+    "BigBirdPegasusEncoder",  # Building part of bigger (tested) model.
+    "BigBirdPegasusDecoder",  # Building part of bigger (tested) model.
+    "BigBirdPegasusDecoderWrapper",  # Building part of bigger (tested) model.
     "M2M100Encoder",  # Building part of bigger (tested) model.
     "M2M100Decoder",  # Building part of bigger (tested) model.
     "Speech2TextEncoder",  # Building part of bigger (tested) model.

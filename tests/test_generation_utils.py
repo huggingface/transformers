@@ -310,19 +310,18 @@ class GenerationTesterMixin:
         logits_processor.append(InfNanRemoveLogitsProcessor())
 
         with torch.no_grad():
-            with torch.no_grad():
-                output_sample = model.sample(
-                    input_ids_clone,
-                    attention_mask=attention_mask_clone,
-                    max_length=max_length,
-                    logits_processor=logits_processor,
-                    logits_warper=logits_warper,
-                    output_scores=output_scores,
-                    output_attentions=output_attentions,
-                    output_hidden_states=output_hidden_states,
-                    return_dict_in_generate=return_dict_in_generate,
-                    **kwargs,
-                )
+            output_sample = model.sample(
+                input_ids_clone,
+                attention_mask=attention_mask_clone,
+                max_length=max_length,
+                logits_processor=logits_processor,
+                logits_warper=logits_warper,
+                output_scores=output_scores,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict_in_generate=return_dict_in_generate,
+                **kwargs,
+            )
         return output_sample, output_generate
 
     def _beam_search_generate(
