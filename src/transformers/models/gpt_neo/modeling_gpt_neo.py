@@ -194,18 +194,24 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
     def __init__(self, attention_type, config):
         super().__init__()
 
-        max_positions = config.max_position_embeddings
-        self.register_buffer(
-            "bias",
-            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
-                1, 1, max_positions, max_positions
-            ),
-        )
-        self.register_buffer("masked_bias", torch.tensor(-1e9))
-
         self.window_size = None
+        max_positions = config.max_position_embeddings
+        bias = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
+            1, 1, max_positions, max_positions
+        ).bool()
+
         if attention_type == "local":
-            self.window_size = config.window_size
+            self.register_buffer(
+                "bias",
+                bias ^ torch.tril(bias, -config.window_size),
+            )
+        else:
+            self.register_buffer(
+                "bias",
+                bias,
+            )
+
+        self.register_buffer("masked_bias", torch.tensor(-1e9))
 
         self.attn_dropout = nn.Dropout(config.attention_dropout)
         self.resid_dropout = nn.Dropout(config.resid_dropout)
@@ -253,9 +259,7 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
             present = None
 
         query_length, key_length = query.size(-2), key.size(-2)
-        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
-        if self.window_size is not None:
-            causal_mask = (causal_mask ^ torch.tril(causal_mask, self.window_size))
+        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
 
         attn_output, attn_weights = self._attn(
             query, key, value, causal_mask, self.masked_bias, self.attn_dropout, attention_mask, head_mask
