@@ -23,6 +23,10 @@ from ..bart.configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartCo
 from ..bert.configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from ..bert_generation.configuration_bert_generation import BertGenerationConfig
 from ..big_bird.configuration_big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig
+from ..bigbird_pegasus.configuration_bigbird_pegasus import (
+    BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    BigBirdPegasusConfig,
+)
 from ..blenderbot.configuration_blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig
 from ..blenderbot_small.configuration_blenderbot_small import (
     BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -47,6 +51,7 @@ from ..ibert.configuration_ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBe
 from ..layoutlm.configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig
 from ..led.configuration_led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig
 from ..longformer.configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
+from ..luke.configuration_luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig
 from ..lxmert.configuration_lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig
 from ..m2m_100.configuration_m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
 from ..marian.configuration_marian import MarianConfig
@@ -85,7 +90,9 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     (key, value)
     for pretrained_map in [
         # Add archive maps here
+        BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -137,7 +144,9 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
+        ("bigbird_pegasus", BigBirdPegasusConfig),
         ("deit", DeiTConfig),
+        ("luke", LukeConfig),
         ("gpt_neo", GPTNeoConfig),
         ("big_bird", BigBirdConfig),
         ("speech_to_text", Speech2TextConfig),
@@ -195,7 +204,9 @@ CONFIG_MAPPING = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("bigbird_pegasus", "BigBirdPegasus"),
         ("deit", "DeiT"),
+        ("luke", "LUKE"),
         ("gpt_neo", "GPT Neo"),
         ("big_bird", "BigBird"),
         ("speech_to_text", "Speech2Text"),

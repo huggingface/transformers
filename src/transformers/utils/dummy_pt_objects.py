@@ -376,6 +376,15 @@ class AutoModelForCausalLM:
         requires_backends(self, ["torch"])
 
 
+class AutoModelForImageClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class AutoModelForMaskedLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -719,6 +728,50 @@ class BigBirdPreTrainedModel:
 
 def load_tf_weights_in_big_bird(*args, **kwargs):
     requires_backends(load_tf_weights_in_big_bird, ["torch"])
+
+
+BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class BigBirdPegasusForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class BigBirdPegasusForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class BigBirdPegasusForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class BigBirdPegasusForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class BigBirdPegasusModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -1736,6 +1789,42 @@ class LongformerModel:
 
 class LongformerSelfAttention:
     def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+LUKE_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class LukeForEntityClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LukeForEntityPairClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LukeForEntitySpanClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LukeModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LukePreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 

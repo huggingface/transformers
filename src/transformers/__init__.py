@@ -155,6 +155,10 @@ _import_structure = {
     "models.bert_japanese": ["BertJapaneseTokenizer", "CharacterTokenizer", "MecabTokenizer"],
     "models.bertweet": ["BertweetTokenizer"],
     "models.big_bird": ["BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP", "BigBirdConfig", "BigBirdTokenizer"],
+    "models.bigbird_pegasus": [
+        "BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BigBirdPegasusConfig",
+    ],
     "models.blenderbot": ["BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BlenderbotConfig", "BlenderbotTokenizer"],
     "models.blenderbot_small": [
         "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -189,6 +193,7 @@ _import_structure = {
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
+    "models.luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig", "LukeTokenizer"],
     "models.lxmert": ["LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LxmertConfig", "LxmertTokenizer"],
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config"],
     "models.marian": ["MarianConfig"],
@@ -239,6 +244,7 @@ _import_structure = {
         "CsvPipelineDataFormat",
         "FeatureExtractionPipeline",
         "FillMaskPipeline",
+        "ImageClassificationPipeline",
         "JsonPipelineDataFormat",
         "NerPipeline",
         "PipedPipelineDataFormat",
@@ -444,8 +450,8 @@ if is_torch_available():
     ]
     _import_structure["generation_utils"] = ["top_k_top_p_filtering"]
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
-    # PyTorch models structure
 
+    # PyTorch models structure
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -478,6 +484,7 @@ if is_torch_available():
             "MODEL_WITH_LM_HEAD_MAPPING",
             "AutoModel",
             "AutoModelForCausalLM",
+            "AutoModelForImageClassification",
             "AutoModelForMaskedLM",
             "AutoModelForMultipleChoice",
             "AutoModelForNextSentencePrediction",
@@ -540,6 +547,16 @@ if is_torch_available():
             "BigBirdModel",
             "BigBirdPreTrainedModel",
             "load_tf_weights_in_big_bird",
+        ]
+    )
+    _import_structure["models.bigbird_pegasus"].extend(
+        [
+            "BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BigBirdPegasusForCausalLM",
+            "BigBirdPegasusForConditionalGeneration",
+            "BigBirdPegasusForQuestionAnswering",
+            "BigBirdPegasusForSequenceClassification",
+            "BigBirdPegasusModel",
         ]
     )
     _import_structure["models.blenderbot"].extend(
@@ -751,6 +768,16 @@ if is_torch_available():
             "LongformerForTokenClassification",
             "LongformerModel",
             "LongformerSelfAttention",
+        ]
+    )
+    _import_structure["models.luke"].extend(
+        [
+            "LUKE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LukeForEntityClassification",
+            "LukeForEntityPairClassification",
+            "LukeForEntitySpanClassification",
+            "LukeModel",
+            "LukePreTrainedModel",
         ]
     )
     _import_structure["models.lxmert"].extend(
@@ -1392,7 +1419,29 @@ if is_flax_available():
             "FlaxBertPreTrainedModel",
         ]
     )
-    _import_structure["models.roberta"].append("FlaxRobertaModel")
+    _import_structure["models.electra"].extend(
+        [
+            "FlaxElectraForMaskedLM",
+            "FlaxElectraForMultipleChoice",
+            "FlaxElectraForPreTraining",
+            "FlaxElectraForQuestionAnswering",
+            "FlaxElectraForSequenceClassification",
+            "FlaxElectraForTokenClassification",
+            "FlaxElectraModel",
+            "FlaxElectraPreTrainedModel",
+        ]
+    )
+    _import_structure["models.roberta"].extend(
+        [
+            "FlaxRobertaForMaskedLM",
+            "FlaxRobertaForMultipleChoice",
+            "FlaxRobertaForQuestionAnswering",
+            "FlaxRobertaForSequenceClassification",
+            "FlaxRobertaForTokenClassification",
+            "FlaxRobertaModel",
+            "FlaxRobertaPreTrainedModel",
+        ]
+    )
 else:
     from .utils import dummy_flax_objects
 
@@ -1508,6 +1557,7 @@ if TYPE_CHECKING:
     from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
     from .models.bertweet import BertweetTokenizer
     from .models.big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig, BigBirdTokenizer
+    from .models.bigbird_pegasus import BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdPegasusConfig
     from .models.blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig, BlenderbotTokenizer
     from .models.blenderbot_small import (
         BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -1542,6 +1592,7 @@ if TYPE_CHECKING:
     from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
+    from .models.luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig, LukeTokenizer
     from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, LxmertTokenizer
     from .models.m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
     from .models.marian import MarianConfig
@@ -1591,6 +1642,7 @@ if TYPE_CHECKING:
         CsvPipelineDataFormat,
         FeatureExtractionPipeline,
         FillMaskPipeline,
+        ImageClassificationPipeline,
         JsonPipelineDataFormat,
         NerPipeline,
         PipedPipelineDataFormat,
@@ -1796,6 +1848,7 @@ if TYPE_CHECKING:
             MODEL_WITH_LM_HEAD_MAPPING,
             AutoModel,
             AutoModelForCausalLM,
+            AutoModelForImageClassification,
             AutoModelForMaskedLM,
             AutoModelForMultipleChoice,
             AutoModelForNextSentencePrediction,
@@ -1850,6 +1903,14 @@ if TYPE_CHECKING:
             BigBirdModel,
             BigBirdPreTrainedModel,
             load_tf_weights_in_big_bird,
+        )
+        from .models.bigbird_pegasus import (
+            BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BigBirdPegasusForCausalLM,
+            BigBirdPegasusForConditionalGeneration,
+            BigBirdPegasusForQuestionAnswering,
+            BigBirdPegasusForSequenceClassification,
+            BigBirdPegasusModel,
         )
         from .models.blenderbot import (
             BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -2023,6 +2084,14 @@ if TYPE_CHECKING:
             LongformerForTokenClassification,
             LongformerModel,
             LongformerSelfAttention,
+        )
+        from .models.luke import (
+            LUKE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LukeForEntityClassification,
+            LukeForEntityPairClassification,
+            LukeForEntitySpanClassification,
+            LukeModel,
+            LukePreTrainedModel,
         )
         from .models.lxmert import (
             LxmertEncoder,
@@ -2555,7 +2624,25 @@ if TYPE_CHECKING:
             FlaxBertModel,
             FlaxBertPreTrainedModel,
         )
-        from .models.roberta import FlaxRobertaModel
+        from .models.electra import (
+            FlaxElectraForMaskedLM,
+            FlaxElectraForMultipleChoice,
+            FlaxElectraForPreTraining,
+            FlaxElectraForQuestionAnswering,
+            FlaxElectraForSequenceClassification,
+            FlaxElectraForTokenClassification,
+            FlaxElectraModel,
+            FlaxElectraPreTrainedModel,
+        )
+        from .models.roberta import (
+            FlaxRobertaForMaskedLM,
+            FlaxRobertaForMultipleChoice,
+            FlaxRobertaForQuestionAnswering,
+            FlaxRobertaForSequenceClassification,
+            FlaxRobertaForTokenClassification,
+            FlaxRobertaModel,
+            FlaxRobertaPreTrainedModel,
+        )
     else:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.

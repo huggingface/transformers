@@ -59,6 +59,13 @@ from ..big_bird.modeling_big_bird import (
     BigBirdForTokenClassification,
     BigBirdModel,
 )
+from ..bigbird_pegasus.modeling_bigbird_pegasus import (
+    BigBirdPegasusForCausalLM,
+    BigBirdPegasusForConditionalGeneration,
+    BigBirdPegasusForQuestionAnswering,
+    BigBirdPegasusForSequenceClassification,
+    BigBirdPegasusModel,
+)
 from ..blenderbot.modeling_blenderbot import BlenderbotForCausalLM, BlenderbotForConditionalGeneration, BlenderbotModel
 from ..blenderbot_small.modeling_blenderbot_small import (
     BlenderbotSmallForCausalLM,
@@ -166,6 +173,7 @@ from ..longformer.modeling_longformer import (
     LongformerForTokenClassification,
     LongformerModel,
 )
+from ..luke.modeling_luke import LukeModel
 from ..lxmert.modeling_lxmert import LxmertForPreTraining, LxmertForQuestionAnswering, LxmertModel
 from ..m2m_100.modeling_m2m_100 import M2M100ForConditionalGeneration, M2M100Model
 from ..marian.modeling_marian import MarianForCausalLM, MarianModel, MarianMTModel
@@ -287,6 +295,7 @@ from .configuration_auto import (
     BertConfig,
     BertGenerationConfig,
     BigBirdConfig,
+    BigBirdPegasusConfig,
     BlenderbotConfig,
     BlenderbotSmallConfig,
     CamembertConfig,
@@ -308,6 +317,7 @@ from .configuration_auto import (
     LayoutLMConfig,
     LEDConfig,
     LongformerConfig,
+    LukeConfig,
     LxmertConfig,
     M2M100Config,
     MarianConfig,
@@ -342,7 +352,9 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
+        (BigBirdPegasusConfig, BigBirdPegasusModel),
         (DeiTConfig, DeiTModel),
+        (LukeConfig, LukeModel),
         (GPTNeoConfig, GPTNeoModel),
         (BigBirdConfig, BigBirdModel),
         (Speech2TextConfig, Speech2TextModel),
@@ -436,6 +448,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
+        (BigBirdPegasusConfig, BigBirdPegasusForConditionalGeneration),
         (GPTNeoConfig, GPTNeoForCausalLM),
         (BigBirdConfig, BigBirdForMaskedLM),
         (Speech2TextConfig, Speech2TextForConditionalGeneration),
@@ -482,6 +495,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Causal LM mapping
+        (BigBirdPegasusConfig, BigBirdPegasusForCausalLM),
         (GPTNeoConfig, GPTNeoForCausalLM),
         (BigBirdConfig, BigBirdForCausalLM),
         (CamembertConfig, CamembertForCausalLM),
@@ -554,6 +568,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        (BigBirdPegasusConfig, BigBirdPegasusForConditionalGeneration),
         (M2M100Config, M2M100ForConditionalGeneration),
         (LEDConfig, LEDForConditionalGeneration),
         (BlenderbotSmallConfig, BlenderbotSmallForConditionalGeneration),
@@ -574,6 +589,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        (BigBirdPegasusConfig, BigBirdPegasusForSequenceClassification),
         (BigBirdConfig, BigBirdForSequenceClassification),
         (ConvBertConfig, ConvBertForSequenceClassification),
         (LEDConfig, LEDForSequenceClassification),
@@ -611,6 +627,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
+        (BigBirdPegasusConfig, BigBirdPegasusForQuestionAnswering),
         (BigBirdConfig, BigBirdForQuestionAnswering),
         (ConvBertConfig, ConvBertForQuestionAnswering),
         (LEDConfig, LEDForQuestionAnswering),
