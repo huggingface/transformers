@@ -130,7 +130,7 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig", "VisualBertTokenizer"],
+    "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -314,7 +314,6 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
-    _import_structure["models.visual_bert"].append("VisualBertTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
@@ -908,16 +907,15 @@ if is_torch_available():
     _import_structure["models.visual_bert"].extend(
         [
             "VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "VisualBertForMaskedLM",
-            "VisualBertForCausalLM",
             "VisualBertForMultipleChoice",
-            "VisualBertForQuestionAnswering",
-            "VisualBertForSequenceClassification",
-            "VisualBertForTokenClassification",
+            "VisualBertForVQA",
+            "VisualBertForVQAAdvanced",
+            "VisualBertForNLVR",
+            "VisualBertForFlickr",
             "VisualBertLayer",
             "VisualBertModel",
             "VisualBertPreTrainedModel",
-            "load_tf_weights_in_visual_bert",
+            # "load_tf_weights_in_visual_bert",
         ]
     )
     _import_structure["models.speech_to_text"].extend(
@@ -1634,7 +1632,7 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
-    from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig, VisualBertTokenizer
+    from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -2247,12 +2245,11 @@ if TYPE_CHECKING:
         )
         from .models.visual_bert import (
             VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            VisualBertForCausalLM,
-            VisualBertForMaskedLM,
             VisualBertForMultipleChoice,
-            VisualBertForQuestionAnswering,
-            VisualBertForSequenceClassification,
-            VisualBertForTokenClassification,
+            VisualBertForVQA,
+            VisualBertForVQAAdvanced,
+            VisualBertForNLVR,
+            VisualBertForFlickr,
             VisualBertLayer,
             VisualBertModel,
             VisualBertPreTrainedModel,
