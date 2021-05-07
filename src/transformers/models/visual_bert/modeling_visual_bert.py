@@ -1502,7 +1502,7 @@ class VisualBertForVQA(VisualBertPreTrainedModel):
             output = (reshaped_logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return QuestionAnsweringModelOutput(  # TO-DO: Need to replace this with VQA Model Output, maybe
+        return SequenceClassifierOutput(  # TO-DO: Need to replace this with VQA Model Output, maybe
             loss=loss,
             logits=reshaped_logits,
             hidden_states=outputs.hidden_states,
@@ -1600,7 +1600,7 @@ class VisualBertForVQAAdvanced(VisualBertPreTrainedModel):
             output = (prediction_scores,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return QuestionAnsweringModelOutput(
+        return MaskedLMOutput(
             loss=loss,
             logits=prediction_scores,
             hidden_states=outputs.hidden_states,
@@ -1703,9 +1703,9 @@ class VisualBertForNLVR(VisualBertPreTrainedModel):
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return QuestionAnsweringModelOutput(  # TO-DO: Need to replace this with VQA Model Output, maybe
+        return SequenceClassifierOutput(  # TO-DO: Need to replace this with VQA Model Output, maybe
             loss=loss,
-            logits=logits,
+            logits=reshaped_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -1884,7 +1884,7 @@ class VisualBertForFlickr(VisualBertPreTrainedModel):
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return QuestionAnsweringModelOutput(  # TO-DO: Need to replace this with VQA Model Output, maybe
+        return SequenceClassifierOutput(  # TO-DO: Need to replace this with VQA Model Output, maybe
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
