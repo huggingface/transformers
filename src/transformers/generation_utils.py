@@ -546,6 +546,8 @@ class GenerationMixin:
     def _get_logits_processor(
         self,
         repetition_penalty: float,
+        repetition_penalty_range: int,
+        repetition_penalty_slope: float,
         no_repeat_ngram_size: int,
         encoder_no_repeat_ngram_size: int,
         encoder_input_ids: torch.LongTensor,
@@ -601,7 +603,7 @@ class GenerationMixin:
                 )
             )
         if repetition_penalty is not None and repetition_penalty != 1.0:
-            processors.append(RepetitionPenaltyLogitsProcessor(penalty=repetition_penalty))
+            processors.append(RepetitionPenaltyLogitsProcessor(penalty=repetition_penalty, m=repetition_penalty_slope, penalize_last=repetition_penalty_range))
         if no_repeat_ngram_size is not None and no_repeat_ngram_size > 0:
             processors.append(NoRepeatNGramLogitsProcessor(no_repeat_ngram_size))
         if encoder_no_repeat_ngram_size is not None and encoder_no_repeat_ngram_size > 0:
@@ -650,6 +652,8 @@ class GenerationMixin:
         top_k: Optional[int] = None,
         top_p: Optional[float] = None,
         repetition_penalty: Optional[float] = None,
+        repetition_penalty_range: Optional[int] = None,
+        repetition_penalty_slope: Optional[float] = 3.33,
         bad_words_ids: Optional[Iterable[int]] = None,
         bos_token_id: Optional[int] = None,
         pad_token_id: Optional[int] = None,
@@ -942,6 +946,8 @@ class GenerationMixin:
         # get distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
             repetition_penalty=repetition_penalty,
+            repetition_penalty_range=repetition_penalty_range,
+            repetition_penalty_slope=repetition_penalty_slope,
             no_repeat_ngram_size=no_repeat_ngram_size,
             encoder_no_repeat_ngram_size=encoder_no_repeat_ngram_size,
             encoder_input_ids=encoder_input_ids,
