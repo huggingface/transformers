@@ -76,6 +76,20 @@ class MBart50Tokenizer(PreTrainedTokenizer):
         mask_token (:obj:`str`, `optional`, defaults to :obj:`"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
+        sp_model_kwargs (:obj:`dict`, `optional`, defaults to :obj:`None`):
+            Will be passed to the ``SentencePieceProcessor.__init__()`` method. The `Python wrapper for SentencePiece
+            <https://github.com/google/sentencepiece/tree/master/python>`__ can be used, among other things, to set:
+
+            - ``enable_sampling``: Enable subword regularization.
+            - ``nbest_size``: Sampling parameters for unigram. Invalid for BPE-Dropout.
+
+              - ``nbest_size = {0,1}``: No sampling is performed.
+              - ``nbest_size > 1``: samples from the nbest_size results.
+              - ``nbest_size < 0``: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+                using forward-filtering-and-backward-sampling algorithm.
+
+            - ``alpha``: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+              BPE-dropout.
 
     Examples::
 
@@ -108,10 +122,13 @@ class MBart50Tokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
+        sp_model_kwargs=None,
         **kwargs
     ):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
+        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         super().__init__(
             src_lang=src_lang,
@@ -122,10 +139,11 @@ class MBart50Tokenizer(PreTrainedTokenizer):
             cls_token=cls_token,
             pad_token=pad_token,
             mask_token=mask_token,
+            sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
 
-        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(str(vocab_file))
         self.vocab_file = vocab_file
 
@@ -177,7 +195,12 @@ class MBart50Tokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d: Dict) -> None:
         self.__dict__ = d
-        self.sp_model = spm.SentencePieceProcessor()
+
+        # for backward compatibility
+        if not hasattr(self, "sp_model_kwargs"):
+            self.sp_model_kwargs = {}
+
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
     def get_vocab(self) -> Dict:
@@ -186,7 +209,7 @@ class MBart50Tokenizer(PreTrainedTokenizer):
         return vocab
 
     def _tokenize(self, text: str) -> List[str]:
-        return self.sp_model.EncodeAsPieces(text)
+        return self.sp_model.encode(text, out_type=str)
 
     def _convert_token_to_id(self, token: str) -> int:
         """Converts a token (str) in an id using the vocab."""
