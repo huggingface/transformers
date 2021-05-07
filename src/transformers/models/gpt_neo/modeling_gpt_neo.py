@@ -511,7 +511,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
         self.drop = nn.Dropout(config.embed_dropout)
-        self.h = nn.ModuleList([GPTNeoBlock(config, layer_id=i) for i in range(config.num_layers)])
+        self.h = nn.ModuleList([GPTNeoBlock(config, layer_id=i).half().cuda() for i in range(config.num_layers)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         self.init_weights()
@@ -705,8 +705,8 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.transformer = GPTNeoModel(config)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.transformer = GPTNeoModel(config).half().cuda()
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False).half().cuda()
 
         self.init_weights()
 
