@@ -1088,6 +1088,32 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         self.assertIsNotNone(encoder_hidden_states.grad)
         self.assertIsNotNone(encoder_attentions.grad)
 
+    def test_generate_with_head_masking(self):
+        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config = config_and_inputs[0]
+        max_length = config_and_inputs[1].shape[-1] + 3
+        model = ProphetNetForConditionalGeneration(config)
+
+        head_masking = {
+            "head_mask": torch.zeros(config.num_encoder_layers, config.num_encoder_attention_heads),
+            "decoder_head_mask": torch.zeros(config.num_decoder_layers, config.num_decoder_attention_heads),
+            "cross_attn_head_mask": torch.zeros(config.num_decoder_layers, config.num_decoder_attention_heads),
+        }
+
+        for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
+            out = model.generate(
+                config_and_inputs[1],
+                num_beams=1,
+                max_length=max_length,
+                output_attentions=True,
+                return_dict_in_generate=True,
+                **{name: mask},
+            )
+            # We check the state of decoder_attentions and cross_attentions just from the last step
+            attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
+            self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
+
 
 @require_torch
 class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
