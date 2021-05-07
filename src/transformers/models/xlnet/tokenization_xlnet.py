@@ -99,6 +99,20 @@ class XLNetTokenizer(PreTrainedTokenizer):
             modeling. This is the token which the model will try to predict.
         additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<eop>", "<eod>"]`):
             Additional special tokens used by the tokenizer.
+        sp_model_kwargs (:obj:`dict`, `optional`, defaults to :obj:`None`):
+            Will be passed to the ``SentencePieceProcessor.__init__()`` method. The `Python wrapper for SentencePiece
+            <https://github.com/google/sentencepiece/tree/master/python>`__ can be used, among other things, to set:
+
+            - ``enable_sampling``: Enable subword regularization.
+            - ``nbest_size``: Sampling parameters for unigram. Invalid for BPE-Dropout.
+
+              - ``nbest_size = {0,1}``: No sampling is performed.
+              - ``nbest_size > 1``: samples from the nbest_size results.
+              - ``nbest_size < 0``: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+                using forward-filtering-and-backward-sampling algorithm.
+
+            - ``alpha``: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+              BPE-dropout.
 
     Attributes:
         sp_model (:obj:`SentencePieceProcessor`):
@@ -124,10 +138,13 @@ class XLNetTokenizer(PreTrainedTokenizer):
         cls_token="<cls>",
         mask_token="<mask>",
         additional_special_tokens=["<eop>", "<eod>"],
+        sp_model_kwargs=None,
         **kwargs
     ):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
+        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         super().__init__(
             do_lower_case=do_lower_case,
@@ -141,6 +158,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
             cls_token=cls_token,
             mask_token=mask_token,
             additional_special_tokens=additional_special_tokens,
+            sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
 
@@ -151,7 +169,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         self.keep_accents = keep_accents
         self.vocab_file = vocab_file
 
-        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
 
     @property
@@ -170,7 +188,12 @@ class XLNetTokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d):
         self.__dict__ = d
-        self.sp_model = spm.SentencePieceProcessor()
+
+        # for backward compatibility
+        if not hasattr(self, "sp_model_kwargs"):
+            self.sp_model_kwargs = {}
+
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
     def preprocess_text(self, inputs):
@@ -188,14 +211,10 @@ class XLNetTokenizer(PreTrainedTokenizer):
 
         return outputs
 
-    def _tokenize(self, text, sample=False):
+    def _tokenize(self, text):
         """Tokenize a string."""
         text = self.preprocess_text(text)
-
-        if not sample:
-            pieces = self.sp_model.EncodeAsPieces(text)
-        else:
-            pieces = self.sp_model.SampleEncodeAsPieces(text, 64, 0.1)
+        pieces = self.sp_model.encode(text, out_type=str)
         new_pieces = []
         for piece in pieces:
             if len(piece) > 1 and piece[-1] == str(",") and piece[-2].isdigit():
