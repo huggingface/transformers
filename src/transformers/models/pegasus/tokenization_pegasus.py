@@ -111,7 +111,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
         offset=103,  # entries 2 - 104 are only used for pretraining
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs
-    ):
+    ) -> None:
         self.offset = offset
 
         if additional_special_tokens is not None:
