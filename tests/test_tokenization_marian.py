@@ -109,7 +109,7 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             f"{ORG_NAME}opus-mt-en-de", sp_model_kwargs={"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
         )
 
-        self.assertTrue(TokenizerTesterMixin.does_subword_sampling(tokenizer))
+        self.check_subword_sampling(tokenizer)
 
     def test_pickle_subword_regularization_tokenizer(self):
         """Google pickle __getstate__ __setstate__ if you are struggling with this."""

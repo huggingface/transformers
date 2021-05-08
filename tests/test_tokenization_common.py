@@ -1728,8 +1728,7 @@ class TokenizerTesterMixin:
             # add pad_token_id to pass subsequent tests
             tokenizer.add_special_tokens({"pad_token": "<PAD>"})
 
-    @staticmethod
-    def does_subword_sampling(tokenizer, default_text: str = None):
+    def check_subword_sampling(self, tokenizer, default_text: str = None):
         """
         Check if the tokenizer generates different results when subword regularization is enabled.
 
@@ -1745,11 +1744,16 @@ class TokenizerTesterMixin:
         # the list of different pairs of tokens_list
         combinations = itertools.combinations(tokens_list, 2)
 
+        # check of sampling is done
+        subword_sampling_found = False
         for combination in combinations:
             if combination[0] != combination[1]:
-                return True  # subword sampling found
+                subword_sampling_found = True
+        self.assertTrue(subword_sampling_found)
 
-        return False  # no subword sampling found
+        # check if converting back to original text works
+        for tokens in tokens_list:
+            self.assertEqual(tokenizer.convert_tokens_to_string(tokens), default_text)
 
     @require_torch
     @slow

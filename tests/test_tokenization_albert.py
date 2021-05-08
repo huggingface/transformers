@@ -156,7 +156,7 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             SAMPLE_VOCAB, sp_model_kwargs={"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
         )
 
-        self.assertTrue(TokenizerTesterMixin.does_subword_sampling(tokenizer))
+        self.check_subword_sampling(tokenizer)
 
     def test_pickle_subword_regularization_tokenizer(self):
         """Google pickle __getstate__ __setstate__ if you are struggling with this."""
@@ -170,4 +170,4 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertIsNotNone(tokenizer_new.sp_model_kwargs)
         self.assertTrue(isinstance(tokenizer_new.sp_model_kwargs, dict))
         self.assertEqual(tokenizer_new.sp_model_kwargs, sp_model_kwargs)
-        self.assertTrue(TokenizerTesterMixin.does_subword_sampling(tokenizer_new))
+        self.check_subword_sampling(tokenizer_new)
