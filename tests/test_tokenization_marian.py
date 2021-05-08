@@ -109,7 +109,7 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             f"{ORG_NAME}opus-mt-en-de", sp_model_kwargs={"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
         )
 
-        self.check_subword_sampling(tokenizer)
+        self.check_subword_sampling(tokenizer, skip_back_convert_check=True)
 
     def test_pickle_subword_regularization_tokenizer(self):
         """Google pickle __getstate__ __setstate__ if you are struggling with this."""
@@ -123,4 +123,4 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertIsNotNone(tokenizer_new.sp_model_kwargs)
         self.assertTrue(isinstance(tokenizer_new.sp_model_kwargs, dict))
         self.assertEqual(tokenizer_new.sp_model_kwargs, sp_model_kwargs)
-        self.check_subword_sampling(tokenizer_new)
+        self.check_subword_sampling(tokenizer_new, skip_back_convert_check=True)

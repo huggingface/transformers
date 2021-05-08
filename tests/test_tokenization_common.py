@@ -1728,18 +1728,26 @@ class TokenizerTesterMixin:
             # add pad_token_id to pass subsequent tests
             tokenizer.add_special_tokens({"pad_token": "<PAD>"})
 
-    def check_subword_sampling(self, tokenizer, default_text: str = None):
+    def check_subword_sampling(self, tokenizer, text: str = None, skip_back_convert_check=False):
         """
         Check if the tokenizer generates different results when subword regularization is enabled.
 
         Subword regularization augments training data with subword sampling.
         This has a random component.
+
+        Args:
+            tokenizer: The tokenizer to check.
+            text: The text to use for the checks.
+            skip_back_convert_check:
+                Option to skip the test if the tokens can be converted back to the original text.
+                This is useful for the Marian tokenizer which uses different tokenizers for
+                source and target language.
         """
-        default_text = "This is a test for subword regularization." if default_text is None else default_text
+        text = "This is a test for subword regularization." if text is None else text
 
         tokens_list = []
         for _ in range(5):
-            tokens_list.append(tokenizer.tokenize(default_text))
+            tokens_list.append(tokenizer.tokenize(text))
 
         # the list of different pairs of tokens_list
         combinations = itertools.combinations(tokens_list, 2)
@@ -1752,8 +1760,9 @@ class TokenizerTesterMixin:
         self.assertTrue(subword_sampling_found)
 
         # check if converting back to original text works
-        for tokens in tokens_list:
-            self.assertEqual(tokenizer.convert_tokens_to_string(tokens), default_text)
+        if not skip_back_convert_check:
+            for tokens in tokens_list:
+                self.assertEqual(tokenizer.convert_tokens_to_string(tokens), text)
 
     @require_torch
     @slow
