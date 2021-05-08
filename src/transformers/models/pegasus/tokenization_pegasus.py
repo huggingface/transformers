@@ -113,7 +113,6 @@ class PegasusTokenizer(PreTrainedTokenizer):
         **kwargs
     ) -> None:
         self.offset = offset
-
         if additional_special_tokens is not None:
             assert isinstance(
                 additional_special_tokens, list
