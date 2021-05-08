@@ -123,4 +123,4 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertIsNotNone(tokenizer_new.sp_model_kwargs)
         self.assertTrue(isinstance(tokenizer_new.sp_model_kwargs, dict))
         self.assertEqual(tokenizer_new.sp_model_kwargs, sp_model_kwargs)
-        self.assertTrue(TokenizerTesterMixin.does_subword_sampling(tokenizer_new))
+        self.check_subword_sampling(tokenizer_new)
