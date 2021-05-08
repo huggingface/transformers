@@ -103,7 +103,7 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertIsInstance(batch_smaller, BatchEncoding)
         self.assertEqual(batch_smaller.input_ids.shape, (2, 10))
 
-    def test_subword_regularization_tokenizer(self):
+    def test_subword_regularization_tokenizer(self) -> None:
         # Subword regularization is only available for the slow tokenizer.
         tokenizer = self.tokenizer_class.from_pretrained(
             f"{ORG_NAME}opus-mt-en-de", sp_model_kwargs={"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
@@ -111,7 +111,7 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.check_subword_sampling(tokenizer, skip_back_convert_check=True)
 
-    def test_pickle_subword_regularization_tokenizer(self):
+    def test_pickle_subword_regularization_tokenizer(self) -> None:
         """Google pickle __getstate__ __setstate__ if you are struggling with this."""
         # Subword regularization is only available for the slow tokenizer.
         sp_model_kwargs = {"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}

@@ -150,7 +150,7 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             for expected, decoded in zip(expected_decoded_sequence, decoded_sequences):
                 self.assertEqual(expected, decoded)
 
-    def test_subword_regularization_tokenizer(self):
+    def test_subword_regularization_tokenizer(self) -> None:
         # Subword regularization is only available for the slow tokenizer.
         tokenizer = AlbertTokenizer(
             SAMPLE_VOCAB, sp_model_kwargs={"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
@@ -158,7 +158,7 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.check_subword_sampling(tokenizer, ignore_case=True)
 
-    def test_pickle_subword_regularization_tokenizer(self):
+    def test_pickle_subword_regularization_tokenizer(self) -> None:
         """Google pickle __getstate__ __setstate__ if you are struggling with this."""
         # Subword regularization is only available for the slow tokenizer.
         sp_model_kwargs = {"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}

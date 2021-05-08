@@ -90,7 +90,7 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         text = tokenizer.convert_tokens_to_string(tokens)
         self.assertEqual(text, "This is a test")
 
-    def test_subword_regularization_tokenizer(self):
+    def test_subword_regularization_tokenizer(self) -> None:
         # Subword regularization is only available for the slow tokenizer.
         tokenizer = self.get_tokenizer(
             sp_model_kwargs={"enable_sampling": True, "alpha": 0.1, "nbest_size": -1},
@@ -98,7 +98,7 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.check_subword_sampling(tokenizer)
 
-    def test_pickle_subword_regularization_tokenizer(self):
+    def test_pickle_subword_regularization_tokenizer(self) -> None:
         """Google pickle __getstate__ __setstate__ if you are struggling with this."""
         # Subword regularization is only available for the slow tokenizer.
         sp_model_kwargs = {"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}

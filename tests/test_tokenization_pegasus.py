@@ -97,7 +97,7 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         assert targets["input_ids"].shape == (2, 5)
         assert len(batch) == 2  # input_ids, attention_mask.
 
-    def test_subword_regularization_tokenizer(self):
+    def test_subword_regularization_tokenizer(self) -> None:
         # Subword regularization is only available for the slow tokenizer.
         tokenizer = self.tokenizer_class.from_pretrained(
             "google/pegasus-large", sp_model_kwargs={"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
@@ -105,7 +105,7 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.check_subword_sampling(tokenizer)
 
-    def test_pickle_subword_regularization_tokenizer(self):
+    def test_pickle_subword_regularization_tokenizer(self) -> None:
         """Google pickle __getstate__ __setstate__ if you are struggling with this."""
         # Subword regularization is only available for the slow tokenizer.
         sp_model_kwargs = {"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
