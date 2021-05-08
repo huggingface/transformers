@@ -1728,8 +1728,7 @@ class TokenizerTesterMixin:
             # add pad_token_id to pass subsequent tests
             tokenizer.add_special_tokens({"pad_token": "<PAD>"})
 
-    def check_subword_sampling(self, tokenizer, text: str = None, skip_back_convert_check=False,
-                               ignore_case=False):
+    def check_subword_sampling(self, tokenizer, text: str = None, skip_back_convert_check=False, ignore_case=False):
         """
         Check if the tokenizer generates different results when subword regularization is enabled.
 
