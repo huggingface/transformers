@@ -1728,7 +1728,8 @@ class TokenizerTesterMixin:
             # add pad_token_id to pass subsequent tests
             tokenizer.add_special_tokens({"pad_token": "<PAD>"})
 
-    def check_subword_sampling(self, tokenizer, text: str = None, skip_back_convert_check=False):
+    def check_subword_sampling(self, tokenizer, text: str = None, skip_back_convert_check=False,
+                               ignore_case=False):
         """
         Check if the tokenizer generates different results when subword regularization is enabled.
 
@@ -1742,6 +1743,7 @@ class TokenizerTesterMixin:
                 Option to skip the test if the tokens can be converted back to the original text.
                 This is useful for the Marian tokenizer which uses different tokenizers for
                 source and target language.
+            ignore_case Ignore the case when comparing tokeinzer results.
         """
         text = "This is a test for subword regularization." if text is None else text
 
@@ -1762,7 +1764,10 @@ class TokenizerTesterMixin:
         # check if converting back to original text works
         if not skip_back_convert_check:
             for tokens in tokens_list:
-                self.assertEqual(tokenizer.convert_tokens_to_string(tokens), text)
+                if ignore_case:
+                    self.assertEqual(text.lower(), tokenizer.convert_tokens_to_string(tokens).lower())
+                else:
+                    self.assertEqual(text, tokenizer.convert_tokens_to_string(tokens))
 
     @require_torch
     @slow
