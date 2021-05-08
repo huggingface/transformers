@@ -631,15 +631,19 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
         hidden_states = hidden_states + position_embeddings
         hidden_states = self.dropout(hidden_states)
 
+        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+
         for layer in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = np.random.uniform(0, 1)
-            if self.training and (dropout_probability < self.config.layerdrop):  # skip the layer
-                layer_outputs = (None, None)
-            else:
+
+            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
+            if not skip_the_layer or deepspeed_zero3_is_enabled:
+                # under deepspeed zero3 all gpus must run in sync
+                # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
                 if getattr(self.config, "gradient_checkpointing", False) and self.training:
                     # create gradient checkpointing function
                     def create_custom_forward(module):
@@ -658,6 +662,9 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
                         hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
                     )
                 hidden_states = layer_outputs[0]
+
+            if skip_the_layer:
+                layer_outputs = (None, None)
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
