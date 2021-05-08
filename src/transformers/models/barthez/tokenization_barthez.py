@@ -17,7 +17,7 @@
 
 import os
 from shutil import copyfile
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
@@ -124,7 +124,7 @@ class BarthezTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        sp_model_kwargs=None,
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs
     ):
         # Mask token behave like a normal word, i.e. include the space before it
@@ -237,7 +237,7 @@ class BarthezTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def _tokenize(self, text):
+    def _tokenize(self, text: str) -> List[str]:
         return self.sp_model.encode(text, out_type=str)
 
     def _convert_token_to_id(self, token):

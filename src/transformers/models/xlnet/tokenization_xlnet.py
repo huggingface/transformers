@@ -18,7 +18,7 @@
 import os
 import unicodedata
 from shutil import copyfile
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
@@ -138,7 +138,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         cls_token="<cls>",
         mask_token="<mask>",
         additional_special_tokens=["<eop>", "<eod>"],
-        sp_model_kwargs=None,
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs
     ):
         # Mask token behave like a normal word, i.e. include the space before it
@@ -211,7 +211,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
 
         return outputs
 
-    def _tokenize(self, text):
+    def _tokenize(self, text: str) -> List[str]:
         """Tokenize a string."""
         text = self.preprocess_text(text)
         pieces = self.sp_model.encode(text, out_type=str)

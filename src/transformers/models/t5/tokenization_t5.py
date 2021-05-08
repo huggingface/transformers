@@ -19,7 +19,7 @@ import os
 import re
 import warnings
 from shutil import copyfile
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
@@ -114,7 +114,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         extra_ids=100,
         additional_special_tokens=None,
-        sp_model_kwargs=None,
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs
     ):
         # Add extra_ids to the special token list
@@ -257,7 +257,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
-    def _tokenize(self, text):
+    def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
         return self.sp_model.encode(text, out_type=str)
 

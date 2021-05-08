@@ -17,9 +17,10 @@
 
 import os
 from shutil import copyfile
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import sentencepiece as spm
+from google.protobuf.any_pb2 import Any
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
@@ -106,7 +107,7 @@ class BigBirdTokenizer(PreTrainedTokenizer):
         sep_token="[SEP]",
         mask_token="[MASK]",
         cls_token="[CLS]",
-        sp_model_kwargs=None,
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
@@ -162,7 +163,7 @@ class BigBirdTokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
-    def _tokenize(self, text):
+    def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
         return self.sp_model.encode(text, out_type=str)
 

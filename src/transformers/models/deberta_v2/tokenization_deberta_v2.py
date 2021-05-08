@@ -16,7 +16,7 @@
 
 import os
 import unicodedata
-from typing import Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as sp
 import six
@@ -106,7 +106,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         pad_token="[PAD]",
         cls_token="[CLS]",
         mask_token="[MASK]",
-        sp_model_kwargs=None,
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs
     ):
         sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
@@ -145,7 +145,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         vocab.update(self.get_added_vocab())
         return vocab
 
-    def _tokenize(self, text):
+    def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
         if self.do_lower_case:
             text = text.lower()

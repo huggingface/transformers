@@ -16,7 +16,9 @@
 import collections
 import os
 from shutil import copyfile
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
+
+from google.protobuf.any_pb2 import Any
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
@@ -131,7 +133,7 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
         pad_token="[PAD]",
         cls_token="[CLS]",
         mask_token="[MASK]",
-        sp_model_kwargs=None,
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
@@ -264,7 +266,7 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def _tokenize(self, text):
+    def _tokenize(self, text: str) -> str:
         return self.sp_model.encode(text, out_type=str)
 
     def _convert_token_to_id(self, token):

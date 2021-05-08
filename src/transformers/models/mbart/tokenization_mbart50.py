@@ -16,7 +16,7 @@
 import os
 from contextlib import contextmanager
 from shutil import copyfile
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
@@ -122,7 +122,7 @@ class MBart50Tokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        sp_model_kwargs=None,
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs
     ):
         # Mask token behave like a normal word, i.e. include the space before it

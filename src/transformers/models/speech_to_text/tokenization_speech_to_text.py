@@ -117,7 +117,7 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         do_lower_case=False,
         tgt_lang=None,
         lang_codes=None,
-        sp_model_kwargs=None,
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs

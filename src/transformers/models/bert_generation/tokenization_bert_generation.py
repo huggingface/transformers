@@ -17,7 +17,7 @@
 
 import os
 from shutil import copyfile
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
@@ -88,7 +88,7 @@ class BertGenerationTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         sep_token="<::::>",
-        sp_model_kwargs=None,
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
@@ -133,7 +133,7 @@ class BertGenerationTokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
-    def _tokenize(self, text):
+    def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
         return self.sp_model.encode(text, out_type=str)
 

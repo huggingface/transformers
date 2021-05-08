@@ -132,7 +132,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         sep_token="</s>",
         pad_token="<pad>",
         unk_token="<unk>",
-        sp_model_kwargs=None,
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
