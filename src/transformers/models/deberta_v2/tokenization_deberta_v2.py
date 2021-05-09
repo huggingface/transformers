@@ -275,7 +275,7 @@ class SPMTokenizer:
               BPE-dropout.
     """
 
-    def __init__(self, vocab_file, split_by_punct=False, sp_model_kwargs=None):
+    def __init__(self, vocab_file, split_by_punct=False, sp_model_kwargs: Optional[Dict[str, Any]] = None):
         self.split_by_punct = split_by_punct
         self.vocab_file = vocab_file
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
