@@ -2,7 +2,7 @@
 
 This branch has the following patches:
 
-* gpt-neo model is loaded directly on GPU to save system memory (Colab and 8GB+ VRAM only)
+* gpt-neo model is loaded directly on GPU to save system memory (Colab or 8GB+ VRAM only)
 * repetition_penalty has range and slope settings, so it doesn't penalize all tokens in the context window
 * no copy of the state dict is made while loading a pretrained model
 * local self attention implemented in a simple way
