@@ -257,12 +257,12 @@ from ..transfo_xl.modeling_transfo_xl import TransfoXLForSequenceClassification,
 
 # Add modeling imports here
 from ..visual_bert.modeling_visual_bert import (
+    VisualBertForFlickr,
     VisualBertForMultipleChoice,
+    VisualBertForNLVR,
     VisualBertForPreTraining,
     VisualBertForVQA,
     VisualBertForVQAAdvanced,
-    VisualBertForNLVR,
-    VisualBertForFlickr,
     VisualBertModel,
 )
 from ..vit.modeling_vit import ViTForImageClassification, ViTModel
@@ -454,7 +454,6 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (IBertConfig, IBertForMaskedLM),
         (DebertaConfig, DebertaForMaskedLM),
         (DebertaV2Config, DebertaV2ForMaskedLM),
-
     ]
 )
 

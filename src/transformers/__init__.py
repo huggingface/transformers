@@ -2243,18 +2243,17 @@ if TYPE_CHECKING:
             TransfoXLPreTrainedModel,
             load_tf_weights_in_transfo_xl,
         )
-        from .models.visual_bert import (
+        from .models.visual_bert import (  # load_tf_weights_in_visual_bert,
             VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VisualBertForFlickr,
             VisualBertForMultipleChoice,
+            VisualBertForNLVR,
+            VisualBertForPreTraining,
             VisualBertForVQA,
             VisualBertForVQAAdvanced,
-            VisualBertForNLVR,
-            VisualBertForFlickr,
             VisualBertLayer,
             VisualBertModel,
             VisualBertPreTrainedModel,
-            VisualBertForPreTraining,
-            # load_tf_weights_in_visual_bert,
         )
         from .models.vit import (
             VIT_PRETRAINED_MODEL_ARCHIVE_LIST,

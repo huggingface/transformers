@@ -44,18 +44,17 @@ if TYPE_CHECKING:
     from .configuration_visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
 
     if is_torch_available():
-        from .modeling_visual_bert import (
+        from .modeling_visual_bert import (  # load_tf_weights_in_visual_bert,
             VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VisualBertForFlickr,
             VisualBertForMultipleChoice,
+            VisualBertForNLVR,
+            VisualBertForPreTraining,
             VisualBertForVQA,
             VisualBertForVQAAdvanced,
-            VisualBertForNLVR,
-            VisualBertForFlickr,
             VisualBertLayer,
             VisualBertModel,
             VisualBertPreTrainedModel,
-            VisualBertForPreTraining,
-            # load_tf_weights_in_visual_bert,
         )
 
 
