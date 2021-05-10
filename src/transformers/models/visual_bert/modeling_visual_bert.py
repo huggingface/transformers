@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright Gunjan Chhablani and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -54,7 +54,7 @@ from .configuration_visual_bert import VisualBertConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "VisualBertConfig"
-_TOKENIZER_FOR_DOC = "VisualBertTokenizer"
+_TOKENIZER_FOR_DOC = "BertTokenizer"
 
 VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "gchhablani/visualbert-vqa",
@@ -228,8 +228,12 @@ class VisualBertEmbeddings(nn.Module):
         # TO-CHECK
         # if position_ids is None:
         #     position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
-        position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)
-        position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
+        if input_ids is not None:
+            position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)
+            position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
+        else:
+            position_ids = torch.arange(seq_length, dtype=torch.long, device=inputs_embeds.device)
+            position_ids = position_ids.unsqueeze(0).expand(input_shape)
 
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
@@ -862,7 +866,7 @@ VISUAL_BERT_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.VisualBertTokenizer`. See
+            Indices can be obtained using :class:`transformers.BertTokenizer`. See
             :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
@@ -967,7 +971,7 @@ class VisualBertModel(VisualBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="visual-bert-base-uncased",
+        checkpoint="visualbert-vqa-coco-pre",
         output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -980,6 +984,7 @@ class VisualBertModel(VisualBertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         visual_embeds=None,
+        visual_attention_mask=None,
         visual_token_type_ids=None,
         image_text_alignment=None,
         encoder_hidden_states=None,
@@ -1042,9 +1047,26 @@ class VisualBertModel(VisualBertPreTrainedModel):
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
+        if visual_embeds is not None:
+            visual_input_shape = visual_embeds.size()[:-1]
+            _, visual_seq_length = visual_input_shape
+            if visual_token_type_ids is None:
+                visual_token_type_ids = torch.zeros(
+                    visual_input_shape, dtype=torch.long, device=device
+                )
+
+            if visual_attention_mask is None:
+                visual_attention_mask = torch.ones(visual_input_shape, device=device)
+
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
+
+        # TO-CHECK : Whether input_shape+visual_input_shape is correct.
+        if visual_embeds is not None:
+            combined_attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
+            extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(combined_attention_mask, [batch_size, input_shape + visual_input_shape], device)
+        else:
+            extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, [batch_size, input_shape], device)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -1178,7 +1200,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         visual_token_type_ids=None,
         image_text_alignment=None,
         labels=None,
-        sentence_image_label=None,
+        sentence_image_labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1198,31 +1220,8 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
             Used to hide legacy arguments that have been deprecated.
 
         Returns:
-
-        Example::
-
-            >>> from transformers import VisualBertTokenizer, VisualBertForPreTraining
-            >>> import torch
-
-            >>> tokenizer = VisualBertTokenizer.from_pretrained('visual-bert-base-uncased')
-            >>> model = VisualBertForPreTraining.from_pretrained('visual-bert-base-uncased')
-
-            >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-            >>> outputs = model(**inputs)
-
-            >>> prediction_logits = outputs.prediction_logits
-            >>> seq_relationship_logits = outputs.seq_relationship_logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if visual_token_type_ids is None:
-            if visual_attention_mask is not None:
-                visual_token_type_ids = torch.zeros_like(
-                    visual_attention_mask, dtype=torch.long, device=visual_attention_mask.device
-                )
-
-        if visual_attention_mask is not None:
-            attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
 
         outputs = self.visual_bert(
             input_ids,
@@ -1232,6 +1231,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             visual_embeds=visual_embeds,
+            visual_attention_mask=visual_attention_mask,
             visual_token_type_ids=visual_token_type_ids,
             image_text_alignment=image_text_alignment,
             output_attentions=output_attentions,
@@ -1243,21 +1243,21 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         prediction_scores, seq_relationship_score = self.cls(sequence_output, pooled_output)
 
         total_loss = None
-        if labels is not None and sentence_image_label is not None:
+        if labels is not None and sentence_image_labels is not None:
             assert labels.size(-1) == attention_mask.size(
                 -1
-            ), f"The labels provided should have same sequence length as attention mask. Found labels with sequence length {labels.size(-1)}, expected {attention_mask.size(-1)}."
+            ) + visual_attention_mask.size(-1), f"The labels provided should have same sequence length as total attention mask. Found labels with sequence length {labels.size(-1)}, expected {attention_mask.size(-1)+ visual_attention_mask.size(-1)}."
 
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-            sentence_image_loss = loss_fct(seq_relationship_score.view(-1, 2), sentence_image_label.view(-1))
+            sentence_image_loss = loss_fct(seq_relationship_score.view(-1, 2), sentence_image_labels.view(-1))
             total_loss = masked_lm_loss + sentence_image_loss
 
         # TO-CHECK
-        if labels is not None and sentence_image_label is None:
+        if labels is not None and sentence_image_labels is None:
             assert labels.size(-1) == attention_mask.size(
                 -1
-            ), f"The labels provided should have same sequence length as attention mask. Found labels with sequence length {labels.size(-1)}, expected {attention_mask.size(-1)}."
+            ) + visual_attention_mask.size(-1), f"The labels provided should have same sequence length as total attention mask. Found labels with sequence length {labels.size(-1)}, expected {attention_mask.size(-1)+ visual_attention_mask.size(-1)}."
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             total_loss = masked_lm_loss
@@ -1319,7 +1319,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
     )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="visual-bert-base-uncased",
+        checkpoint="gchhablani/visualbert-vcr",
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1377,15 +1377,6 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
             else None
         )
 
-        if visual_token_type_ids is None:
-            if visual_attention_mask is not None:
-                visual_token_type_ids = torch.zeros_like(
-                    visual_attention_mask, dtype=torch.long, device=visual_attention_mask.device
-                )
-
-        if visual_attention_mask is not None:
-            attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
-
         outputs = self.visual_bert(
             input_ids,
             attention_mask=attention_mask,
@@ -1394,6 +1385,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             visual_embeds=visual_embeds,
+            visual_attention_mask=visual_attention_mask,
             visual_token_type_ids=visual_token_type_ids,
             image_text_alignment=image_text_alignment,
             output_attentions=output_attentions,
@@ -1442,13 +1434,11 @@ class VisualBertForVQA(VisualBertPreTrainedModel):
 
         self.init_weights()
 
-    # @add_start_docstrings_to_model_forward(
-    #     VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length")
-    # )
+    @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     # @add_code_sample_docstrings(
     #     tokenizer_class=_TOKENIZER_FOR_DOC,
-    #     checkpoint="visual-bert-base-uncased",
-    #     output_type=MultipleChoiceModelOutput,
+    #     checkpoint="gchhablani/visualbert-vqa",
+    #     output_type=SequenceClassifierOutput,
     #     config_class=_CONFIG_FOR_DOC,
     # )
     def forward(
@@ -1469,27 +1459,10 @@ class VisualBertForVQA(VisualBertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
-        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         index_to_gather = attention_mask.sum(1) - 2  # as in original code # need before concat
-
-        if visual_token_type_ids is None:
-            if visual_attention_mask is not None:
-                visual_token_type_ids = torch.zeros_like(
-                    visual_attention_mask, dtype=torch.long, device=visual_attention_mask.device
-                )
-
-        if visual_attention_mask is not None:
-            attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
 
         outputs = self.visual_bert(
             input_ids,
@@ -1499,6 +1472,7 @@ class VisualBertForVQA(VisualBertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             visual_embeds=visual_embeds,
+            visual_attention_mask=visual_attention_mask,
             visual_token_type_ids=visual_token_type_ids,
             image_text_alignment=image_text_alignment,
             output_attentions=output_attentions,
@@ -1542,26 +1516,24 @@ class VisualBertForVQA(VisualBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    VisualBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and
-    a softmax) e.g. for VCR tasks.
+    VisualBert Model with a MLM head on top e.g. for VQA tasks.
     """,
     VISUAL_BERT_START_DOCSTRING,
 )
 class VisualBertForVQAAdvanced(VisualBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.num_labels = config.num_labels
 
         self.visual_bert = VisualBertModel(config)
         self.cls = VisualBertPreTrainingHeads(config)
 
         self.init_weights()
 
-    # @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     # @add_code_sample_docstrings(
     #     tokenizer_class=_TOKENIZER_FOR_DOC,
-    #     checkpoint="visual-bert-base-uncased",
-    #     output_type=QuestionAnsweringModelOutput,
+    #     checkpoint="gchhablani/visualbert-vqa-pre",
+    #     output_type=MaskedLMOutput,
     #     config_class=_CONFIG_FOR_DOC,
     # )
     def forward(
@@ -1593,15 +1565,6 @@ class VisualBertForVQAAdvanced(VisualBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if visual_token_type_ids is None:
-            if visual_attention_mask is not None:
-                visual_token_type_ids = torch.zeros_like(
-                    visual_attention_mask, dtype=torch.long, device=visual_attention_mask.device
-                )
-
-        if visual_attention_mask is not None:
-            attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
-
         outputs = self.visual_bert(
             input_ids,
             attention_mask=attention_mask,
@@ -1610,6 +1573,7 @@ class VisualBertForVQAAdvanced(VisualBertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             visual_embeds=visual_embeds,
+            visual_attention_mask=visual_attention_mask,
             visual_token_type_ids=visual_token_type_ids,
             image_text_alignment=image_text_alignment,
             output_attentions=output_attentions,
@@ -1645,8 +1609,7 @@ class VisualBertForVQAAdvanced(VisualBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    VisualBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and
-    a softmax) e.g. for VCR tasks.
+    VisualBert Model with a sequence classification head on top (a linear layer on top of the pooled output) e.g. for NLVR tasks.
     """,
     VISUAL_BERT_START_DOCSTRING,
 )
@@ -1661,11 +1624,11 @@ class VisualBertForNLVR(VisualBertPreTrainedModel):
 
         self.init_weights()
 
-    # @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     # @add_code_sample_docstrings(
     #     tokenizer_class=_TOKENIZER_FOR_DOC,
-    #     checkpoint="visual-bert-base-uncased",
-    #     output_type=QuestionAnsweringModelOutput,
+    #     checkpoint="gchhablani/visualbert-nlvr2",
+    #     output_type=SequenceClassifierOutput,
     #     config_class=_CONFIG_FOR_DOC,
     # )
     def forward(
@@ -1697,15 +1660,6 @@ class VisualBertForNLVR(VisualBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if visual_token_type_ids is None:
-            if visual_attention_mask is not None:
-                visual_token_type_ids = torch.zeros_like(
-                    visual_attention_mask, dtype=torch.long, device=visual_attention_mask.device
-                )
-
-        if visual_attention_mask is not None:
-            attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
-
         outputs = self.visual_bert(
             input_ids,
             attention_mask=attention_mask,
@@ -1714,6 +1668,7 @@ class VisualBertForNLVR(VisualBertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             visual_embeds=visual_embeds,
+            visual_attention_mask=visual_attention_mask,
             visual_token_type_ids=visual_token_type_ids,
             image_text_alignment=image_text_alignment,
             output_attentions=output_attentions,
@@ -1795,15 +1750,13 @@ class FlickrAttention(nn.Module):
 
 @add_start_docstrings(
     """
-    VisualBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and
-    a softmax) e.g. for VCR tasks.
+    VisualBert Model with a MLM head and an attention layer on top e.g. for FLICKR tasks.
     """,
     VISUAL_BERT_START_DOCSTRING,
 )
 class VisualBertForFlickr(VisualBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.num_labels = config.num_labels
 
         self.visual_bert = VisualBertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -1812,11 +1765,11 @@ class VisualBertForFlickr(VisualBertPreTrainedModel):
 
         self.init_weights()
 
-    # @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     # @add_code_sample_docstrings(
     #     tokenizer_class=_TOKENIZER_FOR_DOC,
-    #     checkpoint="visual-bert-base-uncased",
-    #     output_type=QuestionAnsweringModelOutput,
+    #     checkpoint="gchhablani/visualbert-vqa-coco-pre",
+    #     output_type=SequenceClassifierOutput,
     #     config_class=_CONFIG_FOR_DOC,
     # )
     def forward(
@@ -1851,25 +1804,15 @@ class VisualBertForFlickr(VisualBertPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if visual_token_type_ids is None:
-            if visual_attention_mask is not None:
-                visual_token_type_ids = torch.zeros_like(
-                    visual_attention_mask, dtype=torch.long, device=visual_attention_mask.device
-                )
-
-        if visual_attention_mask is not None:
-            combined_attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
-        else:
-            combined_attention_mask = attention_mask
-
         outputs = self.visual_bert(
             input_ids,
-            attention_mask=combined_attention_mask,
+            attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             visual_embeds=visual_embeds,
+            visual_attention_mask=visual_attention_mask,
             visual_token_type_ids=visual_token_type_ids,
             image_text_alignment=image_text_alignment,
             output_attentions=output_attentions,
@@ -1887,7 +1830,7 @@ class VisualBertForFlickr(VisualBertPreTrainedModel):
         flickr_position = flickr_position * flickr_position_mask
 
         # Selected_positions = batch x selected position x dim
-        # TO-CHECK - If batched_index_selet is needed
+        # TO-CHECK - If batched_index_select is needed
         expanded_flickr_positions = flickr_position.unsqueeze(2).expand(
             flickr_position.size(0), flickr_position.size(1), sequence_output.size(2)
         )
