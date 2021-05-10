@@ -2555,7 +2555,7 @@ def top_k_top_p_filtering(
         if top_k > 0: keep only top k tokens with highest probability (top-k filtering).
         if top_p < 1.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
             Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
-        if top_p < 1.0: keep the top tokens according to tail free sampling.
+        if tfs < 1.0: keep the top tokens according to tail free sampling.
             Tail free sampling is described in: https://trentbrick.github.io/Tail-Free-Sampling/
         Make sure we keep at least min_tokens_to_keep per batch example in the output
     From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
