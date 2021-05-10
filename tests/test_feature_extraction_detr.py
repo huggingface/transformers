@@ -23,7 +23,7 @@ import numpy as np
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow
 
-from .test_feature_extraction_common import FeatureExtractionSavingTestMixin
+from .test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_inputs
 
 
 if is_torch_available():
@@ -71,36 +71,6 @@ class DetrFeatureExtractionTester(unittest.TestCase):
             "image_mean": self.image_mean,
             "image_std": self.image_std,
         }
-
-    def prepare_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-
-        assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
-
-        if equal_resolution:
-            image_inputs = []
-            for i in range(self.batch_size):
-                image_inputs.append(
-                    np.random.randint(
-                        255, size=(self.num_channels, self.max_resolution, self.max_resolution), dtype=np.uint8
-                    )
-                )
-        else:
-            image_inputs = []
-            for i in range(self.batch_size):
-                width, height = np.random.choice(np.arange(self.min_resolution, self.max_resolution), 2)
-                image_inputs.append(np.random.randint(255, size=(self.num_channels, width, height), dtype=np.uint8))
-
-        if not numpify and not torchify:
-            # PIL expects the channel dimension as last dimension
-            image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        if torchify:
-            image_inputs = [torch.from_numpy(x) for x in image_inputs]
-
-        return image_inputs
 
     def get_expected_values(self, image_inputs, batched=False):
         """
@@ -163,7 +133,7 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random PIL images
-        image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False)
+        image_inputs = prepare_inputs(self.feature_extract_tester, equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
 
@@ -195,7 +165,7 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random numpy tensors
-        image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False, numpify=True)
+        image_inputs = prepare_inputs(self.feature_extract_tester, equal_resolution=False, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
 
@@ -228,7 +198,7 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random PyTorch tensors
-        image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False, torchify=True)
+        image_inputs = prepare_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 
@@ -262,7 +232,7 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         feature_extractor_1 = self.feature_extraction_class(**self.feat_extract_dict)
         feature_extractor_2 = self.feature_extraction_class(do_resize=False, do_normalize=False)
         # create random PyTorch tensors
-        image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False, torchify=True)
+        image_inputs = prepare_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 
