@@ -64,7 +64,7 @@ encode the text and prepare the images. The following example shows how to get t
         >>> from PIL import Image
         >>> import requests
 
-        >>> from transformers import CLIPFeatureExtractor, CLIPTokenizer, CLIPModel
+        >>> from transformers import CLIPProcessor, CLIPModel
 
         >>> model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
         >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
