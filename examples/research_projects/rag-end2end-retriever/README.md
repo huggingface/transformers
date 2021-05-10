@@ -2,8 +2,8 @@
 Authors: @patrickvonplaten and @lhoestq
 
 
-The original RAG implementation is able to end-to-end train the question encoder, generator and context encoder. 
-This extension enables the end-to-end training of RAG including the retriever component. 
+The original RAG implementation is able to end-to-end train the question encoder and the generator. 
+This extension enables the end-to-end training of RAG including the context encoder in the retriever component. 
 Please read the [accompanying blog post](https://shamanesiri.medium.com/how-to-finetune-the-entire-rag-architecture-including-dpr-retriever-4b4385322552) for details on this implementation.
 
 The original RAG code has also been modified to work with the latest versions of pytorch lightning (version 1.2.10) and RAY (version ). All other implementation details remain the same as the [original RAG code](https://github.com/huggingface/transformers/tree/master/examples/research_projects/rag).
