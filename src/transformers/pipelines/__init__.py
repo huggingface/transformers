@@ -382,25 +382,7 @@ def pipeline(
         # At that point framework might still be undetermined
         model = get_default_model(targeted_task, framework, task_options)
 
-    # Try to infer tokenizer from model or config name (if provided as str)
-    if tokenizer is None:
-        if isinstance(model, str):
-            tokenizer = model
-        elif isinstance(config, str):
-            tokenizer = config
-        else:
-            # Impossible to guest what is the right tokenizer here
-            raise Exception(
-                "Impossible to guess which tokenizer to use. "
-                "Please provided a PreTrainedTokenizer class or a path/identifier to a pretrained tokenizer."
-            )
-
-    modelcard = None
-    # Try to infer modelcard from model or config name (if provided as str)
-    if isinstance(model, str):
-        modelcard = model
-    elif isinstance(config, str):
-        modelcard = config
+    model_name = model if isinstance(model, str) else None
 
     # Infer the framework form the model
     if framework is None:
