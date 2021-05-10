@@ -44,7 +44,7 @@ Usage
 
 CLIP is a multi-modal vision and language model. It can be used for image-text similarity and for zero-shot image
 classification. CLIP uses a ViT like transformer to get visual features and a causal language model to get the text
-features. Both the text and visual features are then projected to a latent space with similar dimentions. The dot
+features. Both the text and visual features are then projected to a latent space with identical dimension. The dot
 product between the projected image and text features is then used as a similar score.
 
 To feed images to the Transformer encoder, each image is split into a sequence of fixed-size non-overlapping patches,
@@ -52,8 +52,10 @@ which are then linearly embedded. A [CLS] token is added to serve as representat
 also add absolute position embeddings, and feed the resulting sequence of vectors to a standard Transformer encoder.
 The :class:`~transformers.CLIPFeatureExtractor` can be used to resize (or rescale) and normalize images for the model.
 
-The :class:`~transformers.CLIPTokenizer` is used to encode the text. The following example shows how to get the
-image-text similarity scores.
+The :class:`~transformers.CLIPTokenizer` is used to encode the text. The :class:`~transformers.CLIPProcessor` wraps
+:class:`~transformers.CLIPFeatureExtractor` and :class:`~transformers.CLIPTokenizer` into a single instance to both
+encode the text and prepare the images. The following example shows how to get the image-text similarity scores using
+:class:`~transformers.CLIPProcessor` and :class:`~transformers.CLIPModel`.
 
 
 .. code-block::
@@ -64,9 +66,8 @@ image-text similarity scores.
 
         >>> from transformers import CLIPFeatureExtractor, CLIPTokenizer, CLIPModel
 
-        >>> model = CLIPModel.from_pretrained("./hf_model_v2")
-        >>> tokenizer = CLIPTokenizer.from_pretrained("./hf_model_v2/")
-        >>> feature_extractor = CLIPFeatureExtractor.from_pretrained("./hf_model_v2/")
+        >>> model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+        >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
         >>> def prepare_img():
         ...    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -74,12 +75,11 @@ image-text similarity scores.
         ...    return im
         >>> image = prepare_img()
 
-        >>> image_inputs = feature_extractor(image, return_tensors="pt")
-        >>> text_inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+        >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True)
 
-        >>> outputs = model(**text_inputs, **image_inputs)
+        >>> outputs = model(**inputs)
         >>> logits_per_image = outputs.logits_per_image # this is the image-text similarity score
-        >>> probs = logits_per_image.softmax(dim=1) # we can take the softmax to get the label probs
+        >>> probs = logits_per_image.softmax(dim=1) # we can take the softmax to get the label probabilities
 
 
 This model was contributed by `<valhalla> <https://huggingface.co/valhalla>`__. The original code can be found `here
