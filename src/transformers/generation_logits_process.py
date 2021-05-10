@@ -181,6 +181,50 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         return scores
 
 
+class TailFreeSamplingLogitsWarper(LogitsWarper):
+    """
+    :class:`transformers.LogitsWarper` that performs tail free sampling according to:
+        https://trentbrick.github.io/Tail-Free-Sampling/#tail-free-sampling-algorithm
+
+    Args:
+        threshold (:obj:`float`):
+            This sets the threshold z. A reasonable value is 0.95.
+        filter_value (:obj:`float`, `optional`, defaults to :obj:`-float("Inf")`):
+            All filtered values will be set to this float value.
+    """
+
+    def __init__(self, threshold: float, filter_value: float = -float("inf")):
+        if not isinstance(threshold, float) or (threshold < 0 or threshold > 1.0):
+            raise ValueError(f"`threshold` has to be a float > 0 and < 1, but is {threshold}")
+
+        self.z = threshold
+        self.filter_value = filter_value
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        sorted_logits, sorted_indices = torch.sort(scores, descending=True)
+        d = sorted_logits.softmax(dim=-1)
+        d = d[..., 1:] - d[..., :-1]
+        d = d[..., 1:] - d[..., :-1]
+        d = d.abs()
+        d = d / d.sum(dim=-1)
+        cumulative_probs = d.cumsum(dim=-1)
+
+        # Remove tokens with cumulative top_p above the threshold (token with 0 are kept)
+        sorted_indices_to_remove = torch.zeros(sorted_indices.shape).bool().to(scores.device)
+        sorted_indices_to_remove[..., :-2] = (cumulative_probs > self.z)[..., :]
+
+        # Shift the indices to the right to keep also the first token above the threshold
+        #sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+
+        # Always keep the first token
+        sorted_indices_to_remove[..., 0] = 0
+
+        # scatter sorted tensors to original indexing
+        indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
+        scores = scores.masked_fill(indices_to_remove, self.filter_value)
+        return scores
+
+
 class TopPLogitsWarper(LogitsWarper):
     """
     :class:`transformers.LogitsWarper` that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <=
