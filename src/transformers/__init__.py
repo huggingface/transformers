@@ -244,6 +244,7 @@ _import_structure = {
         "CsvPipelineDataFormat",
         "FeatureExtractionPipeline",
         "FillMaskPipeline",
+        "ImageClassificationPipeline",
         "JsonPipelineDataFormat",
         "NerPipeline",
         "PipedPipelineDataFormat",
@@ -319,6 +320,7 @@ if is_tokenizers_available():
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
     _import_structure["models.bert"].append("BertTokenizerFast")
+    _import_structure["models.big_bird"].append("BigBirdTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
     _import_structure["models.deberta"].append("DebertaTokenizerFast")
     _import_structure["models.distilbert"].append("DistilBertTokenizerFast")
@@ -483,6 +485,7 @@ if is_torch_available():
             "MODEL_WITH_LM_HEAD_MAPPING",
             "AutoModel",
             "AutoModelForCausalLM",
+            "AutoModelForImageClassification",
             "AutoModelForMaskedLM",
             "AutoModelForMultipleChoice",
             "AutoModelForNextSentencePrediction",
@@ -1640,6 +1643,7 @@ if TYPE_CHECKING:
         CsvPipelineDataFormat,
         FeatureExtractionPipeline,
         FillMaskPipeline,
+        ImageClassificationPipeline,
         JsonPipelineDataFormat,
         NerPipeline,
         PipedPipelineDataFormat,
@@ -1709,6 +1713,7 @@ if TYPE_CHECKING:
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast
+        from .models.big_bird import BigBirdTokenizerFast
         from .models.camembert import CamembertTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.deberta import DebertaTokenizerFast
@@ -1845,6 +1850,7 @@ if TYPE_CHECKING:
             MODEL_WITH_LM_HEAD_MAPPING,
             AutoModel,
             AutoModelForCausalLM,
+            AutoModelForImageClassification,
             AutoModelForMaskedLM,
             AutoModelForMultipleChoice,
             AutoModelForNextSentencePrediction,
