@@ -265,7 +265,7 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
-        
+
         # Test whether the method "pad_and_return_pixel_mask" and calling the feature extractor return the same tensors
         encoded_images_with_method = feature_extractor_1.pad_and_create_pixel_mask(image_inputs, return_tensors="pt")
         encoded_images = feature_extractor_2(image_inputs, return_tensors="pt")

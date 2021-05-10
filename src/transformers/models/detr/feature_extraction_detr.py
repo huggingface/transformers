@@ -460,8 +460,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
 
             - **pixel_values** -- Pixel values to be fed to a model.
-            - **pixel_mask** -- Pixel mask to be fed to a model (when :obj:`pad_and_return_pixel_mask=True` or if `"pixel_mask"` 
-              is in :obj:`self.model_input_names`).
+            - **pixel_mask** -- Pixel mask to be fed to a model (when :obj:`pad_and_return_pixel_mask=True` or if
+              `"pixel_mask"` is in :obj:`self.model_input_names`).
         """
         # Input type checking for clearer error
 
@@ -623,9 +623,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 maxes[index] = max(maxes[index], item)
         return maxes
 
-    def pad_and_create_pixel_mask(self, 
-                                  pixel_values_list: List[torch.Tensor],
-                                  return_tensors: Optional[Union[str, TensorType]] = None):
+    def pad_and_create_pixel_mask(
+        self, pixel_values_list: List[torch.Tensor], return_tensors: Optional[Union[str, TensorType]] = None
+    ):
         """
         Pad images up to the largest image in a batch and create a corresponding :obj:`pixel_mask`.
 
@@ -641,11 +641,11 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
 
             - **pixel_values** -- Pixel values to be fed to a model.
-            - **pixel_mask** -- Pixel mask to be fed to a model (when :obj:`pad_and_return_pixel_mask=True` or if `"pixel_mask"` 
-              is in :obj:`self.model_input_names`).
+            - **pixel_mask** -- Pixel mask to be fed to a model (when :obj:`pad_and_return_pixel_mask=True` or if
+              `"pixel_mask"` is in :obj:`self.model_input_names`).
 
         """
-        
+
         max_size = self._max_by_axis([list(image.shape) for image in pixel_values_list])
         c, h, w = max_size
         padded_images = []
@@ -670,12 +670,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/detr.py#L258
     def post_process(self, outputs, target_sizes):
         """
-        Converts the output of :class:`~transformers.DetrForObjectDetection` into the format expected by the COCO api.
-
-        Only supports PyTorch.
+        Converts the output of :class:`~transformers.DetrForObjectDetection` into the format expected by the COCO api. Only supports PyTorch.
 
         Args:
-            outputs (:class:`~transformers.DetrForObjectDetection`):
+            outputs (:class:`~transformers.DetrObjectDetectionOutput`):
                 Raw outputs of the model.
             target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`, `optional`):
                 Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
@@ -705,9 +703,21 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     def post_process_segmentation(self, results, outputs, orig_target_sizes, max_target_sizes, threshold=0.5):
         """
         Converts the output of :class:`~transformers.DetrForSegmentation` into actual instance segmentation
-        predictions.
+        predictions. Only supports PyTorch.
 
-        Only supports PyTorch.
+        Args:
+            results:
+                ...
+            outputs (:class:`~transformers.DetrSegmentationOutput`):
+                Raw outputs of the model.
+            orig_target_sizes:
+                ...
+            max_target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`, `optional`):
+                Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
+                image size (before any data augmentation). For visualization, this should be the image size after data
+                augment, but before padding.
+            threshold:
+                ...
         """
 
         assert len(orig_target_sizes) == len(max_target_sizes)
@@ -728,12 +738,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/segmentation.py#L241
     def post_process_panoptic(self, outputs, processed_sizes, target_sizes=None, is_thing_map=None, threshold=0.85):
         """
-        Converts the output of :class:`~transformers.DetrForSegmentation` into actual panoptic predictions.
-
-        Only supports PyTorch.
+        Converts the output of :class:`~transformers.DetrForSegmentation` into actual panoptic predictions. Only supports PyTorch.
 
         Parameters:
-            outputs (:class:`~transformers.DetrForSegmentation`):
+            outputs (:class:`~transformers.DetrSegmentationOutput`):
                 Raw outputs of the model.
             processed_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)` or :obj:`List[Tuple]` of length :obj:`batch_size`):
                 Torch Tensor (or list) containing the size (h, w) of each image of the batch, i.e. the size after data

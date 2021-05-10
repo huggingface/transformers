@@ -88,7 +88,7 @@ class DetrObjectDetectionOutput(ModelOutput):
             bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
             scale-invariant IoU loss.
         loss_dict (:obj:`Dict`, `optional`):
-            A dictionary containing the individual losses.
+            A dictionary containing the individual losses. Useful for logging. 
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, num_classes + 1)`):
             Classification logits (including no-object) for all queries.
         pred_boxes (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, 4)`):
@@ -138,7 +138,7 @@ class DetrObjectDetectionOutput(ModelOutput):
 
 
 @dataclass
-class DetrForSegmentationOutput(DetrObjectDetectionOutput):
+class DetrSegmentationOutput(DetrObjectDetectionOutput):
     """
     This class adds one attribute to DetrObjectDetectionOutput, namely predicted masks.
 
@@ -778,20 +778,9 @@ class DetrEncoder(DetrPreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-        # if embed_tokens is not None:
-        #     self.embed_tokens = embed_tokens
-        # else:
-        #     self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
-
-        # self.embed_positions = DetrLearnedPositionalEmbedding(
-        #     config.max_position_embeddings,
-        #     embed_dim,
-        #     self.padding_idx,
-        # )
-
         self.layers = nn.ModuleList([DetrEncoderLayer(config) for _ in range(config.encoder_layers)])
 
-        # (Niels) in the original DETR, no layernorm is used for the Encoder, as "normalize_before" is set to False
+        # in the original DETR, no layernorm is used for the Encoder, as "normalize_before" is set to False by default there
 
         self.init_weights()
 
@@ -835,30 +824,7 @@ class DetrEncoder(DetrPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # retrieve input_ids and inputs_embeds
-        # if input_ids is not None and inputs_embeds is not None:
-        #     raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        # elif input_ids is not None:
-        #     input_shape = input_ids.size()
-        #     input_ids = input_ids.view(-1, input_shape[-1])
-        # elif inputs_embeds is not None:
-        #     input_shape = inputs_embeds.size()[:-1]
-        # else:
-        #     raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        # if inputs_embeds is None:
-        #     inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-
-        # embed_pos = self.embed_positions(input_shape)
-
-        # # add position embeddings
-        # hidden_states = inputs_embeds + embed_pos
-        # hidden_states = self.layernorm_embedding(hidden_states)
-        # hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
-
         hidden_states = inputs_embeds
-        # (Niels) comment out layernorm, see __init__ above
-        # hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # expand attention_mask
@@ -923,18 +889,6 @@ class DetrDecoder(DetrPreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        # don't think we need embed_tokens (output tokens) here, since we are just updating the query embeddings
-
-        # if embed_tokens is not None:
-        #     self.embed_tokens = embed_tokens
-        # else:
-        #     self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
-
-        # self.embed_positions = DetrLearnedPositionalEmbedding(
-        #     config.max_position_embeddings,
-        #     config.d_model,
-        #     self.padding_idx,
-        # )
         self.layers = nn.ModuleList([DetrDecoderLayer(config) for _ in range(config.decoder_layers)])
         # in DETR, the decoder uses layernorm after the last decoder layer output
         self.layernorm = nn.LayerNorm(config.d_model)
@@ -991,37 +945,11 @@ class DetrDecoder(DetrPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # (Niels) following lines are not required as DETR doesn't use input_ids and inputs_embeds
-        # retrieve input_ids and inputs_embeds
-        # if input_ids is not None and inputs_embeds is not None:
-        #     raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
-        # elif input_ids is not None:
-        #     input_shape = input_ids.size()
-        #     input_ids = input_ids.view(-1, input_shape[-1])
-        # elif inputs_embeds is not None:
-        #     input_shape = inputs_embeds.size()[:-1]
-        # else:
-        #     raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
-
-        # to do: should be updated, because no input_ids here
-        # if inputs_embeds is None:
-        #     inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-
-        # added this (Niels) to infer input_shape:
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
             input_shape = inputs_embeds.size()[:-1]
 
         combined_attention_mask = None
-        # (Niels): following lines are not required as DETR uses parallel decoding instead of autoregressive
-        # # create causal mask
-        # # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        # combined_attention_mask = None
-
-        # if input_shape[-1] > 1:
-        #     combined_attention_mask = _make_causal_mask(
-        #         input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
-        #     ).to(self.device)
 
         if attention_mask is not None and combined_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -1034,15 +962,7 @@ class DetrDecoder(DetrPreTrainedModel):
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
-        # (Niels): following lines are not required because adding position embeddings happens in DetrDecoderLayer
-        # embed positions
-        # positions = self.embed_positions(input_shape, past_key_values_length)
-
-        # hidden_states = inputs_embeds + positions
-        # hidden_states = self.layernorm_embedding(inputs_embeds)
-        # hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
-
-        # (Niels): added an optional list:
+        # optional intermediate hidden states
         intermediate = [] if self.config.auxiliary_loss else None
 
         # decoder layers
@@ -1424,7 +1344,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
 @add_start_docstrings(
     """
     DETR Model (consisting of a backbone and encoder-decoder Transformer) with a segmentation head on top, for tasks
-    such as COCO panoptic. 
+    such as COCO panoptic.
 
     """,
     DETR_START_DOCSTRING,
@@ -1443,7 +1363,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
         self.mask_head = DetrMaskHeadSmallConv(hidden_size + number_of_heads, [1024, 512, 256], hidden_size)
 
     @add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DetrForSegmentationOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=DetrSegmentationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values,
@@ -1615,7 +1535,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
                 output = (logits, pred_boxes, pred_masks) + decoder_outputs + encoder_outputs
             return ((loss, loss_dict) + output) if loss is not None else output
 
-        return DetrForSegmentationOutput(
+        return DetrSegmentationOutput(
             loss=loss,
             loss_dict=loss_dict,
             logits=logits,

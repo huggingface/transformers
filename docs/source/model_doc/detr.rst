@@ -55,12 +55,12 @@ than usual, but with a smaller :obj:`d_model` (which in NLP is typically 768 or 
 Next, this is sent through the encoder, outputting :obj:`encoder_hidden_states` of the same shape (you can consider
 these as image features). Next, so-called **object queries** are sent through the decoder. This is a tensor of shape
 :obj:`(batch_size, num_queries, d_model)`, with :obj:`num_queries` typically set to 100 and initialized with zeros.
-These input embeddings are learnt positional encodings that the authors refer to as object queries, and similarly to the 
-encoder, they are added to the input of each attention layer. Each object query will look for a particular object in the 
-image. The decoder updates these embeddings through multiple self-attention and encoder-decoder attention layers to output 
-:obj:`decoder_hidden_states` of the same shape: :obj:`(batch_size, num_queries, d_model)`. Next, two heads are added on top 
-for object detection: a linear layer for classifying each object query into one of the objects or "no object", and a MLP to 
-predict bounding boxes for each query.
+These input embeddings are learnt positional encodings that the authors refer to as object queries, and similarly to
+the encoder, they are added to the input of each attention layer. Each object query will look for a particular object
+in the image. The decoder updates these embeddings through multiple self-attention and encoder-decoder attention layers
+to output :obj:`decoder_hidden_states` of the same shape: :obj:`(batch_size, num_queries, d_model)`. Next, two heads
+are added on top for object detection: a linear layer for classifying each object query into one of the objects or "no
+object", and a MLP to predict bounding boxes for each query.
 
 The model is trained using a **bipartite matching loss**: so what we actually do is compare the predicted classes +
 bounding boxes of each of the N = 100 object queries to the ground truth annotations, padded up to the same length N
@@ -89,15 +89,70 @@ Tips:
   `num_boxes` variable in the `SetCriterion` class of `modeling_detr.py`. When training on multiple nodes, this should
   be set to the average number of target boxes across all nodes, as can be seen in the original implementation `here
   <https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/models/detr.py#L227-L232>`__.
-- :class:`~transformers.DetrForObjectDetection` can be initialized with any convolutional backbone available in the `timm 
-  library <https://github.com/rwightman/pytorch-image-models>`__. Initializing with a MobileNet backbone for example can be 
-  done by setting the :obj:`backbone` attribute of :class:`~transformers.DetrConfig` to :obj:`"tf_mobilenetv3_small_075"`, 
-  and then initializing :class:`~transformers.DetrForObjectDetection` with that config.
-- At inference time, DETR resizes the input images such that the shortest side is at least 800 pixels while the longest at most 
-  1333 pixels. One can use :class:`~transformers.DetrFeatureExtractor` to prepare images (and optional annotations in COCO format) 
-  for the model. Due to this, images in a batch can have different sizes. DETR solves this by padding images up to the largest 
-  size in a batch, and by creating a pixel mask that indicates which pixels are real/which are padding. Alternatively, one can also 
-  define a custom :obj:`collate_fn` in order to batch images together, using :meth:`~transformers.DetrFeatureExtractor.pad_and_create_pixel_mask`. 
+- :class:`~transformers.DetrForObjectDetection` can be initialized with any convolutional backbone available in the
+  `timm library <https://github.com/rwightman/pytorch-image-models>`__. Initializing with a MobileNet backbone for
+  example can be done by setting the :obj:`backbone` attribute of :class:`~transformers.DetrConfig` to
+  :obj:`"tf_mobilenetv3_small_075"`, and then initializing :class:`~transformers.DetrForObjectDetection` with that
+  config. Note that :class:`~transformers.DetrForSegmentation` does not support any timm backbone, as the mask head
+  depends on the intermediate feature maps from a ResNet. One would need to update the mask head in order to work with
+  a different backbone.
+- DETR resizes the input images such that the shortest side is at least a certain amount of pixels while the longest is
+  at most 1333 pixels. At training time, scale augmentation is used such that the shortest side is randomly set to at least 480 
+  and at most 800 pixels. At inference time, the shortest side is set to 800. One can use :class:`~transformers.DetrFeatureExtractor` 
+  to prepare images (and optional annotations in COCO format) for the model. Due to this resizing, images in a batch can have 
+  different sizes. DETR solves this by padding images up to the largest size in a batch, and by creating a pixel mask that indicates 
+  which pixels are real/which are padding. Alternatively, one can also define a custom :obj:`collate_fn` in order to batch images
+  together, using :meth:`~transformers.DetrFeatureExtractor.pad_and_create_pixel_mask`. 
+- The size of the images will determine the amount of memory being used, and will thus determine the :obj:`batch_size`. It is advised 
+  to use a batch size of 2 per GPU. See `this Github thread <https://github.com/facebookresearch/detr/issues/150>`__ for more info. 
+
+As a summary, consider the following table:
+
++---------------------------------------------+---------------------------------------------------------+----------------------------------------------------------------------+------------------------------------------------------------------------+
+| **Task**                                    | **Object detection**                                    | **Instance segmentation**                                            | **Panoptic segmentation**                                              |
++---------------------------------------------+---------------------------------------------------------+----------------------------------------------------------------------+------------------------------------------------------------------------+
+| **Description**                             | Predicting bounding boxes and class labels around       | Predicting masks around objects (i.e. instances) in an image         | Predicting masks around both objects (i.e. instances) as well as       |
+|                                             | objects in an image                                     |                                                                      | "stuff" (i.e. background things like trees and roads) in an image      |
++---------------------------------------------+---------------------------------------------------------+----------------------------------------------------------------------+------------------------------------------------------------------------+
+| **Model**                                   | :class:`~transformers.DetrForObjectDetection`           | :class:`~transformers.DetrForSegmentation`                           | :class:`~transformers.DetrForSegmentation`                             |
++---------------------------------------------+---------------------------------------------------------+----------------------------------------------------------------------+------------------------------------------------------------------------+
+| **Example dataset**                         | COCO detection                                          | COCO detection,                                                      | COCO panoptic                                                          |
+|                                             |                                                         | COCO panoptic                                                        |                                                                        |
++---------------------------------------------+---------------------------------------------------------+----------------------------------------------------------------------+------------------------------------------------------------------------+
+| **Format of annotations to provide to**     | {‘image_id’: int,                                       | {‘image_id’: int,                                                    | {‘file_name: str,                                                      |
+| :class:`~transformers.DetrFeatureExtractor` | ‘annotations’: List[Dict]}, each Dict being a COCO      | ‘annotations’: [List[Dict]] } (in case of COCO detection)            | ‘image_id: int,                                                        |
+|                                             | object annotation (containing keys "image_id",          |                                                                      | ‘segments_info’: List[Dict] }                                          |
+|                                             |                                                         | or                                                                   |                                                                        |
+|                                             |                                                         |                                                                      | and masks_path (path to directory containing PNG files of the masks)   |
+|                                             |                                                         | {‘file_name’: str,                                                   |                                                                        |
+|                                             |                                                         | ‘image_id’: int,                                                     |                                                                        |
+|                                             |                                                         | ‘segments_info’: List[Dict]} (in case of COCO panoptic)              |                                                                        |
++---------------------------------------------+---------------------------------------------------------+----------------------------------------------------------------------+------------------------------------------------------------------------+
+| **Postprocessing** (i.e. converting the     | :meth:`~transformers.DetrFeatureExtractor.post_process` | :meth:`~transformers.DetrFeatureExtractor.post_process_segmentation` | :meth:`~transformers.DetrFeatureExtractor.post_process_segmentation`,  |
+| output of the model to COCO API)            |                                                         |                                                                      | :meth:`~transformers.DetrFeatureExtractor.post_process_panoptic`       |
++---------------------------------------------+---------------------------------------------------------+----------------------------------------------------------------------+------------------------------------------------------------------------+
+| **evaluators**                              | :obj:`CocoEvaluator` with iou_types = “bbox”            | :obj:`CocoEvaluator` with iou_types = “bbox”, “segm”                 | :obj:`CocoEvaluator` with iou_tupes = “bbox, “segm”                    |
+|                                             |                                                         |                                                                      |                                                                        |
+|                                             |                                                         |                                                                      | :obj:`PanopticEvaluator`                                               |
++---------------------------------------------+---------------------------------------------------------+----------------------------------------------------------------------+------------------------------------------------------------------------+
+
+In short, one should prepare the data either in COCO detection or COCO panoptic format, then use :class:`~transformers.DetrFeatureExtractor` to create :obj:`pixel_values`, :obj:`pixel_mask` and optional :obj:`labels`,
+which can then be used to train (or fine-tune) a model. For evaluation, one should first convert the outputs of the model using one of the postprocessing methods of :class:`~transformers.DetrFeatureExtractor`.
+These can be be provided to either :obj:`CocoEvaluator` or :obj:`PanopticEvaluator`, which allow you to calculate metrics like mAP and PQ.  
+
+
+DETR specific outputs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.models.detr.modeling_detr.DetrModelOutput
+    :members:
+
+.. autoclass:: transformers.models.detr.modeling_detr.DetrObjectDetectionOutput
+    :members:
+
+.. autoclass:: transformers.models.detr.modeling_detr.DetrSegmentationOutput
+    :members:
+
 
 DetrConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -110,7 +165,7 @@ DetrFeatureExtractor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.DetrFeatureExtractor
-    :members: __call__, pad_and_create_pixel_mask
+    :members: __call__, pad_and_create_pixel_mask, post_process, post_process_segmentation, post_process_panoptic
 
 
 DetrModel

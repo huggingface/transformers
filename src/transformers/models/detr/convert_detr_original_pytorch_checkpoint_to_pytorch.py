@@ -178,7 +178,6 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
     is_panoptic = "panoptic" in model_name
     if is_panoptic:
         config.num_labels = 250
-        config.masks = True
     else:
         config.num_labels = 91
         config.id2label = id2label

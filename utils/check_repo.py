@@ -98,6 +98,7 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "CLIPVisionModel",
     "FlaxCLIPTextModel",
     "FlaxCLIPVisionModel",
+    "DetrForSegmentation",
     "DPRReader",
     "DPRSpanPredictor",
     "FlaubertForQuestionAnswering",

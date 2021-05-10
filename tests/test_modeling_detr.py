@@ -378,11 +378,15 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            
+
             if model_class.__name__ == "DetrForObjectDetection":
-                expected_shape = (self.model_tester.batch_size, self.model_tester.num_queries, self.model_tester.num_labels + 1)
+                expected_shape = (
+                    self.model_tester.batch_size,
+                    self.model_tester.num_queries,
+                    self.model_tester.num_labels + 1,
+                )
                 self.assertEqual(outputs.logits.shape, expected_shape)
-            
+
             self.assertTrue(outputs)
 
 
