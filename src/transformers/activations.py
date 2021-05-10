@@ -53,7 +53,7 @@ def gelu_fast(x):
 
 
 def quick_gelu(x):
-    x * torch.sigmoid(1.702 * x)
+    return x * torch.sigmoid(1.702 * x)
 
 
 def _silu_python(x):
