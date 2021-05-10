@@ -466,7 +466,7 @@ class CLIPModelTest(ModelTesterMixin, unittest.TestCase):
 
             try:
                 input_ids = inputs_dict["input_ids"]
-                pixel_values = inputs_dict["pixel_values"] # CLIP needs pixel_values
+                pixel_values = inputs_dict["pixel_values"]  # CLIP needs pixel_values
                 traced_model = torch.jit.trace(model, (input_ids, pixel_values))
             except RuntimeError:
                 self.fail("Couldn't trace module.")

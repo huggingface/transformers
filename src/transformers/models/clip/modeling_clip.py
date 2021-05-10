@@ -15,7 +15,7 @@
 """ PyTorch CLIP model. """
 
 
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -101,6 +101,12 @@ class CLIPOutput(ModelOutput):
     image_embeds: torch.FloatTensor = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
+
+    def to_tuple(self) -> Tuple[Any]:
+        return tuple(
+            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
+            for k in self.keys()
+        )
 
 
 class CLIPVisionEmbeddings(nn.Module):
@@ -956,5 +962,5 @@ class CLIPModel(CLIPPreTrainedModel):
             text_embeds=text_embeds,
             image_embeds=image_embeds,
             text_model_output=text_outputs,
-            vision_model_outputs=vision_outputs,
+            vision_model_output=vision_outputs,
         )
