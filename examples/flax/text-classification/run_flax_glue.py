@@ -482,7 +482,7 @@ def main():
         logger.info("  Evaluating...")
         rng, input_rng = jax.random.split(rng)
 
-        for batch in glue_eval_data_collator(input_rng, eval_dataset, eval_batch_size):
+        for batch in glue_eval_data_collator(eval_dataset, eval_batch_size):
             labels = batch.pop("labels")
             predictions = p_eval_step(state, batch)
             metric.add_batch(predictions=chain(*predictions), references=chain(*labels))
