@@ -16,6 +16,7 @@
 """ Finetuning a 🤗 Flax Transformers model for sequence classification on GLUE."""
 import argparse
 import logging
+import math
 import os
 import random
 import time
@@ -234,8 +235,8 @@ def create_learning_rate_fn(
     return schedule_fn
 
 
-def glue_data_collator(rng: PRNGKey, dataset: Dataset, batch_size: int):
-    """Returns batches of size `batch_size` from `dataset`, sharded over all local devices."""
+def glue_train_data_collator(rng: PRNGKey, dataset: Dataset, batch_size: int):
+    """Returns shuffled batches of size `batch_size` from truncated `train dataset`, sharded over all local devices."""
     steps_per_epoch = len(dataset) // batch_size
     perms = jax.random.permutation(rng, len(dataset))
     perms = perms[: steps_per_epoch * batch_size]  # Skip incomplete batch.
@@ -243,6 +244,18 @@ def glue_data_collator(rng: PRNGKey, dataset: Dataset, batch_size: int):
 
     for perm in perms:
         batch = dataset[perm]
+        batch = {k: jnp.array(v) for k, v in batch.items()}
+        batch = shard(batch)
+
+        yield batch
+
+
+def glue_eval_data_collator(dataset: Dataset, batch_size: int):
+    """Returns batches of size `batch_size` from `eval dataset`, sharded over all local devices."""
+    num_batches = math.ceil(len(dataset) / batch_size)
+
+    for i in range(num_batches):
+        batch = dataset[i * batch_size : (i + 1) * batch_size]
         batch = {k: jnp.array(v) for k, v in batch.items()}
         batch = shard(batch)
 
@@ -459,7 +472,7 @@ def main():
         train_metrics = []
         rng, input_rng, dropout_rng = jax.random.split(rng, 3)
 
-        for batch in glue_data_collator(input_rng, train_dataset, train_batch_size):
+        for batch in glue_train_data_collator(input_rng, train_dataset, train_batch_size):
             dropout_rngs = shard_prng_key(dropout_rng)
             state, metrics = p_train_step(state, batch, dropout_rngs)
             train_metrics.append(metrics)
@@ -469,7 +482,7 @@ def main():
         logger.info("  Evaluating...")
         rng, input_rng = jax.random.split(rng)
 
-        for batch in glue_data_collator(input_rng, eval_dataset, eval_batch_size):
+        for batch in glue_eval_data_collator(input_rng, eval_dataset, eval_batch_size):
             labels = batch.pop("labels")
             predictions = p_eval_step(state, batch)
             metric.add_batch(predictions=chain(*predictions), references=chain(*labels))
@@ -479,6 +492,11 @@ def main():
 
         cur_step = epoch * (len(train_dataset) // train_batch_size)
         write_metric(train_metrics, eval_metric, train_time, cur_step)
+
+    # save last checkpoint
+    if jax.host_id() == 0:
+        params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+        model.save_pretrained(args.output_dir, params=params)
 
 
 if __name__ == "__main__":
