@@ -373,9 +373,12 @@ class SpmConverter(Converter):
 
     def normalizer(self, proto):
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
-        return normalizers.Sequence(
-            [normalizers.Precompiled(precompiled_charsmap), normalizers.Replace(Regex(" {2,}"), " ")]
-        )
+        if not precompiled_charsmap:
+            return normalizers.Sequence([normalizers.Replace(Regex(" {2,}"), " ")])
+        else:
+            return normalizers.Sequence(
+                [normalizers.Precompiled(precompiled_charsmap), normalizers.Replace(Regex(" {2,}"), " ")]
+            )
 
     def pre_tokenizer(self, replacement, add_prefix_space):
         return pre_tokenizers.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
@@ -686,11 +689,24 @@ class T5Converter(SpmConverter):
         )
 
 
+class BigBirdConverter(SpmConverter):
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single="[CLS]:0 $A:0 [SEP]:0",
+            pair="[CLS]:0 $A:0 [SEP]:0 $B:1 [SEP]:1",
+            special_tokens=[
+                ("[CLS]", self.original_tokenizer.convert_tokens_to_ids("[CLS]")),
+                ("[SEP]", self.original_tokenizer.convert_tokens_to_ids("[SEP]")),
+            ],
+        )
+
+
 SLOW_TO_FAST_CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
     "BartTokenizer": RobertaConverter,
     "BarthezTokenizer": BarthezConverter,
     "BertTokenizer": BertConverter,
+    "BigBirdTokenizer": BigBirdConverter,
     "CamembertTokenizer": CamembertConverter,
     "ConvBertTokenizer": BertConverter,
     "DebertaTokenizer": DebertaConverter,

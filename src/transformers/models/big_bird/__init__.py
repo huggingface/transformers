@@ -17,13 +17,24 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_torch_available
+from ...file_utils import (
+    _BaseLazyModule,
+    is_sentencepiece_available,
+    is_tf_available,
+    is_tokenizers_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
     "configuration_big_bird": ["BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP", "BigBirdConfig"],
-    "tokenization_big_bird": ["BigBirdTokenizer"],
 }
+
+if is_sentencepiece_available():
+    _import_structure["tokenization_big_bird"] = ["BigBirdTokenizer"]
+
+if is_tokenizers_available():
+    _import_structure["tokenization_big_bird_fast"] = ["BigBirdTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_big_bird"] = [
@@ -44,7 +55,12 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .configuration_big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig
-    from .tokenization_big_bird import BigBirdTokenizer
+
+    if is_sentencepiece_available():
+        from .tokenization_big_bird import BigBirdTokenizer
+
+    if is_tokenizers_available():
+        from .tokenization_big_bird_fast import BigBirdTokenizerFast
 
     if is_torch_available():
         from .modeling_big_bird import (
