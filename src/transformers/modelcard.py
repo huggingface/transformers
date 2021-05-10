@@ -279,6 +279,8 @@ def _list_possibilities(name, tags):
         return ""
     if isinstance(tags, str):
         tags = [tags]
+    if len(tags) == 0:
+        return ""
     name_tags = [f"- {tag}" for tag in tags]
     return f"{name}:\n" + "\n".join(name_tags) + "\n"
 
@@ -402,7 +404,7 @@ class TrainingSummary:
         if self.eval_results is not None:
             model_card += "\nIt achieves the following results on the evaluation set:\n"
             model_card += "\n".join([f"- {name}: {_maybe_round(value)}" for name, value in self.eval_results.items()])
-            model_card += "\n"
+        model_card += "\n"
 
         model_card += "\n## Model description\n\nMore information needed\n"
         model_card += "\n## Intended uses & limitations\n\nMore information needed\n"
@@ -516,7 +518,7 @@ def parse_log_history(log_history):
             lines.append(values)
 
     idx = len(log_history) - 1
-    while "eval_loss" not in log_history[idx]:
+    while idx >= 0 and "eval_loss" not in log_history[idx]:
         idx -= 1
 
     if idx > 0:
