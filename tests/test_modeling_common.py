@@ -89,6 +89,7 @@ class ModelTesterMixin:
     test_missing_keys = True
     test_model_parallel = False
     is_encoder_decoder = False
+    test_sequence_classification_problem_types = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -175,6 +176,103 @@ class ModelTesterMixin:
                 state_dict_saved = torch.load(output_model_file)
                 for k in _keys_to_ignore_on_save:
                     self.assertNotIn(k, state_dict_saved)
+
+    def _mock_init_weights(self, module):
+        if hasattr(module, "weight") and module.weight is not None:
+            module.weight.data.fill_(3)
+        if hasattr(module, "bias") and module.bias is not None:
+            module.bias.data.fill_(3)
+
+    def test_save_load_fast_init_from_base(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        base_class = MODEL_MAPPING[config.__class__]
+
+        if isinstance(base_class, tuple):
+            base_class = base_class[0]
+
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+
+            # make a copy of model class to not break future tests
+            # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
+            class CopyClass(model_class):
+                pass
+
+            model_class_copy = CopyClass
+
+            # make sure that all keys are expected for test
+            model_class_copy._keys_to_ignore_on_load_missing = []
+
+            # make init deterministic, but make sure that
+            # non-initialized weights throw errors nevertheless
+            model_class_copy._init_weights = self._mock_init_weights
+
+            model = base_class(config)
+            state_dict = model.state_dict()
+
+            # this will often delete a single weight of a multi-weight module
+            # to test an edge case
+            random_key_to_del = random.choice(list(state_dict.keys()))
+            del state_dict[random_key_to_del]
+
+            # check that certain keys didn't get saved with the model
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
+
+                model_fast_init = model_class_copy.from_pretrained(tmpdirname)
+                model_slow_init = model_class_copy.from_pretrained(tmpdirname, _fast_init=False)
+
+                for key in model_fast_init.state_dict().keys():
+                    max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+    def test_save_load_fast_init_to_base(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        base_class = MODEL_MAPPING[config.__class__]
+
+        if isinstance(base_class, tuple):
+            base_class = base_class[0]
+
+        for model_class in self.all_model_classes:
+
+            if model_class == base_class:
+                continue
+
+            # make a copy of model class to not break future tests
+            # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
+            class CopyClass(base_class):
+                pass
+
+            base_class_copy = CopyClass
+
+            # make sure that all keys are expected for test
+            base_class_copy._keys_to_ignore_on_load_missing = []
+
+            # make init deterministic, but make sure that
+            # non-initialized weights throw errors nevertheless
+            base_class_copy._init_weights = self._mock_init_weights
+
+            model = model_class(config)
+            state_dict = model.state_dict()
+
+            # this will often delete a single weight of a multi-weight module
+            # to test an edge case
+            random_key_to_del = random.choice(list(state_dict.keys()))
+            del state_dict[random_key_to_del]
+
+            # check that certain keys didn't get saved with the model
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.config.save_pretrained(tmpdirname)
+                torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
+
+                model_fast_init = base_class_copy.from_pretrained(tmpdirname)
+                model_slow_init = base_class_copy.from_pretrained(tmpdirname, _fast_init=False)
+
+                for key in model_fast_init.state_dict().keys():
+                    max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -945,7 +1043,6 @@ class ModelTesterMixin:
                 with tempfile.TemporaryDirectory() as temp_dir_name:
                     model.base_model.save_pretrained(temp_dir_name)
                     model, loading_info = model_class.from_pretrained(temp_dir_name, output_loading_info=True)
-
                     with self.subTest(msg=f"Missing keys for {model.__class__.__name__}"):
                         self.assertGreater(len(loading_info["missing_keys"]), 0)
 
@@ -998,7 +1095,6 @@ class ModelTesterMixin:
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
 
     def test_model_outputs_equivalence(self):
-
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         def set_nan_tensor_to_zero(t):
@@ -1238,6 +1334,42 @@ class ModelTesterMixin:
 
             model.parallelize()
             model.generate(**cast_to_device(inputs_dict, "cuda:0"), num_beams=2)
+
+    def test_problem_types(self):
+        if not self.test_sequence_classification_problem_types:
+            return
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        problem_types = [
+            {"title": "multi_label_classification", "num_labels": 2, "dtype": torch.float},
+            {"title": "single_label_classification", "num_labels": 1, "dtype": torch.long},
+            {"title": "regression", "num_labels": 1, "dtype": torch.float},
+        ]
+
+        for model_class in self.all_model_classes:
+            if model_class not in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
+                continue
+
+            for problem_type in problem_types:
+                with self.subTest(msg=f"Testing {model_class} with {problem_type['title']}"):
+
+                    config.problem_type = problem_type["title"]
+                    config.num_labels = problem_type["num_labels"]
+
+                    model = model_class(config)
+                    model.to(torch_device)
+                    model.train()
+
+                    inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+                    if problem_type["num_labels"] > 1:
+                        inputs["labels"] = inputs["labels"].unsqueeze(1).repeat(1, problem_type["num_labels"])
+
+                    inputs["labels"] = inputs["labels"].to(problem_type["dtype"])
+
+                    loss = model(**inputs).loss
+                    loss.backward()
 
 
 global_rng = random.Random()

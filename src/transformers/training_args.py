@@ -19,6 +19,7 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from .debug_utils import DebugOption
 from .file_utils import (
     cached_property,
     is_sagemaker_dp_enabled,
@@ -191,8 +192,6 @@ class TrainingArguments:
             Rank of the process during distributed training.
         tpu_num_cores (:obj:`int`, `optional`):
             When training on TPU, the number of TPU cores (automatically passed by launcher script).
-        debug (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            When training on TPU, whether to print debug metrics or not.
         dataloader_drop_last (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to drop the last incomplete batch (if the length of the dataset is not divisible by the batch size)
             or not.
@@ -274,6 +273,16 @@ class TrainingArguments:
             The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
             labels are changed from 0s and 1s to :obj:`label_smoothing_factor/num_labels` and :obj:`1 -
             label_smoothing_factor + label_smoothing_factor/num_labels` respectively.
+        debug (:obj:`str` or list of :class:`~transformers.debug_utils.DebugOption`, `optional`, defaults to :obj:`""`):
+            Enable one or more debug features. This is an experimental feature.
+
+            Possible options are:
+
+            - :obj:`"underflow_overflow"`: detects overflow in model's input/outputs and reports the last frames that
+              led to the event
+            - :obj:`"tpu_metrics_debug"`: print debug metrics on TPU
+
+            The options should be separated by whitespaces.
         adafactor (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use the :class:`~transformers.Adafactor` optimizer instead of
             :class:`~transformers.AdamW`.
@@ -301,6 +310,11 @@ class TrainingArguments:
             :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
             the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
             details.
+        resume_from_checkpoint (:obj:`str`, `optional`):
+            The path to a folder with a valid checkpoint for your model. This argument is not directly used by
+            :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
+            the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
+            details.
     """
 
     output_dir: str = field(
@@ -317,7 +331,7 @@ class TrainingArguments:
     )
 
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
-    do_eval: bool = field(default=None, metadata={"help": "Whether to run eval on the dev set."})
+    do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
     evaluation_strategy: IntervalStrategy = field(
         default="no",
@@ -432,9 +446,18 @@ class TrainingArguments:
     )
     tpu_metrics_debug: bool = field(
         default=False,
-        metadata={"help": "Deprecated, the use of `--debug` is preferred. TPU: Whether to print debug metrics"},
+        metadata={
+            "help": "Deprecated, the use of `--debug tpu_metrics_debug` is preferred. TPU: Whether to print debug metrics"
+        },
     )
-    debug: bool = field(default=False, metadata={"help": "Whether to print debug metrics on TPU"})
+    debug: str = field(
+        default="",
+        metadata={
+            "help": "Whether or not to enable debug mode. Current options: "
+            "`underflow_overflow` (Detect underflow and overflow in activations and weights), "
+            "`tpu_metrics_debug` (print debug metrics on TPU)."
+        },
+    )
 
     dataloader_drop_last: bool = field(
         default=False, metadata={"help": "Drop the last incomplete batch if it is not divisible by the batch size."}
@@ -531,6 +554,10 @@ class TrainingArguments:
     push_to_hub: bool = field(
         default=False, metadata={"help": "Whether or not to upload the trained model to the model hub after training."}
     )
+    resume_from_checkpoint: Optional[str] = field(
+        default=None,
+        metadata={"help": "The path to a folder with a valid checkpoint for your model."},
+    )
     _n_gpu: int = field(init=False, repr=False, default=-1)
     mp_parameters: str = field(
         default="",
@@ -621,6 +648,16 @@ class TrainingArguments:
             raise ValueError("`--sharded_ddp simple` is not compatible with any other option.")
         elif ShardedDDPOption.ZERO_DP_2 in self.sharded_ddp and ShardedDDPOption.ZERO_DP_3 in self.sharded_ddp:
             raise ValueError("`--sharded_ddp zero_dp_2` is not compatible with `--sharded_ddp zero_dp_3`.")
+
+        if self.tpu_metrics_debug:
+            warnings.warn(
+                "using `--tpu_metrics_debug` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `--debug tpu_metrics_debug` instead",
+                FutureWarning,
+            )
+            self.debug += " tpu_metrics_debug"
+            self.tpu_metrics_debug = False
+        if isinstance(self.debug, str):
+            self.debug = [DebugOption(s) for s in self.debug.split()]
 
         if self.deepspeed:
             # - must be run very last in arg parsing, since it will use a lot of these settings.
