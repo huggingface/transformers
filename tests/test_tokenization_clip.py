@@ -147,3 +147,56 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     max_length=max_length,
                     padding="max_length",
                 )
+
+    def test_add_tokens_tokenizer(self):
+        tokenizers = self.get_tokenizers(do_lower_case=False)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                vocab_size = tokenizer.vocab_size
+                all_size = len(tokenizer)
+
+                self.assertNotEqual(vocab_size, 0)
+
+                # We usually have added tokens from the start in tests because our vocab fixtures are
+                # smaller than the original vocabs - let's not assert this
+                # self.assertEqual(vocab_size, all_size)
+
+                new_toks = ["aaaaa bbbbbb", "cccccccccdddddddd"]
+                added_toks = tokenizer.add_tokens(new_toks)
+                vocab_size_2 = tokenizer.vocab_size
+                all_size_2 = len(tokenizer)
+
+                self.assertNotEqual(vocab_size_2, 0)
+                self.assertEqual(vocab_size, vocab_size_2)
+                self.assertEqual(added_toks, len(new_toks))
+                self.assertEqual(all_size_2, all_size + len(new_toks))
+
+                tokens = tokenizer.encode("aaaaa bbbbbb low cccccccccdddddddd l", add_special_tokens=False)
+
+                self.assertGreaterEqual(len(tokens), 4)
+                self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
+                self.assertGreater(tokens[-2], tokenizer.vocab_size - 1)
+
+                new_toks_2 = {"eos_token": ">>>>|||<||<<|<<", "pad_token": "<<<<<|||>|>>>>|>"}
+                added_toks_2 = tokenizer.add_special_tokens(new_toks_2)
+                vocab_size_3 = tokenizer.vocab_size
+                all_size_3 = len(tokenizer)
+
+                self.assertNotEqual(vocab_size_3, 0)
+                self.assertEqual(vocab_size, vocab_size_3)
+                self.assertEqual(added_toks_2, len(new_toks_2))
+                self.assertEqual(all_size_3, all_size_2 + len(new_toks_2))
+
+                tokens = tokenizer.encode(
+                    ">>>>|||<||<<|<< aaaaabbbbbb low cccccccccdddddddd <<<<<|||>|>>>>|> l", add_special_tokens=False
+                )
+
+                self.assertGreaterEqual(len(tokens), 6)
+                self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
+                self.assertGreater(tokens[0], tokens[1])
+                self.assertGreater(tokens[-2], tokenizer.vocab_size - 1)
+                self.assertGreater(tokens[-2], tokens[-3])
+                self.assertEqual(tokens[0], tokenizer.eos_token_id)
+                # padding is very hacky in CLIPTokenizer, pad_token_id is always 0
+                # so skip this check
+                # self.assertEqual(tokens[-2], tokenizer.pad_token_id)
