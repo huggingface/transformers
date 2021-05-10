@@ -238,12 +238,69 @@ should probably proofread and complete it, then remove this comment. -->
 """
 
 
+TASK_TAG_TO_NAME_MAPPING = {
+    "fill-mask": "Masked Language Modeling",
+    "question-answering": "Question Answering",
+    "summarization": "Summarization",
+    "text-classification": "Text Classification",
+    "text-generation": "Causal Language Modeling",
+    "text2text-generation": "Sequence-to-sequence Language Modeling",
+    "token-classification": "Token Classification",
+    "translation": "Translation",
+    "zero-shot-classification": "Zero Shot Classification",
+}
+
+
+METRIC_TAGS = [
+    "accuracy",
+    "bleu",
+    "f1",
+    "matthews_correlation",
+    "pearsonr",
+    "precision",
+    "recall",
+    "rouge",
+    "sacrebleu",
+    "spearmanr",
+]
+
+
+def _listify(obj):
+    if obj is None:
+        return []
+    elif isinstance(obj, str):
+        return [obj]
+    else:
+        return obj
+
+
+def _list_possibilities(name, tags):
+    if tags is None:
+        return ""
+    if isinstance(tags, str):
+        tags = [tags]
+    name_tags = [f"- {tag}" for tag in tags]
+    return f"{name}:\n" + "\n".join(name_tags) + "\n"
+
+
+def infer_metric_tags_from_eval_results(eval_results):
+    if eval_results is None:
+        return {}
+    result = {}
+    for key in eval_results.keys():
+        if key.lower().replace(" ", "_") in METRIC_TAGS:
+            result[key.lower().replace(" ", "_")] = key
+        elif key.lower() == "rouge1":
+            result["rouge"] = key
+    return result
+
+
 @dataclass
 class TrainingSummary:
     model_name: str
-    language: Optional[str] = None
+    language: Optional[Union[str, List[str]]] = None
     license: Optional[str] = None
-    pipeline_tag: Optional[str] = None
+    tags: Optional[Union[str, List[str]]] = None
     finetuned_from: Optional[str] = None
     dataset: Optional[Union[str, List[str]]] = None
     dataset_tags: Optional[Union[str, List[str]]] = None
@@ -251,22 +308,78 @@ class TrainingSummary:
     eval_lines: Optional[List[str]] = None
     hyperparameters: Optional[Dict[str, Any]] = None
 
+    def create_model_index(self, metric_mapping):
+        model_index = f"model-index:\n- name: {self.model_name}\n"
+
+        # Dataset names
+        if self.dataset is None:
+            dataset_names = []
+        elif isinstance(self.dataset, str):
+            dataset_names = [self.dataset]
+        else:
+            dataset_names = self.dataset
+
+        # Dataset tags
+        if self.dataset_tags is None:
+            dataset_tags = []
+        elif isinstance(self.dataset_tags, str):
+            dataset_tags = [self.dataset_tags]
+        else:
+            dataset_tags = self.dataset_tags
+
+        # Dataset mapping tag -> name
+        dataset_names = _listify(self.dataset)
+        dataset_tags = _listify(self.dataset_tags)
+        dataset_mapping = {tag: name for tag, name in zip(dataset_tags, dataset_names)}
+
+        task_mapping = {
+            tag: TASK_TAG_TO_NAME_MAPPING[tag] for tag in _listify(self.tags) if tag in TASK_TAG_TO_NAME_MAPPING
+        }
+
+        if len(task_mapping) == 0 and len(dataset_mapping) == 0:
+            return model_index
+        if len(task_mapping) == 0:
+            task_mapping = {None: None}
+        if len(dataset_mapping) == 0:
+            dataset_mapping = {None: None}
+        all_possibilities = [(task_tag, ds_tag) for task_tag in task_mapping for ds_tag in dataset_mapping]
+
+        model_index += "  results:\n"
+        for task_tag, ds_tag in all_possibilities:
+            result = ""
+            if task_tag is not None:
+                result += f"  - task:\n      name: {task_mapping[task_tag]}\n      type: {task_tag}\n"
+            if ds_tag is not None:
+                prefix = "  - " if task_tag is None else "    "
+                result += f"{prefix}dataset:\n      name: {dataset_mapping[ds_tag]}\n      type: {ds_tag}\n"
+            if len(metric_mapping) > 0:
+                result += "    metrics:\n"
+                for metric_tag, metric_name in metric_mapping.items():
+                    value = self.eval_results[metric_name]
+                    result += f"      - name: {metric_name}\n        type: {metric_tag}\n        value: {value}\n"
+
+            model_index += result
+
+        return model_index
+
     def to_model_card(self):
         model_card = ""
+
+        metric_mapping = infer_metric_tags_from_eval_results(self.eval_results)
+
+        # Metadata
         metadata = ""
-        if self.language is not None:
-            metadata += f"language: {self.language}\n"
+        metadata += _list_possibilities("language", self.language)
         if self.license is not None:
             metadata += f"license: {self.license}\n"
-        if self.pipeline_tag is not None:
-            metadata += f"pipeline-tag: {self.pipeline_tag}\n"
-        if self.dataset_tags is not None:
-            datasets = [self.dataset_tags] if isinstance(self.dataset_tags, str) else self.dataset_tags
-            datasets = [f"- {ds}" for ds in datasets]
-            metadata += "datasets:\n" + "\n".join(datasets)
+        metadata += _list_possibilities("tags", self.tags)
+        metadata += _list_possibilities("datasets", self.dataset_tags)
+        metadata += _list_possibilities("metrics", list(metric_mapping.keys()))
+        metadata += "\n" + self.create_model_index(metric_mapping)
         if len(metadata) > 0:
-            model_card = f"---\n{metadata}\n---\n"
+            model_card = f"---\n{metadata}---\n"
 
+        # Now the model card for realsies.
         model_card += AUTOGENERATED_COMMENT
 
         model_card += f"\n# {self.model_name}\n\n"
@@ -291,17 +404,25 @@ class TrainingSummary:
             model_card += "\n".join([f"- {name}: {_maybe_round(value)}" for name, value in self.eval_results.items()])
             model_card += "\n"
 
+        model_card += "\n## Model description\n\nMore information needed\n"
+        model_card += "\n## Intended uses & limitations\n\nMore information needed\n"
+        model_card += "\n## Training and evaluation data\n\nMore information needed\n"
+
+        model_card += "\n## Training procedure\n"
+        model_card += "\n### Training hyperparameters\n"
         if self.hyperparameters is not None:
-            model_card += "\n## Training hyperparameters\n\nThe following hyperparameters were used during training:\n"
+            model_card += "\nThe following hyperparameters were used during training:\n"
             model_card += "\n".join([f"- {name}: {value}" for name, value in self.hyperparameters.items()])
             model_card += "\n"
+        else:
+            model_card += "\nMore information needed\n"
 
         if self.eval_lines is not None:
-            model_card += "\n## Training results\n\n"
+            model_card += "\n### Training results\n\n"
             model_card += make_markdown_table(self.eval_lines)
             model_card += "\n"
 
-        model_card += "\n## Framework versions\n\n"
+        model_card += "\n### Framework versions\n\n"
         model_card += f"- Transformers {__version__}\n"
         if is_torch_available():
             import torch
@@ -324,7 +445,7 @@ class TrainingSummary:
         trainer,
         language=None,
         license=None,
-        pipeline_tag=None,
+        tags=None,
         model_name=None,
         finetuned_from=None,
         dataset_tags=None,
@@ -340,7 +461,7 @@ class TrainingSummary:
         return cls(
             language=language,
             license=license,
-            pipeline_tag=pipeline_tag,
+            tags=tags,
             model_name=model_name,
             finetuned_from=finetuned_from,
             dataset_tags=dataset_tags,
@@ -413,7 +534,7 @@ def parse_log_history(log_history):
 
 def _maybe_round(v, decimals=4):
     if isinstance(v, float) and len(str(v).split(".")) > 1 and len(str(v).split(".")[1]) > decimals:
-        return f"{v:.6f}"
+        return f"{v:.{decimals}f}"
     return str(v)
 
 
@@ -432,7 +553,7 @@ def make_markdown_table(lines):
     Create a nice Markdown table from the results in `lines`.
     """
     if lines is None or len(lines) == 0:
-        return
+        return ""
     col_widths = {key: len(str(key)) for key in lines[0].keys()}
     for line in lines:
         for key, value in line.items():
