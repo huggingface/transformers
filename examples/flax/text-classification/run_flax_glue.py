@@ -269,7 +269,6 @@ def main():
         level=logging.INFO,
     )
     # Setup logging, we only want one process per machine to log things on the screen.
-    # accelerator.is_local_main_process is only True for one process per machine.
     logger.setLevel(logging.INFO if jax.host_id() == 0 else logging.ERROR)
     if jax.host_id() == 0:
         datasets.utils.logging.set_verbosity_warning()
