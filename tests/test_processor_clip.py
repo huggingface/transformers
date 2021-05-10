@@ -19,7 +19,7 @@ import tempfile
 import unittest
 
 import numpy as np
-from PIL import Image
+import pytest
 
 from transformers import CLIPTokenizer
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME, is_vision_available
@@ -28,6 +28,8 @@ from transformers.testing_utils import require_vision
 
 
 if is_vision_available():
+    from PIL import Image
+
     from transformers import CLIPFeatureExtractor, CLIPProcessor
 
 
@@ -124,7 +126,7 @@ class CLIPProcessorTest(unittest.TestCase):
         image_input = self.prepare_image_inputs()
 
         input_feat_extract = feature_extractor(image_input, return_tensors="np")
-        input_processor = processor(image_input, return_tensors="np")
+        input_processor = processor(images=image_input, return_tensors="np")
 
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
@@ -137,13 +139,29 @@ class CLIPProcessorTest(unittest.TestCase):
 
         input_str = "lower newer"
 
-        with processor.as_target_processor():
-            encoded_processor = processor(input_str)
+        encoded_processor = processor(text=input_str)
 
         encoded_tok = tokenizer(input_str)
 
         for key in encoded_tok.keys():
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
+
+    def test_processor(self):
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+
+        processor = CLIPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        inputs = processor(text=input_str, images=image_input)
+
+        self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values"])
+
+        # test if it raises when no input is passed
+        with pytest.raises(ValueError):
+            processor()
 
     def test_tokenizer_decode(self):
         feature_extractor = self.get_feature_extractor()
