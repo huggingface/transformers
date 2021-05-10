@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright Gunjan Chhablani and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "visual-bert-base-uncased": "https://huggingface.co/visual-bert-base-uncased/resolve/main/config.json",
+    "gchhablani/visualbert-vqa": "https://huggingface.co/gchhablani/visualbert-vqa/resolve/main/config.json",
+    "gchhablani/visualbert-vqa-pre": "https://huggingface.co/gchhablani/visualbert-vqa-pre/resolve/main/config.json",
+    "gchhablani/visualbert-vqa-coco-pre": "https://huggingface.co/gchhablani/visualbert-vqa-coco-pre/resolve/main/config.json",
+    "gchhablani/visualbert-vcr": "https://huggingface.co/gchhablani/visualbert-vcr/resolve/main/config.json",
+    "gchhablani/visualbert-vcr-pre": "https://huggingface.co/gchhablani/visualbert-vcr-pre/resolve/main/config.json",
+    "gchhablani/visualbert-vcr-coco-pre": "https://huggingface.co/gchhablani/visualbert-vcr-coco-pre/resolve/main/config.json",
+    "gchhablani/visualbert-nlvr2": "https://huggingface.co/gchhablani/visualbert-nlvr2/resolve/main/config.json",
+    "gchhablani/visualbert-nlvr2-pre": "https://huggingface.co/gchhablani/visualbert-nlvr2-pre/resolve/main/config.json",
+    "gchhablani/visualbert-nlvr2-coco-pre": "https://huggingface.co/gchhablani/visualbert-nlvr2-coco-pre/resolve/main/config.json"
     # See all VisualBERT models at https://huggingface.co/models?filter=visual_bert
 }
 
@@ -31,7 +39,7 @@ class VisualBertConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a :class:`~transformers.VisualBertModel`. It is used
     to instantiate an VisualBERT model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the VisualBERT
-    `visual-bert-base-uncased <https://huggingface.co/visual-bert-base-uncased>`__ architecture.
+    `visualbert-vqa-coco-pre  <https://huggingface.co/gchhablani/visualbert-vqa-coco-pre>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -40,8 +48,7 @@ class VisualBertConfig(PretrainedConfig):
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
             Vocabulary size of the VisualBERT model. Defines the number of different tokens that can be represented by
-            the :obj:`inputs_ids` passed when calling :class:`~transformers.VisualBertModel` or
-            :class:`~transformers.TFVisualBertModel`. Vocabulary size of the model. Defines the different tokens that
+            the :obj:`inputs_ids` passed when calling :class:`~transformers.VisualBertModel`. Vocabulary size of the model. Defines the different tokens that
             can be represented by the `inputs_ids` passed to the forward method of
             :class:`~transformers.VisualBertModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
@@ -65,8 +72,7 @@ class VisualBertConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
-            The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.VisualBertModel`
-            or :class:`~transformers.TFVisualBertModel`.
+            The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.VisualBertModel`.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
@@ -74,6 +80,10 @@ class VisualBertConfig(PretrainedConfig):
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if ``config.is_decoder=True``.
+        bypass_transformer (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not the model should bypass the transformer for the visual embeddings. If set to `True`,  
+            the model directly concatenates the visual embeddings from :class:`~transformers.VisualBertEmbeddings` with
+            text output from transformers,and then pass it to a self-attention layer.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
 
@@ -81,10 +91,10 @@ class VisualBertConfig(PretrainedConfig):
 
         >>> from transformers import VisualBertModel, VisualBertConfig
 
-        >>> # Initializing a VisualBERT visual-bert-base-uncased style configuration
-        >>> configuration = VisualBertConfig()
+        >>> # Initializing a VisualBERT visualbert-vqa-coco-pre style configuration
+        >>> configuration = VisualBertConfig.from_pretrained('visualbert-vqa-coco-pre')
 
-        >>> # Initializing a model from the visual-bert-base-uncased style configuration
+        >>> # Initializing a model from the visualbert-vqa-coco-pre style configuration
         >>> model = VisualBertModel(configuration)
 
         >>> # Accessing the model configuration
