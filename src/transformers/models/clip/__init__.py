@@ -25,6 +25,8 @@ _import_structure = {
     "tokenization_clip": ["CLIPTokenizer"],
 }
 
+if is_tokenizers_available():
+    _import_structure["tokenization_clip_fast"] = ["CLIPTokenizerFast"]
 
 if is_vision_available():
     _import_structure["feature_extraction_clip"] = ["CLIPFeatureExtractor"]
@@ -43,6 +45,9 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_clip import CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, CLIPConfig, CLIPTextConfig, CLIPVisionConfig
     from .tokenization_clip import CLIPTokenizer
+
+    if is_tokenizers_available():
+        from .tokenization_clip_fast import CLIPTokenizerFast
 
     if is_vision_available():
         from .feature_extraction_clip import CLIPFeatureExtractor

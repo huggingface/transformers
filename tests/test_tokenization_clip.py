@@ -18,7 +18,7 @@ import json
 import os
 import unittest
 
-from transformers import CLIPTokenizer
+from transformers import CLIPTokenizer, CLIPTokenizerFast
 from transformers.models.clip.tokenization_clip import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers
 
@@ -29,6 +29,7 @@ from .test_tokenization_common import TokenizerTesterMixin
 class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = CLIPTokenizer
+    rust_tokenizer_class = CLIPTokenizerFast
     from_pretrained_kwargs = {"add_prefix_space": True}
     test_seq2seq = False
 
@@ -52,6 +53,10 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def get_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
         return CLIPTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+
+    def get_rust_tokenizer(self, **kwargs):
+        kwargs.update(self.special_tokens_map)
+        return CLIPTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
@@ -96,7 +101,7 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # Testing the unknown token
         input_tokens = tokens + [rust_tokenizer.unk_token]
-        input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
+        input_bpe_tokens = [10, 2, 12, 9, 3, 2, 12, 16]
         self.assertListEqual(rust_tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
     def test_pretokenized_inputs(self, *args, **kwargs):
