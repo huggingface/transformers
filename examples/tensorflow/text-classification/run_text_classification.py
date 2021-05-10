@@ -522,7 +522,7 @@ def main():
 
     # region Prediction losses
     # This section is outside the scope() because it's very quick to compute, but behaves badly inside it
-    if "label" in datasets["test"].features:
+    if "test" in datasets and "label" in datasets["test"].features:
         print("Computing prediction loss on test labels...")
         labels = datasets["test"]["label"]
         loss = float(loss_fn(labels, predictions).numpy())
