@@ -18,7 +18,6 @@
 import inspect
 import math
 import unittest
-from typing import List, Tuple, Dict
 
 from transformers import is_timm_available, is_vision_available
 from transformers.file_utils import cached_property
@@ -26,7 +25,8 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
-from .test_modeling_common import ModelTesterMixin, floats_tensor, _config_zero_init
+from .test_modeling_common import ModelTesterMixin, floats_tensor
+
 
 if is_timm_available():
     import torch
@@ -95,7 +95,9 @@ class DetrModelTester:
             labels = []
             for i in range(self.batch_size):
                 target = {}
-                target["class_labels"] = torch.randint(high=self.num_labels, size=(self.n_targets,), device=torch_device)
+                target["class_labels"] = torch.randint(
+                    high=self.num_labels, size=(self.n_targets,), device=torch_device
+                )
                 target["boxes"] = torch.rand(self.n_targets, 4, device=torch_device)
                 target["masks"] = torch.rand(self.n_targets, self.min_size, self.max_size, device=torch_device)
                 labels.append(target)
@@ -179,9 +181,15 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                     target["class_labels"] = torch.ones(
                         size=(self.model_tester.n_targets,), device=torch_device, dtype=torch.long
                     )
-                    target["boxes"] = torch.ones(self.model_tester.n_targets, 4, device=torch_device, dtype=torch.float)
+                    target["boxes"] = torch.ones(
+                        self.model_tester.n_targets, 4, device=torch_device, dtype=torch.float
+                    )
                     target["masks"] = torch.ones(
-                        self.model_tester.n_targets, self.model_tester.min_size, self.model_tester.max_size, device=torch_device, dtype=torch.float
+                        self.model_tester.n_targets,
+                        self.model_tester.min_size,
+                        self.model_tester.max_size,
+                        device=torch_device,
+                        dtype=torch.float,
                     )
                     labels.append(target)
                 inputs_dict["labels"] = labels
@@ -390,6 +398,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
             self.assertTrue(outputs)
 
+
 TOLERANCE = 1e-4
 
 
@@ -488,4 +497,3 @@ class DetrModelIntegrationTests(unittest.TestCase):
             [[-7.7558, -10.8788, -11.9797], [-11.8881, -16.4329, -17.7451], [-14.7316, -19.7383, -20.3004]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.pred_masks[0, 0, :3, :3], expected_slice_masks, atol=1e-4))
-
