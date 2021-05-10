@@ -136,7 +136,6 @@ class CLIPVisionEmbeddings(nn.Module):
 class CLIPTextEmbeddings(nn.Module):
     def __init__(self, config: CLIPTextConfig):
         super().__init__()
-        self.config = config
         embed_dim = config.hidden_size
 
         self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
@@ -898,9 +897,9 @@ class CLIPModel(CLIPPreTrainedModel):
     def forward(
         self,
         input_ids=None,
+        pixel_values=None,
         attention_mask=None,
         position_ids=None,
-        pixel_values=None,
         return_loss=None,
         output_attentions=None,
         output_hidden_states=None,

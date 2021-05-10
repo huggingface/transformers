@@ -239,7 +239,7 @@ class CLIPConfig(PretrainedConfig):
     is_composition = True
 
     def __init__(self, text_config_dict=None, vision_config_dict=None, projection_dim=512, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(text_config_dict=text_config_dict, vision_config_dict=vision_config_dict, **kwargs)
 
         if text_config_dict is None:
             text_config_dict = {}
@@ -265,7 +265,7 @@ class CLIPConfig(PretrainedConfig):
             :class:`CLIPConfig`: An instance of a configuration object
         """
 
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+        return cls(text_config_dict=text_config.to_dict(), vision_config_dict=vision_config.to_dict(), **kwargs)
 
     def to_dict(self):
         """
