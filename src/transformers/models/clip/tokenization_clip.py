@@ -310,7 +310,7 @@ class CLIPTokenizer(PreTrainedTokenizer):
         """Tokenize a string."""
         bpe_tokens = []
         if self.fix_text is None:
-            text = self.nlp.tokenize(text)
+            text = " ".join(self.nlp.tokenize(text))
         else:
             text = whitespace_clean(self.fix_text(text)).lower()
 
