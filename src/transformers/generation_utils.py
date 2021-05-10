@@ -530,7 +530,7 @@ class GenerationMixin:
         # init warp parameters
         top_k = top_k if top_k is not None else self.config.top_k
         top_p = top_p if top_p is not None else self.config.top_p
-        tfs = tfs if tfs is not None else self.config.tfs
+        tfs = tfs
         temperature = temperature if temperature is not None else self.config.temperature
         # instantiate warpers list
         warpers = LogitsProcessorList()
