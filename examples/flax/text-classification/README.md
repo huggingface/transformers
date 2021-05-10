@@ -31,12 +31,10 @@ export TASK_NAME=mrpc
 python run_flax_glue.py \
   --model_name_or_path bert-base-cased \
   --task_name $TASK_NAME \
-  --do_train \
-  --do_eval \
-  --do_predict \
-  --max_seq_length 128 \
+  --max_length 128 \
   --learning_rate 2e-5 \
   --num_train_epochs 3 \
+	--per_device_train_batch_size 4 \
   --output_dir /tmp/$TASK_NAME/
 ```
 
