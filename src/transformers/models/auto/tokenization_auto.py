@@ -63,6 +63,7 @@ from .configuration_auto import (
     BertConfig,
     BertGenerationConfig,
     BigBirdConfig,
+    BigBirdPegasusConfig,
     BlenderbotConfig,
     BlenderbotSmallConfig,
     CamembertConfig,
@@ -275,6 +276,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (Wav2Vec2Config, (Wav2Vec2CTCTokenizer, None)),
         (GPTNeoConfig, (GPT2Tokenizer, GPT2TokenizerFast)),
         (LukeConfig, (LukeTokenizer, None)),
+        (BigBirdPegasusConfig, (PegasusTokenizer, PegasusTokenizerFast)),
     ]
 )
 
