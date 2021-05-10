@@ -268,6 +268,16 @@ class CLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
+    # skip this test as CLIPVisionModel has no base class and is
+    # not available in MODEL_MAPPING
+    def test_save_load_fast_init_from_base(self):
+        pass
+
+    # skip this test as CLIPVisionModel has no base class and is
+    # not available in MODEL_MAPPING
+    def test_save_load_fast_init_to_base(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -375,6 +385,16 @@ class CLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_inputs_embeds(self):
         # CLIP does not use inputs_embeds
+        pass
+
+    # skip this test as CLIPTextModel has no base class and is
+    # not available in MODEL_MAPPING
+    def test_save_load_fast_init_from_base(self):
+        pass
+
+    # skip this test as CLIPTextModel has no base class and is
+    # not available in MODEL_MAPPING
+    def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
