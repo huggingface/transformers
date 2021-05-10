@@ -506,6 +506,7 @@ Flax), PyTorch, and/or TensorFlow.
     model_doc/tapas
     model_doc/transformerxl
     model_doc/vit
+    model_doc/visual_bert
     model_doc/wav2vec2
     model_doc/xlm
     model_doc/xlmprophetnet
