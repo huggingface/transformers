@@ -670,7 +670,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/detr.py#L258
     def post_process(self, outputs, target_sizes):
         """
-        Converts the output of :class:`~transformers.DetrForObjectDetection` into the format expected by the COCO api. Only supports PyTorch.
+        Converts the output of :class:`~transformers.DetrForObjectDetection` into the format expected by the COCO api.
+        Only supports PyTorch.
 
         Args:
             outputs (:class:`~transformers.DetrObjectDetectionOutput`):
@@ -679,6 +680,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
                 image size (before any data augmentation). For visualization, this should be the image size after data
                 augment, but before padding.
+
+        Returns:
+            :obj:`List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an
+            image in the batch as predicted by the model.
         """
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
@@ -706,18 +711,23 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         predictions. Only supports PyTorch.
 
         Args:
-            results:
-                ...
+            results (:obj:`List[Dict]`):
+                Results list obtained by :meth:`~transformers.DetrFeatureExtractor.post_process`, to which "masks"
+                results will be added.
             outputs (:class:`~transformers.DetrSegmentationOutput`):
                 Raw outputs of the model.
-            orig_target_sizes:
-                ...
-            max_target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`, `optional`):
+            orig_target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`):
                 Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
-                image size (before any data augmentation). For visualization, this should be the image size after data
-                augment, but before padding.
-            threshold:
-                ...
+                image size (before any data augmentation).
+            max_target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`):
+                Tensor containing the maximum size (h, w) of each image of the batch. For evaluation, this must be the
+                original image size (before any data augmentation).
+            threshold (:obj:`float`, `optional`, defaults to 0.5):
+                Threshold to use when turning the predicted masks into binary values.
+
+        Returns:
+            :obj:`List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, boxes and masks
+            for an image in the batch as predicted by the model.
         """
 
         assert len(orig_target_sizes) == len(max_target_sizes)
@@ -738,7 +748,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/segmentation.py#L241
     def post_process_panoptic(self, outputs, processed_sizes, target_sizes=None, is_thing_map=None, threshold=0.85):
         """
-        Converts the output of :class:`~transformers.DetrForSegmentation` into actual panoptic predictions. Only supports PyTorch.
+        Converts the output of :class:`~transformers.DetrForSegmentation` into actual panoptic predictions. Only
+        supports PyTorch.
 
         Parameters:
             outputs (:class:`~transformers.DetrSegmentationOutput`):
@@ -752,8 +763,12 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             is_thing_map (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`, `optional`):
                 Dictionary mapping class indices to either True or False, depending on whether or not they are a thing.
                 If not set, defaults to the :obj:`is_thing_map` of COCO panoptic.
-            threshold (:obj:`int`, `optional`, defaults to 0.85):
+            threshold (:obj:`float`, `optional`, defaults to 0.85):
                 Threshold to use to filter out queries.
+
+        Returns:
+            :obj:`List[Dict]`: A list of dictionaries, each dictionary containing a PNG string and segments_info values
+            for an image in the batch as predicted by the model.
         """
         if target_sizes is None:
             target_sizes = processed_sizes

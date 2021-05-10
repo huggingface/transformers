@@ -40,7 +40,7 @@ baselines.*
 This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code can be found `here
 <https://github.com/facebookresearch/detr>`__.
 
-Here's a TLDR explaining how the model works:
+Here's a TLDR explaining how :class:`~transformers.DetrForObjectDetection` works:
 
 First, an image is sent through a pre-trained convolutional backbone (in the paper, the authors use
 ResNet-50/ResNet-101). Let's assume we also add a batch dimension. This means that the input to the backbone is a
@@ -49,8 +49,8 @@ outputs a new lower-resolution feature map, typically of shape :obj:`(batch_size
 then projected to match the hidden dimension of the Transformer of DETR, which is :obj:`256` by default, using a
 :obj:`nn.Conv2D` layer. So now, we have a tensor of shape :obj:`(batch_size, 256, height/32, width/32).` Next, the
 feature map is flattened and transposed to obtain a tensor of shape :obj:`(batch_size, seq_len, d_model)` =
-:obj:`(batch, width/32*height/32, 256)`. So a difference with NLP models is that the sequence length is actually longer
-than usual, but with a smaller :obj:`d_model` (which in NLP is typically 768 or higher).
+:obj:`(batch_size, width/32*height/32, 256)`. So a difference with NLP models is that the sequence length is actually
+longer than usual, but with a smaller :obj:`d_model` (which in NLP is typically 768 or higher).
 
 Next, this is sent through the encoder, outputting :obj:`encoder_hidden_states` of the same shape (you can consider
 these as image features). Next, so-called **object queries** are sent through the decoder. This is a tensor of shape
@@ -65,9 +65,18 @@ object", and a MLP to predict bounding boxes for each query.
 The model is trained using a **bipartite matching loss**: so what we actually do is compare the predicted classes +
 bounding boxes of each of the N = 100 object queries to the ground truth annotations, padded up to the same length N
 (so if an image only contains 4 objects, 96 annotations will just have a "no object" as class and "no bounding box" as
-bounding box). The `Hungarian matching algorithm <https://en.wikipedia.org/wiki/Hungarian_algorithm>`__ is used to
-create a one-to-one mapping of each of the N queries to each of the N annotations. Next, standard cross-entropy and L1
-bounding box losses are used to optimize the parameters of the model.
+bounding box). The `Hungarian matching algorithm <https://en.wikipedia.org/wiki/Hungarian_algorithm>`__ is used to find
+an optimal one-to-one mapping of each of the N queries to each of the N annotations. Next, standard cross-entropy (for
+the classes) and a linear combination of the L1 and `generalized IoU loss <https://giou.stanford.edu/>`__ (for the
+bounding boxes) are used to optimize the parameters of the model.
+
+DETR can be naturally extended to perform panoptic segmentation (which unifies semantic segmentation and instance
+segmentation). :class:`~transformers.DetrForSegmentation` adds a segmentation mask head on top of
+:class:`~transformers.DetrForObjectDetection`. The mask head can be trained either jointly, or in a two steps process,
+where one first trains a :class:`~transformers.DetrForObjectDetection` model to detect bounding boxes around both
+"things" (instances) and "stuff" (background things like trees, roads, sky), then freeze all the weights and train only
+the mask head for 25 epochs. Experimentally, these two approaches give similar results. Note that predicting boxes is
+required for the training to be possible, since the Hungarian matching is computed using distances between boxes.
 
 Tips:
 
@@ -97,14 +106,16 @@ Tips:
   depends on the intermediate feature maps from a ResNet. One would need to update the mask head in order to work with
   a different backbone.
 - DETR resizes the input images such that the shortest side is at least a certain amount of pixels while the longest is
-  at most 1333 pixels. At training time, scale augmentation is used such that the shortest side is randomly set to at least 480 
-  and at most 800 pixels. At inference time, the shortest side is set to 800. One can use :class:`~transformers.DetrFeatureExtractor` 
-  to prepare images (and optional annotations in COCO format) for the model. Due to this resizing, images in a batch can have 
-  different sizes. DETR solves this by padding images up to the largest size in a batch, and by creating a pixel mask that indicates 
-  which pixels are real/which are padding. Alternatively, one can also define a custom :obj:`collate_fn` in order to batch images
-  together, using :meth:`~transformers.DetrFeatureExtractor.pad_and_create_pixel_mask`. 
-- The size of the images will determine the amount of memory being used, and will thus determine the :obj:`batch_size`. It is advised 
-  to use a batch size of 2 per GPU. See `this Github thread <https://github.com/facebookresearch/detr/issues/150>`__ for more info. 
+  at most 1333 pixels. At training time, scale augmentation is used such that the shortest side is randomly set to at
+  least 480 and at most 800 pixels. At inference time, the shortest side is set to 800. One can use
+  :class:`~transformers.DetrFeatureExtractor` to prepare images (and optional annotations in COCO format) for the
+  model. Due to this resizing, images in a batch can have different sizes. DETR solves this by padding images up to the
+  largest size in a batch, and by creating a pixel mask that indicates which pixels are real/which are padding.
+  Alternatively, one can also define a custom :obj:`collate_fn` in order to batch images together, using
+  :meth:`~transformers.DetrFeatureExtractor.pad_and_create_pixel_mask`.
+- The size of the images will determine the amount of memory being used, and will thus determine the :obj:`batch_size`.
+  It is advised to use a batch size of 2 per GPU. See `this Github thread
+  <https://github.com/facebookresearch/detr/issues/150>`__ for more info.
 
 As a summary, consider the following table:
 
@@ -136,9 +147,13 @@ As a summary, consider the following table:
 |                                             |                                                         |                                                                      | :obj:`PanopticEvaluator`                                               |
 +---------------------------------------------+---------------------------------------------------------+----------------------------------------------------------------------+------------------------------------------------------------------------+
 
-In short, one should prepare the data either in COCO detection or COCO panoptic format, then use :class:`~transformers.DetrFeatureExtractor` to create :obj:`pixel_values`, :obj:`pixel_mask` and optional :obj:`labels`,
-which can then be used to train (or fine-tune) a model. For evaluation, one should first convert the outputs of the model using one of the postprocessing methods of :class:`~transformers.DetrFeatureExtractor`.
-These can be be provided to either :obj:`CocoEvaluator` or :obj:`PanopticEvaluator`, which allow you to calculate metrics like mAP and PQ.  
+In short, one should prepare the data either in COCO detection or COCO panoptic format, then use
+:class:`~transformers.DetrFeatureExtractor` to create :obj:`pixel_values`, :obj:`pixel_mask` and optional
+:obj:`labels`, which can then be used to train (or fine-tune) a model. For evaluation, one should first convert the
+outputs of the model using one of the postprocessing methods of :class:`~transformers.DetrFeatureExtractor`. These can
+be be provided to either :obj:`CocoEvaluator` or :obj:`PanopticEvaluator`, which allow you to calculate metrics like
+mean Average Precision (mAP) and Panoptic Quality (PQ). The latter objects are implemented in the `original repository
+<https://github.com/facebookresearch/detr>`__. See the example notebooks for more info regarding evaluation.
 
 
 DETR specific outputs

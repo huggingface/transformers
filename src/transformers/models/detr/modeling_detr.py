@@ -88,7 +88,7 @@ class DetrObjectDetectionOutput(ModelOutput):
             bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
             scale-invariant IoU loss.
         loss_dict (:obj:`Dict`, `optional`):
-            A dictionary containing the individual losses. Useful for logging. 
+            A dictionary containing the individual losses. Useful for logging.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, num_classes + 1)`):
             Classification logits (including no-object) for all queries.
         pred_boxes (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, 4)`):
@@ -154,16 +154,19 @@ class DetrForSegmentationOutput(ModelOutput):
             bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
             scale-invariant IoU loss.
         loss_dict (:obj:`Dict`, `optional`):
-            A dictionary containing the individual losses.
+            A dictionary containing the individual losses. Useful for logging.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, num_classes + 1)`):
             Classification logits (including no-object) for all queries.
         pred_boxes (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use :class:`~transformers.DetrForObjectDetection.post_process` to retrieve the
+            possible padding). You can use :meth:`~transformers.DetrForObjectDetection.post_process` to retrieve the
             unnormalized bounding boxes.
         pred_masks (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, width, height)`):
-            ...
+            Segmentation masks for all queries. See also
+            :meth:`~transformers.DetrFeatureExtractor.post_process_segmentation` or
+            :meth:`~transformers.DetrFeatureExtractor.post_process_panoptic` to evaluate instance and panoptic
+            segmentation masks respectively.
         auxiliary_outputs (:obj:`list[Dict]`, `optional`):
             Optional, only returned when auxilary losses are activated (i.e. :obj:`config.auxiliary_loss` is set to
             `True`) and labels are provided. It is a list of dictionnaries containing the two above keys (:obj:`logits`
