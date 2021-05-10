@@ -100,6 +100,11 @@ class DetrObjectDetectionOutput(ModelOutput):
             Optional, only returned when auxilary losses are activated (i.e. :obj:`config.auxiliary_loss` is set to
             `True`) and labels are provided. It is a list of dictionnaries containing the two above keys (:obj:`logits`
             and :obj:`pred_boxes`) for each decoder layer.
+        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            Sequence of hidden-states at the output of the last layer of the decoder of the model.
+
+            If :obj:`past_key_values` is used only the last hidden-state of the sequences of shape :obj:`(batch_size,
+            1, hidden_size)` is output.
         decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the decoder at the output of
@@ -129,6 +134,7 @@ class DetrObjectDetectionOutput(ModelOutput):
     logits: torch.FloatTensor = None
     pred_boxes: torch.FloatTensor = None
     auxiliary_outputs: Optional[List[Dict]] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -138,16 +144,72 @@ class DetrObjectDetectionOutput(ModelOutput):
 
 
 @dataclass
-class DetrSegmentationOutput(DetrObjectDetectionOutput):
+class DetrForSegmentationOutput(ModelOutput):
     """
-    This class adds one attribute to DetrObjectDetectionOutput, namely predicted masks.
+    Output type of :class:`~transformers.DetrForSegmentation`.
 
     Args:
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` are provided)):
+            Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+            bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
+            scale-invariant IoU loss.
+        loss_dict (:obj:`Dict`, `optional`):
+            A dictionary containing the individual losses.
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, num_classes + 1)`):
+            Classification logits (including no-object) for all queries.
+        pred_boxes (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, 4)`):
+            Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+            values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
+            possible padding). You can use :class:`~transformers.DetrForObjectDetection.post_process` to retrieve the
+            unnormalized bounding boxes.
         pred_masks (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, width, height)`):
             ...
+        auxiliary_outputs (:obj:`list[Dict]`, `optional`):
+            Optional, only returned when auxilary losses are activated (i.e. :obj:`config.auxiliary_loss` is set to
+            `True`) and labels are provided. It is a list of dictionnaries containing the two above keys (:obj:`logits`
+            and :obj:`pred_boxes`) for each decoder layer.
+        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            Sequence of hidden-states at the output of the last layer of the decoder of the model.
+
+            If :obj:`past_key_values` is used only the last hidden-state of the sequences of shape :obj:`(batch_size,
+            1, hidden_size)` is output.
+        decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the decoder at the output of
+            each layer plus the initial embedding outputs.
+        decoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights of the decoder, after the attention softmax, used to
+            compute the weighted average in the self-attention heads.
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the
+            attention softmax, used to compute the weighted average in the cross-attention heads.
+        encoder_last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            Sequence of hidden-states at the output of the last layer of the encoder of the model.
+        encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the encoder at the output of
+            each layer plus the initial embedding outputs.
+        encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights of the encoder, after the attention softmax, used to
+            compute the weighted average in the self-attention heads.
     """
 
+    loss: Optional[torch.FloatTensor] = None
+    loss_dict: Optional[Dict] = None
+    logits: torch.FloatTensor = None
+    pred_boxes: torch.FloatTensor = None
     pred_masks: torch.FloatTensor = None
+    auxiliary_outputs: Optional[List[Dict]] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 # BELOW: utilities copied from
@@ -676,7 +738,9 @@ class DetrPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.init_std
-        if isinstance(module, nn.Linear):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1332,6 +1396,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
             logits=logits,
             pred_boxes=pred_boxes,
             auxiliary_outputs=auxiliary_outputs,
+            last_hidden_state=outputs.last_hidden_state,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,
@@ -1359,8 +1424,13 @@ class DetrForSegmentation(DetrPreTrainedModel):
 
         # segmentation head
         hidden_size, number_of_heads = config.d_model, config.encoder_attention_heads
-        self.bbox_attention = DetrMHAttentionMap(hidden_size, hidden_size, number_of_heads, dropout=0.0)
         self.mask_head = DetrMaskHeadSmallConv(hidden_size + number_of_heads, [1024, 512, 256], hidden_size)
+
+        self.init_weights()
+
+        # The DetrMHAttentionMap has a custom layer initialization scheme which must not get overwritten by the
+        # self.init_weights()
+        self.bbox_attention = DetrMHAttentionMap(hidden_size, hidden_size, number_of_heads, dropout=0.0, std=config.init_xavier_std)
 
     @add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=DetrSegmentationOutput, config_class=_CONFIG_FOR_DOC)
@@ -1542,6 +1612,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
             pred_boxes=pred_boxes,
             pred_masks=pred_masks,
             auxiliary_outputs=auxiliary_outputs,
+            last_hidden_state=decoder_outputs.last_hidden_state,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
@@ -1637,7 +1708,7 @@ class DetrMaskHeadSmallConv(nn.Module):
 class DetrMHAttentionMap(nn.Module):
     """This is a 2D attention module, which only returns the attention softmax (no multiplication by value)"""
 
-    def __init__(self, query_dim, hidden_dim, num_heads, dropout=0.0, bias=True):
+    def __init__(self, query_dim, hidden_dim, num_heads, dropout=0.0, bias=True, std=None):
         super().__init__()
         self.num_heads = num_heads
         self.hidden_dim = hidden_dim
@@ -1648,8 +1719,8 @@ class DetrMHAttentionMap(nn.Module):
 
         nn.init.zeros_(self.k_linear.bias)
         nn.init.zeros_(self.q_linear.bias)
-        nn.init.xavier_uniform_(self.k_linear.weight)
-        nn.init.xavier_uniform_(self.q_linear.weight)
+        nn.init.xavier_uniform_(self.k_linear.weight, gain=std)
+        nn.init.xavier_uniform_(self.q_linear.weight, gain=std)
         self.normalize_fact = float(hidden_dim / self.num_heads) ** -0.5
 
     def forward(self, q, k, mask: Optional[Tensor] = None):

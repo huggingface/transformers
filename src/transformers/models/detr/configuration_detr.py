@@ -71,6 +71,8 @@ class DetrConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         init_std (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        init_xavier_std (:obj:`float`, `optional`, defaults to 1.):
+            The scaling factor used for the Xavier initialization gain in the HM Attention map module.
         encoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
             The LayerDrop probability for the encoder. See the `LayerDrop paper <see
             https://arxiv.org/abs/1909.11556>`__ for more details.
@@ -142,6 +144,7 @@ class DetrConfig(PretrainedConfig):
         attention_dropout=0.0,
         activation_dropout=0.0,
         init_std=0.02,
+        init_xavier_std=1.,
         classifier_dropout=0.0,
         scale_embedding=False,
         auxiliary_loss=False,
@@ -176,6 +179,7 @@ class DetrConfig(PretrainedConfig):
         self.activation_dropout = activation_dropout
         self.activation_function = activation_function
         self.init_std = init_std
+        self.init_xavier_std = init_xavier_std
         self.encoder_layerdrop = encoder_layerdrop
         self.decoder_layerdrop = decoder_layerdrop
         self.classifier_dropout = classifier_dropout

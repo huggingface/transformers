@@ -18,6 +18,7 @@
 import inspect
 import math
 import unittest
+from typing import List, Tuple, Dict
 
 from transformers import is_timm_available, is_vision_available
 from transformers.file_utils import cached_property
@@ -25,8 +26,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
-from .test_modeling_common import ModelTesterMixin, floats_tensor
-
+from .test_modeling_common import ModelTesterMixin, floats_tensor, _config_zero_init
 
 if is_timm_available():
     import torch
@@ -87,7 +87,7 @@ class DetrModelTester:
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size])
 
-        pixel_mask = torch.ones([self.batch_size, self.min_size, self.max_size])
+        pixel_mask = torch.ones([self.batch_size, self.min_size, self.max_size], device=torch_device)
 
         labels = None
         if self.use_labels:
@@ -95,9 +95,9 @@ class DetrModelTester:
             labels = []
             for i in range(self.batch_size):
                 target = {}
-                target["class_labels"] = torch.randint(high=self.num_labels, size=(self.n_targets,))
-                target["boxes"] = torch.rand(self.n_targets, 4)
-                target["masks"] = torch.rand(self.n_targets, self.min_size, self.max_size)
+                target["class_labels"] = torch.randint(high=self.num_labels, size=(self.n_targets,), device=torch_device)
+                target["boxes"] = torch.rand(self.n_targets, 4, device=torch_device)
+                target["masks"] = torch.rand(self.n_targets, self.min_size, self.max_size, device=torch_device)
                 labels.append(target)
 
         config = DetrConfig(
@@ -176,12 +176,12 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 labels = []
                 for i in range(self.model_tester.batch_size):
                     target = {}
-                    target["class_labels"] = torch.randint(
-                        high=self.model_tester.num_labels, size=(self.model_tester.n_targets,)
+                    target["class_labels"] = torch.ones(
+                        size=(self.model_tester.n_targets,), device=torch_device, dtype=torch.long
                     )
-                    target["boxes"] = torch.rand(self.model_tester.n_targets, 4)
-                    target["masks"] = torch.rand(
-                        self.model_tester.n_targets, self.model_tester.min_size, self.model_tester.max_size
+                    target["boxes"] = torch.ones(self.model_tester.n_targets, 4, device=torch_device, dtype=torch.float)
+                    target["masks"] = torch.ones(
+                        self.model_tester.n_targets, self.model_tester.min_size, self.model_tester.max_size, device=torch_device, dtype=torch.float
                     )
                     labels.append(target)
                 inputs_dict["labels"] = labels
@@ -238,6 +238,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
 
         for model_class in self.all_model_classes:
+            print(model_class)
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
@@ -278,12 +279,12 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 # loss is at first position
                 if "labels" in inputs_dict:
                     correct_outlen += 1  # loss is added to beginning
-                # Object Detection model returns pred_logits and pred_boxes instead of last_hidden_state
+                # Object Detection model returns pred_logits and pred_boxes
                 if model_class.__name__ == "DetrForObjectDetection":
-                    correct_outlen += 1
+                    correct_outlen += 2
                 # Panoptic Segmentation model returns pred_logits, pred_boxes, pred_masks
                 if model_class.__name__ == "DetrForSegmentation":
-                    correct_outlen += 2
+                    correct_outlen += 3
                 if "past_key_values" in outputs:
                     correct_outlen += 1  # past_key_values have been returned
 
@@ -389,7 +390,6 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
             self.assertTrue(outputs)
 
-
 TOLERANCE = 1e-4
 
 
@@ -488,3 +488,4 @@ class DetrModelIntegrationTests(unittest.TestCase):
             [[-7.7558, -10.8788, -11.9797], [-11.8881, -16.4329, -17.7451], [-14.7316, -19.7383, -20.3004]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.pred_masks[0, 0, :3, :3], expected_slice_masks, atol=1e-4))
+
