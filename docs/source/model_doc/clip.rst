@@ -82,7 +82,7 @@ encode the text and prepare the images. The following example shows how to get t
         >>> probs = logits_per_image.softmax(dim=1) # we can take the softmax to get the label probabilities
 
 
-This model was contributed by `<valhalla> <https://huggingface.co/valhalla>`__. The original code can be found `here
+This model was contributed by `valhalla <https://huggingface.co/valhalla>`__. The original code can be found `here
 <https://github.com/openai/CLIP>`__.
 
 CLIPConfig
@@ -140,7 +140,7 @@ CLIPModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.CLIPModel
-    :members: forward
+    :members: forward, get_text_features, get_image_features
 
 
 CLIPTextModel
@@ -154,4 +154,4 @@ CLIPVisionModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.CLIPVisionModel
-    :members: forward, encode_text, encode_image
+    :members: forward
