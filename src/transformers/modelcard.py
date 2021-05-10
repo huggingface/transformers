@@ -292,9 +292,7 @@ class TrainingSummary:
             model_card += "\n"
 
         if self.hyperparameters is not None:
-            model_card += (
-                "\n## Training hyperparameters\n\nThe following hyperparameters were used during training:\n"
-            )
+            model_card += "\n## Training hyperparameters\n\nThe following hyperparameters were used during training:\n"
             model_card += "\n".join([f"- {name}: {value}" for name, value in self.hyperparameters.items()])
             model_card += "\n"
 
