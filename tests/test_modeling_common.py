@@ -176,6 +176,9 @@ class ModelTesterMixin:
                 state_dict_saved = torch.load(output_model_file)
                 for k in _keys_to_ignore_on_save:
                     self.assertNotIn(k, state_dict_saved)
+                
+                # Test we can load the state dict in the model, necessary for the checkpointing API in Trainer.
+                model.load_state_dict(state_dict_saved)
 
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
