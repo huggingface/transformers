@@ -32,18 +32,18 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "t
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "valhalla/clip-vit-base-patch32": "https://huggingface.co/valhalla/clip-vit-base-patch32/resolve/main/vocab.json",
+        "openai/clip-vit-base-patch32": "https://huggingface.co/openai/clip-vit-base-patch32/resolve/main/vocab.json",
     },
     "merges_file": {
-        "valhalla/clip-vit-base-patch32": "https://huggingface.co/valhalla/clip-vit-base-patch32/resolve/main/merges.txt",
+        "openai/clip-vit-base-patch32": "https://huggingface.co/openai/clip-vit-base-patch32/resolve/main/merges.txt",
     },
     "tokenizer_file": {
-        "valhalla/clip-vit-base-patch32": "https://huggingface.co/valhalla/clip-vit-base-patch32/resolve/main/tokenizer.json",
+        "openai/clip-vit-base-patch32": "https://huggingface.co/openai/clip-vit-base-patch32/resolve/main/tokenizer.json",
     },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "valhalla/clip-vit-base-patch32": 77,
+    "openai/clip-vit-base-patch32": 77,
 }
 
 
@@ -58,7 +58,7 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
     ::
 
         >>> from transformers import CLIPTokenizerFast
-        >>> tokenizer = CLIPTokenizerFast.from_pretrained("valhalla/clip-vit-base-patch32")
+        >>> tokenizer = CLIPTokenizerFast.from_pretrained("openai/clip-vit-base-patch32")
         >>> tokenizer("Hello world")['input_ids']
         [15496, 995]
         >>> tokenizer(" Hello world")['input_ids']

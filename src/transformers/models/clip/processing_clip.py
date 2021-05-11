@@ -85,7 +85,7 @@ class CLIPProcessor:
 
                 - a string, the `model id` of a pretrained feature_extractor hosted inside a model repo on
                   huggingface.co. Valid model ids can be located at the root-level, like ``clip-vit-base-patch32``, or
-                  namespaced under a user or organization name, like ``valhalla/clip-vit-base-patch32``.
+                  namespaced under a user or organization name, like ``openai/clip-vit-base-patch32``.
                 - a path to a `directory` containing a feature extractor file saved using the
                   :meth:`~transformers.PreTrainedFeatureExtractor.save_pretrained` method, e.g.,
                   ``./my_model_directory/``.

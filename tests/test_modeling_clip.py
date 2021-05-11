@@ -540,7 +540,7 @@ def prepare_img():
 class CLIPModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        model_name = "valhalla/clip-vit-base-patch32"
+        model_name = "openai/clip-vit-base-patch32"
         model = CLIPModel.from_pretrained(model_name)
         tokenizer = CLIPTokenizer.from_pretrained(model_name)
         feature_extractor = CLIPFeatureExtractor.from_pretrained(model_name)

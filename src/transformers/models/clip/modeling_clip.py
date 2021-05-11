@@ -39,7 +39,7 @@ logger = logging.get_logger(__name__)
 
 
 CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "valhalla/clip-vit-base-patch32",
+    "openai/clip-vit-base-patch32",
     # See all CLIP models at https://huggingface.co/models?filter=clip
 ]
 
