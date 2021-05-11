@@ -15,7 +15,7 @@
 # limitations under the License.
 
 
-from typing import Optional
+from typing import Any, Optional
 
 import flax
 import jax.numpy as jnp
@@ -32,6 +32,7 @@ class GreedyState:
     cur_len: jnp.DeviceArray
     sequences: jnp.DeviceArray
     is_sent_finished: jnp.DeviceArray
+    cache: Any = None
 
 
 class FlaxGenerationMixin:
@@ -85,7 +86,7 @@ class FlaxGenerationMixin:
 
         model = self
 
-        state = GreedyState(cur_len=cur_len, sequences=sequences, is_sent_finished=is_sent_finished, i=1)
+        state = GreedyState(cur_len=cur_len, sequences=sequences, is_sent_finished=is_sent_finished)
 
         def greedy_search_cond_fn(state):
             """Sampling loop termination condition."""
@@ -96,8 +97,11 @@ class FlaxGenerationMixin:
 
         def greedy_search_body_fn(state):
             """Sampling loop state update."""
-            input_ids = lax.dynamic_slice(state.sequences, (0, 0), (batch_size, state.cur_len))
-            next_logits = model(input_ids)[0][:, -1]
+            input_ids = state.sequences
+            generated_token_index = lax.cond(
+                state.cache is not None, lambda _: 1, lambda _: state.cur_len, operand=None
+            )
+            next_logits = model(input_ids)[0][:, generated_token_index]
 
             next_tokens = jnp.argmax(next_logits, axis=-1)
 
@@ -114,6 +118,6 @@ class FlaxGenerationMixin:
         else:
             final_state = lax.while_loop(greedy_search_cond_fn, greedy_search_body_fn, state)
 
-        sequences = final_state[0]
+        sequences = final_state.sequences
 
         return sequences
