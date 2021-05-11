@@ -46,7 +46,7 @@ jobs:
 
       - name: Run all tests on GPU
         run: |
-          python -m pytest --make-reports=tests_torch_gpu tests
+          python -m pytest --timeout=300 --make-reports=tests_torch_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
