@@ -119,7 +119,7 @@ _deps = [
     "pydantic",
     "pytest",
     "pytest-sugar",
-    "pytest-xdist",
+    "pytest-timeout",
     "python>=3.6.0",
     "recommonmark",
     "regex!=2019.12.17",
@@ -247,7 +247,7 @@ extras["vision"] = deps_list("Pillow")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
     deps_list(
-        "pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets", "pytest-sugar", "black", "sacrebleu", "rouge-score", "nltk"
+        "pytest", "pytest-timeout", "timeout-decorator", "parameterized", "psutil", "datasets", "pytest-sugar", "black", "sacrebleu", "rouge-score", "nltk"
     )
     + extras["retrieval"]
     + extras["modelcreation"]
