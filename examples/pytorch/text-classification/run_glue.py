@@ -516,7 +516,14 @@ def main():
                             writer.write(f"{index}\t{item}\n")
 
     if training_args.push_to_hub:
-        trainer.push_to_hub()
+        kwargs = {"finetuned_from": model_args.model_name_or_path, "tags": "text-classification"}
+        if data_args.task_name is not None:
+            kwargs["language"] = "en"
+            kwargs["dataset_tags"] = "glue"
+            kwargs["dataset_args"] = data_args.task_name
+            kwargs["dataset"] = f"GLUE {data_args.task_name.upper()}"
+
+        trainer.push_to_hub(**kwargs)
 
 
 def _mp_fn(index):
