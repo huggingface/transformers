@@ -25,15 +25,14 @@ class CustomProxy(Proxy):
 
     def size(self, dim=None):
         frame = inspect.currentframe()
-        assert frame is not None
         calling_frame = frame.f_back
-        assert calling_frame is not None
 
         # self.size can be called through the shape property, in which case we need to get the outer
         # frame, containing the meaningful information.
         if calling_frame.f_code.co_name == "shape":
             calling_frame = calling_frame.f_back
 
+        instructions = list(reversed(list(dis.get_instructions(calling_frame.f_code))[: calling_frame.f_lasti]))
         code_context = inspect.getframeinfo(calling_frame).code_context[0].strip()
 
         shape = self._shape(calling_frame)
@@ -69,8 +68,8 @@ class CustomProxy(Proxy):
             # instruction, and returns the shape padded as much as necessary to match the expected
             # number of items.
             #   - If self.size is called outside of an unpacking context, simply return the shape.
-            instructions = reversed(list(dis.get_instructions(calling_frame.f_code))[: calling_frame.f_lasti])
             is_unpack = False
+
             for inst in instructions:
                 if inst.opname == "UNPACK_SEQUENCE":
                     is_unpack = True
@@ -92,9 +91,7 @@ class CustomProxy(Proxy):
 
     def __bool__(self) -> bool:
         frame = inspect.currentframe()
-        assert frame is not None
         calling_frame = frame.f_back
-        assert calling_frame is not None
         code_context = inspect.getframeinfo(calling_frame).code_context[0].strip()
         if calling_frame.f_code.co_name == "apply_chunking_to_forward":
             # Returning True to every assertion in "apply_chuncking_to_forward"
@@ -126,8 +123,69 @@ class CustomTracer(Tracer):
         if self.num_choices > 0:
             self.encoder_shape[0] *= self.num_choices
 
+        self.prev_module = None
+        self.leaf_modules = set()
+
     def proxy(self, node: Node):
         return CustomProxy(node, self)
+
+    def _insert_module_as_submodule(self, mod):
+        """
+        Helper method which tries to insert a module which was not declared as submodule.
+        """
+        # First, retrieve the parent module.
+        if self.prev_module is None:
+            return None
+        parent_path = self.prev_module.rsplit(".", 1)[0]
+        parent_mod = None
+        for path, module in self.root.named_modules():
+            if path == parent_path:
+                parent_mod = module
+                break
+        if parent_mod is None:
+            return None
+
+        # If retrieving the parent module was possible, set the module not declared as a submodule
+        # as a parent module attribute.
+        path = None
+        for var_name, var_val in inspect.currentframe().f_back.f_locals.items():
+            if mod is var_val:
+                setattr(parent_mod, var_name, mod)
+                path = f"{parent_path}.{var_name}"
+                break
+
+        return path
+
+    def path_of_module(self, mod: torch.nn.Module) -> str:
+        """
+        Helper method to find the qualified name of ``mod`` in the Module hierarchy of ``root``. For example, if
+        ``root`` has a submodule named ``foo``, which has a submodule named ``bar``, passing ``bar`` into this function
+        will return the string "foo.bar".
+
+        Args:
+            mod (str): The ``Module`` to retrieve the qualified name for.
+        """
+        # Prefer the O(1) algorithm
+        if hasattr(self, "submodule_paths") and self.submodule_paths:
+            path = self.submodule_paths.get(mod)
+            if path is None:
+                path = self._insert_module_as_submodule(mod)
+            if path is None:
+                raise NameError("module is not installed as a submodule")
+            self.prev_module = path
+            return path
+
+        # O(N^2) fallback in the case that we didn't store the submodule
+        # paths.
+        else:
+            for n, p in self.root.named_modules():
+                if mod is p:
+                    return n
+            path = self._insert_module_as_submodule(mod)
+            if path is None:
+                raise NameError("module is not installed as a submodule")
+            self.prev_module = path
+            return path
 
 
 def symbolic_trace(
