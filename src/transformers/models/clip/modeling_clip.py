@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Team. All rights reserved.
+# Copyright 2021 The OpenAI Team Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -807,6 +807,16 @@ class CLIPModel(CLIPPreTrainedModel):
 
     def __init__(self, config: CLIPConfig):
         super().__init__(config)
+
+        if not isinstance(config.text_config, CLIPTextConfig):
+            raise ValueError(
+                f"config.text_config is expected to be of type CLIPTextConfig but is of type {type(config.text_config)}."
+            )
+
+        if not isinstance(config.vision_config, CLIPVisionConfig):
+            raise ValueError(
+                f"config.vision_config is expected to be of type CLIPVisionConfig but is of type {type(config.vision_config)}."
+            )
 
         text_config = config.text_config
         vision_config = config.vision_config
