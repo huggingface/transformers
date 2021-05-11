@@ -1207,13 +1207,15 @@ def nested_simplify(obj, decimals=3):
     Simplifies an object by rounding float numbers, and downcasting tensors/numpy arrays to get simple equality test
     within tests.
     """
+    import numpy as np
+
     from transformers.tokenization_utils import BatchEncoding
 
     if isinstance(obj, list):
         return [nested_simplify(item, decimals) for item in obj]
     elif isinstance(obj, (dict, BatchEncoding)):
         return {nested_simplify(k, decimals): nested_simplify(v, decimals) for k, v in obj.items()}
-    elif isinstance(obj, (str, int)):
+    elif isinstance(obj, (str, int, np.int64)):
         return obj
     elif is_torch_available() and isinstance(obj, torch.Tensor):
         return nested_simplify(obj.tolist())
