@@ -519,6 +519,7 @@ def main():
         kwargs = {"finetuned_from": model_args.model_name_or_path, "tags": "text-classification"}
         if data_args.task_name is not None:
             kwargs["dataset_tags"] = "glue"
+            kwargs["dataset_args"] = data_args.task_name
             kwargs["dataset"] = f"GLUE {data_args.task_name.upper()}"
 
         trainer.push_to_hub(**kwargs)

@@ -240,6 +240,7 @@ should probably proofread and complete it, then remove this comment. -->
 
 TASK_TAG_TO_NAME_MAPPING = {
     "fill-mask": "Masked Language Modeling",
+    "multiple-choice": "Multiple Choice",
     "question-answering": "Question Answering",
     "summarization": "Summarization",
     "text-classification": "Text Classification",
@@ -306,6 +307,7 @@ class TrainingSummary:
     finetuned_from: Optional[str] = None
     dataset: Optional[Union[str, List[str]]] = None
     dataset_tags: Optional[Union[str, List[str]]] = None
+    dataset_args: Optional[Union[str, List[str]]] = None
     eval_results: Optional[Dict[str, float]] = None
     eval_lines: Optional[List[str]] = None
     hyperparameters: Optional[Dict[str, Any]] = None
@@ -313,26 +315,14 @@ class TrainingSummary:
     def create_model_index(self, metric_mapping):
         model_index = f"model-index:\n- name: {self.model_name}\n"
 
-        # Dataset names
-        if self.dataset is None:
-            dataset_names = []
-        elif isinstance(self.dataset, str):
-            dataset_names = [self.dataset]
-        else:
-            dataset_names = self.dataset
-
-        # Dataset tags
-        if self.dataset_tags is None:
-            dataset_tags = []
-        elif isinstance(self.dataset_tags, str):
-            dataset_tags = [self.dataset_tags]
-        else:
-            dataset_tags = self.dataset_tags
-
         # Dataset mapping tag -> name
         dataset_names = _listify(self.dataset)
         dataset_tags = _listify(self.dataset_tags)
+        dataset_args = _listify(self.dataset_args)
+        if len(dataset_args) < len(dataset_tags):
+            dataset_args = dataset_args + [None] * (len(dataset_tags) - len(dataset_args))
         dataset_mapping = {tag: name for tag, name in zip(dataset_tags, dataset_names)}
+        dataset_arg_mapping = {tag: arg for tag, arg in zip(dataset_tags, dataset_args)}
 
         task_mapping = {
             tag: TASK_TAG_TO_NAME_MAPPING[tag] for tag in _listify(self.tags) if tag in TASK_TAG_TO_NAME_MAPPING
@@ -354,6 +344,8 @@ class TrainingSummary:
             if ds_tag is not None:
                 prefix = "  - " if task_tag is None else "    "
                 result += f"{prefix}dataset:\n      name: {dataset_mapping[ds_tag]}\n      type: {ds_tag}\n"
+                if dataset_arg_mapping[ds_tag] is not None:
+                    result += f"      args: {dataset_arg_mapping[ds_tag]}\n"
             if len(metric_mapping) > 0:
                 result += "    metrics:\n"
                 for metric_tag, metric_name in metric_mapping.items():
@@ -452,6 +444,7 @@ class TrainingSummary:
         finetuned_from=None,
         dataset_tags=None,
         dataset=None,
+        dataset_args=None,
     ):
         # TODO (Sylvain) Add a default for `pipeline-tag` inferred from the model.
         if model_name is None:
@@ -468,6 +461,7 @@ class TrainingSummary:
             finetuned_from=finetuned_from,
             dataset_tags=dataset_tags,
             dataset=dataset,
+            dataset_args=dataset_args,
             eval_results=eval_results,
             eval_lines=eval_lines,
             hyperparameters=hyperparameters,

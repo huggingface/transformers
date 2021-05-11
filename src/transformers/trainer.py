@@ -2385,6 +2385,7 @@ class Trainer:
         finetuned_from: Optional[str] = None,
         dataset_tags: Optional[Union[str, List[str]]] = None,
         dataset: Optional[Union[str, List[str]]] = None,
+        dataset_args: Optional[Union[str, List[str]]] = None,
     ):
         training_summary = TrainingSummary.from_trainer(
             self,
@@ -2395,6 +2396,7 @@ class Trainer:
             finetuned_from=finetuned_from,
             dataset_tags=dataset_tags,
             dataset=dataset,
+            dataset_args=dataset_args,
         )
         model_card = training_summary.to_model_card()
         with open(os.path.join(self.args.output_dir, "README.md"), "w") as f:
