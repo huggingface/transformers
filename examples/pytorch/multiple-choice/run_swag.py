@@ -428,7 +428,14 @@ def main():
         trainer.save_metrics("eval", metrics)
 
     if training_args.push_to_hub:
-        trainer.push_to_hub()
+        trainer.push_to_hub(
+            finetuned_from=model_args.model_name_or_path,
+            tags="multiple-choice",
+            dataset_tags="swag",
+            dataset_args="regular",
+            dataset="SWAG",
+            language="en",
+        )
 
 
 def _mp_fn(index):
