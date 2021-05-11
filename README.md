@@ -6,6 +6,7 @@ This branch has the following patches:
 * repetition_penalty has range and slope settings, so it doesn't penalize all tokens in the context window
 * no copy of the state dict is made while loading a pretrained model
 * local self attention implemented in a simple way
+* tail free sampling
 
 <!---
 Copyright 2020 The HuggingFace Team. All rights reserved.
