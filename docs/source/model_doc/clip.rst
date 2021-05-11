@@ -69,11 +69,8 @@ encode the text and prepare the images. The following example shows how to get t
         >>> model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
         >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
-        >>> def prepare_img():
-        ...    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        ...    im = Image.open(requests.get(url, stream=True).raw)
-        ...    return im
-        >>> image = prepare_img()
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True)
 

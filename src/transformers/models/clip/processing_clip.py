@@ -29,10 +29,10 @@ class CLIPProcessor:
     :meth:`~transformers.CLIPProcessor.decode` for more information.
 
     Args:
-        feature_extractor (:obj:`CLIPFeatureExtractor`):
-            An instance of :class:`~transformers.CLIPFeatureExtractor`. The feature extractor is a required input.
-        tokenizer (:obj:`CLIPTokenizer`):
-            An instance of :class:`~transformers.CLIPTokenizer`. The tokenizer is a required input.
+        feature_extractor (:class:`~transformers.CLIPFeatureExtractor`):
+            The feature extractor is a required input.
+        tokenizer (:class:`~transformers.CLIPTokenizer`):
+            The tokenizer is a required input.
     """
 
     def __init__(self, feature_extractor, tokenizer):
@@ -91,6 +91,7 @@ class CLIPProcessor:
                   ``./my_model_directory/``.
                 - a path or url to a saved feature extractor JSON `file`, e.g.,
                   ``./my_model_directory/preprocessor_config.json``.
+
             **kwargs
                 Additional keyword arguments passed along to both :class:`~transformers.PreTrainedFeatureExtractor` and
                 :class:`~transformers.PreTrainedTokenizer`
