@@ -41,15 +41,15 @@ limitations under the License.
 <p>State-of-the-art Natural Language Processing for Jax, PyTorch and TensorFlow
 </h3>
 
-🤗 Transformers provides thousands of pretrained models to perform tasks on texts such as classification, information extraction, question answering, summarization, translation, text generation, etc in 100+ languages. Its aim is to make cutting-edge NLP easier to use for everyone.
+🤗 Transformers provides thousands of pretrained models to perform tasks on texts such as classification, information extraction, question answering, summarization, translation, text generation and more in over 100 languages. Its aim is to make cutting-edge NLP easier to use for everyone.
 
-🤗 Transformers provides APIs to quickly download and use those pretrained models on a given text, fine-tune them on your own datasets then share them with the community on our [model hub](https://huggingface.co/models). At the same time, each python module defining an architecture can be used as a standalone and modified to enable quick research experiments.
+🤗 Transformers provides APIs to quickly download and use those pretrained models on a given text, fine-tune them on your own datasets and then share them with the community on our [model hub](https://huggingface.co/models). At the same time, each python module defining an architecture is fully standalone and can be modified to enable quick research experiments.
 
-🤗 Transformers is backed by the three most popular deep learning libraries, [Jax](https://jax.readthedocs.io/en/latest/), [PyTorch](https://pytorch.org/) and [TensorFlow](https://www.tensorflow.org/), with a seamless integration between them, allowing you to train your models with one then load it for inference with the other.
+🤗 Transformers is backed by the three most popular deep learning libraries — [Jax](https://jax.readthedocs.io/en/latest/), [PyTorch](https://pytorch.org/) and [TensorFlow](https://www.tensorflow.org/) — with a seamless integration between them. It's straightforward to train your models with one before loading them for inference with the other.
 
 ## Online demos
 
-You can test most of our models directly on their pages from the [model hub](https://huggingface.co/models). We also offer [private model hosting, versioning, & an inference API](https://huggingface.co/pricing) to use those models.
+You can test most of our models directly on their pages from the [model hub](https://huggingface.co/models). We also offer [private model hosting, versioning, & an inference API](https://huggingface.co/pricing) for public and private models.
 
 Here are a few examples:
 - [Masked word completion with BERT](https://huggingface.co/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
@@ -64,20 +64,20 @@ Here are a few examples:
 
 ## Quick tour
 
-To immediately use a model on a given text, we provide the `pipeline` API. Pipelines group together a pretrained model with the preprocessing that was used during that model training. Here is how to quickly use a pipeline to classify positive versus negative texts
+To immediately use a model on a given text, we provide the `pipeline` API. Pipelines group together a pretrained model with the preprocessing that was used during that model's training. Here is how to quickly use a pipeline to classify positive versus negative texts:
 
 ```python
 >>> from transformers import pipeline
 
 # Allocate a pipeline for sentiment-analysis
 >>> classifier = pipeline('sentiment-analysis')
->>> classifier('We are very happy to include pipeline into the transformers repository.')
-[{'label': 'POSITIVE', 'score': 0.9978193640708923}]
+>>> classifier('We are very happy to introduce pipeline to the transformers repository.')
+[{'label': 'POSITIVE', 'score': 0.9996980428695679}]
 ```
 
-The second line of code downloads and caches the pretrained model used by the pipeline, the third line evaluates it on the given text. Here the answer is "positive" with a confidence of 99.8%.
+The second line of code downloads and caches the pretrained model used by the pipeline, while the third evaluates it on the given text. Here the answer is "positive" with a confidence of 99.97%.
 
-This is another example of pipeline used for that can extract question answers from some context:
+Many NLP tasks have a pre-trained `pipeline` ready to go. For example, we can easily extract question answers given context:
 
 ``` python
 >>> from transformers import pipeline
@@ -86,15 +86,15 @@ This is another example of pipeline used for that can extract question answers f
 >>> question_answerer = pipeline('question-answering')
 >>> question_answerer({
 ...     'question': 'What is the name of the repository ?',
-...     'context': 'Pipeline have been included in the huggingface/transformers repository'
+...     'context': 'Pipeline has been included in the huggingface/transformers repository'
 ... })
-{'score': 0.5135612454720828, 'start': 35, 'end': 59, 'answer': 'huggingface/transformers'}
+{'score': 0.30970096588134766, 'start': 34, 'end': 58, 'answer': 'huggingface/transformers'}
 
 ```
 
-On top of the answer, the pretrained model used here returned its confidence score, along with the start position and its end position in the tokenized sentence. You can learn more about the tasks supported by the `pipeline` API in [this tutorial](https://huggingface.co/transformers/task_summary.html).
+In addition to the answer, the pretrained model used here returned its confidence score, along with the start position and end position of the answer in the tokenized sentence. You can learn more about the tasks supported by the `pipeline` API in [this tutorial](https://huggingface.co/transformers/task_summary.html).
 
-To download and use any of the pretrained models on your given task, you just need to use those three lines of codes (PyTorch version):
+To download and use any of the pretrained models on your given task, all it takes is three lines of code. Here is the PyTorch version:
 ```python
 >>> from transformers import AutoTokenizer, AutoModel
 
@@ -104,7 +104,7 @@ To download and use any of the pretrained models on your given task, you just ne
 >>> inputs = tokenizer("Hello world!", return_tensors="pt")
 >>> outputs = model(**inputs)
 ```
-or for TensorFlow:
+And here is the equivalent code for TensorFlow:
 ```python
 >>> from transformers import AutoTokenizer, TFAutoModel
 
@@ -115,9 +115,9 @@ or for TensorFlow:
 >>> outputs = model(**inputs)
 ```
 
-The tokenizer is responsible for all the preprocessing the pretrained model expects, and can be called directly on one (or list) of texts (as we can see on the fourth line of both code examples). It will output a dictionary you can directly pass to your model (which is done on the fifth line).
+The tokenizer is responsible for all the preprocessing the pretrained model expects, and can be called directly on a single string (as in the above examples) or a list. It will output a dictionary that you can use in downstream code or simply directly pass to your model using the ** argument unpacking operator.
 
-The model itself is a regular [Pytorch `nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) or a [TensorFlow `tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) (depending on your backend) which you can use normally. For instance, [this tutorial](https://huggingface.co/transformers/training.html) explains how to integrate such a model in classic PyTorch or TensorFlow training loop, or how to use our `Trainer` API to quickly fine-tune the on a new dataset.
+The model itself is a regular [Pytorch `nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) or a [TensorFlow `tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) (depending on your backend) which you can use normally. [This tutorial](https://huggingface.co/transformers/training.html) explains how to integrate such a model into a classic PyTorch or TensorFlow training loop, or how to use our `Trainer` API to quickly fine-tune on a new dataset.
 
 ## Why should I use transformers?
 
@@ -135,16 +135,16 @@ The model itself is a regular [Pytorch `nn.Module`](https://pytorch.org/docs/sta
 1. Choose the right framework for every part of a model's lifetime:
     - Train state-of-the-art models in 3 lines of code.
     - Move a single model between TF2.0/PyTorch frameworks at will.
-    - Seamlessly pick the right framework for training, evaluation, production.
+    - Seamlessly pick the right framework for training, evaluation and production.
 
 1. Easily customize a model or an example to your needs:
-    - Examples for each architecture to reproduce the results by the official authors of said architecture.
-    - Expose the models internal as consistently as possible.
+    - We provide examples for each architecture to reproduce the results published by its original authors.
+    - Model internals are exposed as consistently as possible.
     - Model files can be used independently of the library for quick experiments.
 
 ## Why shouldn't I use transformers?
 
-- This library is not a modular toolbox of building blocks for neural nets. The code in the model files is not refactored with additional abstractions on purpose, so that researchers can quickly iterate on each of the models without diving in additional abstractions/files.
+- This library is not a modular toolbox of building blocks for neural nets. The code in the model files is not refactored with additional abstractions on purpose, so that researchers can quickly iterate on each of the models without diving into additional abstractions/files.
 - The training API is not intended to work on any model but is optimized to work with the models provided by the library. For generic machine learning loops, you should use another library.
 - While we strive to present as many use cases as possible, the scripts in our [examples folder](https://github.com/huggingface/transformers/tree/master/examples) are just that: examples. It is expected that they won't work out-of-the box on your specific problem and that you will be required to change a few lines of code to adapt them to your needs.
 
@@ -159,7 +159,7 @@ You should install 🤗 Transformers in a [virtual environment](https://docs.pyt
 First, create a virtual environment with the version of Python you're going to use and activate it.
 
 Then, you will need to install at least one of Flax, PyTorch or TensorFlow.
-Please refer to [TensorFlow installation page](https://www.tensorflow.org/install/), [PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) regarding the specific install command for your platform and/or [Flax installation page](https://github.com/google/flax#quick-install).
+Please refer to [TensorFlow installation page](https://www.tensorflow.org/install/), [PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) and/or [Flax installation page](https://github.com/google/flax#quick-install) regarding the specific install command for your platform.
 
 When one of those backends has been installed, 🤗 Transformers can be installed using pip as follows:
 
@@ -181,7 +181,7 @@ conda install -c huggingface transformers
 
 Follow the installation pages of Flax, PyTorch or TensorFlow to see how to install them with conda.
 
-## Models architectures
+## Model architectures
 
 **[All the model checkpoints](https://huggingface.co/models)** provided by 🤗 Transformers are seamlessly integrated from the huggingface.co [model hub](https://huggingface.co) where they are uploaded directly by [users](https://huggingface.co/users) and [organizations](https://huggingface.co/organizations).
 
@@ -249,9 +249,9 @@ Min, Patrick Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, and Wen-tau Yih.
 1. **[XLSR-Wav2Vec2](https://huggingface.co/transformers/model_doc/xlsr_wav2vec2.html)** (from Facebook AI) released with the paper [Unsupervised Cross-Lingual Representation Learning For Speech Recognition](https://arxiv.org/abs/2006.13979) by Alexis Conneau, Alexei Baevski, Ronan Collobert, Abdelrahman Mohamed, Michael Auli.
 1. Want to contribute a new model? We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them in the [`templates`](./templates) folder of the repository. Be sure to check the [contributing guidelines](./CONTRIBUTING.md) and contact the maintainers or open an issue to collect feedbacks before starting your PR.
 
-To check if each model has an implementation in Flax, PyTorch or TensorFlow, or has an associated tokenizer backed by the 🤗 Tokenizers library, refer to [this table](https://huggingface.co/transformers/index.html#bigtable)
+To check if each model has an implementation in Flax, PyTorch or TensorFlow, or has an associated tokenizer backed by the 🤗 Tokenizers library, refer to [this table](https://huggingface.co/transformers/index.html#bigtable).
 
-These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations. You can find more details on the performances in the Examples section of the [documentation](https://huggingface.co/transformers/examples.html).
+These implementations have been tested on several datasets (see the example scripts) and should match the performance of the original implementations. You can find more details on performance in the Examples section of the [documentation](https://huggingface.co/transformers/examples.html).
 
 
 ## Learn more
