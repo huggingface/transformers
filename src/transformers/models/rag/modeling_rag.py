@@ -1120,7 +1120,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
 
     def set_context_encoder_for_training(self,retriever_model_name):
         self.rag.context_encoder_training=True
-        print("loading the ctx encoder.....")
         self.rag.ctx_encoder = DPRContextEncoder.from_pretrained(retriever_model_name)
 
     def get_context_trained_encoder(self):
