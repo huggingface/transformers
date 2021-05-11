@@ -2,7 +2,7 @@
 Authors: @patrickvonplaten and @lhoestq
 
 
-The original RAG implementation is able to end-to-end train the question encoder and the generator. 
+The original RAG implementation is able to train the question encoder and the generator in an end-to-end fashion. 
 This extension enables the end-to-end training of RAG including the context encoder in the retriever component. 
 Please read the [accompanying blog post](https://shamanesiri.medium.com/how-to-finetune-the-entire-rag-architecture-including-dpr-retriever-4b4385322552) for details on this implementation.
 
