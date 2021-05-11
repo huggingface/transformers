@@ -40,8 +40,7 @@ python run_flax_glue.py \
 
 where task name can be one of cola, mnli, mnli-mm, mrpc, qnli, qqp, rte, sst2, stsb, wnli.
 
-Using the command above, the script will train for 3 epochs and run eval after each epoch. Once
-training is done, it will run a few predictions on the test set and output the predictions.
+Using the command above, the script will train for 3 epochs and run eval after each epoch. 
 Metrics and hyperparameters are stored in Tensorflow event files in `---output_dir`.
 You can see the results by running `tensorboard` in that directory:
 
@@ -60,20 +59,20 @@ On the task other than MRPC and WNLI we train for 3 these epochs because this is
 but looking at the training curves of some of them (e.g., SST-2, STS-b), it appears the models
 are undertrained and we could get better results when training longer.
 
-In the Tensorboard results linked below, the random seed of each model is equal to the ID of the run. So in order to reproduce run 1, run the command above with `--seed=1`. The best run used random seed 2, which is the default in the script. The results of all runs are in [this Google Sheet](https://docs.google.com/spreadsheets/d/1wtcjX_fJLjYs6kXkoiej2qGjrl9ByfNhPulPAz71Ky4/edit?usp=sharing).
+In the Tensorboard results linked below, the random seed of each model is equal to the ID of the run. So in order to reproduce run 1, run the command above with `--seed=1`. The best run used random seed 2, which is the default in the script. The results of all runs are in [this Google Sheet](https://docs.google.com/spreadsheets/d/1zKL_xn32HwbxkFMxB3ftca-soTHAuBFgIhYhOhCnZ4E/edit?usp=sharing).
 
 
 | Task  | Metric                       | Acc (best run) | Acc (avg/5runs) | Stdev     | Metrics                                                                  |
 |-------|------------------------------|----------------|-----------------|-----------|--------------------------------------------------------------------------|
-| CoLA  | Matthew's corr               | 59.19          | 59.31           | 1.17      | [tfhub.dev](https://tensorboard.dev/experiment/zVRnDpUeRiWJOKJ6bDgksw/)  |
-| SST-2 | Accuracy                     | 91.47          | 91.83           | 0.63      | [tfhub.dev](https://tensorboard.dev/experiment/pijWaaOdTaiWD6Bqc6PoHQ/)  |
-| MRPC  | F1/Accuracy                  | 89.5/85.42     | 89.12/84.40     | 0.47/0.69 | [tfhub.dev](https://tensorboard.dev/experiment/GlXMMAsYTJOExm9BmKKoLw/)  |
-| STS-B | Pearson/Spearman corr.       | 88.92/88.68    | 89.13/88.86     | 0.22/0.20 | [tfhub.dev](https://tensorboard.dev/experiment/92w90I9JSV6w5x91e2bQpw/)  |
-| QQP   | Accuracy/F1                  | 90.83/87.63    | 90.87/87.66     | 0.05/0.07 | [tfhub.dev](https://tensorboard.dev/experiment/9JDb13BxS72c03LsyMNY8A/)  |
-| MNLI  | Matched acc./Mismatched acc. | 83.86/83.55    | 83.53/83.86     | 0.22/0.22 | [tfhub.dev](https://tensorboard.dev/experiment/X7AmBzhoR66VW8NgNLhRmQ/) / [tfhub.dev](https://tensorboard.dev/experiment/fDnYyHNKS1mbx2XrAFvIBw/)  |
-| QNLI  | Accuracy                     | 90.75          | 90.86           | 0.18      | [tfhub.dev](https://tensorboard.dev/experiment/Z0U789pbQRyJ4QbpAH3FlQ/)  |
-| RTE   | Accuracy                     | 69.14          | 67.50           | 1.66      | [tfhub.dev](https://tensorboard.dev/experiment/bDP0NVFyQKKHGL10XBErqg/)  |
-| WNLI  | Accuracy                     | 57.81          | 41.56           | 19.47     | [tfhub.dev](https://tensorboard.dev/experiment/7Nsags44Q1y2id46ddlhNQ/)  |
+| CoLA  | Matthew's corr               | 59.57          | 58.04           | 1.81      | [tfhub.dev](https://tensorboard.dev/experiment/f4OvQpWtRq6CvddpxGBd0A/)  |
+| SST-2 | Accuracy                     | 92.43          | 91.79           | 0.59      | [tfhub.dev](https://tensorboard.dev/experiment/BYFwa49MRTaLIn93DgAEtA/)  |
+| MRPC  | F1/Accuracy                  | 89.50/84.8     | 88.70/84.02     | 0.56/0.48 | [tfhub.dev](https://tensorboard.dev/experiment/9ZWH5xwXRS6zEEUE4RaBhQ/)  |
+| STS-B | Pearson/Spearman corr.       | 90.00/88.71    | 89.09/88.61     | 0.51/0.07 | [tfhub.dev](https://tensorboard.dev/experiment/mUlI5B9QQ0WGEJip7p3Tng/)  |
+| QQP   | Accuracy/F1                  | 90.88/87.64    | 90.75/87.53     | 0.11/0.13 | [tfhub.dev](https://tensorboard.dev/experiment/pO6h75L3SvSXSWRcgljXKA/)  |
+| MNLI  | Matched acc.                 | 84.06          | 83.88           | 0.16      | [tfhub.dev](https://tensorboard.dev/experiment/LKwaOH18RMuo7nJkESrpKg/)  |
+| QNLI  | Accuracy                     | 91.01          | 90.86           | 0.18      | [tfhub.dev](https://tensorboard.dev/experiment/qesXxNcaQhmKxPmbw1sOoA/)  |
+| RTE   | Accuracy                     | 66.80          | 65.27           | 1.07      | [tfhub.dev](https://tensorboard.dev/experiment/Z84xC0r6RjyzT4SLqiAbzQ/)  |
+| WNLI  | Accuracy                     | 39.44          | 32.96           | 5.85      | [tfhub.dev](https://tensorboard.dev/experiment/gV73w9v0RIKrqVw32PZbAQ/)  |
 
 Some of these results are significantly different from the ones reported on the test set of GLUE benchmark on the
 website. For QQP and WNLI, please refer to [FAQ #12](https://gluebenchmark.com/faq) on the website.

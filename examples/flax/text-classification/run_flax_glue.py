@@ -129,7 +129,7 @@ def parse_args():
         "--num_warmup_steps", type=int, default=0, help="Number of steps for the warmup in the lr scheduler."
     )
     parser.add_argument("--output_dir", type=str, default=None, help="Where to store the final model.")
-    parser.add_argument("--seed", type=int, default=0, help="A seed for reproducible training.")
+    parser.add_argument("--seed", type=int, default=2, help="A seed for reproducible training.")
     args = parser.parse_args()
 
     # Sanity checks
@@ -269,8 +269,8 @@ def main():
         level=logging.INFO,
     )
     # Setup logging, we only want one process per machine to log things on the screen.
-    logger.setLevel(logging.INFO if jax.host_id() == 0 else logging.ERROR)
-    if jax.host_id() == 0:
+    logger.setLevel(logging.INFO if jax.process_index() == 0 else logging.ERROR)
+    if jax.process_index() == 0:
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_info()
     else:
@@ -492,7 +492,7 @@ def main():
         num_leftover_samples = len(eval_dataset) % eval_batch_size
 
         # make sure leftover batch is evaluated on one device
-        if num_leftover_samples > 0 and jax.host_id() == 0:
+        if num_leftover_samples > 0 and jax.process_index() == 0:
             # put weights on single device
             state = unreplicate(state)
 
@@ -509,7 +509,7 @@ def main():
         write_metric(train_metrics, eval_metric, train_time, cur_step)
 
     # save last checkpoint
-    if jax.host_id() == 0:
+    if jax.process_index() == 0:
         params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
         model.save_pretrained(args.output_dir, params=params)
 
