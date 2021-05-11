@@ -1072,7 +1072,7 @@ num_heads))`.
 
 
 @add_start_docstrings(
-    "The bare T5 Model transformer outputting raw hidden-states" "without any specific head on top.",
+    "The bare T5 Model transformer outputting raw hidden-states without any specific head on top.",
     T5_START_DOCSTRING,
 )
 class TFT5Model(TFT5PreTrainedModel):
@@ -1514,7 +1514,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
 
 @add_start_docstrings(
-    "The bare T5 Model transformer outputting encoder's raw hidden-states" "without any specific head on top.",
+    "The bare T5 Model transformer outputting encoder's raw hidden-states without any specific head on top.",
     T5_START_DOCSTRING,
 )
 class TFT5EncoderModel(TFT5PreTrainedModel):

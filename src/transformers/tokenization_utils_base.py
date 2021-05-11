@@ -1481,12 +1481,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if value == self.model_max_length - self.num_special_tokens_to_add(pair=False) and self.verbose:
             if not self.deprecation_warnings.get("max_len_single_sentence", False):
                 logger.warning(
-                    "Setting 'max_len_single_sentence' is now deprecated. " "This value is automatically set up."
+                    "Setting 'max_len_single_sentence' is now deprecated. This value is automatically set up."
                 )
             self.deprecation_warnings["max_len_single_sentence"] = True
         else:
             raise ValueError(
-                "Setting 'max_len_single_sentence' is now deprecated. " "This value is automatically set up."
+                "Setting 'max_len_single_sentence' is now deprecated. This value is automatically set up."
             )
 
     @max_len_sentences_pair.setter
@@ -1495,12 +1495,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if value == self.model_max_length - self.num_special_tokens_to_add(pair=True) and self.verbose:
             if not self.deprecation_warnings.get("max_len_sentences_pair", False):
                 logger.warning(
-                    "Setting 'max_len_sentences_pair' is now deprecated. " "This value is automatically set up."
+                    "Setting 'max_len_sentences_pair' is now deprecated. This value is automatically set up."
                 )
             self.deprecation_warnings["max_len_sentences_pair"] = True
         else:
             raise ValueError(
-                "Setting 'max_len_sentences_pair' is now deprecated. " "This value is automatically set up."
+                "Setting 'max_len_sentences_pair' is now deprecated. This value is automatically set up."
             )
 
     def __repr__(self) -> str:

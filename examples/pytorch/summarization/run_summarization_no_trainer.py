@@ -104,7 +104,7 @@ def parse_args():
         "--ignore_pad_token_for_loss",
         type=bool,
         default=True,
-        help="Whether to ignore the tokens corresponding to " "padded labels in the loss computation or not.",
+        help="Whether to ignore the tokens corresponding to padded labels in the loss computation or not.",
     )
     parser.add_argument(
         "--max_source_length",
@@ -117,7 +117,7 @@ def parse_args():
         "--source_prefix",
         type=str,
         default=None,
-        help="A prefix to add before every source text " "(useful for T5 models).",
+        help="A prefix to add before every source text (useful for T5 models).",
     )
     parser.add_argument(
         "--preprocessing_num_workers",

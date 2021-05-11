@@ -75,7 +75,7 @@ class TrainCommand(BaseTransformersCLICommand):
             "--validation_split",
             type=float,
             default=0.1,
-            help="if validation dataset is not provided, fraction of train dataset " "to use as validation dataset.",
+            help="if validation dataset is not provided, fraction of train dataset to use as validation dataset.",
         )
 
         train_parser.add_argument("--output", type=str, default="./", help="path to saved the trained model.")

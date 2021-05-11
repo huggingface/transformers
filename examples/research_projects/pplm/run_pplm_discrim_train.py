@@ -370,7 +370,7 @@ def train_discriminator(
         # class \t text
 
         if dataset_fp is None:
-            raise ValueError("When generic dataset is selected, " "dataset_fp needs to be specified aswell.")
+            raise ValueError("When generic dataset is selected, dataset_fp needs to be specified aswell.")
 
         classes = set()
         with open(dataset_fp) as f:
@@ -498,7 +498,7 @@ if __name__ == "__main__":
         "--dataset_fp",
         type=str,
         default="",
-        help="File path of the dataset to use. " "Needed only in case of generic datadset",
+        help="File path of the dataset to use. Needed only in case of generic datadset",
     )
     parser.add_argument(
         "--pretrained_model", type=str, default="gpt2-medium", help="Pretrained model to use as encoder"

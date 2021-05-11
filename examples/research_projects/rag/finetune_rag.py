@@ -523,7 +523,7 @@ def main(args=None, model=None) -> GenerativeQAModule:
     named_actors = []
     if args.distributed_retriever == "ray" and args.gpus > 1:
         if not is_ray_available():
-            raise RuntimeError("Please install Ray to use the Ray " "distributed retriever.")
+            raise RuntimeError("Please install Ray to use the Ray distributed retriever.")
         # Connect to an existing Ray cluster.
         try:
             ray.init(address=args.ray_address)

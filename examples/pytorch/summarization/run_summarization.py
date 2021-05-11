@@ -130,7 +130,7 @@ class DataTrainingArguments:
     test_file: Optional[str] = field(
         default=None,
         metadata={
-            "help": "An optional input test data file to evaluate the metrics (rouge) on " "(a jsonlines or csv file)."
+            "help": "An optional input test data file to evaluate the metrics (rouge) on (a jsonlines or csv file)."
         },
     )
     overwrite_cache: bool = field(

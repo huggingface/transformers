@@ -284,7 +284,7 @@ class RepoCreateCommand(BaseUserCommand):
             exit(1)
         print("\nYour repo now lives at:")
         print(f"  {ANSI.bold(url)}")
-        print("\nYou can clone it locally with the command below," " and commit/push as usual.")
+        print("\nYou can clone it locally with the command below, and commit/push as usual.")
         print(f"\n  git clone {url}")
         print("")
 
