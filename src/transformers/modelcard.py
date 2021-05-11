@@ -23,6 +23,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+import requests
+from huggingface_hub import HfApi
+
 from . import __version__
 from .file_utils import (
     CONFIG_NAME,
@@ -32,6 +35,7 @@ from .file_utils import (
     cached_path,
     hf_bucket_url,
     is_datasets_available,
+    is_offline_mode,
     is_remote_url,
     is_tokenizers_available,
     is_torch_available,
@@ -311,6 +315,17 @@ class TrainingSummary:
     eval_results: Optional[Dict[str, float]] = None
     eval_lines: Optional[List[str]] = None
     hyperparameters: Optional[Dict[str, Any]] = None
+
+    def __post_init__(self):
+        # Infer default license from the checkpoint used, if possible.
+        if self.license is None and not is_offline_mode() and self.finetuned_from is not None:
+            try:
+                model_info = HfApi().model_info(self.finetuned_from)
+                for tag in model_info.tags:
+                    if tag.startswith("license:"):
+                        self.license = tag[8:]
+            except requests.exceptions.HTTPError:
+                pass
 
     def create_model_index(self, metric_mapping):
         model_index = f"model-index:\n- name: {self.model_name}\n"
