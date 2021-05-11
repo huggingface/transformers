@@ -77,7 +77,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
             tokenizer
             <https://github.com/google-research/pegasus/blob/939830367bcf411193d2b5eca2f2f90f3f9260ca/pegasus/ops/pretrain_parsing_ops.cc#L66>`__
             that uses the tokens 2 - 104 only for pretraining
-        sp_model_kwargs (:obj:`dict`, `optional`, defaults to :obj:`None`):
+        sp_model_kwargs (:obj:`dict`, `optional`):
             Will be passed to the ``SentencePieceProcessor.__init__()`` method. The `Python wrapper for SentencePiece
             <https://github.com/google/sentencepiece/tree/master/python>`__ can be used, among other things, to set:
 

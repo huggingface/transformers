@@ -79,7 +79,7 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
             Whether or not to lowercase the input when tokenizing.
         tgt_lang (:obj:`str`, `optional`):
             A string representing the target language.
-        sp_model_kwargs (:obj:`dict`, `optional`, defaults to :obj:`None`):
+        sp_model_kwargs (:obj:`dict`, `optional`):
             Will be passed to the ``SentencePieceProcessor.__init__()`` method. The `Python wrapper for SentencePiece
             <https://github.com/google/sentencepiece/tree/master/python>`__ can be used, among other things, to set:
 
