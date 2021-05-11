@@ -63,7 +63,7 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
     def test_aggregation_strategy(self):
         model_name = self.small_models[0]
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        nlp = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="tf")
+        nlp = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
         example1 = [
             {
                 "entity": "B-PER",
@@ -223,10 +223,11 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
         self.assertEqual(nlp.aggregate(example1, AggregationStrategy.FIRST), first_result)
         # We don't test MAX and AVERAGE here, the examples output roughly the same
 
+    @require_torch
     def test_aggregation_strategy_example2(self):
         model_name = self.small_models[0]
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        nlp = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="tf")
+        nlp = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
         example2 = [
             {
                 "entity": "I-PER",
@@ -270,10 +271,11 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
         self.assertEqual(nlp.aggregate(example2, AggregationStrategy.FIRST), first_result)
         # We don't test MAX and AVERAGE here, the examples output roughly the same
 
+    @require_torch
     def test_aggregation_strategy_example3(self):
         model_name = self.small_models[0]
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        nlp = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="tf")
+        nlp = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
         example3 = [
             {
                 "entity": "I-MISC",
