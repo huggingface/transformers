@@ -1168,7 +1168,6 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
     def test_push_to_hub(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(output_dir=tmp_dir)
-            trainer.save_model()
             url = trainer.push_to_hub(repo_name="test-trainer", use_auth_token=self._token)
 
             # Extract repo_name from the url
