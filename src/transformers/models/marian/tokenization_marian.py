@@ -227,7 +227,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         return super().decode(token_ids, **kwargs)
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        """Uses source spm if _decode_use_source_tokenizer is True, and target spm otherwise """
+        """Uses source spm if _decode_use_source_tokenizer is True, and target spm otherwise"""
         if self._decode_use_source_tokenizer:
             return self.spm_source.DecodePieces(tokens)
         else:

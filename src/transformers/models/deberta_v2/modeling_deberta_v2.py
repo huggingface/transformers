@@ -511,7 +511,7 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
         query_size (int): the length of query
         key_size (int): the length of key
         bucket_size (int): the size of position bucket
-        max_position (int): the maxium allowed absolute positoin
+        max_position (int): the maximum allowed absolute position
 
     Return:
         :obj:`torch.LongTensor`: A tensor with shape [1, query_size, key_size]
@@ -561,8 +561,8 @@ class DisentangledSelfAttention(torch.nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
             )
         self.num_attention_heads = config.num_attention_heads
         _attention_head_size = config.hidden_size // config.num_attention_heads
@@ -698,7 +698,7 @@ class DisentangledSelfAttention(torch.nn.Module):
             relative_pos = relative_pos.unsqueeze(1)
         # bsz x height x query x key
         elif relative_pos.dim() != 4:
-            raise ValueError(f"Relative postion ids must be of dim 2 or 3 or 4. {relative_pos.dim()}")
+            raise ValueError(f"Relative position ids must be of dim 2 or 3 or 4. {relative_pos.dim()}")
 
         att_span = self.pos_ebd_size
         relative_pos = relative_pos.long().to(query_layer.device)

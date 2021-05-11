@@ -48,7 +48,8 @@ Tips:
   layers to the decoder and auto-regressively generates the decoder output. - T5 uses relative scalar embeddings.
   Encoder input padding can be done on the left and on the right.
 
-The original code can be found `here <https://github.com/google-research/text-to-text-transfer-transformer>`__.
+This model was contributed by `thomwolf <https://huggingface.co/thomwolf>`__. The original code can be found `here
+<https://github.com/google-research/text-to-text-transfer-transformer>`__.
 
 Training
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -73,10 +74,10 @@ token. T5 can be trained / fine-tuned both in a supervised and unsupervised fash
 
 .. code-block::
 
-  input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt').input_ids
-  labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2>', return_tensors='pt').input_ids
-  # the forward function automatically creates the correct decoder_input_ids
-  loss = model(input_ids=input_ids, labels=labels).loss
+    input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt').input_ids
+    labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2>', return_tensors='pt').input_ids
+    # the forward function automatically creates the correct decoder_input_ids
+    loss = model(input_ids=input_ids, labels=labels).loss
 
 - Supervised training
 
@@ -86,10 +87,10 @@ token. T5 can be trained / fine-tuned both in a supervised and unsupervised fash
 
 .. code-block::
 
-  input_ids = tokenizer('translate English to German: The house is wonderful.', return_tensors='pt').input_ids
-  labels = tokenizer('Das Haus ist wunderbar.', return_tensors='pt').input_ids
-  # the forward function automatically creates the correct decoder_input_ids
-  loss = model(input_ids=input_ids, labels=labels).loss
+    input_ids = tokenizer('translate English to German: The house is wonderful.', return_tensors='pt').input_ids
+    labels = tokenizer('Das Haus ist wunderbar.', return_tensors='pt').input_ids
+    # the forward function automatically creates the correct decoder_input_ids
+    loss = model(input_ids=input_ids, labels=labels).loss
 
 
 T5Config

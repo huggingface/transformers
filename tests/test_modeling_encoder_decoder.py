@@ -34,6 +34,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoConfig,
         AutoTokenizer,
         BartForCausalLM,
         BertGenerationDecoder,
@@ -884,3 +885,38 @@ class BartEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
 
     def test_encoder_decoder_model_shared_weights(self):
         pass
+
+
+@require_torch
+class EncoderDecoderModelTest(unittest.TestCase):
+    def get_from_encoderdecoder_pretrained_model(self):
+        return EncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "bert-base-uncased")
+
+    def get_decoder_config(self):
+        config = AutoConfig.from_pretrained("bert-base-uncased")
+        config.is_decoder = True
+        config.add_cross_attention = True
+        return config
+
+    def get_encoderdecoder_model(self):
+        return EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
+
+    def get_encoder_decoder_models(self):
+        encoder_model = BertModel.from_pretrained("bert-base-uncased")
+        decoder_model = BertLMHeadModel.from_pretrained("bert-base-uncased", config=self.get_decoder_config())
+        return {"encoder": encoder_model, "decoder": decoder_model}
+
+    def _check_configuration_tie(self, model):
+        assert id(model.decoder.config) == id(model.config.decoder)
+        assert id(model.encoder.config) == id(model.config.encoder)
+
+    @slow
+    def test_configuration_tie(self):
+        model = self.get_from_encoderdecoder_pretrained_model()
+        self._check_configuration_tie(model)
+
+        model = EncoderDecoderModel(**self.get_encoder_decoder_models())
+        self._check_configuration_tie(model)
+
+        model = self.get_encoderdecoder_model()
+        self._check_configuration_tie(model)

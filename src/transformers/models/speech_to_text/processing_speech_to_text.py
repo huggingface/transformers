@@ -97,7 +97,7 @@ class Speech2TextProcessor:
                   :meth:`~transformers.PreTrainedFeatureExtractor.save_pretrained` method, e.g.,
                   ``./my_model_directory/``.
                 - a path or url to a saved feature extractor JSON `file`, e.g.,
-                  ``./my_model_directory/feature_extraction_config.json``.
+                  ``./my_model_directory/preprocessor_config.json``.
             **kwargs
                 Additional keyword arguments passed along to both :class:`~transformers.PreTrainedFeatureExtractor` and
                 :class:`~transformers.PreTrainedTokenizer`

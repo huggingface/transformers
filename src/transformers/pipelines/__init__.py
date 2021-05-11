@@ -20,11 +20,14 @@ import warnings
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
 
 from ..configuration_utils import PretrainedConfig
+from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..file_utils import is_tf_available, is_torch_available
-from ..modelcard import ModelCard
-from ..models.auto.tokenization_auto import AutoTokenizer
+from ..models.auto.configuration_auto import AutoConfig
+from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
+from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import logging
+from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
     ArgumentHandler,
     CsvPipelineDataFormat,
@@ -39,6 +42,7 @@ from .base import (
 from .conversational import Conversation, ConversationalPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
+from .image_classification import ImageClassificationPipeline
 from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
 from .text2text_generation import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
@@ -78,6 +82,7 @@ if is_torch_available():
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         AutoModel,
         AutoModelForCausalLM,
+        AutoModelForImageClassification,
         AutoModelForMaskedLM,
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
@@ -93,6 +98,10 @@ logger = logging.get_logger(__name__)
 
 
 # Register all the supported tasks here
+TASK_ALIASES = {
+    "sentiment-analysis": "text-classification",
+    "ner": "token-classification",
+}
 SUPPORTED_TASKS = {
     "feature-extraction": {
         "impl": FeatureExtractionPipeline,
@@ -100,7 +109,7 @@ SUPPORTED_TASKS = {
         "pt": AutoModel if is_torch_available() else None,
         "default": {"model": {"pt": "distilbert-base-cased", "tf": "distilbert-base-cased"}},
     },
-    "sentiment-analysis": {
+    "text-classification": {
         "impl": TextClassificationPipeline,
         "tf": TFAutoModelForSequenceClassification if is_tf_available() else None,
         "pt": AutoModelForSequenceClassification if is_torch_available() else None,
@@ -111,7 +120,7 @@ SUPPORTED_TASKS = {
             },
         },
     },
-    "ner": {
+    "token-classification": {
         "impl": TokenClassificationPipeline,
         "tf": TFAutoModelForTokenClassification if is_tf_available() else None,
         "pt": AutoModelForTokenClassification if is_torch_available() else None,
@@ -193,6 +202,12 @@ SUPPORTED_TASKS = {
         "pt": AutoModelForCausalLM if is_torch_available() else None,
         "default": {"model": {"pt": "microsoft/DialoGPT-medium", "tf": "microsoft/DialoGPT-medium"}},
     },
+    "image-classification": {
+        "impl": ImageClassificationPipeline,
+        "tf": None,
+        "pt": AutoModelForImageClassification if is_torch_available() else None,
+        "default": {"model": {"pt": "google/vit-base-patch16-224"}},
+    },
 }
 
 
@@ -206,8 +221,10 @@ def check_task(task: str) -> Tuple[Dict, Any]:
             The task defining which pipeline will be returned. Currently accepted tasks are:
 
             - :obj:`"feature-extraction"`
-            - :obj:`"sentiment-analysis"`
-            - :obj:`"ner"`
+            - :obj:`"text-classification"`
+            - :obj:`"sentiment-analysis"` (alias of :obj:`"text-classification")
+            - :obj:`"token-classification"`
+            - :obj:`"ner"` (alias of :obj:`"token-classification")
             - :obj:`"question-answering"`
             - :obj:`"fill-mask"`
             - :obj:`"summarization"`
@@ -222,6 +239,8 @@ def check_task(task: str) -> Tuple[Dict, Any]:
 
 
     """
+    if task in TASK_ALIASES:
+        task = TASK_ALIASES[task]
     if task in SUPPORTED_TASKS:
         targeted_task = SUPPORTED_TASKS[task]
         return targeted_task, None
@@ -231,10 +250,10 @@ def check_task(task: str) -> Tuple[Dict, Any]:
         if len(tokens) == 4 and tokens[0] == "translation" and tokens[2] == "to":
             targeted_task = SUPPORTED_TASKS["translation"]
             return targeted_task, (tokens[1], tokens[3])
-        raise KeyError("Invalid translation task {}, use 'translation_XX_to_YY' format".format(task))
+        raise KeyError(f"Invalid translation task {task}, use 'translation_XX_to_YY' format")
 
     raise KeyError(
-        "Unknown task {}, available tasks are {}".format(task, list(SUPPORTED_TASKS.keys()) + ["translation_XX_to_YY"])
+        f"Unknown task {task}, available tasks are {list(SUPPORTED_TASKS.keys()) + ['translation_XX_to_YY']}"
     )
 
 
@@ -243,9 +262,11 @@ def pipeline(
     model: Optional = None,
     config: Optional[Union[str, PretrainedConfig]] = None,
     tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
+    feature_extractor: Optional[Union[str, PreTrainedFeatureExtractor]] = None,
     framework: Optional[str] = None,
     revision: Optional[str] = None,
     use_fast: bool = True,
+    use_auth_token: Optional[Union[str, bool]] = None,
     model_kwargs: Dict[str, Any] = {},
     **kwargs
 ) -> Pipeline:
@@ -263,8 +284,12 @@ def pipeline(
             The task defining which pipeline will be returned. Currently accepted tasks are:
 
             - :obj:`"feature-extraction"`: will return a :class:`~transformers.FeatureExtractionPipeline`.
-            - :obj:`"sentiment-analysis"`: will return a :class:`~transformers.TextClassificationPipeline`.
-            - :obj:`"ner"`: will return a :class:`~transformers.TokenClassificationPipeline`.
+            - :obj:`"text-classification"`: will return a :class:`~transformers.TextClassificationPipeline`.
+            - :obj:`"sentiment-analysis"`: (alias of :obj:`"text-classification") will return a
+              :class:`~transformers.TextClassificationPipeline`.
+            - :obj:`"token-classification"`: will return a :class:`~transformers.TokenClassificationPipeline`.
+            - :obj:`"ner"` (alias of :obj:`"token-classification"): will return a
+              :class:`~transformers.TokenClassificationPipeline`.
             - :obj:`"question-answering"`: will return a :class:`~transformers.QuestionAnsweringPipeline`.
             - :obj:`"fill-mask"`: will return a :class:`~transformers.FillMaskPipeline`.
             - :obj:`"summarization"`: will return a :class:`~transformers.SummarizationPipeline`.
@@ -295,6 +320,18 @@ def pipeline(
             :obj:`model` is not specified or not a string, then the default tokenizer for :obj:`config` is loaded (if
             it is a string). However, if :obj:`config` is also not given or not a string, then the default tokenizer
             for the given :obj:`task` will be loaded.
+        feature_extractor (:obj:`str` or :obj:`~transformers.PreTrainedFeatureExtractor`, `optional`):
+            The feature extractor that will be used by the pipeline to encode data for the model. This can be a model
+            identifier or an actual pretrained feature extractor inheriting from
+            :class:`~transformers.PreTrainedFeatureExtractor`.
+
+            Feature extractors are used for non-NLP models, such as Speech or Vision models as well as multi-modal
+            models. Multi-modal models will also require a tokenizer to be passed.
+
+            If not provided, the default feature extractor for the given :obj:`model` will be loaded (if it is a
+            string). If :obj:`model` is not specified or not a string, then the default feature extractor for
+            :obj:`config` is loaded (if it is a string). However, if :obj:`config` is also not given or not a string,
+            then the default feature extractor for the given :obj:`task` will be loaded.
         framework (:obj:`str`, `optional`):
             The framework to use, either :obj:`"pt"` for PyTorch or :obj:`"tf"` for TensorFlow. The specified framework
             must be installed.
@@ -308,6 +345,10 @@ def pipeline(
             artifacts on huggingface.co, so ``revision`` can be any identifier allowed by git.
         use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to use a Fast tokenizer if possible (a :class:`~transformers.PreTrainedTokenizerFast`).
+        use_auth_token (:obj:`str` or `bool`, `optional`):
+            The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+            generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
+            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
         model_kwargs:
             Additional dictionary of keyword arguments passed along to the model's :obj:`from_pretrained(...,
             **model_kwargs)` function.
@@ -341,50 +382,20 @@ def pipeline(
         # At that point framework might still be undetermined
         model = get_default_model(targeted_task, framework, task_options)
 
-    # Try to infer tokenizer from model or config name (if provided as str)
-    if tokenizer is None:
-        if isinstance(model, str):
-            tokenizer = model
-        elif isinstance(config, str):
-            tokenizer = config
-        else:
-            # Impossible to guest what is the right tokenizer here
-            raise Exception(
-                "Impossible to guess which tokenizer to use. "
-                "Please provided a PretrainedTokenizer class or a path/identifier to a pretrained tokenizer."
-            )
-
-    modelcard = None
-    # Try to infer modelcard from model or config name (if provided as str)
-    if isinstance(model, str):
-        modelcard = model
-    elif isinstance(config, str):
-        modelcard = config
+    model_name = model if isinstance(model, str) else None
 
     # Infer the framework form the model
     if framework is None:
-        framework, model = infer_framework_from_model(model, targeted_task, revision=revision)
+        framework, model = infer_framework_from_model(model, targeted_task, revision=revision, task=task)
 
     task_class, model_class = targeted_task["impl"], targeted_task[framework]
 
-    # Instantiate tokenizer if needed
-    if isinstance(tokenizer, (str, tuple)):
-        if isinstance(tokenizer, tuple):
-            # For tuple we have (tokenizer name, {kwargs})
-            use_fast = tokenizer[1].pop("use_fast", use_fast)
-            tokenizer = AutoTokenizer.from_pretrained(
-                tokenizer[0], use_fast=use_fast, revision=revision, **tokenizer[1]
-            )
-        else:
-            tokenizer = AutoTokenizer.from_pretrained(tokenizer, revision=revision, use_fast=use_fast)
+    # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
+    model_kwargs["use_auth_token"] = model_kwargs.get("use_auth_token", use_auth_token)
 
     # Instantiate config if needed
     if isinstance(config, str):
-        config = AutoConfig.from_pretrained(config, revision=revision)
-
-    # Instantiate modelcard if needed
-    if isinstance(modelcard, str):
-        modelcard = ModelCard.from_pretrained(modelcard, revision=revision)
+        config = AutoConfig.from_pretrained(config, revision=revision, _from_pipeline=task, **model_kwargs)
 
     # Instantiate model if needed
     if isinstance(model, str):
@@ -407,7 +418,64 @@ def pipeline(
                 f"Pipeline using {framework} framework, but this framework is not supported by this pipeline."
             )
 
-        model = model_class.from_pretrained(model, config=config, revision=revision, **model_kwargs)
+        model = model_class.from_pretrained(
+            model, config=config, revision=revision, _from_pipeline=task, **model_kwargs
+        )
+
+    model_config = model.config
+
+    load_tokenizer = type(model_config) in TOKENIZER_MAPPING
+    load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING
+
+    if load_tokenizer:
+        # Try to infer tokenizer from model or config name (if provided as str)
+        if tokenizer is None:
+            if isinstance(model_name, str):
+                tokenizer = model_name
+            elif isinstance(config, str):
+                tokenizer = config
+            else:
+                # Impossible to guess what is the right tokenizer here
+                raise Exception(
+                    "Impossible to guess which tokenizer to use. "
+                    "Please provide a PreTrainedTokenizer class or a path/identifier to a pretrained tokenizer."
+                )
+
+        # Instantiate tokenizer if needed
+        if isinstance(tokenizer, (str, tuple)):
+            if isinstance(tokenizer, tuple):
+                # For tuple we have (tokenizer name, {kwargs})
+                use_fast = tokenizer[1].pop("use_fast", use_fast)
+                tokenizer_identifier = tokenizer[0]
+                tokenizer_kwargs = tokenizer[1]
+            else:
+                tokenizer_identifier = tokenizer
+                tokenizer_kwargs = model_kwargs
+
+            tokenizer = AutoTokenizer.from_pretrained(
+                tokenizer_identifier, revision=revision, use_fast=use_fast, _from_pipeline=task, **tokenizer_kwargs
+            )
+
+    if load_feature_extractor:
+        # Try to infer feature extractor from model or config name (if provided as str)
+        if feature_extractor is None:
+            if isinstance(model_name, str):
+                feature_extractor = model_name
+            elif isinstance(config, str):
+                feature_extractor = config
+            else:
+                # Impossible to guess what is the right feature_extractor here
+                raise Exception(
+                    "Impossible to guess which feature extractor to use. "
+                    "Please provide a PreTrainedFeatureExtractor class or a path/identifier "
+                    "to a pretrained feature extractor."
+                )
+
+        # Instantiate feature_extractor if needed
+        if isinstance(feature_extractor, (str, tuple)):
+            feature_extractor = AutoFeatureExtractor.from_pretrained(
+                feature_extractor, revision=revision, _from_pipeline=task, **model_kwargs
+            )
 
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:
@@ -419,4 +487,10 @@ def pipeline(
                 )
                 break
 
-    return task_class(model=model, tokenizer=tokenizer, modelcard=modelcard, framework=framework, task=task, **kwargs)
+    if tokenizer is not None:
+        kwargs["tokenizer"] = tokenizer
+
+    if feature_extractor is not None:
+        kwargs["feature_extractor"] = feature_extractor
+
+    return task_class(model=model, framework=framework, task=task, **kwargs)

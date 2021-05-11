@@ -31,31 +31,31 @@ Example of use:
 
 .. code-block::
 
-  import torch
-  from transformers import AutoModel, AutoTokenizer 
+    >>> import torch
+    >>> from transformers import AutoModel, AutoTokenizer 
 
-  bertweet = AutoModel.from_pretrained("vinai/bertweet-base")
+    >>> bertweet = AutoModel.from_pretrained("vinai/bertweet-base")
 
-  # For transformers v4.x+: 
-  tokenizer = AutoTokenizer.from_pretrained("vinai/bertweet-base", use_fast=False)
+    >>> # For transformers v4.x+: 
+    >>> tokenizer = AutoTokenizer.from_pretrained("vinai/bertweet-base", use_fast=False)
 
-  # For transformers v3.x: 
-  # tokenizer = AutoTokenizer.from_pretrained("vinai/bertweet-base")
+    >>> # For transformers v3.x: 
+    >>> # tokenizer = AutoTokenizer.from_pretrained("vinai/bertweet-base")
 
-  # INPUT TWEET IS ALREADY NORMALIZED!
-  line = "SC has first two presumptive cases of coronavirus , DHEC confirms HTTPURL via @USER :cry:"
+    >>> # INPUT TWEET IS ALREADY NORMALIZED!
+    >>> line = "SC has first two presumptive cases of coronavirus , DHEC confirms HTTPURL via @USER :cry:"
 
-  input_ids = torch.tensor([tokenizer.encode(line)])
+    >>> input_ids = torch.tensor([tokenizer.encode(line)])
 
-  with torch.no_grad():
-      features = bertweet(input_ids)  # Models outputs are now tuples
+    >>> with torch.no_grad():
+    ...     features = bertweet(input_ids)  # Models outputs are now tuples
 
-  ## With TensorFlow 2.0+:
-  # from transformers import TFAutoModel
-  # bertweet = TFAutoModel.from_pretrained("vinai/bertweet-base")
+    >>> # With TensorFlow 2.0+:
+    >>> # from transformers import TFAutoModel
+    >>> # bertweet = TFAutoModel.from_pretrained("vinai/bertweet-base")
 
-
-The original code can be found `here <https://github.com/VinAIResearch/BERTweet>`__.
+This model was contributed by `dqnguyen <https://huggingface.co/dqnguyen>`__. The original code can be found `here
+<https://github.com/VinAIResearch/BERTweet>`__.
 
 BertweetTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

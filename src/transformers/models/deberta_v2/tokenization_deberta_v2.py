@@ -107,8 +107,8 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
 
         if not os.path.isfile(vocab_file):
             raise ValueError(
-                "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained "
-                "model use `tokenizer = DebertaV2Tokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`".format(vocab_file)
+                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained "
+                "model use `tokenizer = DebertaV2Tokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.do_lower_case = do_lower_case
         self.split_by_punct = split_by_punct
@@ -134,7 +134,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         return self._tokenizer.tokenize(text)
 
     def _convert_token_to_id(self, token):
-        """ Converts a token (str) in an id using the vocab. """
+        """Converts a token (str) in an id using the vocab."""
         return self._tokenizer.spm.PieceToId(token)
 
     def _convert_id_to_token(self, index):
@@ -142,7 +142,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         return self._tokenizer.spm.IdToPiece(index) if index < self.vocab_size else self.unk_token
 
     def convert_tokens_to_string(self, tokens):
-        """ Converts a sequence of tokens (string) in a single string. """
+        """Converts a sequence of tokens (string) in a single string."""
         return self._tokenizer.decode(tokens)
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
@@ -187,16 +187,8 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         """
 
         if already_has_special_tokens:
-            if token_ids_1 is not None:
-                raise ValueError(
-                    "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formatted with special tokens for the model."
-                )
-            return list(
-                map(
-                    lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0,
-                    token_ids_0,
-                )
+            return super().get_special_tokens_mask(
+                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
             )
 
         if token_ids_1 is not None:
@@ -436,7 +428,7 @@ class SPMTokenizer:
 
 def _is_whitespace(char):
     """Checks whether `chars` is a whitespace character."""
-    # \t, \n, and \r are technically contorl characters but we treat them
+    # \t, \n, and \r are technically control characters but we treat them
     # as whitespace since they are generally considered as such.
     if char == " " or char == "\t" or char == "\n" or char == "\r":
         return True
@@ -481,11 +473,11 @@ def convert_to_unicode(text):
         elif isinstance(text, bytes):
             return text.decode("utf-8", "ignore")
         else:
-            raise ValueError("Unsupported string type: %s" % (type(text)))
+            raise ValueError(f"Unsupported string type: {type(text)}")
     elif six.PY2:
         if isinstance(text, str):
             return text.decode("utf-8", "ignore")
         else:
-            raise ValueError("Unsupported string type: %s" % (type(text)))
+            raise ValueError(f"Unsupported string type: {type(text)}")
     else:
         raise ValueError("Not running on Python2 or Python 3?")

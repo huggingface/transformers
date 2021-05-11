@@ -19,6 +19,7 @@ from packaging import version
 from torch import nn
 from torch.utils.data.dataset import Dataset
 
+from .integrations import is_deepspeed_zero3_enabled
 from .trainer import Trainer
 from .trainer_utils import PredictionOutput
 from .utils import logging
@@ -156,9 +157,11 @@ class Seq2SeqTrainer(Trainer):
         has_labels = "labels" in inputs
         inputs = self._prepare_inputs(inputs)
 
+        # XXX: adapt synced_gpus for fairscale as well
         gen_kwargs = {
             "max_length": self._max_length if self._max_length is not None else self.model.config.max_length,
             "num_beams": self._num_beams if self._num_beams is not None else self.model.config.num_beams,
+            "synced_gpus": True if is_deepspeed_zero3_enabled() else False,
         }
 
         generated_tokens = self.model.generate(
@@ -196,7 +199,7 @@ class Seq2SeqTrainer(Trainer):
     def _pad_tensors_to_max_len(self, tensor, max_length):
         if self.tokenizer is None:
             raise ValueError(
-                f"Tensor need to be padded to `max_length={max_length}` but no tokenzier was passed when creating "
+                f"Tensor need to be padded to `max_length={max_length}` but no tokenizer was passed when creating "
                 "this `Trainer`. Make sure to create your `Trainer` with the appropriate tokenizer."
             )
         # If PAD token is not defined at least EOS token has to be defined

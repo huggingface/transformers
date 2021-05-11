@@ -19,6 +19,7 @@ import unittest
 
 from tests.test_modeling_common import floats_tensor
 from transformers import is_torch_available
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -259,6 +260,7 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_head_masking = False
+    test_sequence_classification_problem_types = True
 
     def setUp(self):
         self.model_tester = ConvBertModelTester(self)
@@ -352,7 +354,7 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
                 if "labels" in inputs_dict:
                     correct_outlen += 1  # loss is added to beginning
                 # Question Answering model returns start_logits and end_logits
-                if model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
+                if model_class in get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING):
                     correct_outlen += 1  # start_logits and end_logits instead of only 1 output
                 if "past_key_values" in outputs:
                     correct_outlen += 1  # past_key_values have been returned

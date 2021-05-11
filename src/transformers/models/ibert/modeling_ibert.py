@@ -43,7 +43,7 @@ from .quant_modules import IntGELU, IntLayerNorm, IntSoftmax, QuantAct, QuantEmb
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "ibert-roberta-base"
+_CHECKPOINT_FOR_DOC = "kssteven/ibert-roberta-base"
 _CONFIG_FOR_DOC = "IBertConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
@@ -179,8 +179,8 @@ class IBertSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
             )
         self.quant_mode = config.quant_mode
         self.weight_bit = 8
@@ -645,7 +645,7 @@ class IBertPreTrainedModel(PreTrainedModel):
     base_model_prefix = "ibert"
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, (QuantLinear, nn.Linear)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617

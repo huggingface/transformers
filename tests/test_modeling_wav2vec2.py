@@ -320,14 +320,23 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
                     if "conv.weight" in name or "masked_spec_embed" in name:
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     else:
                         self.assertIn(
                             ((param.data.mean() * 1e9).round() / 1e9).item(),
                             [0.0, 1.0],
-                            msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
+
+    # overwrite from test_modeling_common
+    def _mock_init_weights(self, module):
+        if hasattr(module, "weight") and module.weight is not None:
+            module.weight.data.fill_(3)
+        if hasattr(module, "weight_g") and module.weight is not None:
+            module.weight_g.data.fill_(3)
+        if hasattr(module, "bias") and module.bias is not None:
+            module.bias.data.fill_(3)
 
     @slow
     def test_model_from_pretrained(self):
@@ -437,14 +446,23 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
                     if "conv.weight" in name or "masked_spec_embed" in name:
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     else:
                         self.assertIn(
                             ((param.data.mean() * 1e9).round() / 1e9).item(),
                             [0.0, 1.0],
-                            msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
+
+    # overwrite from test_modeling_common
+    def _mock_init_weights(self, module):
+        if hasattr(module, "weight") and module.weight is not None:
+            module.weight.data.fill_(3)
+        if hasattr(module, "weight_g") and module.weight is not None:
+            module.weight_g.data.fill_(3)
+        if hasattr(module, "bias") and module.bias is not None:
+            module.bias.data.fill_(3)
 
     @slow
     def test_model_from_pretrained(self):

@@ -19,6 +19,10 @@ import PIL.Image
 from .file_utils import _is_torch, is_torch_available
 
 
+IMAGENET_DEFAULT_MEAN = [0.485, 0.456, 0.406]
+IMAGENET_DEFAULT_STD = [0.229, 0.224, 0.225]
+
+
 def is_torch_tensor(obj):
     return _is_torch(obj) if is_torch_available() else False
 
@@ -120,9 +124,9 @@ class ImageFeatureExtractionMixin:
 
         if isinstance(image, np.ndarray):
             if not isinstance(mean, np.ndarray):
-                mean = np.array(mean)
+                mean = np.array(mean).astype(image.dtype)
             if not isinstance(std, np.ndarray):
-                std = np.array(std)
+                std = np.array(std).astype(image.dtype)
         elif is_torch_tensor(image):
             import torch
 
@@ -156,3 +160,55 @@ class ImageFeatureExtractionMixin:
             image = self.to_pil_image(image)
 
         return image.resize(size, resample=resample)
+
+    def center_crop(self, image, size):
+        """
+        Crops :obj:`image` to the given size using a center crop. Note that if the image is too small to be cropped to
+        the size given, it will be padded (so the returned result has the size asked).
+
+        Args:
+            image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+                The image to resize.
+            size (:obj:`int` or :obj:`Tuple[int, int]`):
+                The size to which crop the image.
+        """
+        self._ensure_format_supported(image)
+        if not isinstance(size, tuple):
+            size = (size, size)
+
+        # PIL Image.size is (width, height) but NumPy array and torch Tensors have (height, width)
+        image_shape = (image.size[1], image.size[0]) if isinstance(image, PIL.Image.Image) else image.shape[-2:]
+        top = (image_shape[0] - size[0]) // 2
+        bottom = top + size[0]  # In case size is odd, (image_shape[0] + size[0]) // 2 won't give the proper result.
+        left = (image_shape[1] - size[1]) // 2
+        right = left + size[1]  # In case size is odd, (image_shape[1] + size[1]) // 2 won't give the proper result.
+
+        # For PIL Images we have a method to crop directly.
+        if isinstance(image, PIL.Image.Image):
+            return image.crop((left, top, right, bottom))
+
+        # Check if all the dimensions are inside the image.
+        if top >= 0 and bottom <= image_shape[0] and left >= 0 and right <= image_shape[1]:
+            return image[..., top:bottom, left:right]
+
+        # Otherwise, we may need to pad if the image is too small. Oh joy...
+        new_shape = image.shape[:-2] + (max(size[0], image_shape[0]), max(size[1], image_shape[1]))
+        if isinstance(image, np.ndarray):
+            new_image = np.zeros_like(image, shape=new_shape)
+        elif is_torch_tensor(image):
+            new_image = image.new_zeros(new_shape)
+
+        top_pad = (new_shape[-2] - image_shape[0]) // 2
+        bottom_pad = top_pad + image_shape[0]
+        left_pad = (new_shape[-1] - image_shape[1]) // 2
+        right_pad = left_pad + image_shape[1]
+        new_image[..., top_pad:bottom_pad, left_pad:right_pad] = image
+
+        top += top_pad
+        bottom += top_pad
+        left += left_pad
+        right += left_pad
+
+        return new_image[
+            ..., max(0, top) : min(new_image.shape[-2], bottom), max(0, left) : min(new_image.shape[-1], right)
+        ]
