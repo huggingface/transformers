@@ -325,9 +325,6 @@ def main():
             num_labels = len(label_list)
 
     # Load pretrained model and tokenizer
-    #
-    # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
-    # download model & vocab.
     config = AutoConfig.from_pretrained(args.model_name_or_path, num_labels=num_labels, finetuning_task=args.task_name)
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_fast=not args.use_slow_tokenizer)
     model = FlaxAutoModelForSequenceClassification.from_pretrained(args.model_name_or_path, config=config)
@@ -496,8 +493,10 @@ def main():
             # put weights on single device
             state = unreplicate(state)
 
+            # take leftover samples
             batch = eval_dataset[-num_leftover_samples:]
             batch = {k: jnp.array(v) for k, v in batch.items()}
+
             labels = batch.pop("labels")
             predictions = eval_step(state, batch)
             metric.add_batch(predictions=predictions, references=labels)
