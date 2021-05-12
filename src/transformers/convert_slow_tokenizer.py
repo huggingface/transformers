@@ -701,6 +701,29 @@ class BigBirdConverter(SpmConverter):
         )
 
 
+class CLIPConverter(Converter):
+    def converted(self) -> Tokenizer:
+        vocab = self.original_tokenizer.encoder
+        merges = list(self.original_tokenizer.bpe_ranks.keys())
+
+        tokenizer = Tokenizer(
+            BPE(
+                vocab=vocab,
+                merges=merges,
+                dropout=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="</w>",
+                fuse_unk=False,
+            )
+        )
+
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=self.original_tokenizer.add_prefix_space)
+        tokenizer.decoder = decoders.ByteLevel()
+        tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
+
+        return tokenizer
+
+
 SLOW_TO_FAST_CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
     "BartTokenizer": RobertaConverter,
@@ -708,6 +731,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "BertTokenizer": BertConverter,
     "BigBirdTokenizer": BigBirdConverter,
     "CamembertTokenizer": CamembertConverter,
+    "CLIPTokenizer": CLIPConverter,
     "ConvBertTokenizer": BertConverter,
     "DebertaTokenizer": DebertaConverter,
     "DistilBertTokenizer": BertConverter,
