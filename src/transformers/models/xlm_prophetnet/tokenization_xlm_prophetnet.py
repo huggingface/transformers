@@ -16,9 +16,7 @@
 import collections
 import os
 from shutil import copyfile
-from typing import Dict, List, Optional, Tuple
-
-from google.protobuf.any_pb2 import Any
+from typing import Any, Dict, List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
