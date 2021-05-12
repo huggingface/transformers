@@ -124,7 +124,6 @@ class CustomTracer(Tracer):
             self.encoder_shape[0] *= self.num_choices
 
         self.prev_module = None
-        self.leaf_modules = set()
 
     def proxy(self, node: Node):
         return CustomProxy(node, self)

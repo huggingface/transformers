@@ -19,7 +19,7 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available
-from transformers.file_utils import cached_property, is_torch_fx_available
+from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -32,10 +32,6 @@ if is_torch_available():
 
     from transformers import T5Config, T5EncoderModel, T5ForConditionalGeneration, T5Model, T5Tokenizer
     from transformers.models.t5.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
-
-
-if is_torch_fx_available():
-    from transformers.modeling_fx_utils import symbolic_trace
 
 
 class T5ModelTester:
@@ -218,82 +214,6 @@ class T5ModelTester:
         self.parent.assertEqual(len(outputs), 4)
         self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.decoder_seq_length, self.vocab_size))
         self.parent.assertEqual(outputs["loss"].size(), ())
-
-    def create_and_check_tracing_model(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
-    ):
-        if not is_torch_fx_available():
-            self.parent.assertTrue(True)
-            return
-        model = T5Model(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids=input_ids,
-            decoder_input_ids=decoder_input_ids,
-            attention_mask=attention_mask,
-            decoder_attention_mask=decoder_attention_mask,
-        )
-        result = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
-        traced = symbolic_trace(
-            model,
-            input_names=["input_ids", "decoder_input_ids", "attention_mask", "decoder_attention_mask"],
-            batch_size=self.batch_size,
-            seqlen=[self.encoder_seq_length, self.decoder_seq_length],
-        )
-        traced_result = traced(
-            input_ids=input_ids,
-            decoder_input_ids=decoder_input_ids,
-            attention_mask=attention_mask,
-            decoder_attention_mask=decoder_attention_mask,
-        )
-
-        decoder_output_close = torch.allclose(result.last_hidden_state, traced_result["last_hidden_state"], atol=1e-7)
-        encoder_output_close = torch.allclose(
-            result.encoder_last_hidden_state, traced_result["encoder_last_hidden_state"], atol=1e-7
-        )
-        self.parent.assertTrue(decoder_output_close and encoder_output_close)
-
-    def create_and_check_tracing_with_lm_head(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
-    ):
-        if not is_torch_fx_available():
-            self.parent.assertTrue(True)
-            return
-        model = T5ForConditionalGeneration(config=config).to(torch_device).eval()
-        outputs = model(
-            input_ids=input_ids,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            labels=lm_labels,
-        )
-        traced = symbolic_trace(
-            model,
-            input_names=["input_ids", "decoder_input_ids", "decoder_attention_mask", "labels"],
-            batch_size=self.batch_size,
-            seqlen=[self.encoder_seq_length, self.decoder_seq_length],
-        )
-        traced_result = traced(
-            input_ids=input_ids,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            labels=lm_labels,
-        )
-        logits_close = torch.allclose(outputs.logits, traced_result["logits"])
-        loss_close = torch.allclose(outputs.loss, traced_result["loss"])
-        self.parent.assertTrue(logits_close and loss_close)
 
     def create_and_check_decoder_model_past(
         self,
@@ -569,7 +489,6 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (T5ForConditionalGeneration,) if is_torch_available() else ()
     all_parallelizable_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
-    fx_ready_model_classes = all_model_classes
     test_pruning = False
     test_torchscript = True
     test_resize_embeddings = True
@@ -602,14 +521,6 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_with_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_lm_head(*config_and_inputs)
-
-    def test_model_tracing(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_tracing_model(*config_and_inputs)
-
-    def test_tracing_with_lm_head(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_tracing_with_lm_head(*config_and_inputs)
 
     def test_decoder_model_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
