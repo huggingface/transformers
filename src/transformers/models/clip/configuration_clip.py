@@ -164,7 +164,7 @@ class CLIPVisionConfig(PretrainedConfig):
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
 
-        Example::
+    Example::
 
         >>> from transformers import CLIPVisionModel, CLIPVisionConfig
 
@@ -224,15 +224,14 @@ class CLIPConfig(PretrainedConfig):
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
     Args:
-        projection_dim: (:obj:`int`, `optional`, defaults to 512):
+        text_config_dict (:obj:`dict`, `optional`):
+            Dictionary of configuration options used to initialize :class:`~transformers.CLIPTextConfig`.
+        vision_config_dict (:obj:`dict`, `optional`):
+            Dictionary of configuration options used to initialize :class:`~transformers.CLIPVisionConfig`.
+        projection_dim (:obj:`int`, `optional`, defaults to 512):
             Dimentionality of text and vision projection layers.
         kwargs (`optional`):
-            Dictionary of keyword arguments. Notably:
-
-                - **text_config** (:class:`~transformers.CLIPTextConfig`, `optional`) -- An instance of a configuration
-                  object that defines the text model config.
-                - **vision_config** (:class:`~transformers.CLIPVisionConfig`, `optional`) -- An instance of a
-                  configuration object that defines the vision model config.
+            Dictionary of keyword arguments.
     """
 
     model_type = "clip"
