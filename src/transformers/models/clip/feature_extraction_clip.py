@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Feature extractor class for DeiT."""
+"""Feature extractor class for CLIP."""
 
 from typing import List, Optional, Union
 
@@ -21,16 +21,16 @@ from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...file_utils import TensorType
-from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, ImageFeatureExtractionMixin, is_torch_tensor
+from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class DeiTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
+class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
-    Constructs a DeiT feature extractor.
+    Constructs a CLIP feature extractor.
 
     This feature extractor inherits from :class:`~transformers.FeatureExtractionMixin` which contains most of the main
     methods. Users should refer to this superclass for more information regarding those methods.
@@ -38,10 +38,8 @@ class DeiTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     Args:
         do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to resize the input to a certain :obj:`size`.
-        size (:obj:`int` or :obj:`Tuple(int)`, `optional`, defaults to 256):
-            Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
-            integer is provided, then the input will be resized to (size, size). Only has an effect if :obj:`do_resize`
-            is set to :obj:`True`.
+        size (:obj:`int`, `optional`, defaults to 224):
+            Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`.
         resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BICUBIC`):
             An optional resampling filter. This can be one of :obj:`PIL.Image.NEAREST`, :obj:`PIL.Image.BOX`,
             :obj:`PIL.Image.BILINEAR`, :obj:`PIL.Image.HAMMING`, :obj:`PIL.Image.BICUBIC` or :obj:`PIL.Image.LANCZOS`.
@@ -65,7 +63,7 @@ class DeiTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     def __init__(
         self,
         do_resize=True,
-        size=256,
+        size=224,
         resample=Image.BICUBIC,
         do_center_crop=True,
         crop_size=224,
@@ -81,8 +79,8 @@ class DeiTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.do_center_crop = do_center_crop
         self.crop_size = crop_size
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
+        self.image_mean = image_mean if image_mean is not None else [0.48145466, 0.4578275, 0.40821073]
+        self.image_std = image_std if image_std is not None else [0.26862954, 0.26130258, 0.27577711]
 
     def __call__(
         self,
@@ -117,8 +115,7 @@ class DeiTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         Returns:
             :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
 
-            - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
-              width).
+            - **pixel_values** -- Pixel values to be fed to a model.
         """
         # Input type checking for clearer error
         valid_images = False
