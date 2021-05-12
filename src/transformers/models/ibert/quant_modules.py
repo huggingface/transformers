@@ -124,7 +124,7 @@ class QuantAct(nn.Module):
             Momentum for updating the activation quantization range.
         per_channel (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to or not use channel-wise quantization.
-        channel_len (:obj:`int`, `optional`, defaults to :obj:`None`):
+        channel_len (:obj:`int`, `optional`):
             Specify the channel length when set the `per_channel` True.
         quant_mode (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not the layer is quantized.
@@ -755,9 +755,9 @@ class FixedPointMul(Function):
             Quantization bitwidth.
         z_scaling_factor (:obj:`torch.Tensor`):
             Scaling factor of the output tensor.
-        identity (:obj:`torch.Tensor`, `optional`, defaults to :obj:`None`):
+        identity (:obj:`torch.Tensor`, `optional`):
             Identity tensor, if exists.
-        identity_scaling_factor (:obj:`torch.Tensor`, `optional`, defaults to :obj:`None`):
+        identity_scaling_factor (:obj:`torch.Tensor`, `optional`):
             Scaling factor of the identity tensor `identity`, if exists.
 
     Returns:

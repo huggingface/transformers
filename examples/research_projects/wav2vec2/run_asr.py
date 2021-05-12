@@ -144,7 +144,7 @@ class Orthography:
     Args:
         do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to accept lowercase input and lowercase the output when decoding.
-        vocab_file (:obj:`str`, `optional`, defaults to :obj:`None`):
+        vocab_file (:obj:`str`, `optional`):
             File containing the vocabulary.
         word_delimiter_token (:obj:`str`, `optional`, defaults to :obj:`"|"`):
             The token used for delimiting words; it needs to be in the vocabulary.
@@ -152,7 +152,7 @@ class Orthography:
             Table to use with `str.translate()` when preprocessing text (e.g., "-" -> " ").
         words_to_remove (:obj:`Set[str]`, `optional`, defaults to :obj:`set()`):
             Words to remove when preprocessing text (e.g., "sil").
-        untransliterator (:obj:`Callable[[str], str]`, `optional`, defaults to :obj:`None`):
+        untransliterator (:obj:`Callable[[str], str]`, `optional`):
             Function that untransliterates text back into native writing system.
     """
 
