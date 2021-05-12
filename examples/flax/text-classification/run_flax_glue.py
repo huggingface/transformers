@@ -473,8 +473,8 @@ def main():
             dropout_rngs = shard_prng_key(dropout_rng)
             state, metrics = p_train_step(state, batch, dropout_rngs)
             train_metrics.append(metrics)
-            train_time += time.time() - train_start
-            logger.info(f"    Done! Training metrics: {unreplicate(metrics)}")
+        train_time += time.time() - train_start
+        logger.info(f"    Done! Training metrics: {unreplicate(metrics)}")
 
         logger.info("  Evaluating...")
         rng, input_rng = jax.random.split(rng)
