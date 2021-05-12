@@ -33,6 +33,7 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     rust_tokenizer_class = AlbertTokenizerFast
     test_rust_tokenizer = True
     test_sentencepiece = True
+    test_sentencepiece_ignore_case = True
 
     def setUp(self):
         super().setUp()
