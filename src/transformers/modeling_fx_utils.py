@@ -130,7 +130,7 @@ class CustomTracer(Tracer):
 
     def _insert_module_as_submodule(self, mod):
         """
-        Helper method which tries to insert a module which was not declared as submodule.
+        Helper method which tries to insert a module that was not declared as submodule.
         """
         # First, retrieve the parent module.
         if self.prev_module is None:
@@ -179,6 +179,7 @@ class CustomTracer(Tracer):
         else:
             for n, p in self.root.named_modules():
                 if mod is p:
+                    self.prev_module = n
                     return n
             path = self._insert_module_as_submodule(mod)
             if path is None:
