@@ -27,16 +27,15 @@ _import_structure = {
 if is_torch_available():
     _import_structure["modeling_visual_bert"] = [
         "VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "VisualBertForFlickr",
         "VisualBertForMultipleChoice",
+        "VisualBertForNLVR",
+        "VisualBertForPreTraining",
         "VisualBertForVQA",
         "VisualBertForVQAAdvanced",
-        "VisualBertForNLVR",
-        "VisualBertForFlickr",
         "VisualBertLayer",
         "VisualBertModel",
         "VisualBertPreTrainedModel",
-        "VisualBertForPreTraining"
-        # "load_tf_weights_in_visual_bert",
     ]
 
 

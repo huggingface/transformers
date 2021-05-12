@@ -130,7 +130,6 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -231,6 +230,7 @@ _import_structure = {
         "TransfoXLCorpus",
         "TransfoXLTokenizer",
     ],
+    "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
     "models.wav2vec2": [
         "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -927,21 +927,6 @@ if is_torch_available():
             "RobertaModel",
         ]
     )
-    _import_structure["models.visual_bert"].extend(
-        [
-            "VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "VisualBertForMultipleChoice",
-            "VisualBertForVQA",
-            "VisualBertForVQAAdvanced",
-            "VisualBertForNLVR",
-            "VisualBertForFlickr",
-            "VisualBertLayer",
-            "VisualBertModel",
-            "VisualBertPreTrainedModel",
-            "VisualBertForPreTraining"
-            # "load_tf_weights_in_visual_bert",
-        ]
-    )
     _import_structure["models.speech_to_text"].extend(
         [
             "SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -990,6 +975,20 @@ if is_torch_available():
             "TransfoXLModel",
             "TransfoXLPreTrainedModel",
             "load_tf_weights_in_transfo_xl",
+        ]
+    )
+    _import_structure["models.visual_bert"].extend(
+        [
+            "VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VisualBertForFlickr",
+            "VisualBertForMultipleChoice",
+            "VisualBertForNLVR",
+            "VisualBertForPreTraining",
+            "VisualBertForVQA",
+            "VisualBertForVQAAdvanced",
+            "VisualBertLayer",
+            "VisualBertModel",
+            "VisualBertPreTrainedModel",
         ]
     )
     _import_structure["models.vit"].extend(

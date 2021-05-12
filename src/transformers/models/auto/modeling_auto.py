@@ -257,15 +257,7 @@ from ..tapas.modeling_tapas import (
 from ..transfo_xl.modeling_transfo_xl import TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
 
 # Add modeling imports here
-from ..visual_bert.modeling_visual_bert import (
-    VisualBertForFlickr,
-    VisualBertForMultipleChoice,
-    VisualBertForNLVR,
-    VisualBertForPreTraining,
-    VisualBertForVQA,
-    VisualBertForVQAAdvanced,
-    VisualBertModel,
-)
+from ..visual_bert.modeling_visual_bert import VisualBertForMultipleChoice, VisualBertForPreTraining, VisualBertModel
 from ..vit.modeling_vit import ViTForImageClassification, ViTModel
 from ..wav2vec2.modeling_wav2vec2 import Wav2Vec2ForMaskedLM, Wav2Vec2Model
 from ..xlm.modeling_xlm import (

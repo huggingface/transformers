@@ -70,6 +70,7 @@ VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+# TO-CHECK
 def load_tf_weights_in_visual_bert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
@@ -1400,8 +1401,8 @@ class VisualBertModel(VisualBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    VisualBert Model with two heads on top as done during the pretraining: a `masked language modeling` head and a `sentence-image
-    prediction (classification)` head.
+    VisualBert Model with two heads on top as done during the pretraining: a `masked language modeling` head and a
+    `sentence-image prediction (classification)` head.
     """,
     VISUAL_BERT_START_DOCSTRING,
 )
@@ -1860,7 +1861,8 @@ class VisualBertForVQAAdvanced(VisualBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    VisualBert Model with a sequence classification head on top (a dropout and a linear layer on top of the pooled output) for NLVR task.
+    VisualBert Model with a sequence classification head on top (a dropout and a linear layer on top of the pooled
+    output) for NLVR task.
     """,
     VISUAL_BERT_START_DOCSTRING,
 )
@@ -2045,8 +2047,8 @@ class VisualBertForFlickr(VisualBertPreTrainedModel):
             The positions depicting the position of the image embedding corresponding to the textual tokens.
 
         labels (:obj:`torch.LongTensor` of shape ``(batch_size, total_sequence_length, visual_sequence_length)``, `optional`):
-            Labels for computing the masked language modeling loss. KLDLoss is computed against these labels and the outputs
-            from the attention layer.
+            Labels for computing the masked language modeling loss. KLDLoss is computed against these labels and the
+            outputs from the attention layer.
 
         """
         assert flickr_position is not None, "`flickr_position` should not be None when using Flickr Model."
