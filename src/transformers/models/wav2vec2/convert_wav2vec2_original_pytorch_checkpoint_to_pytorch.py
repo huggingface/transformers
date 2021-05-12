@@ -49,7 +49,7 @@ MAPPING = {
     "fc2": "encoder.layers.*.feed_forward.output_dense",
     "final_layer_norm": "encoder.layers.*.final_layer_norm",
     "encoder.layer_norm": "encoder.layer_norm",
-    "w2v_model.layer_norm": "layer_norm",
+    "w2v_model.layer_norm": "feature_projection.layer_norm",
     "quantizer.weight_proj": "quantizer.quantizer.weight_proj",
     "quantizer.vars": "quantizer.quantizer.vars",
     "project_q": "quantizer.project_q",

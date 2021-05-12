@@ -108,6 +108,22 @@ class Wav2Vec2Config(PretrainedConfig):
             masked along the time axis. This is only relevant if ``apply_spec_augment is True``.
         mask_feature_length (:obj:`int`, `optional`, defaults to 10):
             Length of vector span along the feature axis.
+        num_latent_vars (:obj:`int`, `optional`, defaults to 320):
+            Number of entries in each quantization codebook (group).
+        gumbel_softmax_temperature (:obj:`Tuple[float]`, `optional`, defaults to :obj:`(2.0, 0.5, 0.999995)`):
+            The range of Gumbel softmax temperature `theta`. The values are `(max temp, min temp, annealing factor)`.
+        contrastive_logit_temperature (:obj:`float`, `optional`, defaults to 0.1):
+            The temperature `kappa` in the contrastive loss.
+        feat_quantizer_dropout (:obj:`float`, `optional`, defaults to 0.0):
+            The dropout probabilitiy for the output of the feature extractor that's used by the quantizer.
+        num_negatives (:obj:`int`, `optional`, defaults to 100):
+            Number of negative samples for the contrastive loss.
+        vq_latent_dim (:obj:`int`, `optional`, defaults to 256):
+            Dimensionality of the quantized feature vectors.
+        vq_final_dim (:obj:`int`, `optional`, defaults to 256):
+            Dimensionality of the final projection of both the quantized and the transformer features.
+        diversity_loss_weight (:obj:`int`, `optional`, defaults to 0.1):
+            The weight of the codebook diversity loss component.
         ctc_loss_reduction (:obj:`str`, `optional`, defaults to :obj:`"sum"`):
             Specifies the reduction to apply to the output of ``torch.nn.CTCLoss``. Only relevant when training an
             instance of :class:`~transformers.Wav2Vec2ForCTC`.
@@ -164,16 +180,14 @@ class Wav2Vec2Config(PretrainedConfig):
         mask_time_length=10,
         mask_feature_prob=0.0,
         mask_feature_length=10,
-        quantize_targets=False,
         num_latent_vars=320,
         num_latent_groups=2,
-        latent_temp=(2.0, 0.5, 0.999995),
-        logit_temp=0.1,
+        gumbel_softmax_temperature=(2.0, 0.5, 0.999995),
+        contrastive_logit_temperature=0.1,
         num_negatives=100,
-        cross_sample_negatives=0,
-        additional_losses_weights=(0.1, 10),
-        latent_dim=0,
-        final_dim=256,
+        vq_latent_dim=256,
+        vq_final_dim=256,
+        diversity_loss_weight=0.1,
         ctc_loss_reduction="sum",
         ctc_zero_infinity=False,
         gradient_checkpointing=False,
@@ -229,17 +243,15 @@ class Wav2Vec2Config(PretrainedConfig):
         self.mask_feature_length = mask_feature_length
 
         # parameters for pretraining with vector quantized (VQ) representations
-        self.quantize_targets = quantize_targets
         self.num_latent_vars = num_latent_vars
         self.num_latent_groups = num_latent_groups
-        self.latent_temp = latent_temp
-        self.logit_temp = logit_temp
+        self.gumbel_softmax_temperature = list(gumbel_softmax_temperature)
+        self.contrastive_logit_temperature = contrastive_logit_temperature
         self.feat_quantizer_dropout = feat_quantizer_dropout
         self.num_negatives = num_negatives
-        self.cross_sample_negatives = cross_sample_negatives
-        self.latent_dim = latent_dim
-        self.final_dim = final_dim
-        self.additional_losses_weights = additional_losses_weights
+        self.vq_latent_dim = vq_latent_dim
+        self.vq_final_dim = vq_final_dim
+        self.diversity_loss_weight = diversity_loss_weight
 
         # ctc loss
         self.ctc_loss_reduction = ctc_loss_reduction

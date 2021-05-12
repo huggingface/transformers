@@ -29,7 +29,14 @@ from .test_modeling_common import ModelTesterMixin, _config_zero_init
 if is_torch_available():
     import torch
 
-    from transformers import Wav2Vec2Config, Wav2Vec2ForCTC, Wav2Vec2ForMaskedLM, Wav2Vec2Model, Wav2Vec2Processor
+    from transformers import (
+        Wav2Vec2Config,
+        Wav2Vec2ForCTC,
+        Wav2Vec2ForMaskedLM,
+        Wav2Vec2ForPreTraining,
+        Wav2Vec2Model,
+        Wav2Vec2Processor,
+    )
     from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices
 
 
@@ -219,13 +226,7 @@ class Wav2Vec2ModelTester:
 @require_torch
 class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (
-            Wav2Vec2ForCTC,
-            Wav2Vec2Model,
-            Wav2Vec2ForMaskedLM,
-        )
-        if is_torch_available()
-        else ()
+        (Wav2Vec2ForCTC, Wav2Vec2Model, Wav2Vec2ForMaskedLM, Wav2Vec2ForPreTraining) if is_torch_available() else ()
     )
     test_pruning = False
     test_headmasking = False
@@ -346,7 +347,9 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (Wav2Vec2ForCTC, Wav2Vec2Model, Wav2Vec2ForMaskedLM) if is_torch_available() else ()
+    all_model_classes = (
+        (Wav2Vec2ForCTC, Wav2Vec2Model, Wav2Vec2ForMaskedLM, Wav2Vec2ForPreTraining) if is_torch_available() else ()
+    )
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -524,7 +527,6 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
 
 
 @require_torch
-@slow
 @require_datasets
 @require_soundfile
 class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
@@ -611,3 +613,24 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             "his instant panic was followed by a small sharp blow high on his chest",
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
+
+    def test_inference_pretraining(self):
+        model = Wav2Vec2ForPreTraining.from_pretrained("anton-l/wav2vec2-base-960h")
+        model.to(torch_device).eval()
+        processor = Wav2Vec2Processor.from_pretrained("anton-l/wav2vec2-base-960h")
+        input_speech = self._load_datasamples(2)
+
+        input_values = processor(input_speech, return_tensors="pt", padding=True).input_values.to(torch_device)
+
+        with torch.no_grad():
+            logits = model(input_values).logits
+
+        # fmt: off
+        expected_logits = torch.tensor([
+            [6.6907, 1.4053, 1.0851, -1.2404, 1.4979, 1.5350, 1.8366, -0.0889, 1.0697, 0.8635, 1.8594, 0.7124, -0.7738, 0.7378, 0.9588, -0.5237, 4.5066, -1.5240, 4.3916, 2.0915, -2.1298, 1.6082, -1.9616, -1.6807, 2.1234, -2.0304, 1.7671, 1.2398, 1.2167, 1.3665, 7.0616, 7.0554],  # noqa: E231
+            [4.1121, -2.9582, -1.4431, -2.1215, -2.1317, 1.4962, 3.0845, 0.4857, 1.6397, 1.2999, 1.3486, 2.2505, 0.4338, 1.8848, 1.3722, 0.5974, 1.3401, 1.7750, -2.1933, 4.2322, -1.8338, 4.6845, 4.3277, 5.8094, 4.3873, 4.8047, 0.1528, 7.7661, 4.2549, -1.1348, -2.5336, -1.6874]  # noqa: E231
+        ], device=torch_device)
+        # fmt: on
+
+        # logits are only deterministic at index 0 (positive), since negatives are sampled randomly
+        self.assertTrue(torch.allclose(logits[0, :, :32], expected_logits, atol=1e-4))
