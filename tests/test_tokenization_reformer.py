@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import os
-import pickle
 import unittest
 
 from transformers import SPIECE_UNDERLINE, ReformerTokenizer, ReformerTokenizerFast

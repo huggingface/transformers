@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import os
-import pickle
 import unittest
 
 from transformers import AlbertTokenizer, AlbertTokenizerFast

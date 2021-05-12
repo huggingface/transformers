@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import os
-import pickle
 import tempfile
 import unittest
 from pathlib import Path
