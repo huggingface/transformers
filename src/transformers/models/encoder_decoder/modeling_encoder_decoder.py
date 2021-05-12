@@ -429,7 +429,7 @@ class EncoderDecoderModel(PreTrainedModel):
                 return_dict=return_dict,
                 **kwargs_encoder,
             )
-        elif encoder_outputs is None and input_ids is not None:
+        elif encoder_outputs is None and pixel_values is not None:
             encoder_outputs = self.encoder(
                 pixel_values=pixel_values,
                 output_attentions=output_attentions,
