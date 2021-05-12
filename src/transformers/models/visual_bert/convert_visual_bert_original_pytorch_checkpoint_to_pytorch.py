@@ -16,14 +16,12 @@
 
 
 import argparse
-import random
 from collections import OrderedDict
 from pathlib import Path
 
-import numpy as np
 import torch
 
-from transformers import (  # VisualBertForFlickr,; VisualBertModel,
+from transformers import (
     VisualBertConfig,
     VisualBertForMultipleChoice,
     VisualBertForNLVR,

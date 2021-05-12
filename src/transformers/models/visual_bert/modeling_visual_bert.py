@@ -17,7 +17,6 @@
 
 import math
 import os
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -29,7 +28,6 @@ from torch.nn import CrossEntropyLoss, KLDivLoss, LogSoftmax
 from ...activations import ACT2FN
 from ...file_utils import (
     ModelOutput,
-    add_code_sample_docstrings,
     _prepare_output_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -41,7 +39,6 @@ from ...modeling_outputs import (
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     SequenceClassifierOutput,
-    TokenClassifierOutput
 )
 from ...modeling_utils import (
     PreTrainedModel,
@@ -151,7 +148,14 @@ def mish(x):
 
 
 def add_code_sample_docstrings(
-    *docstr, tokenizer_class=None, checkpoint=None, output_type=None, config_class=None, mask=None, model_cls=None, code_sample=None
+    *docstr,
+    tokenizer_class=None,
+    checkpoint=None,
+    output_type=None,
+    config_class=None,
+    mask=None,
+    model_cls=None,
+    code_sample=None
 ):
     def docstring_decorator(fn):
         # model_class defaults to function's class if not specified otherwise
@@ -160,12 +164,13 @@ def add_code_sample_docstrings(
         doc_kwargs = dict(model_class=model_class, tokenizer_class=tokenizer_class, checkpoint=checkpoint)
 
         output_doc = _prepare_output_docstrings(output_type, config_class) if output_type is not None else ""
-        print(doc_kwargs)
+
         built_doc = code_sample.format(**doc_kwargs)
         fn.__doc__ = (fn.__doc__ or "") + "".join(docstr) + output_doc + built_doc
         return fn
 
     return docstring_decorator
+
 
 # TO-CHECK: Vestige of the original code
 
@@ -1274,9 +1279,7 @@ class VisualBertModel(VisualBertPreTrainedModel):
             visual_input_shape = visual_embeds.size()[:-1]
             _, visual_seq_length = visual_input_shape
             if visual_token_type_ids is None:
-                visual_token_type_ids = torch.zeros(
-                    visual_input_shape, dtype=torch.long, device=device
-                )
+                visual_token_type_ids = torch.zeros(visual_input_shape, dtype=torch.long, device=device)
 
             if visual_attention_mask is None:
                 visual_attention_mask = torch.ones(visual_input_shape, device=device)
@@ -1287,9 +1290,13 @@ class VisualBertModel(VisualBertPreTrainedModel):
         # TO-CHECK : Whether input_shape+visual_input_shape is correct.
         if visual_embeds is not None:
             combined_attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
-            extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(combined_attention_mask, [batch_size, input_shape + visual_input_shape], device)
+            extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
+                combined_attention_mask, [batch_size, input_shape + visual_input_shape], device
+            )
         else:
-            extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, [batch_size, input_shape], device)
+            extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
+                attention_mask, [batch_size, input_shape], device
+            )
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -1300,7 +1307,7 @@ class VisualBertModel(VisualBertPreTrainedModel):
         #         encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
         #     encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         # else:
-        encoder_extended_attention_mask = None
+        #     encoder_extended_attention_mask = None
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -1434,7 +1441,6 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         return_dict=None,
         labels=None,
         sentence_image_labels=None,
-
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape ``(batch_size, total_sequence_length)``, `optional`):
@@ -1473,9 +1479,9 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
 
         total_loss = None
         if labels is not None and sentence_image_labels is not None:
-            assert labels.size(-1) == attention_mask.size(
+            assert labels.size(-1) == attention_mask.size(-1) + visual_attention_mask.size(
                 -1
-            ) + visual_attention_mask.size(-1), f"The labels provided should have same sequence length as total attention mask. Found labels with sequence length {labels.size(-1)}, expected {attention_mask.size(-1)+ visual_attention_mask.size(-1)}."
+            ), f"The labels provided should have same sequence length as total attention mask. Found labels with sequence length {labels.size(-1)}, expected {attention_mask.size(-1)+ visual_attention_mask.size(-1)}."
 
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
@@ -1484,9 +1490,9 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
 
         # TO-CHECK
         if labels is not None and sentence_image_labels is None:
-            assert labels.size(-1) == attention_mask.size(
+            assert labels.size(-1) == attention_mask.size(-1) + visual_attention_mask.size(
                 -1
-            ) + visual_attention_mask.size(-1), f"The labels provided should have same sequence length as total attention mask. Found labels with sequence length {labels.size(-1)}, expected {attention_mask.size(-1)+ visual_attention_mask.size(-1)}."
+            ), f"The labels provided should have same sequence length as total attention mask. Found labels with sequence length {labels.size(-1)}, expected {attention_mask.size(-1)+ visual_attention_mask.size(-1)}."
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             total_loss = masked_lm_loss
@@ -1623,7 +1629,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output, pooled_output = outputs[0], outputs[1]
+        _, pooled_output = outputs[0], outputs[1]
 
         # pooled_output = self.sequence_summary(sequence_output)
         logits = self.cls(pooled_output)

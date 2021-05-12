@@ -78,7 +78,7 @@ class VisualBertConfig(PretrainedConfig):
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         bypass_transformer (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not the model should bypass the transformer for the visual embeddings. If set to `True`,  
+            Whether or not the model should bypass the transformer for the visual embeddings. If set to `True`,
             the model directly concatenates the visual embeddings from :class:`~transformers.VisualBertEmbeddings` with
             text output from transformers, and then pass it to a self-attention layer.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
