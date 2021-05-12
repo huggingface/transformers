@@ -510,6 +510,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         return None  # Overwrite for models with output embeddings
 
+    def _init_weights(self, module):
+        """
+        Initialize the weights.
+        This method should be overridden by derived class.
+        """
+        pass
+
     def tie_weights(self):
         """
         Tie the weights between the input embeddings and the output embeddings.
