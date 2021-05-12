@@ -118,7 +118,7 @@ class DebugUnderflowOverflow:
             How many frames back to record
         trace_batch_nums(:obj:`List[int]`, `optional`, defaults to ``[]``):
             Which batch numbers to trace (turns detection off)
-        abort_after_batch_num  (:obj:`int`, `optional`, defaults to :obj:`None`):
+        abort_after_batch_num  (:obj:`int`, `optional`):
             Whether to abort after a certain batch number has finished
 
     """
