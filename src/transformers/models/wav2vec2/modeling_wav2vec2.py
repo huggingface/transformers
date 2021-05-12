@@ -1215,7 +1215,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
             >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
             >>> logits = model(input_values).logits
 
-            >>> predicted_ids = torch.argmax(logits, input_dim=-1)
+            >>> predicted_ids = torch.argmax(logits, dim=-1)
             >>> transcription = processor.decode(predicted_ids[0])
         """
 
@@ -1300,7 +1300,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
             >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
             >>> logits = model(input_values).logits
-            >>> predicted_ids = torch.argmax(logits, input_dim=-1)
+            >>> predicted_ids = torch.argmax(logits, dim=-1)
 
             >>> transcription = processor.decode(predicted_ids[0])
 
