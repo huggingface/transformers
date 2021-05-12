@@ -241,7 +241,7 @@ def main():
         # Downloading and loading a dataset from the hub.
         datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir)
         if "validation" not in datasets.keys():
-            if data_args.validation_split_percentage == None:
+            if data_args.validation_split_percentage is None:
                 data_args.validation_split_percentage = 5
             datasets["validation"] = load_dataset(
                 data_args.dataset_name,
