@@ -510,6 +510,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         return None  # Overwrite for models with output embeddings
 
+    def _init_weights(self, module):
+        """
+        Initialize the weights. This method should be overridden by derived class.
+        """
+        raise NotImplementedError(f"Make sure `_init_weigths` is implemented for {self.__class__}")
+
     def tie_weights(self):
         """
         Tie the weights between the input embeddings and the output embeddings.
@@ -1205,7 +1211,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
 
             model, missing_keys, unexpected_keys, error_msgs = cls._load_state_dict_into_model(
-                model, state_dict, pretrained_model_name_or_path
+                model, state_dict, pretrained_model_name_or_path, _fast_init=_fast_init
             )
 
         # make sure token embedding weights are still tied if needed
@@ -1225,7 +1231,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return model
 
     @classmethod
-    def _load_state_dict_into_model(cls, model, state_dict, pretrained_model_name_or_path):
+    def _load_state_dict_into_model(cls, model, state_dict, pretrained_model_name_or_path, _fast_init=True):
 
         # Convert old format to new format if needed from a PyTorch state_dict
         old_keys = []
@@ -1273,12 +1279,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for pat in cls._keys_to_ignore_on_load_unexpected:
                 unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
-        # tie unintialized modules
-        unintialized_modules = model.retrieve_modules_from_names(
-            missing_keys, add_prefix=add_prefix, remove_prefix=remove_prefix
-        )
-        for module in unintialized_modules:
-            model._init_weights(module)
+        if _fast_init:
+            # retrieve unintialized modules and initialize
+            unintialized_modules = model.retrieve_modules_from_names(
+                missing_keys, add_prefix=add_prefix, remove_prefix=remove_prefix
+            )
+            for module in unintialized_modules:
+                model._init_weights(module)
+
         # copy state_dict so _load_from_state_dict can modify it
         metadata = getattr(state_dict, "_metadata", None)
         state_dict = state_dict.copy()
