@@ -17,10 +17,9 @@
 
 import os
 from shutil import copyfile
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
-from google.protobuf.any_pb2 import Any
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
