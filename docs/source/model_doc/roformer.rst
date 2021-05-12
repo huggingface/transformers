@@ -37,8 +37,8 @@ Tips:
 - RoFormer is a model with rotary position embeddings.
 
 
-This model was contributed by `junnyu <https://huggingface.co/junnyu>`__. The
-original code can be found `here <https://github.com/ZhuiyiTechnology/roformer>`__.
+This model was contributed by `junnyu <https://huggingface.co/junnyu>`__. The original code can be found `here
+<https://github.com/ZhuiyiTechnology/roformer>`__.
 
 RoFormerConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

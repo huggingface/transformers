@@ -16,7 +16,7 @@
 
 
 import math
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -64,7 +64,8 @@ _CONFIG_FOR_DOC = "RoFormerConfig"
 _TOKENIZER_FOR_DOC = "RoFormerTokenizer"
 
 TF_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "junnyu/roformer_chinese_base",
+    "junnyu/roformer_chinese_small",
+    "junnyu/roformer_chinese_base"
     # See all RoFormer models at https://huggingface.co/models?filter=roformer
 ]
 
@@ -183,14 +184,19 @@ class TFRoFormerSelfAttention(tf.keras.layers.Layer):
         value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
 
         if sinusoidal_pos is not None:
-            cos_pos = tf.repeat(sinusoidal_pos[..., 1::2], 2, axis=-1)
+            # https://kexue.fm/archives/8265
+            # sin_pos [θ0,θ1,θ2......θd/2-1]-> sin_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
+            # cos_pos [θ0,θ1,θ2......θd/2-1]-> cos_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
             sin_pos = tf.repeat(sinusoidal_pos[..., ::2], 2, axis=-1)
-            qw2 = tf.stack([-query_layer[..., 1::2], query_layer[..., ::2]], axis=-1)
-            qw2 = tf.reshape(qw2, shape_list(query_layer))
-            query_layer = query_layer * cos_pos + qw2 * sin_pos
-            kw2 = tf.stack([-key_layer[..., 1::2], key_layer[..., ::2]], axis=-1)
-            kw2 = tf.reshape(kw2, shape_list(key_layer))
-            key_layer = key_layer * cos_pos + kw2 * sin_pos
+            cos_pos = tf.repeat(sinusoidal_pos[..., 1::2], 2, axis=-1)
+            # rotate_half_query_layer [-q1,q0,-q3,q2......,-qd-1,qd-2]
+            rotate_half_query_layer = tf.stack([-query_layer[..., 1::2], query_layer[..., ::2]], axis=-1)
+            rotate_half_query_layer = tf.reshape(rotate_half_query_layer, shape_list(query_layer))
+            query_layer = query_layer * cos_pos + rotate_half_query_layer * sin_pos
+            # rotate_half_key_layer [-k1,k0,-k3,k2......,-kd-1,kd-2]
+            rotate_half_key_layer = tf.stack([-key_layer[..., 1::2], key_layer[..., ::2]], axis=-1)
+            rotate_half_key_layer = tf.reshape(rotate_half_key_layer, shape_list(key_layer))
+            key_layer = key_layer * cos_pos + rotate_half_key_layer * sin_pos
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         # (batch size, num_heads, seq_len_q, seq_len_k)
@@ -223,6 +229,7 @@ class TFRoFormerSelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->RoFormer
 class TFRoFormerSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: RoFormerConfig, **kwargs):
         super().__init__(**kwargs)
@@ -276,6 +283,7 @@ class TFRoFormerAttention(tf.keras.layers.Layer):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->RoFormer
 class TFRoFormerIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: RoFormerConfig, **kwargs):
         super().__init__(**kwargs)
@@ -296,6 +304,7 @@ class TFRoFormerIntermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->RoFormer
 class TFRoFormerOutput(tf.keras.layers.Layer):
     def __init__(self, config: RoFormerConfig, **kwargs):
         super().__init__(**kwargs)
@@ -320,7 +329,7 @@ class TFRoFormerLayer(tf.keras.layers.Layer):
 
         self.attention = TFRoFormerAttention(config, name="attention")
         self.intermediate = TFRoFormerIntermediate(config, name="intermediate")
-        self.bert_output = TFRoFormerOutput(config, name="output")
+        self.roformer_output = TFRoFormerOutput(config, name="output")
 
     def call(
         self,
@@ -341,7 +350,9 @@ class TFRoFormerLayer(tf.keras.layers.Layer):
         )
         attention_output = attention_outputs[0]
         intermediate_output = self.intermediate(hidden_states=attention_output)
-        layer_output = self.bert_output(hidden_states=intermediate_output, input_tensor=attention_output, training=training)
+        layer_output = self.roformer_output(
+            hidden_states=intermediate_output, input_tensor=attention_output, training=training
+        )
         outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
 
         return outputs
@@ -396,6 +407,7 @@ class TFRoFormerEncoder(tf.keras.layers.Layer):
         )
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHeadTransform with Bert->RoFormer
 class TFRoFormerPredictionHeadTransform(tf.keras.layers.Layer):
     def __init__(self, config: RoFormerConfig, **kwargs):
         super().__init__(**kwargs)
@@ -421,6 +433,7 @@ class TFRoFormerPredictionHeadTransform(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertLMPredictionHead with Bert->RoFormer
 class TFRoFormerLMPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config: RoFormerConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
@@ -464,6 +477,7 @@ class TFRoFormerLMPredictionHead(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertMLMHead with Bert->RoFormer
 class TFRoFormerMLMHead(tf.keras.layers.Layer):
     def __init__(self, config: RoFormerConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
@@ -508,7 +522,7 @@ class TFRoFormerMainLayer(tf.keras.layers.Layer):
         position_ids = tf.range(0, seq_len, dtype=inputs.dtype)
         indices = tf.range(0, output_dim // 2, dtype=inputs.dtype)
         indices = tf.pow(10000.0, -2 * indices / output_dim)
-        embeddings = tf.einsum('n,d->nd', position_ids, indices)
+        embeddings = tf.einsum("n,d->nd", position_ids, indices)
         embeddings = tf.stack([tf.sin(embeddings), tf.cos(embeddings)], axis=-1)
         embeddings = tf.reshape(embeddings, (seq_len, output_dim))
         return embeddings[None, None, :, :]
@@ -604,9 +618,7 @@ class TFRoFormerMainLayer(tf.keras.layers.Layer):
         sequence_output = encoder_outputs[0]
 
         if not inputs["return_dict"]:
-            return (
-                sequence_output,
-            ) + encoder_outputs[1:]
+            return (sequence_output,) + encoder_outputs[1:]
 
         return TFBaseModelOutput(
             last_hidden_state=sequence_output,
@@ -788,7 +800,6 @@ class TFRoFormerModel(TFRoFormerPreTrainedModel):
 
 @add_start_docstrings("""RoFormer Model with a `language modeling` head on top. """, ROFORMER_START_DOCSTRING)
 class TFRoFormerForMaskedLM(TFRoFormerPreTrainedModel, TFMaskedLanguageModelingLoss):
-
     def __init__(self, config: RoFormerConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -885,7 +896,6 @@ class TFRoFormerForMaskedLM(TFRoFormerPreTrainedModel, TFMaskedLanguageModelingL
     """RoFormer Model with a `language modeling` head on top for CLM fine-tuning. """, ROFORMER_START_DOCSTRING
 )
 class TFRoFormerForCausalLM(TFRoFormerPreTrainedModel, TFCausalLanguageModelingLoss):
-
     def __init__(self, config: RoFormerConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1109,9 +1119,7 @@ class TFRoFormerForMultipleChoice(TFRoFormerPreTrainedModel, TFMultipleChoiceLos
         super().__init__(config, *inputs, **kwargs)
 
         self.roformer = TFRoFormerMainLayer(config, name="roformer")
-        self.sequence_summary = TFSequenceSummary(
-            config, config.initializer_range, name="sequence_summary"
-        )
+        self.sequence_summary = TFSequenceSummary(config, config.initializer_range, name="sequence_summary")
         self.classifier = tf.keras.layers.Dense(
             units=1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
@@ -1127,7 +1135,9 @@ class TFRoFormerForMultipleChoice(TFRoFormerPreTrainedModel, TFMultipleChoiceLos
         """
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
-    @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        ROFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1190,9 +1200,7 @@ class TFRoFormerForMultipleChoice(TFRoFormerPreTrainedModel, TFMultipleChoiceLos
             else None
         )
         flat_inputs_embeds = (
-            tf.reshape(
-                tensor=inputs["inputs_embeds"], shape=(-1, seq_length, shape_list(inputs["inputs_embeds"])[3])
-            )
+            tf.reshape(tensor=inputs["inputs_embeds"], shape=(-1, seq_length, shape_list(inputs["inputs_embeds"])[3]))
             if inputs["inputs_embeds"] is not None
             else None
         )
@@ -1224,11 +1232,15 @@ class TFRoFormerForMultipleChoice(TFRoFormerPreTrainedModel, TFMultipleChoiceLos
             attentions=outputs.attentions,
         )
 
-    @tf.function(input_signature=[{
-        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-        "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
-    }])
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
+            }
+        ]
+    )
     def serving(self, inputs: Dict[str, tf.Tensor]) -> TFMultipleChoiceModelOutput:
         output = self.call(input_ids=inputs)
 
@@ -1249,7 +1261,6 @@ class TFRoFormerForMultipleChoice(TFRoFormerPreTrainedModel, TFMultipleChoiceLos
     ROFORMER_START_DOCSTRING,
 )
 class TFRoFormerForTokenClassification(TFRoFormerPreTrainedModel, TFTokenClassificationLoss):
-
     def __init__(self, config: RoFormerConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1343,7 +1354,6 @@ class TFRoFormerForTokenClassification(TFRoFormerPreTrainedModel, TFTokenClassif
     ROFORMER_START_DOCSTRING,
 )
 class TFRoFormerForQuestionAnswering(TFRoFormerPreTrainedModel, TFQuestionAnsweringLoss):
-
     def __init__(self, config: RoFormerConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 

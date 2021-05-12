@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 junnyu The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 junnyu and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,9 @@
 
 import math
 import os
+from typing import Optional
 
+import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -57,9 +59,45 @@ _CONFIG_FOR_DOC = "RoFormerConfig"
 _TOKENIZER_FOR_DOC = "RoFormerTokenizer"
 
 ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "junnyu/roformer_chinese_base",
+    "junnyu/roformer_chinese_small",
+    "junnyu/roformer_chinese_base"
     # See all RoFormer models at https://huggingface.co/models?filter=roformer
 ]
+
+
+class RoFormerSinusoidalPositionalEmbedding(nn.Embedding):
+    """This module produces sinusoidal positional embeddings of any length."""
+
+    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
+        super().__init__(num_positions, embedding_dim)
+        self.weight = self._init_weight(self.weight)
+
+    @staticmethod
+    def _init_weight(out: nn.Parameter):
+        """
+        Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
+        the 2nd half of the vector. [dim // 2:]
+        """
+        n_pos, dim = out.shape
+        position_enc = np.array(
+            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
+        )
+        out.requires_grad = False  # set early to avoid an error in pytorch-1.8+
+        sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
+        out[:, 0:sentinel] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
+        out[:, sentinel:] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
+        out.detach_()
+
+        return out
+
+    @torch.no_grad()
+    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
+        """`input_ids_shape` is expected to be [bsz x seqlen]."""
+        bsz, seq_len = input_ids_shape[:2]
+        positions = torch.arange(
+            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+        )
+        return super().forward(positions)
 
 
 def load_tf_weights_in_roformer(model, config, tf_checkpoint_path):
@@ -136,12 +174,8 @@ def load_tf_weights_in_roformer(model, config, tf_checkpoint_path):
     return model
 
 
-def mish(x):
-    return x * torch.tanh(nn.functional.softplus(x))
-
-
 class RoFormerEmbeddings(nn.Module):
-    """Construct the embeddings from word, position and token_type embeddings."""
+    """Construct the embeddings from word and token_type embeddings."""
 
     def __init__(self, config):
         super().__init__()
@@ -153,9 +187,7 @@ class RoFormerEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(
-        self, input_ids=None, token_type_ids=None, inputs_embeds=None, past_key_values_length=0
-    ):
+    def forward(self, input_ids=None, token_type_ids=None, inputs_embeds=None):
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -238,12 +270,24 @@ class RoFormerSelfAttention(nn.Module):
             key_layer = self.transpose_for_scores(self.key(hidden_states))
             value_layer = self.transpose_for_scores(self.value(hidden_states))
             if sinusoidal_pos is not None:
-                cos_pos = torch.repeat_interleave(sinusoidal_pos[..., 1::2], 2, dim=-1)
-                sin_pos = torch.repeat_interleave(sinusoidal_pos[..., ::2], 2, dim=-1)
-                qw2 = torch.stack([-query_layer[..., 1::2], query_layer[..., ::2]], dim=-1).reshape_as(query_layer)
-                query_layer = query_layer * cos_pos + qw2 * sin_pos
-                kw2 = torch.stack([-key_layer[..., 1::2], key_layer[..., ::2]], dim=-1).reshape_as(key_layer)
-                key_layer = key_layer * cos_pos + kw2 * sin_pos
+                # https://kexue.fm/archives/8265
+                # sin [batch_size, num_heads, sequence_length, embed_size_per_head//2]
+                # cos [batch_size, num_heads, sequence_length, embed_size_per_head//2]
+                sin, cos = sinusoidal_pos.chunk(2, dim=-1)
+                # sin [θ0,θ1,θ2......θd/2-1]-> sin_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
+                sin_pos = torch.repeat_interleave(sin, 2, dim=-1)
+                # cos [θ0,θ1,θ2......θd/2-1]-> cos_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
+                cos_pos = torch.repeat_interleave(cos, 2, dim=-1)
+                # rotate_half_query_layer [-q1,q0,-q3,q2......,-qd-1,qd-2]
+                rotate_half_query_layer = torch.stack(
+                    [-query_layer[..., 1::2], query_layer[..., ::2]], dim=-1
+                ).reshape_as(query_layer)
+                query_layer = query_layer * cos_pos + rotate_half_query_layer * sin_pos
+                # rotate_half_key_layer [-k1,k0,-k3,k2......,-kd-1,kd-2]
+                rotate_half_key_layer = torch.stack([-key_layer[..., 1::2], key_layer[..., ::2]], dim=-1).reshape_as(
+                    key_layer
+                )
+                key_layer = key_layer * cos_pos + rotate_half_key_layer * sin_pos
 
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
@@ -287,6 +331,7 @@ class RoFormerSelfAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->RoFormer
 class RoFormerSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -352,6 +397,7 @@ class RoFormerAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->RoFormer
 class RoFormerIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -367,6 +413,7 @@ class RoFormerIntermediate(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->RoFormer
 class RoFormerOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -471,13 +518,15 @@ class RoFormerEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        self.embed_positions = RoFormerSinusoidalPositionalEmbedding(
+            config.max_position_embeddings, config.hidden_size // config.num_attention_heads
+        )
         self.layer = nn.ModuleList([RoFormerLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(
         self,
         hidden_states,
         attention_mask=None,
-        sinusoidal_pos=None,
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
@@ -490,6 +539,9 @@ class RoFormerEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
+
+        # [sequence_length, embed_size_per_head] -> [batch_size, num_heads, sequence_length, embed_size_per_head]
+        sinusoidal_pos = self.embed_positions(hidden_states.shape[:-1])[None, None, :, :]
 
         next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
@@ -567,6 +619,7 @@ class RoFormerEncoder(nn.Module):
         )
 
 
+# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->RoFormer
 class RoFormerPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -584,6 +637,7 @@ class RoFormerPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->RoFormer
 class RoFormerLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -604,6 +658,7 @@ class RoFormerLMPredictionHead(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->RoFormer
 class RoFormerOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -623,16 +678,18 @@ class RoFormerPreTrainedModel(PreTrainedModel):
     config_class = RoFormerConfig
     load_tf_weights = load_tf_weights_in_roformer
     base_model_prefix = "roformer"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = []
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, RoFormerSinusoidalPositionalEmbedding):
+            pass
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
@@ -747,16 +804,6 @@ class RoFormerModel(RoFormerPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def get_sinusoidal_position_embeddings(self, inputs):
-        output_dim = self.config.hidden_size // self.config.num_attention_heads
-        position_ids = torch.arange(0, inputs.size(1), dtype=inputs.dtype, device=inputs.device)
-        indices = torch.arange(0, output_dim // 2, dtype=inputs.dtype, device=inputs.device)
-        indices = torch.pow(10000.0, -2 * indices / output_dim)
-        embeddings = torch.einsum('n,d->nd', position_ids, indices)
-        embeddings = torch.stack([embeddings.sin(), embeddings.cos()], dim=-1)
-        embeddings = embeddings.flatten(1, 2)
-        return embeddings[None, None, :, :]
-
     @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -854,18 +901,12 @@ class RoFormerModel(RoFormerPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output = self.embeddings(
-            input_ids=input_ids,
-            token_type_ids=token_type_ids,
-            inputs_embeds=inputs_embeds,
-            past_key_values_length=past_key_values_length,
+            input_ids=input_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
-        sinusoidal_pos = self.get_sinusoidal_position_embeddings(
-            embedding_output)
 
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            sinusoidal_pos=sinusoidal_pos,
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
@@ -992,7 +1033,7 @@ class RoFormerForMaskedLM(RoFormerPreTrainedModel):
 )
 class RoFormerForCausalLM(RoFormerPreTrainedModel):
 
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
+    _keys_to_ignore_on_load_missing = [r"predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1014,21 +1055,21 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel):
     @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            inputs_embeds=None,
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            head_mask=None,
-            cross_attn_head_mask=None,
-            past_key_values=None,
-            labels=None,
-            use_cache=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        inputs_embeds=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        head_mask=None,
+        cross_attn_head_mask=None,
+        past_key_values=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         encoder_hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
@@ -1068,7 +1109,7 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel):
             >>> config.is_decoder = True
             >>> model = RoFormerForCausalLM.from_pretrained('junnyu/roformer_chinese_base', config=config)
 
-            >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+            >>> inputs = tokenizer("今天天气非常好。", return_tensors="pt")
             >>> outputs = model(**inputs)
 
             >>> prediction_logits = outputs.logits
@@ -1130,7 +1171,9 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel):
     def _reorder_cache(self, past, beam_idx):
         reordered_past = ()
         for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],)
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+            )
         return reordered_past
 
 
@@ -1179,16 +1222,16 @@ class RoFormerForSequenceClassification(RoFormerPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`): Labels for computing the sequence
@@ -1251,7 +1294,9 @@ class RoFormerForMultipleChoice(RoFormerPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        ROFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1259,16 +1304,16 @@ class RoFormerForMultipleChoice(RoFormerPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`): Labels for computing the multiple

@@ -19,6 +19,8 @@ import warnings
 from collections import OrderedDict
 
 from ...utils import logging
+
+# Add modeling imports here
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -237,8 +239,6 @@ from ..roberta.modeling_roberta import (
     RobertaForTokenClassification,
     RobertaModel,
 )
-
-# Add modeling imports here
 from ..roformer.modeling_roformer import (
     RoFormerForCausalLM,
     RoFormerForMaskedLM,
