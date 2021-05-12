@@ -24,6 +24,7 @@ logger = logging.get_logger(__name__)
 
 CHARACTER_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "helboukkouri/character-bert": "https://huggingface.co/helboukkouri/character-bert/resolve/main/config.json",
+    "helboukkouri/character-bert-medical": "https://huggingface.co/helboukkouri/character-bert-medical/resolve/main/config.json",
     # See all CharacterBERT models at https://huggingface.co/models?filter=character_bert
 }
 

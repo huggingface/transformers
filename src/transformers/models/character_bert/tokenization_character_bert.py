@@ -26,18 +26,23 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
+
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "helboukkouri/character-bert": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
+        "helboukkouri/character-bert": "https://huggingface.co/helboukkouri/character-bert/resolve/main/vocab.txt",
+        "helboukkouri/character-bert-medical": "https://huggingface.co/helboukkouri/character-bert-medical/resolve/main/vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "helboukkouri/character-bert": 512,
+    "helboukkouri/character-bert-medical": 512,
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
     "helboukkouri/character-bert": {"max_word_length": 50, "do_lower_case": True},
+    "helboukkouri/character-bert-medical": {"max_word_length": 50, "do_lower_case": True},
 }
 
 PAD_TOKEN_CHAR_ID = 0
@@ -91,7 +96,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for :obj:`lowercase` (as in the original BERT).    """
 
-
+    vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
@@ -126,7 +131,6 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             strip_accents=strip_accents,
             **kwargs,
         )
-
         self.do_basic_tokenize = do_basic_tokenize
         if do_basic_tokenize:
             self.basic_tokenizer = BasicTokenizer(
@@ -136,6 +140,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
                 strip_accents=strip_accents,
             )
         # This is responsible for converting tokens into character ids
+        self.max_word_length = max_word_length
         self._mapper = CharacterMapper(max_word_length=max_word_length)
 
     def __repr__(self) -> str:

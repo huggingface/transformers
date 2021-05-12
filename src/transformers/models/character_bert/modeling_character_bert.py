@@ -68,6 +68,7 @@ _TOKENIZER_FOR_DOC = "CharacterBertTokenizer"
 
 CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "helboukkouri/character-bert",
+    "helboukkouri/character-bert-medical",
     # See all CharacterBERT models at https://huggingface.co/models?filter=character_bert
 ]
 
