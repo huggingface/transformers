@@ -31,22 +31,14 @@ from .test_modeling_common import ModelTesterMixin, _config_zero_init, floats_te
 if is_torch_available():
     import torch
 
-    from transformers import (
-        CLIPConfig,
-        CLIPModel,
-        CLIPTextConfig,
-        CLIPTextModel,
-        CLIPTokenizer,
-        CLIPVisionConfig,
-        CLIPVisionModel,
-    )
+    from transformers import CLIPConfig, CLIPModel, CLIPTextConfig, CLIPTextModel, CLIPVisionConfig, CLIPVisionModel
     from transformers.models.clip.modeling_clip import CLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import CLIPFeatureExtractor
+    from transformers import CLIPProcessor
 
 
 class CLIPVisionModelTester:
@@ -543,26 +535,25 @@ class CLIPModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model_name = "openai/clip-vit-base-patch32"
-        model = CLIPModel.from_pretrained(model_name)
-        tokenizer = CLIPTokenizer.from_pretrained(model_name)
-        feature_extractor = CLIPFeatureExtractor.from_pretrained(model_name)
+        model = CLIPModel.from_pretrained(model_name).to(torch_device)
+        processor = CLIPProcessor.from_pretrained(model_name)
 
         image = prepare_img()
-        vision_inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
-        text_inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
-        text_inputs = text_inputs.to(torch_device)
+        inputs = processor(
+            text=["a photo of a cat", "a photo of a dog"], images=image, padding=True, return_tensors="pt"
+        ).to(torch_device)
 
         # forward pass
-        outputs = model(**text_inputs, **vision_inputs)
+        outputs = model(inputs)
 
         # verify the logits
         self.assertEqual(
             outputs.logits_per_image.shape,
-            torch.Size((vision_inputs.pixel_values.shape[0], text_inputs.input_ids.shape[0])),
+            torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
         )
         self.assertEqual(
             outputs.logits_per_text.shape,
-            torch.Size((text_inputs.input_ids.shape[0], vision_inputs.pixel_values.shape[0])),
+            torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
         expected_logits = torch.Tensor([[24.5056, 18.8076]]).to(torch_device)
