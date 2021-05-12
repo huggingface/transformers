@@ -43,6 +43,8 @@ from ...modeling_outputs import (
     MultipleChoiceModelOutput,
     NextSentencePredictorOutput,
     QuestionAnsweringModelOutput,
+    SemanticSimilarityOutput,
+    SemanticSimilarityOutput
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
@@ -1828,4 +1830,104 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             end_logits=end_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    Bert Model transformer with a semantic similarity head on top.
+    """,
+    BERT_START_DOCSTRING,
+)
+class BertForSemanticSimilarity(BertPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.bert = BertModel(config)
+        self.dropout1 = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout2 = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = nn.Linear(config.hidden_size, 1)
+
+        self.init_weights()
+
+    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=SemanticSimilarityOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        input_ids1=None,
+        attention_mask1=None,
+        token_type_ids1=None,
+        position_ids1=None,
+        head_mask1=None,
+        inputs_embeds1=None,
+        output_attentions1=None,
+        output_hidden_states1=None,
+        input_ids2=None,
+        attention_mask2=None,
+        token_type_ids2=None,
+        position_ids2=None,
+        head_mask2=None,
+        inputs_embeds2=None,
+        output_attentions2=None,
+        output_hidden_states2=None,
+        labels=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs1 = self.bert(
+            input_ids1,
+            attention_mask=attention_mask1,
+            token_type_ids=token_type_ids1,
+            position_ids=position_ids1,
+            head_mask=head_mask1,
+            inputs_embeds=inputs_embeds1,
+            output_attentions=output_attentions1,
+            output_hidden_states=output_hidden_states1,
+            return_dict=return_dict,
+        )
+
+        outputs2 = self.bert(
+            input_ids2,
+            attention_mask=attention_mask2,
+            token_type_ids=token_type_ids2,
+            position_ids=position_ids2,
+            head_mask=head_mask2,
+            inputs_embeds=inputs_embeds2,
+            output_attentions=output_attentions2,
+            output_hidden_states=output_hidden_states2,
+            return_dict=return_dict,
+        )
+
+        pooled_output1 = outputs1[1]
+        pooled_output2 = outputs2[1]
+
+        pooled_output1 = self.dropout1(pooled_output1)
+        pooled_output2 = self.dropout1(pooled_output1)
+
+        logits = nn.CosineSimilarity(dim=1, eps=1e-6)(pooled_output1, pooled_output2)
+
+        loss = None
+        if labels is not None:
+            # TODO: make sure labels are -1 and +1
+            loss_fct = MSELoss()
+            loss = loss_fct(logits, labels)
+
+        return SemanticSimilarityOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states1=outputs1.hidden_states,
+            attentions1=outputs1.attentions,
+            hidden_states2=outputs2.hidden_states,
+            attentions2=outputs2.attentions,
         )

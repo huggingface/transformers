@@ -598,6 +598,16 @@ class SequenceClassifierOutput(ModelOutput):
 
 
 @dataclass
+class SemanticSimilarityOutput(ModelOutput):
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    hidden_states1: Optional[Tuple[torch.FloatTensor]] = None
+    attentions1: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states2: Optional[Tuple[torch.FloatTensor]] = None
+    attentions2: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
 class Seq2SeqSequenceClassifierOutput(ModelOutput):
     """
     Base class for outputs of sequence-to-sequence sentence classification models.
