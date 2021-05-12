@@ -70,6 +70,63 @@ TF_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+# Copied from transformers.models.marian.modeling_tf_marian.TFMarianSinusoidalPositionalEmbedding with Marian->RoFormer
+class TFRoFormerSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
+    """This module produces sinusoidal positional embeddings of any length."""
+
+    def __init__(self, num_positions: int, embedding_dim: int, **kwargs):
+        super().__init__(**kwargs)
+
+        if embedding_dim % 2 != 0:
+            raise NotImplementedError(f"odd embedding_dim {embedding_dim} not supported")
+
+        self.embedding_dim = embedding_dim
+        self.num_positions = num_positions
+
+    def build(self, input_shape: tf.TensorShape):
+        """
+        Build shared token embedding layer Shared weights logic adapted from
+        https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
+        """
+
+        weight = self._init_weight(self.num_positions, self.embedding_dim)
+
+        self.weight = self.add_weight(
+            name="embeddings",
+            shape=[self.num_positions, self.embedding_dim],
+        )
+        weight = tf.cast(weight, dtype=self.weight.dtype)
+
+        self.weight.assign(weight)
+
+        super().build(input_shape)
+
+    @staticmethod
+    def _init_weight(n_pos: int, dim: int):
+        """
+        Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
+        the 2nd half of the vector. [dim // 2:]
+        """
+        position_enc = np.array(
+            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
+        )
+        table = np.zeros_like(position_enc)
+        # index 0 is all zero
+        table[:, 0 : dim // 2] = np.sin(position_enc[:, 0::2])
+        table[:, dim // 2 :] = np.cos(position_enc[:, 1::2])
+        # convert to tensor
+        table = tf.convert_to_tensor(table)
+        tf.stop_gradient(table)
+        return table
+
+    def call(self, input_shape: tf.TensorShape, past_key_values_length: int = 0):
+        """Input is expected to be of size [bsz x seqlen]."""
+        bsz, seq_len = input_shape[:2]
+
+        positions = tf.range(past_key_values_length, seq_len + past_key_values_length, delta=1, name="range")
+        return tf.gather(self.weight, positions)
+
+
 class TFRoFormerEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -185,10 +242,13 @@ class TFRoFormerSelfAttention(tf.keras.layers.Layer):
 
         if sinusoidal_pos is not None:
             # https://kexue.fm/archives/8265
-            # sin_pos [θ0,θ1,θ2......θd/2-1]-> sin_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
-            # cos_pos [θ0,θ1,θ2......θd/2-1]-> cos_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
-            sin_pos = tf.repeat(sinusoidal_pos[..., ::2], 2, axis=-1)
-            cos_pos = tf.repeat(sinusoidal_pos[..., 1::2], 2, axis=-1)
+            # sin [batch_size, num_heads, sequence_length, embed_size_per_head//2]
+            # cos [batch_size, num_heads, sequence_length, embed_size_per_head//2]
+            sin, cos = tf.split(sinusoidal_pos, num_or_size_splits=2, axis=-1)
+            # sin [θ0,θ1,θ2......θd/2-1]-> sin_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
+            # cos [θ0,θ1,θ2......θd/2-1]-> cos_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
+            sin_pos = tf.repeat(sin, 2, axis=-1)
+            cos_pos = tf.repeat(cos, 2, axis=-1)
             # rotate_half_query_layer [-q1,q0,-q3,q2......,-qd-1,qd-2]
             rotate_half_query_layer = tf.stack([-query_layer[..., 1::2], query_layer[..., ::2]], axis=-1)
             rotate_half_query_layer = tf.reshape(rotate_half_query_layer, shape_list(query_layer))
@@ -361,14 +421,17 @@ class TFRoFormerLayer(tf.keras.layers.Layer):
 class TFRoFormerEncoder(tf.keras.layers.Layer):
     def __init__(self, config: RoFormerConfig, **kwargs):
         super().__init__(**kwargs)
-
+        self.embed_positions = TFRoFormerSinusoidalPositionalEmbedding(
+            config.max_position_embeddings,
+            config.hidden_size // config.num_attention_heads,
+            name="embed_positions",
+        )
         self.layer = [TFRoFormerLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
 
     def call(
         self,
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
-        sinusoidal_pos: tf.Tensor,
         head_mask: tf.Tensor,
         output_attentions: bool,
         output_hidden_states: bool,
@@ -377,6 +440,9 @@ class TFRoFormerEncoder(tf.keras.layers.Layer):
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
+
+        # [sequence_length, embed_size_per_head] -> [batch_size, num_heads, sequence_length, embed_size_per_head]
+        sinusoidal_pos = self.embed_positions(shape_list(hidden_states)[:-1])[None, None, :, :]
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -516,17 +582,6 @@ class TFRoFormerMainLayer(tf.keras.layers.Layer):
         """
         raise NotImplementedError
 
-    def get_sinusoidal_position_embeddings(self, inputs):
-        output_dim = self.config.hidden_size // self.config.num_attention_heads
-        seq_len = shape_list(inputs)[1]
-        position_ids = tf.range(0, seq_len, dtype=inputs.dtype)
-        indices = tf.range(0, output_dim // 2, dtype=inputs.dtype)
-        indices = tf.pow(10000.0, -2 * indices / output_dim)
-        embeddings = tf.einsum("n,d->nd", position_ids, indices)
-        embeddings = tf.stack([tf.sin(embeddings), tf.cos(embeddings)], axis=-1)
-        embeddings = tf.reshape(embeddings, (seq_len, output_dim))
-        return embeddings[None, None, :, :]
-
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -576,7 +631,6 @@ class TFRoFormerMainLayer(tf.keras.layers.Layer):
             inputs_embeds=inputs["inputs_embeds"],
             training=inputs["training"],
         )
-        sinusoidal_pos = self.get_sinusoidal_position_embeddings(embedding_output)
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
@@ -607,7 +661,6 @@ class TFRoFormerMainLayer(tf.keras.layers.Layer):
         encoder_outputs = self.encoder(
             hidden_states=embedding_output,
             attention_mask=extended_attention_mask,
-            sinusoidal_pos=sinusoidal_pos,
             head_mask=inputs["head_mask"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
@@ -682,7 +735,7 @@ ROFORMER_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`np.ndarray`, :obj:`tf.Tensor`, :obj:`List[tf.Tensor]` :obj:`Dict[str, tf.Tensor]` or :obj:`Dict[str, np.ndarray]` and each example must have the shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
+            Indices can be obtained using :class:`~transformers.RoFormerTokenizer`. See
             :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
             details.
 
