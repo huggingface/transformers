@@ -100,7 +100,8 @@ overall training time below. For comparison we ran Pytorch's [run_glue.py](https
 
 
 *All experiments are ran on Google Cloud Platform. Prices are on-demand prices
-(not preemptible), obtained from the following tables:
+(not preemptible), obtained on May 12, 2021 for zone Iowa (us-central1) using
+the following tables:
 [TPU pricing table](https://cloud.google.com/tpu/pricing),
 [GPU pricing table](https://cloud.google.com/compute/gpus-pricing). GPU
 experiments are ran without further optimizations besides JAX transformations.
