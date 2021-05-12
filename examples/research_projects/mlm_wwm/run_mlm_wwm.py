@@ -29,7 +29,7 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
-from datasets import Dataset, load_dataset
+from datasets import load_dataset
 
 import transformers
 from transformers import (
@@ -166,9 +166,8 @@ def add_chinese_references(dataset, ref_file):
         refs = [json.loads(line) for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
     assert len(dataset) == len(refs)
 
-    dataset_dict = {c: dataset[c] for c in dataset.column_names}
-    dataset_dict["chinese_ref"] = refs
-    return Dataset.from_dict(dataset_dict)
+    # requires datasets>=1.6.2
+    return dataset.add_column("chinese_ref", refs)
 
 
 def main():
