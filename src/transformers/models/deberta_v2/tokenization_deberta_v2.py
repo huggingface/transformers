@@ -109,7 +109,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs
     ) -> None:
-        sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         super().__init__(
             do_lower_case=do_lower_case,
@@ -119,7 +119,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
             cls_token=cls_token,
             mask_token=mask_token,
             split_by_punct=split_by_punct,
-            sp_model_kwargs=sp_model_kwargs,
+            sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
 
@@ -130,7 +130,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
             )
         self.do_lower_case = do_lower_case
         self.split_by_punct = split_by_punct
-        self._tokenizer = SPMTokenizer(vocab_file, split_by_punct=split_by_punct, sp_model_kwargs=sp_model_kwargs)
+        self._tokenizer = SPMTokenizer(vocab_file, split_by_punct=split_by_punct, sp_model_kwargs=self.sp_model_kwargs)
 
     @property
     def vocab_size(self):

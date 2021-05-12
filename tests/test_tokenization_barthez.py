@@ -30,6 +30,7 @@ class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = BarthezTokenizer
     rust_tokenizer_class = BarthezTokenizerFast
     test_rust_tokenizer = True
+    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()
@@ -75,25 +76,3 @@ class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ids = tokenizer.encode(sequence)
         rust_ids = rust_tokenizer.encode(sequence)
         self.assertListEqual(ids, rust_ids)
-
-    def test_subword_regularization_tokenizer(self) -> None:
-        # Subword regularization is only available for the slow tokenizer.
-        tokenizer = self.tokenizer_class.from_pretrained(
-            "moussaKam/mbarthez", sp_model_kwargs={"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
-        )
-
-        self.check_subword_sampling(tokenizer)
-
-    def test_pickle_subword_regularization_tokenizer(self) -> None:
-        """Google pickle __getstate__ __setstate__ if you are struggling with this."""
-        # Subword regularization is only available for the slow tokenizer.
-        sp_model_kwargs = {"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
-        tokenizer = self.tokenizer_class.from_pretrained("moussaKam/mbarthez", sp_model_kwargs=sp_model_kwargs)
-        tokenizer_bin = pickle.dumps(tokenizer)
-        del tokenizer
-        tokenizer_new = pickle.loads(tokenizer_bin)
-
-        self.assertIsNotNone(tokenizer_new.sp_model_kwargs)
-        self.assertTrue(isinstance(tokenizer_new.sp_model_kwargs, dict))
-        self.assertEqual(tokenizer_new.sp_model_kwargs, sp_model_kwargs)
-        self.check_subword_sampling(tokenizer_new)

@@ -100,6 +100,9 @@ class TokenizerTesterMixin:
     from_pretrained_filter = None
     from_pretrained_vocab_key = "vocab_file"
     test_seq2seq = True
+    test_sentencepiece = False
+    test_sentencepiece_ignore_case = False
+    test_sentencepiece_skip_back_convert_check = False
 
     def setUp(self) -> None:
         # Tokenizer.filter makes it possible to filter which Tokenizer to case based on all the
@@ -216,6 +219,38 @@ class TokenizerTesterMixin:
             {value: batch_encode_plus_sequences[value][i] for value in batch_encode_plus_sequences.keys()}
             for i in range(len(batch_encode_plus_sequences["input_ids"]))
         ]
+
+    def test_subword_regularization_tokenizer(self) -> None:
+        if not self.test_sentencepiece:
+            return
+
+        # Subword regularization is only available for the slow tokenizer.
+        sp_model_kwargs = {"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
+        tokenizer = self.get_tokenizer(sp_model_kwargs=sp_model_kwargs)
+
+        self.assertTrue(hasattr(tokenizer, "sp_model_kwargs"))
+        self.assertIsNotNone(tokenizer.sp_model_kwargs)
+        self.assertTrue(isinstance(tokenizer.sp_model_kwargs, dict))
+        self.assertEqual(tokenizer.sp_model_kwargs, sp_model_kwargs)
+        self.check_subword_sampling(tokenizer)
+
+    def test_pickle_subword_regularization_tokenizer(self) -> None:
+        if not self.test_sentencepiece:
+            return
+
+        """Google pickle __getstate__ __setstate__ if you are struggling with this."""
+        # Subword regularization is only available for the slow tokenizer.
+        sp_model_kwargs = {"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
+        tokenizer = self.get_tokenizer(sp_model_kwargs=sp_model_kwargs)
+        tokenizer_bin = pickle.dumps(tokenizer)
+        del tokenizer
+        tokenizer_new = pickle.loads(tokenizer_bin)
+
+        self.assertTrue(hasattr(tokenizer_new, "sp_model_kwargs"))
+        self.assertIsNotNone(tokenizer_new.sp_model_kwargs)
+        self.assertTrue(isinstance(tokenizer_new.sp_model_kwargs, dict))
+        self.assertEqual(tokenizer_new.sp_model_kwargs, sp_model_kwargs)
+        self.check_subword_sampling(tokenizer_new)
 
     def test_model_input_names_signature(self):
         accepted_model_main_input_names = [
@@ -1732,8 +1767,6 @@ class TokenizerTesterMixin:
         self,
         tokenizer: PreTrainedTokenizer,
         text: str = None,
-        skip_back_convert_check: bool = False,
-        ignore_case: bool = False,
     ) -> None:
         """
         Check if the tokenizer generates different results when subword regularization is enabled.
@@ -1744,13 +1777,10 @@ class TokenizerTesterMixin:
         Args:
             tokenizer: The tokenizer to check.
             text: The text to use for the checks.
-            skip_back_convert_check:
-                Option to skip the test if the tokens can be converted back to the original text.
-                This is useful for the Marian tokenizer which uses different tokenizers for
-                source and target language.
-            ignore_case: Ignore the case when comparing tokeinzer results.
         """
         text = "This is a test for subword regularization." if text is None else text
+        if self.test_sentencepiece_ignore_case:
+            text = text.lower()
 
         tokens_list = []
         for _ in range(5):
@@ -1767,10 +1797,10 @@ class TokenizerTesterMixin:
         self.assertTrue(subword_sampling_found)
 
         # check if converting back to original text works
-        if not skip_back_convert_check:
+        if not self.test_sentencepiece_skip_back_convert_check:
             for tokens in tokens_list:
-                if ignore_case:
-                    self.assertEqual(text.lower(), tokenizer.convert_tokens_to_string(tokens).lower())
+                if self.test_sentencepiece_ignore_case:
+                    self.assertEqual(text, tokenizer.convert_tokens_to_string(tokens).lower())
                 else:
                     self.assertEqual(text, tokenizer.convert_tokens_to_string(tokens))
 

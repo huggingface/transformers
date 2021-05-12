@@ -33,6 +33,8 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = DebertaV2Tokenizer
     rust_tokenizer_class = None
     test_rust_tokenizer = False
+    test_sentencepiece = True
+    test_sentencepiece_ignore_case = True
 
     def setUp(self):
         super().setUp()
@@ -160,27 +162,3 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
             for expected, decoded in zip(expected_decoded_sequences, decoded_sequences):
                 self.assertEqual(expected, decoded)
-
-    def test_subword_regularization_tokenizer(self) -> None:
-        # Subword regularization is only available for the slow tokenizer.
-        tokenizer = self.tokenizer_class(
-            SAMPLE_VOCAB, keep_accents=True, sp_model_kwargs={"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
-        )
-
-        self.check_subword_sampling(tokenizer, text="this is a test for subword regularization", ignore_case=True)
-
-    def test_pickle_subword_regularization_tokenizer(self) -> None:
-        """Google pickle __getstate__ __setstate__ if you are struggling with this."""
-        # Subword regularization is only available for the slow tokenizer.
-        sp_model_kwargs = {"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
-        tokenizer = self.tokenizer_class(SAMPLE_VOCAB, keep_accents=True, sp_model_kwargs=sp_model_kwargs)
-        tokenizer_bin = pickle.dumps(tokenizer)
-        del tokenizer
-        tokenizer_new = pickle.loads(tokenizer_bin)
-
-        self.assertTrue(hasattr(tokenizer_new, "_tokenizer"))
-        self.assertIsNotNone(tokenizer_new._tokenizer)
-        self.assertIsNotNone(tokenizer_new._tokenizer.sp_model_kwargs)
-        self.assertTrue(isinstance(tokenizer_new._tokenizer.sp_model_kwargs, dict))
-        self.assertEqual(tokenizer_new._tokenizer.sp_model_kwargs, sp_model_kwargs)
-        self.check_subword_sampling(tokenizer_new, text="this is a test for subword regularization", ignore_case=True)

@@ -39,6 +39,7 @@ class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = MBart50Tokenizer
     rust_tokenizer_class = MBart50TokenizerFast
     test_rust_tokenizer = True
+    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()
@@ -81,34 +82,6 @@ class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             [SPIECE_UNDERLINE + "I", SPIECE_UNDERLINE + "was", SPIECE_UNDERLINE + "b", "or", "n", SPIECE_UNDERLINE + "in", SPIECE_UNDERLINE + "", "<unk>", "2", "0", "0", "0", ",", SPIECE_UNDERLINE + "and", SPIECE_UNDERLINE + "this", SPIECE_UNDERLINE + "is", SPIECE_UNDERLINE + "f", "al", "s", "<unk>", "."],
             # fmt: on
         )
-
-    def test_subword_regularization_tokenizer(self) -> None:
-        # Subword regularization is only available for the slow tokenizer.
-        tokenizer = self.tokenizer_class(
-            SAMPLE_VOCAB,
-            src_lang="en_XX",
-            tgt_lang="ro_RO",
-            keep_accents=True,
-            sp_model_kwargs={"enable_sampling": True, "alpha": 0.1, "nbest_size": -1},
-        )
-
-        self.check_subword_sampling(tokenizer)
-
-    def test_pickle_subword_regularization_tokenizer(self) -> None:
-        """Google pickle __getstate__ __setstate__ if you are struggling with this."""
-        # Subword regularization is only available for the slow tokenizer.
-        sp_model_kwargs = {"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
-        tokenizer = self.tokenizer_class(
-            SAMPLE_VOCAB, src_lang="en_XX", tgt_lang="ro_RO", keep_accents=True, sp_model_kwargs=sp_model_kwargs
-        )
-        tokenizer_bin = pickle.dumps(tokenizer)
-        del tokenizer
-        tokenizer_new = pickle.loads(tokenizer_bin)
-
-        self.assertIsNotNone(tokenizer_new.sp_model_kwargs)
-        self.assertTrue(isinstance(tokenizer_new.sp_model_kwargs, dict))
-        self.assertEqual(tokenizer_new.sp_model_kwargs, sp_model_kwargs)
-        self.check_subword_sampling(tokenizer_new)
 
 
 @require_torch
