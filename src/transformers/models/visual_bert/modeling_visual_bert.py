@@ -54,6 +54,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "VisualBertConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
+_TOKENIZER_CHECKPOINT = "bert-base-uncased"
 
 VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "gchhablani/visualbert-vqa",
@@ -150,6 +151,7 @@ def mish(x):
 def add_code_sample_docstrings(
     *docstr,
     tokenizer_class=None,
+    tokenizer_checkpoint=None,
     checkpoint=None,
     output_type=None,
     config_class=None,
@@ -161,7 +163,13 @@ def add_code_sample_docstrings(
         # model_class defaults to function's class if not specified otherwise
         model_class = fn.__qualname__.split(".")[0] if model_cls is None else model_cls
 
-        doc_kwargs = dict(model_class=model_class, tokenizer_class=tokenizer_class, checkpoint=checkpoint)
+        doc_kwargs = dict(
+            model_class=model_class,
+            tokenizer_class=tokenizer_class,
+            checkpoint=checkpoint,
+            mask=mask,
+            tokenizer_checkpoint=tokenizer_checkpoint,
+        )
 
         output_doc = _prepare_output_docstrings(output_type, config_class) if output_type is not None else ""
 
@@ -970,7 +978,7 @@ VISUAL_BERT_VQA_SAMPLE = r"""
         >>> from transformers import {tokenizer_class}, {model_class}
         >>> import torch
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{tokenizer_checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> text = "Who is eating the apple?"
@@ -998,7 +1006,7 @@ VISUAL_BERT_NLVR_SAMPLE = r"""
         >>> from transformers import {tokenizer_class}, {model_class}
         >>> import torch
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{tokenizer_checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> text = "Who is eating the apple?"
@@ -1027,7 +1035,7 @@ VISUAL_BERT_VQA_ADVANCED_SAMPLE = r"""
         >>> from transformers import {tokenizer_class}, {model_class}
         >>> import torch
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{tokenizer_checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> text = "Who is eating the apple?"
@@ -1055,7 +1063,7 @@ VISUAL_BERT_FLICKR_SAMPLE = r"""
         >>> from transformers import {tokenizer_class}, {model_class}
         >>> import torch
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{tokenizer_checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> text = "Who is eating the apple?"
@@ -1085,10 +1093,10 @@ VISUAL_BERT_PRE_TRAINING_SAMPLE = r"""
         >>> from transformers import {tokenizer_class}, {model_class}
         >>> import torch
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{tokenizer_checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
-        >>> inputs = tokenizer("The capital of France is {{mask}}.", return_tensors="pt")
+        >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="pt")
         >>> visual_embeds = get_visual_embeddings(image).unsqueeze(0)
         >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long) #example
         >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
@@ -1115,7 +1123,7 @@ VISUAL_BERT_MODEL_SAMPLE = r"""
         >>> from transformers import {tokenizer_class}, {model_class}
         >>> import torch
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{tokenizer_checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("The capital of France is Paris.", return_tensors="pt")
@@ -1140,7 +1148,7 @@ VISUAL_BERT_MULTIPLE_CHOICE_SAMPLE = r"""
         >>> from transformers import {tokenizer_class}, {model_class}
         >>> import torch
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{tokenizer_checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
@@ -1216,6 +1224,7 @@ class VisualBertModel(VisualBertPreTrainedModel):
     @replace_return_docstrings(output_type=BaseModelOutputWithPoolingAndCrossAttentions, config_class=_CONFIG_FOR_DOC)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
+        tokenizer_checkpoint=_TOKENIZER_CHECKPOINT,
         checkpoint="gchhablani/visualbert-vqa-coco-pre",
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class="gchhablani/visualbert-vqa-coco-pre",
@@ -1419,7 +1428,9 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
     @replace_return_docstrings(output_type=VisualBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
+        tokenizer_checkpoint=_TOKENIZER_CHECKPOINT,
         checkpoint="gchhablani/visualbert-vqa-coco-pre",
+        mask="[MASK]",
         output_type=VisualBertForPreTrainingOutput,
         config_class="gchhablani/visualbert-vqa-coco-pre",
         code_sample=VISUAL_BERT_PRE_TRAINING_SAMPLE,
@@ -1554,6 +1565,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
     )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
+        tokenizer_checkpoint=_TOKENIZER_CHECKPOINT,
         checkpoint="gchhablani/visualbert-vcr",
         output_type=MultipleChoiceModelOutput,
         config_class="gchhablani/visualbert-vcr",
@@ -1673,6 +1685,7 @@ class VisualBertForVQA(VisualBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
+        tokenizer_checkpoint=_TOKENIZER_CHECKPOINT,
         checkpoint="gchhablani/visualbert-vqa",
         output_type=SequenceClassifierOutput,
         config_class="gchhablani/visualbert-vqa",
@@ -1774,6 +1787,7 @@ class VisualBertForVQAAdvanced(VisualBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
+        tokenizer_checkpoint=_TOKENIZER_CHECKPOINT,
         checkpoint="gchhablani/visualbert-vqa-pre",
         output_type=MaskedLMOutput,
         config_class="gchhablani/visualbert-vqa-pre",
@@ -1864,6 +1878,7 @@ class VisualBertForNLVR(VisualBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
+        tokenizer_checkpoint=_TOKENIZER_CHECKPOINT,
         checkpoint="gchhablani/visualbert-nlvr2",
         output_type=SequenceClassifierOutput,
         config_class="gchhablani/visualbert-nlvr2",
@@ -2001,6 +2016,7 @@ class VisualBertForFlickr(VisualBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
+        tokenizer_checkpoint=_TOKENIZER_CHECKPOINT,
         checkpoint="gchhablani/visualbert-vqa-coco-pre",
         output_type=SequenceClassifierOutput,
         config_class="gchhablani/visualbert-vqa-coco-pre",
