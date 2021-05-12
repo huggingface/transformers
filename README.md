@@ -7,6 +7,7 @@ This branch has the following patches:
 * no copy of the state dict is made while loading a pretrained model
 * local self attention implemented in a simple way
 * tail free sampling
+* fix random samples showing up in fp16 mode
 
 <!---
 Copyright 2020 The HuggingFace Team. All rights reserved.
