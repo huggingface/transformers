@@ -364,11 +364,8 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
-<<<<<<< HEAD
         (VisualBertConfig, VisualBertModel),
-=======
         (CLIPConfig, CLIPModel),
->>>>>>> upstream/master
         (BigBirdPegasusConfig, BigBirdPegasusModel),
         (DeiTConfig, DeiTModel),
         (LukeConfig, LukeModel),
@@ -554,7 +551,6 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
-        (VisualBertConfig, VisualBertForVQAAdvanced),
         (BigBirdConfig, BigBirdForMaskedLM),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
         (ConvBertConfig, ConvBertForMaskedLM),
@@ -608,9 +604,6 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
-        (VisualBertConfig, VisualBertForFlickr),
-        (VisualBertConfig, VisualBertForNLVR),
-        (VisualBertConfig, VisualBertForVQA),
         (BigBirdPegasusConfig, BigBirdPegasusForSequenceClassification),
         (BigBirdConfig, BigBirdForSequenceClassification),
         (ConvBertConfig, ConvBertForSequenceClassification),
