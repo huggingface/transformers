@@ -69,6 +69,10 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
+        pixel_values (:obj:`torch.LongTensor` of shape :obj:`(batch_size, channels, image_width, image_height)`):
+            Image pixels 
+            `What are input IDs? <../glossary.html#pixel-values>`__
+
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
@@ -227,7 +231,7 @@ class EncoderDecoderModel(PreTrainedModel):
         encoder_pretrained_model_name_or_path: str = None,
         decoder_pretrained_model_name_or_path: str = None,
         *model_args,
-        **kwargs
+        **kwargs,
     ) -> PreTrainedModel:
         r"""
         Instantiate an encoder and a decoder from one or two base classes of the library from pretrained model
@@ -365,6 +369,7 @@ class EncoderDecoderModel(PreTrainedModel):
     def forward(
         self,
         input_ids=None,
+        pixel_values=None,
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
@@ -414,7 +419,7 @@ class EncoderDecoderModel(PreTrainedModel):
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
 
-        if encoder_outputs is None:
+        if encoder_outputs is None and input_ids is not None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
@@ -424,6 +429,16 @@ class EncoderDecoderModel(PreTrainedModel):
                 return_dict=return_dict,
                 **kwargs_encoder,
             )
+        elif encoder_outputs is None and input_ids is not None:
+            encoder_outputs = self.encoder(
+                pixel_values=pixel_values,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                **kwargs_encoder,
+            )
+        else:
+            raise Exception("Both `pixel_values` & `input_ids` cannot be None.")
 
         encoder_hidden_states = encoder_outputs[0]
 
