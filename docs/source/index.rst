@@ -114,7 +114,7 @@ conversion utilities for the following models:
 11. :doc:`CamemBERT <model_doc/camembert>` (from Inria/Facebook/Sorbonne) released with the paper `CamemBERT: a Tasty
     French Language Model <https://arxiv.org/abs/1911.03894>`__ by Louis Martin*, Benjamin Muller*, Pedro Javier Ortiz
     Suárez*, Yoann Dupont, Laurent Romary, Éric Villemonte de la Clergerie, Djamé Seddah and Benoît Sagot.
-12. :doc:`CLIP <model_doc/camembert>` from (OpenAI) released with the paper `Learning Transferable Visual Models From
+12. :doc:`CLIP <model_doc/clip>` from (OpenAI) released with the paper `Learning Transferable Visual Models From
     Natural Language Supervision <https://arxiv.org/abs/2103.00020>`__ by Alec Radford, Jong Wook Kim, Chris Hallacy,
     Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen
     Krueger, Ilya Sutskever.
