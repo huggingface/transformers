@@ -77,15 +77,14 @@ class VisualBertConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        bypass_transformer (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not the model should bypass the transformer for the visual embeddings. If set to `True`,  
+            the model directly concatenates the visual embeddings from :class:`~transformers.VisualBertEmbeddings` with
+            text output from transformers, and then pass it to a self-attention layer.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if ``config.is_decoder=True``.
-        bypass_transformer (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not the model should bypass the transformer for the visual embeddings. If set to `True`,  
-            the model directly concatenates the visual embeddings from :class:`~transformers.VisualBertEmbeddings` with
-            text output from transformers,and then pass it to a self-attention layer.
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+
 
         Example::
 
@@ -100,6 +99,7 @@ class VisualBertConfig(PretrainedConfig):
         >>> # Accessing the model configuration
         >>> configuration = model.config
     """
+
     model_type = "visual_bert"
 
     def __init__(
@@ -117,9 +117,10 @@ class VisualBertConfig(PretrainedConfig):
         type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        use_cache=True,
         bypass_transformer=False,
-        is_encoder_decoder=False,
+        # TO-DO: Check if the following parameters are needed and if yes, then whether they are to be documented.
+        # use_cache=True,
+        # is_encoder_decoder=False,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -140,6 +141,6 @@ class VisualBertConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
+        # self.use_cache = use_cache
         self.bypass_transformer = bypass_transformer
-        self.is_encoder_decoder = is_encoder_decoder
+        # self.is_encoder_decoder = is_encoder_decoder
