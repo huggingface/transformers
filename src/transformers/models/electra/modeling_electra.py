@@ -21,8 +21,8 @@ from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.utils.checkpoint
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, get_activation
 from ...file_utils import (
@@ -303,7 +303,7 @@ class ElectraSelfAttention(nn.Module):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = F.softmax(attention_scores, dim=-1)
+        attention_probs = nn.Softmax(dim=-1)(attention_scores)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -963,11 +963,14 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
                     self.config.problem_type = "multi_label_classification"
 
             if self.config.problem_type == "regression":
-                loss = F.mse_loss(logits.view(-1, self.num_labels), labels)
+                loss_fct = MSELoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels)
             elif self.config.problem_type == "single_label_classification":
-                loss = F.cross_entropy(logits.view(-1, self.num_labels), labels.view(-1))
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
-                loss = F.binary_cross_entropy_with_logits(logits, labels)
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
 
         if not return_dict:
             output = (logits,) + discriminator_hidden_states[1:]
@@ -1052,15 +1055,14 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
 
         loss = None
         if labels is not None:
+            loss_fct = nn.BCEWithLogitsLoss()
             if attention_mask is not None:
                 active_loss = attention_mask.view(-1, discriminator_sequence_output.shape[1]) == 1
                 active_logits = logits.view(-1, discriminator_sequence_output.shape[1])[active_loss]
                 active_labels = labels[active_loss]
-                loss = F.binary_cross_entropy_with_logits(active_logits, active_labels.float())
+                loss = loss_fct(active_logits, active_labels.float())
             else:
-                loss = F.binary_cross_entropy_with_logits(
-                    logits.view(-1, discriminator_sequence_output.shape[1]), labels.float()
-                )
+                loss = loss_fct(logits.view(-1, discriminator_sequence_output.shape[1]), labels.float())
 
         if not return_dict:
             output = (logits,) + discriminator_hidden_states[1:]
@@ -1146,8 +1148,8 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         loss = None
         # Masked language modeling softmax layer
         if labels is not None:
-            # -100 index = padding token
-            loss = F.cross_entropy(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            loss_fct = nn.CrossEntropyLoss()  # -100 index = padding token
+            loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
             output = (prediction_scores,) + generator_hidden_states[1:]
@@ -1223,14 +1225,15 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
 
         loss = None
         if labels is not None:
+            loss_fct = nn.CrossEntropyLoss()
             # Only keep active parts of the loss
             if attention_mask is not None:
                 active_loss = attention_mask.view(-1) == 1
                 active_logits = logits.view(-1, self.config.num_labels)[active_loss]
                 active_labels = labels.view(-1)[active_loss]
-                loss = F.cross_entropy(active_logits, active_labels)
+                loss = loss_fct(active_logits, active_labels)
             else:
-                loss = F.cross_entropy(logits.view(-1, self.config.num_labels), labels.view(-1))
+                loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + discriminator_hidden_states[1:]
@@ -1327,8 +1330,9 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
             start_positions.clamp_(0, ignored_index)
             end_positions.clamp_(0, ignored_index)
 
-            start_loss = F.cross_entropy(start_logits, start_positions, ignore_index=ignored_index)
-            end_loss = F.cross_entropy(end_logits, end_positions, ignore_index=ignored_index)
+            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
+            start_loss = loss_fct(start_logits, start_positions)
+            end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
 
         if not return_dict:
@@ -1423,7 +1427,8 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = F.cross_entropy(reshaped_logits, labels)
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(reshaped_logits, labels)
 
         if not return_dict:
             output = (reshaped_logits,) + discriminator_hidden_states[1:]
