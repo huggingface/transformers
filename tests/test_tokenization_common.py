@@ -100,9 +100,13 @@ class TokenizerTesterMixin:
     from_pretrained_filter = None
     from_pretrained_vocab_key = "vocab_file"
     test_seq2seq = True
+
+    # set to True to test a sentencepiece tokenizer
     test_sentencepiece = False
+
+    # set to True to ignore casing when testing a sentencepiece tokenizer
+    # test_sentencepiece must also be set to True
     test_sentencepiece_ignore_case = False
-    test_sentencepiece_skip_back_convert_check = False
 
     def setUp(self) -> None:
         # Tokenizer.filter makes it possible to filter which Tokenizer to case based on all the
@@ -1797,12 +1801,11 @@ class TokenizerTesterMixin:
         self.assertTrue(subword_sampling_found)
 
         # check if converting back to original text works
-        if not self.test_sentencepiece_skip_back_convert_check:
-            for tokens in tokens_list:
-                if self.test_sentencepiece_ignore_case:
-                    self.assertEqual(text, tokenizer.convert_tokens_to_string(tokens).lower())
-                else:
-                    self.assertEqual(text, tokenizer.convert_tokens_to_string(tokens))
+        for tokens in tokens_list:
+            if self.test_sentencepiece_ignore_case:
+                self.assertEqual(text, tokenizer.convert_tokens_to_string(tokens).lower())
+            else:
+                self.assertEqual(text, tokenizer.convert_tokens_to_string(tokens))
 
     @require_torch
     @slow
