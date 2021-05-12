@@ -35,11 +35,11 @@ class QuantEmbedding(nn.Module):
     :obj:`torch.nn.Embedding`.
 
     Args:
-        weight_bit (:obj:`int`, `optiona`l, defaults to :obj:`8`):
+        weight_bit (:obj:`int`, `optional`, defaults to :obj:`8`):
             Bitwidth for the quantized weight.
-        momentum (:obj:`float`, `optional, defaults to :obj:`0.95`):
+        momentum (:obj:`float`, `optional`, defaults to :obj:`0.95`):
             Momentum for updating the activation quantization range.
-        quant_mode (:obj:`bool`, `optional, defaults to :obj:`False`):
+        quant_mode (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not the layer is quantized.
     """
 
@@ -124,7 +124,7 @@ class QuantAct(nn.Module):
             Momentum for updating the activation quantization range.
         per_channel (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to or not use channel-wise quantization.
-        channel_len (:obj:`int`, `optional`, defaults to :obj:`None`):
+        channel_len (:obj:`int`, `optional`):
             Specify the channel length when set the `per_channel` True.
         quant_mode (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not the layer is quantized.
@@ -619,7 +619,7 @@ def symmetric_linear_quantization_params(num_bits, saturation_min, saturation_ma
         `saturation_max`.
     """
     # in this part, we do not need any gradient computation,
-    # in order to enfore this, we put torch.no_grad()
+    # in order to enforce this, we put torch.no_grad()
     with torch.no_grad():
         n = 2 ** (num_bits - 1) - 1
 
@@ -755,9 +755,9 @@ class FixedPointMul(Function):
             Quantization bitwidth.
         z_scaling_factor (:obj:`torch.Tensor`):
             Scaling factor of the output tensor.
-        identity (:obj:`torch.Tensor`, `optional`, defaults to :obj:`None`):
+        identity (:obj:`torch.Tensor`, `optional`):
             Identity tensor, if exists.
-        identity_scaling_factor (:obj:`torch.Tensor`, `optional`, defaults to :obj:`None`):
+        identity_scaling_factor (:obj:`torch.Tensor`, `optional`):
             Scaling factor of the identity tensor `identity`, if exists.
 
     Returns:

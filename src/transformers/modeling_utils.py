@@ -18,6 +18,7 @@ import inspect
 import os
 import re
 import warnings
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
@@ -29,11 +30,14 @@ from torch.nn import functional as F
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
+    CONFIG_NAME,
     DUMMY_INPUTS,
+    FLAX_WEIGHTS_NAME,
     TF2_WEIGHTS_NAME,
     TF_WEIGHTS_NAME,
     WEIGHTS_NAME,
     ModelOutput,
+    PushToHubMixin,
     cached_path,
     hf_bucket_url,
     is_offline_mode,
@@ -41,11 +45,31 @@ from .file_utils import (
     replace_return_docstrings,
 )
 from .generation_utils import GenerationMixin
-from .integrations import is_deepspeed_zero3_enabled
+from .integrations import deepspeed_config, is_deepspeed_zero3_enabled
 from .utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+
+_init_weights = True
+
+
+@contextmanager
+def no_init_weights(_enable=True):
+    """
+    Context manager to globally disable weight initialization to speed up loading large models.
+
+    TODO(Patrick): Delete safety argument `_enable=True` at next major version. .
+    """
+    global _init_weights
+    if _enable:
+        _init_weights = False
+    try:
+        yield
+    finally:
+        _init_weights = True
+
 
 try:
     from torch.nn import Identity
@@ -288,7 +312,7 @@ class ModuleUtilsMixin:
                 The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard).
             num_hidden_layers (:obj:`int`):
                 The number of hidden layers in the model.
-            is_attention_chunked: (:obj:`bool`, `optional, defaults to :obj:`False`):
+            is_attention_chunked: (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not the attentions scores are computed by chunks or not.
 
         Returns:
@@ -384,7 +408,7 @@ class ModuleUtilsMixin:
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
 
-class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
+class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin):
     r"""
     Base class for all models.
 
@@ -485,6 +509,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             :obj:`nn.Module`: A torch module mapping hidden states to vocabulary.
         """
         return None  # Overwrite for models with output embeddings
+
+    def _init_weights(self, module):
+        """
+        Initialize the weights. This method should be overridden by derived class.
+        """
+        raise NotImplementedError(f"Make sure `_init_weigths` is implemented for {self.__class__}")
 
     def tie_weights(self):
         """
@@ -679,7 +709,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             )
 
         # Build new embeddings
-        new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim).to(self.device)
+        new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim).to(
+            self.device, dtype=old_embeddings.weight.dtype
+        )
 
         # initialize all new embeddings (in particular added tokens)
         self._init_weights(new_embeddings)
@@ -763,17 +795,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
     def init_weights(self):
         """
-        Initializes and prunes weights if needed.
+        If needed prunes and maybe initializes weights.
         """
-        # Initialize weights
-        self.apply(self._init_weights)
-
         # Prune heads if needed
         if self.config.pruned_heads:
             self.prune_heads(self.config.pruned_heads)
 
-        # Tie weights if needed
-        self.tie_weights()
+        if _init_weights:
+            # Initialize weights
+            self.apply(self._init_weights)
+
+            # Tie weights should be skipped when not initializing all weights
+            # since from_pretrained(...) calls tie weights anyways
+            self.tie_weights()
 
     def prune_heads(self, heads_to_prune: Dict[int, List[int]]):
         """
@@ -798,6 +832,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         save_config: bool = True,
         state_dict: Optional[dict] = None,
         save_function: Callable = torch.save,
+        push_to_hub: bool = False,
+        **kwargs,
     ):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
@@ -817,6 +853,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             save_function (:obj:`Callable`):
                 The function to use to save the state dictionary. Useful on distributed training like TPUs when one
                 need to replace :obj:`torch.save` by another method.
+            push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to push your model to the Hugging Face model hub after saving it.
+            kwargs:
+                Additional key word arguments passed along to the
+                :meth:`~transformers.file_utils.PushToHubMixin.push_to_hub` method.
         """
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -847,6 +888,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         logger.info(f"Model weights saved in {output_model_file}")
 
+        if push_to_hub:
+            saved_files = [output_model_file]
+            if save_config:
+                saved_files.append(os.path.join(save_directory, CONFIG_NAME))
+            url = self._push_to_hub(save_files=saved_files, **kwargs)
+            logger.info(f"Model pushed to the hub in this commit: {url}")
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
         r"""
@@ -875,6 +923,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                       this case, ``from_tf`` should be set to :obj:`True` and a configuration object should be provided
                       as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in
                       a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+                    - A path or url to a model folder containing a `flax checkpoint file` in `.msgpack` format (e.g,
+                      ``./flax_model/`` containing ``flax_model.msgpack``). In this case, ``from_flax`` should be set
+                      to :obj:`True`.
                     - :obj:`None` if you are both providing the configuration and state dictionary (resp. with keyword
                       arguments ``config`` and ``state_dict``).
             model_args (sequence of positional arguments, `optional`):
@@ -907,6 +958,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             from_tf (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Load the model weights from a TensorFlow checkpoint save file (see docstring of
                 ``pretrained_model_name_or_path`` argument).
+            from_flax (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Load the model weights from a Flax checkpoint save file (see docstring of
+                ``pretrained_model_name_or_path`` argument).
             force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to force the (re-)download of the model weights and configuration files, overriding the
                 cached versions if they exist.
@@ -927,10 +981,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
                 identifier allowed by git.
-            mirror(:obj:`str`, `optional`, defaults to :obj:`None`):
+            mirror(:obj:`str`, `optional`):
                 Mirror source to accelerate downloads in China. If you are from China and have an accessibility
                 problem, you can set this option to resolve it. Note that we do not guarantee the timeliness or safety.
                 Please refer to the mirror site for more information.
+            _fast_init(:obj:`bool`, `optional`, defaults to `:obj:`True`):
+                Whether or not to disable fast initialization.
+
+                .. warning::
+
+                    One should only disable `_fast_init` to ensure backwards compatibility with
+                    ``transformers.__version__ < 4.6.0`` for seeded model initialization. This argument will be removed
+                    at the next major version. See `pull request 11471
+                    <https://github.com/huggingface/transformers/pull/11471>`__ for more information.
+
             kwargs (remaining dictionary of keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or
@@ -968,11 +1032,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower, for example purposes, not runnable).
             >>> config = BertConfig.from_json_file('./tf_model/my_tf_model_config.json')
             >>> model = BertModel.from_pretrained('./tf_model/my_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+            >>> # Loading from a Flax checkpoint file instead of a PyTorch model (slower)
+            >>> model = BertModel.from_pretrained('bert-base-uncased', from_flax=True)
+
         """
         config = kwargs.pop("config", None)
         state_dict = kwargs.pop("state_dict", None)
         cache_dir = kwargs.pop("cache_dir", None)
         from_tf = kwargs.pop("from_tf", False)
+        from_flax = kwargs.pop("from_flax", False)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
@@ -983,6 +1051,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         mirror = kwargs.pop("mirror", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
+        _fast_init = kwargs.pop("_fast_init", True)
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -1023,13 +1092,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 elif from_tf and os.path.isfile(os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)):
                     # Load from a TF 2.0 checkpoint in priority if from_tf
                     archive_file = os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)
+                elif from_flax and os.path.isfile(os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME)):
+                    # Load from a Flax checkpoint in priority if from_flax
+                    archive_file = os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME)
                 elif os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
                     # Load from a PyTorch checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
                 else:
                     raise EnvironmentError(
-                        f"Error no file named {[WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + '.index']} found in "
-                        f"directory {pretrained_model_name_or_path} or `from_tf` set to False."
+                        f"Error no file named {[WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + '.index', FLAX_WEIGHTS_NAME]} found in "
+                        f"directory {pretrained_model_name_or_path} or `from_tf` and `from_flax` set to False."
                     )
             elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
@@ -1041,9 +1113,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     )
                 archive_file = pretrained_model_name_or_path + ".index"
             else:
+                # set correct filename
+                if from_tf:
+                    filename = TF2_WEIGHTS_NAME
+                elif from_flax:
+                    filename = FLAX_WEIGHTS_NAME
+                else:
+                    filename = WEIGHTS_NAME
+
                 archive_file = hf_bucket_url(
                     pretrained_model_name_or_path,
-                    filename=(TF2_WEIGHTS_NAME if from_tf else WEIGHTS_NAME),
+                    filename=filename,
                     revision=revision,
                     mirror=mirror,
                 )
@@ -1079,30 +1159,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         config.name_or_path = pretrained_model_name_or_path
 
         # Instantiate model.
-
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-            # this immediately partitions the model to avoid the overhead in time and memory copying it on CPU or each GPU first
-            with deepspeed.zero.Init():
-                model = cls(config, *model_args, **model_kwargs)
+            # this immediately partitions the model across all gpus, to avoid the overhead in time
+            # and memory copying it on CPU or each GPU first
+            with deepspeed.zero.Init(config=deepspeed_config()):
+                with no_init_weights(_enable=_fast_init):
+                    model = cls(config, *model_args, **model_kwargs)
         else:
-            model = cls(config, *model_args, **model_kwargs)
-
-        if state_dict is None and not from_tf:
-            try:
-                state_dict = torch.load(resolved_archive_file, map_location="cpu")
-            except Exception:
-                raise OSError(
-                    f"Unable to load weights from pytorch checkpoint file for '{pretrained_model_name_or_path}' "
-                    f"at '{resolved_archive_file}'"
-                    "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "
-                )
-
-        missing_keys = []
-        unexpected_keys = []
-        error_msgs = []
+            with no_init_weights(_enable=_fast_init):
+                model = cls(config, *model_args, **model_kwargs)
 
         if from_tf:
             if resolved_archive_file.endswith(".index"):
@@ -1120,103 +1188,32 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                         "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions."
                     )
                     raise
+        elif from_flax:
+            try:
+                from .modeling_flax_pytorch_utils import load_flax_checkpoint_in_pytorch_model
+
+                model = load_flax_checkpoint_in_pytorch_model(model, resolved_archive_file)
+            except ImportError:
+                logger.error(
+                    "Loading a Flax model in PyTorch, requires both PyTorch and Flax to be installed. Please see "
+                    "https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation instructions."
+                )
+                raise
         else:
-            # Convert old format to new format if needed from a PyTorch state_dict
-            old_keys = []
-            new_keys = []
-            for key in state_dict.keys():
-                new_key = None
-                if "gamma" in key:
-                    new_key = key.replace("gamma", "weight")
-                if "beta" in key:
-                    new_key = key.replace("beta", "bias")
-                if new_key:
-                    old_keys.append(key)
-                    new_keys.append(new_key)
-            for old_key, new_key in zip(old_keys, new_keys):
-                state_dict[new_key] = state_dict.pop(old_key)
+            if state_dict is None:
+                try:
+                    state_dict = torch.load(resolved_archive_file, map_location="cpu")
+                except Exception:
+                    raise OSError(
+                        f"Unable to load weights from pytorch checkpoint file for '{pretrained_model_name_or_path}' "
+                        f"at '{resolved_archive_file}'"
+                        "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "
+                    )
 
-            # copy state_dict so _load_from_state_dict can modify it
-            metadata = getattr(state_dict, "_metadata", None)
-            state_dict = state_dict.copy()
-            if metadata is not None:
-                state_dict._metadata = metadata
+            model, missing_keys, unexpected_keys, error_msgs = cls._load_state_dict_into_model(
+                model, state_dict, pretrained_model_name_or_path, _fast_init=_fast_init
+            )
 
-            # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
-            # so we need to apply the function recursively.
-            def load(module: nn.Module, prefix=""):
-                local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
-                args = (state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
-                if is_deepspeed_zero3_enabled():
-                    import deepspeed
-
-                    # because zero3 puts placeholders in model params, this context
-                    # manager gathers (unpartitions) the params of the current layer, then loads from
-                    # the state dict and then re-partitions them again
-                    with deepspeed.zero.GatheredParameters(list(module.parameters(recurse=False)), modifier_rank=0):
-                        if torch.distributed.get_rank() == 0:
-                            module._load_from_state_dict(*args)
-                else:
-                    module._load_from_state_dict(*args)
-
-                for name, child in module._modules.items():
-                    if child is not None:
-                        load(child, prefix + name + ".")
-
-            # Make sure we are able to load base models as well as derived models (with heads)
-            start_prefix = ""
-            model_to_load = model
-            has_prefix_module = any(s.startswith(cls.base_model_prefix) for s in state_dict.keys())
-            if not hasattr(model, cls.base_model_prefix) and has_prefix_module:
-                start_prefix = cls.base_model_prefix + "."
-            if hasattr(model, cls.base_model_prefix) and not has_prefix_module:
-                model_to_load = getattr(model, cls.base_model_prefix)
-
-            load(model_to_load, prefix=start_prefix)
-
-            if model.__class__.__name__ != model_to_load.__class__.__name__:
-                base_model_state_dict = model_to_load.state_dict().keys()
-                head_model_state_dict_without_base_prefix = [
-                    key.split(cls.base_model_prefix + ".")[-1] for key in model.state_dict().keys()
-                ]
-                missing_keys.extend(head_model_state_dict_without_base_prefix - base_model_state_dict)
-
-            # Some models may have keys that are not in the state by design, removing them before needlessly warning
-            # the user.
-            if cls._keys_to_ignore_on_load_missing is not None:
-                for pat in cls._keys_to_ignore_on_load_missing:
-                    missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
-
-            if cls._keys_to_ignore_on_load_unexpected is not None:
-                for pat in cls._keys_to_ignore_on_load_unexpected:
-                    unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
-
-            if len(unexpected_keys) > 0:
-                logger.warning(
-                    f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
-                    f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
-                    f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
-                    f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).\n"
-                    f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
-                    f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
-                )
-            else:
-                logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
-            if len(missing_keys) > 0:
-                logger.warning(
-                    f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
-                    f"and are newly initialized: {missing_keys}\n"
-                    f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
-                )
-            else:
-                logger.info(
-                    f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
-                    f"If your task is similar to the task the model of the checkpoint was trained on, "
-                    f"you can already use {model.__class__.__name__} for predictions without further training."
-                )
-            if len(error_msgs) > 0:
-                error_msg = "\n\t".join(error_msgs)
-                raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
 
@@ -1232,6 +1229,151 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             return model, loading_info
 
         return model
+
+    @classmethod
+    def _load_state_dict_into_model(cls, model, state_dict, pretrained_model_name_or_path, _fast_init=True):
+
+        # Convert old format to new format if needed from a PyTorch state_dict
+        old_keys = []
+        new_keys = []
+        for key in state_dict.keys():
+            new_key = None
+            if "gamma" in key:
+                new_key = key.replace("gamma", "weight")
+            if "beta" in key:
+                new_key = key.replace("beta", "bias")
+            if new_key:
+                old_keys.append(key)
+                new_keys.append(new_key)
+        for old_key, new_key in zip(old_keys, new_keys):
+            state_dict[new_key] = state_dict.pop(old_key)
+
+        # Retrieve missing & unexpected_keys
+        expected_keys = list(model.state_dict().keys())
+        loaded_keys = list(state_dict.keys())
+        prefix = model.base_model_prefix
+
+        has_prefix_module = any(s.startswith(prefix) for s in loaded_keys)
+        expects_prefix_module = any(s.startswith(prefix) for s in expected_keys)
+
+        # key re-naming operations are never done on the keys
+        # that are loaded, but always on the keys of the newly initialized model
+        remove_prefix = not has_prefix_module and expects_prefix_module
+        add_prefix = has_prefix_module and not expects_prefix_module
+
+        if remove_prefix:
+            expected_keys = [".".join(s.split(".")[1:]) if s.startswith(prefix) else s for s in expected_keys]
+        elif add_prefix:
+            expected_keys = [".".join([prefix, s]) for s in expected_keys]
+
+        missing_keys = list(set(expected_keys) - set(loaded_keys))
+        unexpected_keys = list(set(loaded_keys) - set(expected_keys))
+
+        # Some models may have keys that are not in the state by design, removing them before needlessly warning
+        # the user.
+        if cls._keys_to_ignore_on_load_missing is not None:
+            for pat in cls._keys_to_ignore_on_load_missing:
+                missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
+
+        if cls._keys_to_ignore_on_load_unexpected is not None:
+            for pat in cls._keys_to_ignore_on_load_unexpected:
+                unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
+
+        if _fast_init:
+            # retrieve unintialized modules and initialize
+            unintialized_modules = model.retrieve_modules_from_names(
+                missing_keys, add_prefix=add_prefix, remove_prefix=remove_prefix
+            )
+            for module in unintialized_modules:
+                model._init_weights(module)
+
+        # copy state_dict so _load_from_state_dict can modify it
+        metadata = getattr(state_dict, "_metadata", None)
+        state_dict = state_dict.copy()
+        if metadata is not None:
+            state_dict._metadata = metadata
+
+        error_msgs = []
+
+        # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
+        # so we need to apply the function recursively.
+        def load(module: nn.Module, prefix=""):
+            local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
+            args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
+            if is_deepspeed_zero3_enabled():
+                import deepspeed
+
+                # because zero3 puts placeholders in model params, this context
+                # manager gathers (unpartitions) the params of the current layer, then loads from
+                # the state dict and then re-partitions them again
+                with deepspeed.zero.GatheredParameters(list(module.parameters(recurse=False)), modifier_rank=0):
+                    if torch.distributed.get_rank() == 0:
+                        module._load_from_state_dict(*args)
+            else:
+                module._load_from_state_dict(*args)
+
+            for name, child in module._modules.items():
+                if child is not None:
+                    load(child, prefix + name + ".")
+
+        # Make sure we are able to load base models as well as derived models (with heads)
+        start_prefix = ""
+        model_to_load = model
+        if not hasattr(model, cls.base_model_prefix) and has_prefix_module:
+            start_prefix = cls.base_model_prefix + "."
+        if hasattr(model, cls.base_model_prefix) and not has_prefix_module:
+            model_to_load = getattr(model, cls.base_model_prefix)
+
+        load(model_to_load, prefix=start_prefix)
+
+        if len(unexpected_keys) > 0:
+            logger.warning(
+                f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
+                f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
+                f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
+                f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).\n"
+                f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
+                f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
+            )
+        else:
+            logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
+        if len(missing_keys) > 0:
+            logger.warning(
+                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
+                f"and are newly initialized: {missing_keys}\n"
+                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+            )
+        else:
+            logger.info(
+                f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
+                f"If your task is similar to the task the model of the checkpoint was trained on, "
+                f"you can already use {model.__class__.__name__} for predictions without further training."
+            )
+        if len(error_msgs) > 0:
+            error_msg = "\n\t".join(error_msgs)
+            raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
+
+        return model, missing_keys, unexpected_keys, error_msgs
+
+    def retrieve_modules_from_names(self, names, add_prefix=False, remove_prefix=False):
+        module_keys = set([".".join(key.split(".")[:-1]) for key in names])
+
+        # torch.nn.ParameterList is a special case where two parameter keywords
+        # are appended to the module name, *e.g.* bert.special_embeddings.0
+        module_keys = module_keys.union(set([".".join(key.split(".")[:-2]) for key in names if key[-1].isdigit()]))
+
+        retrieved_modules = []
+        # retrieve all modules that has at least one missing weight name
+        for name, module in self.named_modules():
+            if remove_prefix:
+                name = ".".join(name.split(".")[1:]) if name.startswith(self.base_model_prefix) else name
+            elif add_prefix:
+                name = ".".join([self.base_model_prefix, name]) if len(name) > 0 else self.base_model_prefix
+
+            if name in module_keys:
+                retrieved_modules.append(module)
+
+        return retrieved_modules
 
 
 class Conv1D(nn.Module):

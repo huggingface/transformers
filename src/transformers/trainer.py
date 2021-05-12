@@ -20,9 +20,11 @@ import collections
 import inspect
 import math
 import os
+import random
 import re
 import shutil
 import sys
+import tempfile
 import time
 import warnings
 from logging import StreamHandler
@@ -58,10 +60,12 @@ from torch.utils.data.sampler import RandomSampler, SequentialSampler
 from . import __version__
 from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
+from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .dependency_versions_check import dep_version_check
 from .file_utils import (
     CONFIG_NAME,
     WEIGHTS_NAME,
+    PushToHubMixin,
     is_apex_available,
     is_datasets_available,
     is_in_notebook,
@@ -70,6 +74,7 @@ from .file_utils import (
     is_torch_tpu_available,
     is_training_run_on_sagemaker,
 )
+from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, unwrap_model
 from .optimization import Adafactor, AdamW, get_scheduler
 from .tokenization_utils_base import PreTrainedTokenizerBase
@@ -124,6 +129,7 @@ from .utils import logging
 from .utils.modeling_auto_mapping import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
 
 
+_is_torch_generator_available = False
 _is_native_amp_available = False
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
@@ -138,6 +144,7 @@ if is_apex_available():
     from apex import amp
 
 if version.parse(torch.__version__) >= version.parse("1.6"):
+    _is_torch_generator_available = True
     _is_native_amp_available = True
     from torch.cuda.amp import autocast
 
@@ -206,7 +213,7 @@ class Trainer:
 
             Note that if it's a :obj:`torch.utils.data.dataset.IterableDataset` with some randomization and you are
             training in a distributed fashion, your iterable dataset should either use a internal attribute
-            :obj:`generator` that is a :obj:`torch.Generator` for the randomization that must be identic on all
+            :obj:`generator` that is a :obj:`torch.Generator` for the randomization that must be identical on all
             processes (and the Trainer will manually set the seed of this :obj:`generator` at each epoch) or have a
             :obj:`set_epoch()` method that internally sets the seed of the RNGs used.
         eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
@@ -410,13 +417,25 @@ class Trainer:
         if args.fp16 and not args.deepspeed:  # deepspeed manages its own fp16
             if self.fp16_backend == "amp":
                 self.use_amp = True
-                self.scaler = ShardedGradScaler() if self.sharded_ddp is not None else torch.cuda.amp.GradScaler()
+                if is_sagemaker_mp_enabled():
+                    self.scaler = smp.amp.GradScaler()
+                elif self.sharded_ddp is not None:
+                    self.scaler = ShardedGradScaler()
+                else:
+                    self.scaler = torch.cuda.amp.GradScaler()
             else:
                 if not is_apex_available():
                     raise ImportError(
                         "Using FP16 with APEX but APEX is not installed, please refer to https://www.github.com/nvidia/apex."
                     )
                 self.use_apex = True
+
+        # FP16 + model parallelism in SageMaker: gradient clipping does not work for now so we raise a helpful error.
+        if is_sagemaker_mp_enabled() and self.use_amp and args.max_grad_norm is not None and args.max_grad_norm > 0:
+            raise ValueError(
+                "SageMaker Model Parallelism in mixed precision mode does not support gradient clipping yet. Pass "
+                "along 'max_grad_norm': 0 in your hyperparameters."
+            )
 
         # Label smoothing
         if self.args.label_smoothing_factor != 0:
@@ -426,9 +445,9 @@ class Trainer:
 
         self.state = TrainerState()
         self.control = TrainerControl()
-        # Internal variable for total_flos used to count as tensors (for distributed + TPU), will be sent in the
-        # state at each call to self.log.
-        self._total_flos = None
+        # Internal variable to count flos in each process, will be accumulated in `self.state.total_flos` then
+        # returned to 0 every time flos need to be logged
+        self.current_flos = 0
         self.hp_search_backend = None
         self.use_tune_checkpoints = False
         default_label_names = (
@@ -510,6 +529,11 @@ class Trainer:
         if not isinstance(self.train_dataset, collections.abc.Sized):
             return None
 
+        generator = None
+        if self.args.world_size <= 1 and _is_torch_generator_available:
+            generator = torch.Generator()
+            generator.manual_seed(int(torch.empty((), dtype=torch.int64).random_().item()))
+
         # Build the sampler.
         if self.args.group_by_length:
             if is_datasets_available() and isinstance(self.train_dataset, datasets.Dataset):
@@ -523,7 +547,11 @@ class Trainer:
             model_input_name = self.tokenizer.model_input_names[0] if self.tokenizer is not None else None
             if self.args.world_size <= 1:
                 return LengthGroupedSampler(
-                    self.train_dataset, self.args.train_batch_size, lengths=lengths, model_input_name=model_input_name
+                    self.train_dataset,
+                    self.args.train_batch_size,
+                    lengths=lengths,
+                    model_input_name=model_input_name,
+                    generator=generator,
                 )
             else:
                 return DistributedLengthGroupedSampler(
@@ -533,10 +561,13 @@ class Trainer:
                     rank=self.args.process_index,
                     lengths=lengths,
                     model_input_name=model_input_name,
+                    seed=self.args.seed,
                 )
 
         else:
             if self.args.world_size <= 1:
+                if _is_torch_generator_available:
+                    return RandomSampler(self.train_dataset, generator=generator)
                 return RandomSampler(self.train_dataset)
             elif (
                 self.args.parallel_mode in [ParallelMode.TPU, ParallelMode.SAGEMAKER_MODEL_PARALLEL]
@@ -548,10 +579,14 @@ class Trainer:
                     batch_size=self.args.per_device_train_batch_size,
                     num_replicas=self.args.world_size,
                     rank=self.args.process_index,
+                    seed=self.args.seed,
                 )
             else:
                 return DistributedSampler(
-                    self.train_dataset, num_replicas=self.args.world_size, rank=self.args.process_index
+                    self.train_dataset,
+                    num_replicas=self.args.world_size,
+                    rank=self.args.process_index,
+                    seed=self.args.seed,
                 )
 
     def get_train_dataloader(self) -> DataLoader:
@@ -803,7 +838,7 @@ class Trainer:
         return len(dataloader.dataset)
 
     def _hp_search_setup(self, trial: Union["optuna.Trial", Dict[str, Any]]):
-        """ HP search setup code """
+        """HP search setup code"""
         self._trial = trial
 
         if self.hp_search_backend is None or trial is None:
@@ -1024,7 +1059,18 @@ class Trainer:
                 # We load the model state dict on the CPU to avoid an OOM error.
                 state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
                 # If the model is on the GPU, it still works!
-                self.model.load_state_dict(state_dict)
+                load_result = self.model.load_state_dict(state_dict, strict=False)
+                if len(load_result.missing_keys) != 0:
+                    if load_result.missing_keys == self.model._keys_to_ignore_on_save:
+                        self.model.tie_weights()
+                    else:
+                        logger.warn(
+                            f"There were missing keys in the checkpoint model loaded: {load_result.missing_keys}."
+                        )
+                if len(load_result.unexpected_keys) != 0:
+                    logger.warn(
+                        f"There were unexpected keys in the checkpoint model loaded: {load_result.unexpected_keys}."
+                    )
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
         if model_reloaded:
@@ -1058,6 +1104,9 @@ class Trainer:
             max_steps = args.max_steps
             num_train_epochs = int(args.num_train_epochs)
             num_update_steps_per_epoch = max_steps
+
+        if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
+            debug_overflow = DebugUnderflowOverflow(self.model)  # noqa
 
         delay_optimizer_creation = self.sharded_ddp is not None and self.sharded_ddp != ShardedDDPOption.SIMPLE
         if args.deepspeed:
@@ -1162,7 +1211,6 @@ class Trainer:
         # _total_loss_scalar is updated everytime .item() has to be called on tr_loss and stores the sum of all losses
         self._total_loss_scalar = 0.0
         self._globalstep_last_logged = self.state.global_step
-        self._total_flos = self.state.total_flos
         model.zero_grad()
 
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
@@ -1202,6 +1250,8 @@ class Trainer:
                     steps_trained_in_current_epoch -= 1
                     if steps_trained_progress_bar is not None:
                         steps_trained_progress_bar.update(1)
+                    if steps_trained_in_current_epoch == 0:
+                        self._load_rng_state(resume_from_checkpoint)
                     continue
                 elif steps_trained_progress_bar is not None:
                     steps_trained_progress_bar.close()
@@ -1220,7 +1270,7 @@ class Trainer:
                         tr_loss += self.training_step(model, inputs)
                 else:
                     tr_loss += self.training_step(model, inputs)
-                self._total_flos += float(self.floating_point_ops(inputs))
+                self.current_flos += float(self.floating_point_ops(inputs))
 
                 # Optimizer step for deepspeed must be called on every step regardless of the value of gradient_accumulation_steps
                 if self.deepspeed:
@@ -1283,7 +1333,7 @@ class Trainer:
             self.control = self.callback_handler.on_epoch_end(args, self.state, self.control)
             self._maybe_log_save_evaluate(tr_loss, model, trial, epoch)
 
-            if args.tpu_metrics_debug or args.debug:
+            if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
                 if is_torch_tpu_available():
                     # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
                     xm.master_print(met.metrics_report())
@@ -1321,9 +1371,8 @@ class Trainer:
                 )
 
         metrics = speed_metrics("train", start_time, self.state.max_steps)
-        if self._total_flos is not None:
-            self.store_flos()
-            metrics["total_flos"] = self.state.total_flos
+        self.store_flos()
+        metrics["total_flos"] = self.state.total_flos
         self.log(metrics)
 
         self.control = self.callback_handler.on_train_end(args, self.state, self.control)
@@ -1359,6 +1408,41 @@ class Trainer:
         if self.control.should_save:
             self._save_checkpoint(model, trial, metrics=metrics)
             self.control = self.callback_handler.on_save(self.args, self.state, self.control)
+
+    def _load_rng_state(self, checkpoint):
+        # Load RNG states from `checkpoint`
+        if checkpoint is None:
+            return
+
+        local_rank = xm.get_local_ordinal() if is_torch_tpu_available() else self.args.local_rank
+        if local_rank != -1:
+            rng_file = os.path.join(checkpoint, f"rng_state_{local_rank}.pth")
+            if not os.path.isfile(os.path.join(checkpoint, rng_file)):
+                logger.info(
+                    f"Didn't find an RNG file for process {local_rank}, if you are resuming a training that "
+                    "wasn't launched in a distributed fashion, reproducibility is not guaranteed."
+                )
+                return
+        else:
+            rng_file = os.path.join(checkpoint, "rng_state.pth")
+            if not os.path.isfile(os.path.join(checkpoint, rng_file)):
+                logger.info(
+                    "Didn't find an RNG file, if you are resuming a training that was launched in a distributed "
+                    "fashion, reproducibility is not guaranteed."
+                )
+                return
+
+        checkpoint_rng_state = torch.load(rng_file)
+        random.setstate(checkpoint_rng_state["python"])
+        np.random.set_state(checkpoint_rng_state["numpy"])
+        torch.random.set_rng_state(checkpoint_rng_state["cpu"])
+        if torch.cuda.is_available():
+            if self.args.local_rank != -1:
+                torch.cuda.random.set_rng_state(checkpoint_rng_state["cuda"])
+            else:
+                torch.cuda.random.set_rng_state_all(checkpoint_rng_state["cuda"])
+        if is_torch_tpu_available():
+            xm.set_rng_state(checkpoint_rng_state["xla"])
 
     def _save_checkpoint(self, model, trial, metrics=None):
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
@@ -1399,20 +1483,25 @@ class Trainer:
                 xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
                 reissue_pt_warnings(caught_warnings)
         elif is_sagemaker_mp_enabled():
-            # Consolidate the state dict on all processed of dp_rank 0
-            opt_state_dict = self.optimizer.state_dict()
-            # Save it and the scheduler on the main process
-            if self.is_world_process_zero():
-                torch.save(opt_state_dict, os.path.join(output_dir, "optimizer.pt"))
-                with warnings.catch_warnings(record=True) as caught_warnings:
-                    torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
-                reissue_pt_warnings(caught_warnings)
+            if smp.dp_rank() == 0:
+                # Consolidate the state dict on all processed of dp_rank 0
+                opt_state_dict = self.optimizer.state_dict()
+                # Save it and the scheduler on the main process
+                if self.is_world_process_zero():
+                    torch.save(opt_state_dict, os.path.join(output_dir, "optimizer.pt"))
+                    with warnings.catch_warnings(record=True) as caught_warnings:
+                        torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+                    reissue_pt_warnings(caught_warnings)
+                    if self.use_amp:
+                        torch.save(self.scaler.state_dict(), os.path.join(output_dir, "scaler.pt"))
         elif self.is_world_process_zero() and not self.deepspeed:
             # deepspeed.save_checkpoint above saves model/optim/sched
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
             with warnings.catch_warnings(record=True) as caught_warnings:
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
             reissue_pt_warnings(caught_warnings)
+            if self.use_amp:
+                torch.save(self.scaler.state_dict(), os.path.join(output_dir, "scaler.pt"))
 
         # Determine the new best metric / best model checkpoint
         if metrics is not None and self.args.metric_for_best_model is not None:
@@ -1437,6 +1526,31 @@ class Trainer:
         # Maybe delete some older checkpoints.
         if self.is_world_process_zero():
             self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
+
+        # Save RNG state in non-distributed training
+        rng_states = {
+            "python": random.getstate(),
+            "numpy": np.random.get_state(),
+            "cpu": torch.random.get_rng_state(),
+        }
+        if torch.cuda.is_available():
+            if self.args.local_rank == -1:
+                # In non distributed, we save the global CUDA RNG state (will take care of DataParallel)
+                rng_states["cuda"] = torch.cuda.random.get_rng_state_all()
+            else:
+                rng_states["cuda"] = torch.cuda.random.get_rng_state()
+
+        if is_torch_tpu_available():
+            rng_states["xla"] = xm.get_rng_state()
+
+        # A process can arrive here before the process 0 has a chance to save the model, in which case output_dir may
+        # not yet exist.
+        os.makedirs(output_dir, exist_ok=True)
+        local_rank = xm.get_local_ordinal() if is_torch_tpu_available() else self.args.local_rank
+        if local_rank == -1:
+            torch.save(rng_states, os.path.join(output_dir, "rng_state.pth"))
+        else:
+            torch.save(rng_states, os.path.join(output_dir, f"rng_state_{local_rank}.pth"))
 
     def _load_optimizer_and_scheduler(self, checkpoint):
         """If optimizer and scheduler states exist, load them."""
@@ -1471,6 +1585,8 @@ class Trainer:
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, "scheduler.pt")))
                 reissue_pt_warnings(caught_warnings)
+                if self.use_amp and os.path.isfile(os.path.join(checkpoint, "scaler.pt")):
+                    self.scaler.load_state_dict(torch.load(os.path.join(checkpoint, "scaler.pt")))
 
     def hyperparameter_search(
         self,
@@ -1607,7 +1723,8 @@ class Trainer:
         inputs = self._prepare_inputs(inputs)
 
         if is_sagemaker_mp_enabled():
-            loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
+            scaler = self.scaler if self.use_amp else None
+            loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps, scaler=scaler)
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
         if self.use_amp:
@@ -1788,11 +1905,12 @@ class Trainer:
 
     def store_flos(self):
         # Storing the number of floating-point operations that went into the model
-        if self._total_flos is not None:
-            if self.args.local_rank != -1:
-                self.state.total_flos = distributed_broadcast_scalars([self._total_flos]).sum().item()
-            else:
-                self.state.total_flos = self._total_flos
+        if self.args.local_rank != -1:
+            self.state.total_flos += distributed_broadcast_scalars([self.current_flos]).sum().item()
+            self.current_flos = 0
+        else:
+            self.state.total_flos = self.current_flos
+            self.current_flos = 0
 
     def _sorted_checkpoints(
         self, output_dir=None, checkpoint_prefix=PREFIX_CHECKPOINT_DIR, use_mtime=False
@@ -1883,9 +2001,10 @@ class Trainer:
         )
 
         output.metrics.update(speed_metrics(metric_key_prefix, start_time, output.num_samples))
+
         self.log(output.metrics)
 
-        if self.args.tpu_metrics_debug or self.args.debug:
+        if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
             xm.master_print(met.metrics_report())
 
@@ -2273,6 +2392,105 @@ class Trainer:
             return self.model.floating_point_ops(inputs)
         else:
             return 0
+
+    def create_model_card(
+        self,
+        language: Optional[str] = None,
+        license: Optional[str] = None,
+        tags: Optional[str] = None,
+        model_name: Optional[str] = None,
+        finetuned_from: Optional[str] = None,
+        dataset_tags: Optional[Union[str, List[str]]] = None,
+        dataset: Optional[Union[str, List[str]]] = None,
+        dataset_args: Optional[Union[str, List[str]]] = None,
+    ):
+        training_summary = TrainingSummary.from_trainer(
+            self,
+            language=language,
+            license=license,
+            tags=tags,
+            model_name=model_name,
+            finetuned_from=finetuned_from,
+            dataset_tags=dataset_tags,
+            dataset=dataset,
+            dataset_args=dataset_args,
+        )
+        model_card = training_summary.to_model_card()
+        with open(os.path.join(self.args.output_dir, "README.md"), "w") as f:
+            f.write(model_card)
+
+    def push_to_hub(
+        self,
+        repo_name: Optional[str] = None,
+        repo_url: Optional[str] = None,
+        commit_message: Optional[str] = "add model",
+        organization: Optional[str] = None,
+        private: bool = None,
+        use_auth_token: Optional[Union[bool, str]] = None,
+        **kwargs,
+    ):
+        """
+        Upload `self.model` to the 🤗 model hub.
+
+        Parameters:
+            repo_name (:obj:`str`, `optional`):
+                Repository name for your model or tokenizer in the hub. If not specified and :obj:`repo_url` is not
+                specified either, will default to the stem of :obj:`self.args.output_dir`.
+            repo_url (:obj:`str`, `optional`):
+                Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
+                repository will be created in your namespace (unless you specify an :obj:`organization`) with
+                :obj:`repo_name`.
+            commit_message (:obj:`str`, `optional`, defaults to :obj:`"add model"`):
+                Message to commit while pushing.
+            organization (:obj:`str`, `optional`):
+                Organization in which you want to push your model or tokenizer (you must be a member of this
+                organization).
+            private (:obj:`bool`, `optional`):
+                Whether or not the repository created should be private (requires a paying subscription).
+            use_auth_token (:obj:`bool` or :obj:`str`, `optional`):
+                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`). Will default to
+                :obj:`True` if :obj:`repo_url` is not specified.
+            kwargs:
+                Additional keyword arguments passed along to :meth:`~transformers.Trainer.create_model_card`.
+
+        Returns:
+            The url of the commit of your model in the given repository.
+        """
+        if not self.is_world_process_zero():
+            return
+
+        if not isinstance(unwrap_model(self.model), PushToHubMixin):
+            raise ValueError(
+                "The `upload_model_to_hub` method only works for models that inherit from `PushToHubMixin` models."
+            )
+
+        if repo_url is None and repo_name is None:
+            repo_name = Path(self.args.output_dir).name
+
+        if repo_name is not None:
+            model_name = repo_name
+        elif repo_url is not None:
+            model_name = repo_url.split("/")[-1]
+        else:
+            model_name = None
+        self.create_model_card(model_name=model_name, **kwargs)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            shutil.copy(os.path.join(self.args.output_dir, "README.md"), os.path.join(tmp_dir, "README.md"))
+            unwrap_model(self.model).save_pretrained(tmp_dir)
+            if self.tokenizer is not None:
+                self.tokenizer.save_pretrained(tmp_dir)
+
+            return unwrap_model(self.model)._push_to_hub(
+                save_directory=tmp_dir,
+                repo_name=repo_name,
+                repo_url=repo_url,
+                commit_message=commit_message,
+                organization=organization,
+                private=private,
+                use_auth_token=use_auth_token,
+            )
 
     #
     # Deprecated code

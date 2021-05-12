@@ -45,7 +45,7 @@ from utils_qa import postprocess_qa_predictions_with_beam_search
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.6.0.dev0")
+check_min_version("4.7.0.dev0")
 
 logger = logging.getLogger(__name__)
 
@@ -132,17 +132,17 @@ class DataTrainingArguments:
             "value if set."
         },
     )
-    max_val_samples: Optional[int] = field(
+    max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of validation examples to this "
+            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
             "value if set."
         },
     )
-    max_test_samples: Optional[int] = field(
+    max_predict_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of test examples to this "
+            "help": "For debugging purposes or quicker training, truncate the number of prediction examples to this "
             "value if set."
         },
     )
@@ -215,7 +215,7 @@ def main():
                 f"Output directory ({training_args.output_dir}) already exists and is not empty. "
                 "Use --overwrite_output_dir to overcome."
             )
-        elif last_checkpoint is not None:
+        elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
             logger.info(
                 f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
@@ -504,9 +504,9 @@ def main():
         if "validation" not in datasets:
             raise ValueError("--do_eval requires a validation dataset")
         eval_examples = datasets["validation"]
-        if data_args.max_val_samples is not None:
+        if data_args.max_eval_samples is not None:
             # Selecting Eval Samples from Dataset
-            eval_examples = eval_examples.select(range(data_args.max_val_samples))
+            eval_examples = eval_examples.select(range(data_args.max_eval_samples))
         # Create Features from Eval Dataset
         eval_dataset = eval_examples.map(
             prepare_validation_features,
@@ -515,28 +515,28 @@ def main():
             remove_columns=column_names,
             load_from_cache_file=not data_args.overwrite_cache,
         )
-        if data_args.max_val_samples is not None:
+        if data_args.max_eval_samples is not None:
             # Selecting Samples from Dataset again since Feature Creation might increase samples size
-            eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
+            eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
 
     if training_args.do_predict:
         if "test" not in datasets:
             raise ValueError("--do_predict requires a test dataset")
-        test_examples = datasets["test"]
-        if data_args.max_test_samples is not None:
+        predict_examples = datasets["test"]
+        if data_args.max_predict_samples is not None:
             # We will select sample from whole data
-            test_examples = test_examples.select(range(data_args.max_test_samples))
+            predict_examples = predict_examples.select(range(data_args.max_predict_samples))
         # Test Feature Creation
-        test_dataset = test_examples.map(
+        predict_dataset = predict_examples.map(
             prepare_validation_features,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
             remove_columns=column_names,
             load_from_cache_file=not data_args.overwrite_cache,
         )
-        if data_args.max_test_samples is not None:
+        if data_args.max_predict_samples is not None:
             # During Feature creation dataset samples might increase, we will select required samples again
-            test_dataset = test_dataset.select(range(data_args.max_test_samples))
+            predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
 
     # Data collator
     # We have already padded to max length if the corresponding flag is True, otherwise we need to pad in the data
@@ -595,12 +595,11 @@ def main():
 
     # Training
     if training_args.do_train:
-        if last_checkpoint is not None:
+        checkpoint = None
+        if training_args.resume_from_checkpoint is not None:
+            checkpoint = training_args.resume_from_checkpoint
+        elif last_checkpoint is not None:
             checkpoint = last_checkpoint
-        elif os.path.isdir(model_args.model_name_or_path):
-            checkpoint = model_args.model_name_or_path
-        else:
-            checkpoint = None
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
@@ -620,8 +619,8 @@ def main():
         logger.info("*** Evaluate ***")
         metrics = trainer.evaluate()
 
-        max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(eval_dataset)
-        metrics["eval_samples"] = min(max_val_samples, len(eval_dataset))
+        max_eval_samples = data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
+        metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
 
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
@@ -629,14 +628,28 @@ def main():
     # Prediction
     if training_args.do_predict:
         logger.info("*** Predict ***")
-        results = trainer.predict(test_dataset, test_examples)
+        results = trainer.predict(predict_dataset, predict_examples)
         metrics = results.metrics
 
-        max_test_samples = data_args.max_test_samples if data_args.max_test_samples is not None else len(test_dataset)
-        metrics["test_samples"] = min(max_test_samples, len(test_dataset))
+        max_predict_samples = (
+            data_args.max_predict_samples if data_args.max_predict_samples is not None else len(predict_dataset)
+        )
+        metrics["predict_samples"] = min(max_predict_samples, len(predict_dataset))
 
-        trainer.log_metrics("test", metrics)
-        trainer.save_metrics("test", metrics)
+        trainer.log_metrics("predict", metrics)
+        trainer.save_metrics("predict", metrics)
+
+    if training_args.push_to_hub:
+        kwargs = {"finetuned_from": model_args.model_name_or_path, "tags": "question-answering"}
+        if data_args.dataset_name is not None:
+            kwargs["dataset_tags"] = data_args.dataset_name
+            if data_args.dataset_config_name is not None:
+                kwargs["dataset_args"] = data_args.dataset_config_name
+                kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+            else:
+                kwargs["dataset"] = data_args.dataset_name
+
+        trainer.push_to_hub(**kwargs)
 
 
 def _mp_fn(index):

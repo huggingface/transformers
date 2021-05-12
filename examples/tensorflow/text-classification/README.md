@@ -54,6 +54,20 @@ After training, the model will be saved to `--output_dir`. Once your model is tr
 by calling the script without a `--train_file` or `--validation_file`; simply pass it the output_dir containing
 the trained model and a `--test_file` and it will write its predictions to a text file for you.
 
+### Multi-GPU and TPU usage
+
+By default, the script uses a `MirroredStrategy` and will use multiple GPUs effectively if they are available. TPUs
+can also be used by passing the name of the TPU resource with the `--tpu` argument.
+
+### Memory usage and data loading
+
+One thing to note is that all data is loaded into memory in this script. Most text classification datasets are small
+enough that this is not an issue, but if you have a very large dataset you will need to modify the script to handle
+data streaming. This is particularly challenging for TPUs, given the stricter requirements and the sheer volume of data
+required to keep them fed. A full explanation of all the possible pitfalls is a bit beyond this example script and 
+README, but for more information you can see the 'Input Datasets' section of 
+[this document](https://www.tensorflow.org/guide/tpu).
+
 ### Example command
 ```
 python run_text_classification.py \

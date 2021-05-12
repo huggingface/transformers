@@ -245,7 +245,7 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
         return self.sp_model.EncodeAsPieces(text)
 
     def _convert_token_to_id(self, token):
-        """ Converts a token (str) in an id using the vocab. """
+        """Converts a token (str) in an id using the vocab."""
         if token in self.fairseq_tokens_to_ids:
             return self.fairseq_tokens_to_ids[token]
         spm_id = self.sp_model.PieceToId(token)
@@ -290,7 +290,7 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of IDs to which the special tokens will be added
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:

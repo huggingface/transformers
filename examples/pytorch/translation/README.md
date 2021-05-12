@@ -167,7 +167,7 @@ pip install accelerate
 then
 
 ```bash
-python run_tranlation_no_trainer.py \
+python run_translation_no_trainer.py \
     --model_name_or_path Helsinki-NLP/opus-mt-en-ro \
     --source_lang en \
     --target_lang ro \
@@ -188,7 +188,7 @@ and reply to the questions asked. Then
 accelerate test
 ```
 
-that will check everything is ready for training. Finally, you cna launch training with
+that will check everything is ready for training. Finally, you can launch training with
 
 ```bash
 export TASK_NAME=mrpc

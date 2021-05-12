@@ -233,6 +233,13 @@ class RagPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        # At the moment fast initialization is not supported
+        # for composite models
+        kwargs["_fast_init"] = False
+        return super().from_pretrained(*args, **kwargs)
+
+    @classmethod
     def from_pretrained_question_encoder_generator(
         cls,
         question_encoder_pretrained_model_name_or_path: str = None,
@@ -1543,7 +1550,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
-                max_length=max_length,
                 num_beams=num_beams,
                 device=self.device,
                 length_penalty=length_penalty,

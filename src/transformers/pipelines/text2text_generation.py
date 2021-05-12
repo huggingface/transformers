@@ -48,7 +48,7 @@ class Text2TextGenerationPipeline(Pipeline):
 
     def check_inputs(self, input_length: int, min_length: int, max_length: int):
         """
-        Checks wether there might be something wrong with given input with regard to the model.
+        Checks whether there might be something wrong with given input with regard to the model.
         """
         return True
 
@@ -204,7 +204,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
 
     def check_inputs(self, input_length: int, min_length: int, max_length: int) -> bool:
         """
-        Checks wether there might be something wrong with given input with regard to the model.
+        Checks whether there might be something wrong with given input with regard to the model.
         """
         if input_length < min_length // 2:
             logger.warning(
@@ -295,10 +295,10 @@ class TranslationPipeline(Text2TextGenerationPipeline):
                 Whether or not to include the decoded texts in the outputs.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to clean up the potential extra spaces in the text output.
-            src_lang (:obj:`str`, `optional`, defaults to :obj:`None`):
+            src_lang (:obj:`str`, `optional`):
                 The language of the input. Might be required for multilingual models. Will not have any effect for
                 single pair translation models
-            tgt_lang (:obj:`str`, `optional`, defaults to :obj:`None`):
+            tgt_lang (:obj:`str`, `optional`):
                 The language of the desired output. Might be required for multilingual models. Will not have any effect
                 for single pair translation models
             generate_kwargs:

@@ -41,6 +41,7 @@ from ..herbert.tokenization_herbert import HerbertTokenizer
 from ..layoutlm.tokenization_layoutlm import LayoutLMTokenizer
 from ..led.tokenization_led import LEDTokenizer
 from ..longformer.tokenization_longformer import LongformerTokenizer
+from ..luke.tokenization_luke import LukeTokenizer
 from ..lxmert.tokenization_lxmert import LxmertTokenizer
 from ..mobilebert.tokenization_mobilebert import MobileBertTokenizer
 from ..mpnet.tokenization_mpnet import MPNetTokenizer
@@ -62,6 +63,7 @@ from .configuration_auto import (
     BertConfig,
     BertGenerationConfig,
     BigBirdConfig,
+    BigBirdPegasusConfig,
     BlenderbotConfig,
     BlenderbotSmallConfig,
     CamembertConfig,
@@ -81,6 +83,7 @@ from .configuration_auto import (
     LayoutLMConfig,
     LEDConfig,
     LongformerConfig,
+    LukeConfig,
     LxmertConfig,
     M2M100Config,
     MarianConfig,
@@ -155,8 +158,10 @@ if is_tokenizers_available():
     from ..bart.tokenization_bart_fast import BartTokenizerFast
     from ..barthez.tokenization_barthez_fast import BarthezTokenizerFast
     from ..bert.tokenization_bert_fast import BertTokenizerFast
+    from ..big_bird.tokenization_big_bird_fast import BigBirdTokenizerFast
     from ..camembert.tokenization_camembert_fast import CamembertTokenizerFast
     from ..convbert.tokenization_convbert_fast import ConvBertTokenizerFast
+    from ..deberta.tokenization_deberta_fast import DebertaTokenizerFast
     from ..distilbert.tokenization_distilbert_fast import DistilBertTokenizerFast
     from ..dpr.tokenization_dpr_fast import DPRQuestionEncoderTokenizerFast
     from ..electra.tokenization_electra_fast import ElectraTokenizerFast
@@ -181,13 +186,16 @@ if is_tokenizers_available():
     from ..t5.tokenization_t5_fast import T5TokenizerFast
     from ..xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
     from ..xlnet.tokenization_xlnet_fast import XLNetTokenizerFast
+
 else:
     AlbertTokenizerFast = None
     BartTokenizerFast = None
     BarthezTokenizerFast = None
     BertTokenizerFast = None
+    BigBirdTokenizerFast = None
     CamembertTokenizerFast = None
     ConvBertTokenizerFast = None
+    DebertaTokenizerFast = None
     DistilBertTokenizerFast = None
     DPRQuestionEncoderTokenizerFast = None
     ElectraTokenizerFast = None
@@ -232,7 +240,6 @@ TOKENIZER_MAPPING = OrderedDict(
         (MarianConfig, (MarianTokenizer, None)),
         (BlenderbotSmallConfig, (BlenderbotSmallTokenizer, None)),
         (BlenderbotConfig, (BlenderbotTokenizer, None)),
-        (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
         (BartConfig, (BartTokenizer, BartTokenizerFast)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
         (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),
@@ -253,7 +260,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (CTRLConfig, (CTRLTokenizer, None)),
         (FSMTConfig, (FSMTTokenizer, None)),
         (BertGenerationConfig, (BertGenerationTokenizer, None)),
-        (DebertaConfig, (DebertaTokenizer, None)),
+        (DebertaConfig, (DebertaTokenizer, DebertaTokenizerFast)),
         (DebertaV2Config, (DebertaV2Tokenizer, None)),
         (RagConfig, (RagTokenizer, None)),
         (XLMProphetNetConfig, (XLMProphetNetTokenizer, None)),
@@ -264,10 +271,12 @@ TOKENIZER_MAPPING = OrderedDict(
         (TapasConfig, (TapasTokenizer, None)),
         (LEDConfig, (LEDTokenizer, LEDTokenizerFast)),
         (ConvBertConfig, (ConvBertTokenizer, ConvBertTokenizerFast)),
-        (BigBirdConfig, (BigBirdTokenizer, None)),
+        (BigBirdConfig, (BigBirdTokenizer, BigBirdTokenizerFast)),
         (IBertConfig, (RobertaTokenizer, RobertaTokenizerFast)),
         (Wav2Vec2Config, (Wav2Vec2CTCTokenizer, None)),
         (GPTNeoConfig, (GPT2Tokenizer, GPT2TokenizerFast)),
+        (LukeConfig, (LukeTokenizer, None)),
+        (BigBirdPegasusConfig, (PegasusTokenizer, PegasusTokenizerFast)),
     ]
 )
 

@@ -50,8 +50,8 @@ For example here is how to truncate all three splits to just 50 samples each:
 ```
 examples/pytorch/token-classification/run_ner.py \
 --max_train_samples 50 \
---max_val_samples 50 \
---max_test_samples 50 \
+--max_eval_samples 50 \
+--max_predict_samples 50 \
 [...]
 ```
 
@@ -65,7 +65,7 @@ examples/pytorch/token-classification/run_ner.py -h
 You can resume training from a previous checkpoint like this:
 
 1. Pass `--output_dir previous_output_dir` without `--overwrite_output_dir` to resume training from the latest checkpoint in `output_dir` (what you would use if the training was interrupted, for instance).
-2. Pass `--model_name_or_path path_to_a_specific_checkpoint` to resume training from that checkpoint folder.
+2. Pass `--resume_from_checkpoint path_to_a_specific_checkpoint` to resume training from that checkpoint folder.
 
 Should you want to turn an example into a notebook where you'd no longer have access to the command
 line, 🤗 Trainer supports resuming from a checkpoint via `trainer.train(resume_from_checkpoint)`.
@@ -119,7 +119,7 @@ When using PyTorch, we support TPUs thanks to `pytorch/xla`. For more context an
 very detailed [pytorch/xla README](https://github.com/pytorch/xla/blob/master/README.md).
 
 In this repo, we provide a very simple launcher script named
-[xla_spawn.py](https://github.com/huggingface/transformers/tree/master/examples/xla_spawn.py) that lets you run our
+[xla_spawn.py](https://github.com/huggingface/transformers/tree/master/examples/pytorch/xla_spawn.py) that lets you run our
 example scripts on multiple TPU cores without any boilerplate. Just pass a `--num_cores` flag to this script, then your
 regular training script with its arguments (this is similar to the `torch.distributed.launch` helper for
 `torch.distributed`):

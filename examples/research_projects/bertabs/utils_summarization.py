@@ -47,7 +47,7 @@ class CNNDMDataset(Dataset):
             self.documents.append(path_to_story)
 
     def __len__(self):
-        """ Returns the number of documents. """
+        """Returns the number of documents."""
         return len(self.documents)
 
     def __getitem__(self, idx):
