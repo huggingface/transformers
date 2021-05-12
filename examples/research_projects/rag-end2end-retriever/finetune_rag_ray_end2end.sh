@@ -42,7 +42,7 @@ python finetune_rag.py \
     --passages_path /home/gsir059/HNSW/my_knowledge_dataset \
     --index_path /home/gsir059/HNSW/my_knowledge_dataset_hnsw_index.faiss \
     --index_name custom \
-    --context_encoder_type facebook/dpr-ctx_encoder-multiset-base \
+    --context_encoder_name facebook/dpr-ctx_encoder-multiset-base \
     --csv_path /home/gsir059/COVID-FILES/covid_dump.csv \
     --data_cache_dir /home/gsir059/cache \
     --index_gpus 2 \

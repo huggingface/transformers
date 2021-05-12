@@ -11,11 +11,7 @@ from transformers import (
     DPRContextEncoderTokenizerFast)
 
 
-
-
-
 logger = logging.getLogger(__name__)
-
 
 class RayRetriever:
     def __init__(self):
@@ -26,11 +22,11 @@ class RayRetriever:
             self.retriever = RagRetriever(
                 config,
                 question_encoder_tokenizer=question_encoder_tokenizer,
-                ctx_encoder_tokenizer=ctx_encoder_tokenizer,
                 generator_tokenizer=generator_tokenizer,
                 index=index,
                 init_retrieval=False,
             )
+            self.retriever.set_ctx_encoder_tokenizer(ctx_encoder_tokenizer)
             self.initialized = True
 
     def init_retrieval(self):

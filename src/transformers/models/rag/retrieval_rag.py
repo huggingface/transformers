@@ -363,14 +363,13 @@ class RagRetriever:
 
     """
 
-    def __init__(self, config, question_encoder_tokenizer, ctx_encoder_tokenizer,generator_tokenizer, index=None, init_retrieval=True):
+    def __init__(self, config, question_encoder_tokenizer, generator_tokenizer, index=None, init_retrieval=True):
         self._init_retrieval = init_retrieval
         requires_backends(self, ["datasets", "faiss"])
         super().__init__()
         self.index = index or self._build_index(config)
         self.generator_tokenizer = generator_tokenizer
         self.question_encoder_tokenizer = question_encoder_tokenizer
-        self.ctx_encoder_tokenizer=ctx_encoder_tokenizer
 
         self.n_docs = config.n_docs
         self.batch_size = config.retrieval_batch_size
@@ -378,6 +377,10 @@ class RagRetriever:
         self.config = config
         if self._init_retrieval:
             self.init_retrieval()
+
+        self.ctx_encoder_tokenizer=None
+        self.return_tokenized_docs=False
+
 
     @staticmethod
     def _build_index(config):
@@ -544,6 +547,12 @@ class RagRetriever:
         doc_ids, retrieved_doc_embeds = self._main_retrieve(question_hidden_states, n_docs)
         return retrieved_doc_embeds, doc_ids, self.index.get_doc_dicts(doc_ids)
 
+
+    def set_ctx_encoder_tokenizer(self,ctx_encoder_tokenizer):
+        #used in end2end retriever training
+        self.ctx_encoder_tokenizer=ctx_encoder_tokenizer
+        self.return_tokenized_docs=True
+
     def __call__(
         self,
         question_input_ids: List[List[int]],
@@ -595,27 +604,39 @@ class RagRetriever:
             docs, input_strings, prefix, n_docs, return_tensors=return_tensors
         )
 
-        retrived_doc_text=[]
-        retrived_doc_title=[]
+        if self.return_tokenized_docs:
+            retrived_doc_text=[]
+            retrived_doc_title=[]
 
-        for b_idx in range(len(docs)): 
-             for doc_idx in range(n_docs):
-                    retrived_doc_text.append(docs[b_idx]['text'][doc_idx])
-                    retrived_doc_title.append(docs[b_idx]['title'][doc_idx])
+            for b_idx in range(len(docs)): 
+                for doc_idx in range(n_docs):
+                        retrived_doc_text.append(docs[b_idx]['text'][doc_idx])
+                        retrived_doc_title.append(docs[b_idx]['title'][doc_idx])
 
-        #used in end2end retriever training 
-        tokenized_docs=self.ctx_encoder_tokenizer(retrived_doc_title, retrived_doc_text, 
-            truncation=True, padding="longest", return_tensors="pt"
-        )
+            #used in end2end retriever training 
+            tokenized_docs=self.ctx_encoder_tokenizer(retrived_doc_title, retrived_doc_text, 
+                truncation=True, padding="longest", return_tensors="pt"
+            )
 
-        return BatchEncoding(
-            {
-                "context_input_ids": context_input_ids, #combined context
-                "context_attention_mask": context_attention_mask,
-                "retrieved_doc_embeds": retrieved_doc_embeds,
-                "doc_ids": doc_ids,
-                "tokenized_doc_ids":tokenized_docs["input_ids"],
-                "tokenized_doc_attention_mask":tokenized_docs["attention_mask"],
-            },
-            tensor_type=return_tensors,
-        )
+            return BatchEncoding(
+                {
+                    "context_input_ids": context_input_ids,
+                    "context_attention_mask": context_attention_mask,
+                    "retrieved_doc_embeds": retrieved_doc_embeds,
+                    "doc_ids": doc_ids,
+                    "tokenized_doc_ids":tokenized_docs["input_ids"],
+                    "tokenized_doc_attention_mask":tokenized_docs["attention_mask"],
+                },
+                tensor_type=return_tensors,
+            )
+
+        else:
+            return BatchEncoding(
+                {
+                    "context_input_ids": context_input_ids,
+                    "context_attention_mask": context_attention_mask,
+                    "retrieved_doc_embeds": retrieved_doc_embeds,
+                    "doc_ids": doc_ids,
+                },
+                tensor_type=return_tensors,
+            )

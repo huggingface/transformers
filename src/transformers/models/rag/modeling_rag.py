@@ -586,23 +586,24 @@ class RagModel(RagPreTrainedModel):
                     return_tensors="pt",
                 )
              
-                #additional we need tokens related to retrieved documents.   
-                context_input_ids, context_attention_mask, retrieved_doc_embeds,\
-                retrived_doc_input_ids, retrived_doc_attention_mask, \
-                retrieved_doc_ids=(
-                    retriever_outputs["context_input_ids"],
-                    retriever_outputs["context_attention_mask"],
-                    retriever_outputs["retrieved_doc_embeds"],
-                    retriever_outputs["tokenized_doc_ids"],
-                    retriever_outputs["tokenized_doc_attention_mask"],
-                    retriever_outputs["doc_ids"],
-                )
-
-
-                context_input_ids = context_input_ids.to(input_ids)
-                context_attention_mask = context_attention_mask.to(input_ids)
-
+  
                 if self.context_encoder_training:
+
+                    context_input_ids, context_attention_mask, retrieved_doc_embeds,\
+                    retrived_doc_input_ids, retrived_doc_attention_mask, \
+                    retrieved_doc_ids=(
+                        retriever_outputs["context_input_ids"],
+                        retriever_outputs["context_attention_mask"],
+                        retriever_outputs["retrieved_doc_embeds"],
+                        retriever_outputs["tokenized_doc_ids"],
+                        retriever_outputs["tokenized_doc_attention_mask"],
+                        retriever_outputs["doc_ids"],
+                    )
+
+
+                    context_input_ids = context_input_ids.to(input_ids)
+                    context_attention_mask = context_attention_mask.to(input_ids)
+
                     retrived_doc_input_ids=retrived_doc_input_ids.to(input_ids)
                     retrived_doc_attention_mask=retrived_doc_attention_mask.to(input_ids)
                     retrieved_doc_embeds=self.ctx_encoder(retrived_doc_input_ids,attention_mask=retrived_doc_attention_mask,return_dict=True).pooler_output
@@ -615,8 +616,18 @@ class RagModel(RagPreTrainedModel):
 
 
                 else:
-                    #set to correct device
+                    context_input_ids, context_attention_mask, retrieved_doc_embeds, retrieved_doc_ids = (
+                        retriever_outputs["context_input_ids"],
+                        retriever_outputs["context_attention_mask"],
+                        retriever_outputs["retrieved_doc_embeds"],
+                        retriever_outputs["doc_ids"],
+                    )
+
+                    # set to correct device
                     retrieved_doc_embeds = retrieved_doc_embeds.to(question_encoder_last_hidden_state)
+                    context_input_ids = context_input_ids.to(input_ids)
+                    context_attention_mask = context_attention_mask.to(input_ids)
+
                     # compute doc_scores
                     doc_scores = torch.bmm(
                         question_encoder_last_hidden_state.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)
@@ -727,10 +738,10 @@ class RagSequenceForGeneration(RagPreTrainedModel):
     def set_retriever(self, retriever: RagRetriever):
         self.rag.retriever = retriever
 
-    def set_context_encoder_for_training(self,retriever_model_name):
+    def set_context_encoder_for_training(self,ctx_encoder):
         #used in end2end retriever training
         self.rag.context_encoder_training=True
-        self.rag.ctx_encoder = DPRContextEncoder.from_pretrained(retriever_model_name)
+        self.rag.ctx_encoder = ctx_encoder
 
     @add_start_docstrings_to_model_forward(RAG_FORWARD_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=RetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
@@ -1118,9 +1129,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
     def set_retriever(self, retriever: RagRetriever):
         self.rag.retriever = retriever
 
-    def set_context_encoder_for_training(self,retriever_model_name):
+    def set_context_encoder_for_training(self,ctx_encoder):
         self.rag.context_encoder_training=True
-        self.rag.ctx_encoder = DPRContextEncoder.from_pretrained(retriever_model_name)
+        self.rag.ctx_encoder = ctx_encoder
 
     def get_context_trained_encoder(self):
         return self.rag.ctx_encoder 

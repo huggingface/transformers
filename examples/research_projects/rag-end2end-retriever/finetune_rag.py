@@ -140,7 +140,8 @@ class GenerativeQAModule(BaseTransformer):
 
             
             model = self.model_class.from_pretrained(hparams.model_name_or_path, config=config, retriever=retriever)
-            model.set_context_encoder_for_training(hparams.context_encoder_type)
+            ctx_encoder=DPRContextEncoder.from_pretrained(hparams.context_encoder_name)
+            model.set_context_encoder_for_training(ctx_encoder)
             prefix = config.question_encoder.prefix
         else:
             if hparams.prefix is not None:
@@ -156,9 +157,9 @@ class GenerativeQAModule(BaseTransformer):
         )
 
  
-        self.config_dpr=DPRConfig.from_pretrained('facebook/dpr-ctx_encoder-multiset-base')#used in the re-encode process
+        self.config_dpr=DPRConfig.from_pretrained(hparams.context_encoder_name)#used in the re-encode process
         self.custom_config=hparams
-        self.context_tokenizer=DPRContextEncoderTokenizerFast.from_pretrained('facebook/dpr-ctx_encoder-multiset-base')
+        self.context_tokenizer=DPRContextEncoderTokenizerFast.from_pretrained(hparams.context_encoder_name)
 
 
         super().__init__(hparams, config=config, tokenizer=tokenizer, model=model)
@@ -567,7 +568,7 @@ class GenerativeQAModule(BaseTransformer):
             help="RAG model type: sequence or token, if none specified, the type is inferred from the model_name_or_path",
         )
         parser.add_argument(
-            "--context_encoder_type",
+            "--context_encoder_name",
             type=str,
             help="Name of the pre-trained context encoder checkpoint from the DPR",
         )
