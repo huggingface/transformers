@@ -544,7 +544,7 @@ class CLIPModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         # forward pass
-        outputs = model(inputs)
+        outputs = model(**inputs)
 
         # verify the logits
         self.assertEqual(
