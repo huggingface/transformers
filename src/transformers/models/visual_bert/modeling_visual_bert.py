@@ -40,6 +40,7 @@ from ...modeling_outputs import (
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     SequenceClassifierOutput,
+    TokenClassifierOutput
 )
 from ...modeling_utils import (
     PreTrainedModel,
@@ -1405,7 +1406,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
             loss = loss_fct(reshaped_logits, labels)
 
         if not return_dict:
-            output = (reshaped_logits,) + outputs[1:]
+            output = (reshaped_logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
@@ -1462,6 +1463,7 @@ class VisualBertForVQA(VisualBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # TO-CHECK : Raises an error if sum <2
         index_to_gather = attention_mask.sum(1) - 2  # as in original code # need before concat
 
         outputs = self.visual_bert(
@@ -1503,7 +1505,7 @@ class VisualBertForVQA(VisualBertPreTrainedModel):
             reshaped_logits = log_softmax(reshaped_logits)
             loss = loss_fct(reshaped_logits, labels.contiguous())
         if not return_dict:
-            output = (reshaped_logits,) + outputs[1:]
+            output = (reshaped_logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(  # TO-DO: Need to replace this with VQA Model Output, maybe
@@ -1593,7 +1595,7 @@ class VisualBertForVQAAdvanced(VisualBertPreTrainedModel):
             loss = masked_lm_loss
 
         if not return_dict:
-            output = (prediction_scores,) + outputs[1:]
+            output = (prediction_scores,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return MaskedLMOutput(
@@ -1602,9 +1604,6 @@ class VisualBertForVQAAdvanced(VisualBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-
-# nlvr setting
 
 
 @add_start_docstrings(
@@ -1689,7 +1688,7 @@ class VisualBertForNLVR(VisualBertPreTrainedModel):
             loss = masked_lm_loss
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(  # TO-DO: Need to replace this with VQA Model Output, maybe
@@ -1860,10 +1859,10 @@ class VisualBertForFlickr(VisualBertPreTrainedModel):
             loss = loss_fct(scores, labels)
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(  # TO-DO: Need to replace this with VQA Model Output, maybe
+        return SequenceClassifierOutput(  # TO-DO: Need to replace this correct Model Output
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,

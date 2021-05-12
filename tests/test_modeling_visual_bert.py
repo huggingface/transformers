@@ -19,15 +19,12 @@ import copy
 import unittest
 
 from tests.test_modeling_common import floats_tensor
-from transformers import is_torch_available, MODEL_FOR_MULTIPLE_CHOICE_MAPPING, MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING, MODEL_FOR_MASKED_LM_MAPPING, MODEL_FOR_PRETRAINING_MAPPING
+from transformers import is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
-
-import numpy as np
-import random
 
 if is_torch_available():
     import torch
@@ -117,11 +114,11 @@ class VisualBertModelTester:
 
         attention_mask = None
         if self.use_attention_mask:
-            attention_mask = random_attention_mask([self.batch_size, self.seq_length])
+            attention_mask = torch.ones((self.batch_size, self.seq_length), dtype=torch.long, device=torch_device)
 
         visual_attention_mask = None
         if self.use_visual_attention_mask:
-            visual_attention_mask = random_attention_mask([self.batch_size, self.visual_seq_length])
+            visual_attention_mask = torch.ones((self.batch_size, self.visual_seq_length), dtype=torch.long, device=torch_device)
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -161,11 +158,11 @@ class VisualBertModelTester:
 
         attention_mask = None
         if self.use_attention_mask:
-            attention_mask = random_attention_mask([self.batch_size, self.num_choices, self.seq_length])
+            attention_mask = torch.ones((self.batch_size, self.num_choices, self.seq_length), dtype=torch.long, device=torch_device)
 
         visual_attention_mask = None
         if self.use_visual_attention_mask:
-            visual_attention_mask = random_attention_mask([self.batch_size, self.num_choices, self.visual_seq_length])
+            visual_attention_mask = torch.ones((self.batch_size, self.num_choices, self.visual_seq_length), dtype=torch.long, device=torch_device)
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -196,6 +193,17 @@ class VisualBertModelTester:
 
         if self.use_labels:
             vqa_labels = ids_tensor([self.batch_size, self.num_labels], self.num_labels)
+
+        config, input_dict = self.prepare_config_and_inputs_for_common()
+
+        input_dict.update({"labels": vqa_labels})
+        return config, input_dict
+
+    def prepare_config_and_inputs_for_vqa_advanced(self):
+        vqa_labels = None
+
+        if self.use_labels:
+            vqa_labels = ids_tensor([self.batch_size, self.seq_length + self.visual_seq_length], self.vocab_size)
 
         config, input_dict = self.prepare_config_and_inputs_for_common()
 
@@ -251,6 +259,15 @@ class VisualBertModelTester:
         result = model(**input_dict)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
+    def create_and_check_for_vqa_advanced(
+        self, config, input_dict
+    ):
+        model = VisualBertForVQAAdvanced(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(**input_dict)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length + self.visual_seq_length, self.vocab_size))
+
     def create_and_check_for_multiple_choice(
         self, config, input_dict
     ):
@@ -279,8 +296,8 @@ class VisualBertModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length + self.visual_seq_length, self.visual_seq_length))
 
 
-@require_torch
-class VisualBertModelTest(unittest.TestCase):
+@ require_torch
+class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
@@ -295,10 +312,172 @@ class VisualBertModelTest(unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    test_torchscript = False
+    test_pruning = False
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = copy.deepcopy(inputs_dict)
+        if model_class == VisualBertForMultipleChoice:
+            for key in inputs_dict.keys():
+                value = inputs_dict[key]
+                if isinstance(value, torch.Tensor) and value.ndim > 1:
+                    if key != 'visual_embeds':
+                        inputs_dict[key] = inputs_dict[key].unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
+                    else:
+                        inputs_dict[key] = inputs_dict[key].unsqueeze(1).expand(-1, self.model_tester.num_choices, -1, self.model_tester.visual_embedding_dim).contiguous()
+
+        elif model_class == VisualBertForFlickr:
+            inputs_dict['flickr_position'] = torch.zeros((self.model_tester.batch_size, self.model_tester.seq_length + self.model_tester.visual_seq_length), dtype=torch.long, device=torch_device)
+
+        if return_labels:
+            if model_class == VisualBertForMultipleChoice:
+                inputs_dict["labels"] = torch.zeros(self.model_tester.batch_size, dtype=torch.long, device=torch_device)
+            elif model_class == VisualBertForPreTraining:
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length + self.model_tester.visual_seq_length), dtype=torch.long, device=torch_device
+                )
+                inputs_dict["sentence_image_labels"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+
+            # Flickr expects float labels
+            elif model_class == VisualBertForFlickr:
+                inputs_dict["labels"] = torch.ones((self.model_tester.batch_size, self.model_tester.seq_length + self.model_tester.visual_seq_length, self.model_tester.visual_seq_length) , dtype=torch.float, device=torch_device)
+
+            # VQA expects float labels
+            elif model_class == VisualBertForVQA:
+                inputs_dict["labels"] = torch.ones((self.model_tester.batch_size, self.model_tester.num_labels), dtype=torch.float, device=torch_device)
+
+            elif model_class == VisualBertForNLVR:
+                inputs_dict["labels"] = torch.zeros((self.model_tester.batch_size), dtype=torch.long, device=torch_device)
+
+            elif model_class == VisualBertForVQAAdvanced:
+                inputs_dict["labels"] = torch.zeros((self.model_tester.batch_size, self.model_tester.seq_length + self.model_tester.visual_seq_length), dtype=torch.long, device=torch_device)
+
+        return inputs_dict
 
     def setUp(self):
         self.model_tester = VisualBertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=VisualBertConfig, hidden_size=37)
+
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        seq_len = getattr(self.model_tester, "seq_length", None)
+        visual_seq_len = getattr(self.model_tester, "visual_seq_length", None)
+
+        encoder_seq_length = (seq_len if seq_len is not None else 0) + (visual_seq_len if visual_seq_len is not None else 0)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+        chunk_length = getattr(self.model_tester, "chunk_length", None)
+        if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
+            encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            if chunk_length is not None:
+                self.assertListEqual(
+                    list(attentions[0].shape[-4:]),
+                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
+                )
+            else:
+                self.assertListEqual(
+                    list(attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                )
+            out_len = len(outputs)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            if hasattr(self.model_tester, "num_hidden_states_types"):
+                added_hidden_states = self.model_tester.num_hidden_states_types
+            elif self.is_encoder_decoder:
+                added_hidden_states = 2
+            else:
+                added_hidden_states = 1
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+
+            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+            if chunk_length is not None:
+                self.assertListEqual(
+                    list(self_attentions[0].shape[-4:]),
+                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
+                )
+            else:
+                self.assertListEqual(
+                    list(self_attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                )
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            if hasattr(self.model_tester, "encoder_seq_length"):
+                seq_length = self.model_tester.encoder_seq_length
+                if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
+                    seq_length = seq_length * self.model_tester.chunk_length
+            else:
+                seq_length = self.model_tester.seq_length + self.model_tester.visual_seq_length
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [seq_length, self.model_tester.hidden_size],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -321,6 +500,10 @@ class VisualBertModelTest(unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_vqa()
         self.model_tester.create_and_check_for_vqa(*config_and_inputs)
 
+    def test_model_for_vqa_advanced(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_vqa_advanced()
+        self.model_tester.create_and_check_for_vqa_advanced(*config_and_inputs)
+
     def test_model_for_nlvr(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_nlvr()
         self.model_tester.create_and_check_for_nlvr(*config_and_inputs)
@@ -333,17 +516,17 @@ class VisualBertModelTest(unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_flickr()
         self.model_tester.create_and_check_for_flickr(*config_and_inputs)
 
-    @slow
+    @ slow
     def test_model_from_pretrained(self):
-        for model_name in VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[: 1]:
             model = VisualBertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
-@require_torch
+@ require_torch
 class VisualBertModelIntegrationTest(unittest.TestCase):
 
-    @slow
+    @ slow
     def test_inference_vqa_coco_pre(self):
         model = VisualBertForPreTraining.from_pretrained("gchhablani/visualbert-vqa-coco-pre")
 
@@ -371,7 +554,7 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
                 [-6.3027, -5.9939, -5.9297]]]
         )
 
-        self.assertTrue(torch.allclose(output.prediction_logits[:, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(output.prediction_logits[: , : 3, : 3], expected_slice, atol=1e-4))
 
         expected_shape_2 = torch.Size((1, 2))
         self.assertEqual(output.seq_relationship_logits.shape, expected_shape_2)
@@ -382,7 +565,7 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(output.seq_relationship_logits, expected_slice_2, atol=1e-4))
 
-    @slow
+    @ slow
     def test_inference_vqa_pre(self):
         model = VisualBertForPreTraining.from_pretrained("gchhablani/visualbert-vqa-pre")
 
@@ -410,7 +593,7 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
                 [-6.8588, -7.3453, -7.3635]]]
         )
 
-        self.assertTrue(torch.allclose(output.prediction_logits[:, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(output.prediction_logits[: , : 3, : 3], expected_slice, atol=1e-4))
 
         expected_shape_2 = torch.Size((1, 2))
         self.assertEqual(output.seq_relationship_logits.shape, expected_shape_2)
@@ -421,7 +604,7 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(output.seq_relationship_logits, expected_slice_2, atol=1e-4))
 
-    @slow
+    @ slow
     def test_inference_nlvr_coco_pre(self):
         model = VisualBertForPreTraining.from_pretrained("gchhablani/visualbert-nlvr2-coco-pre")
 
@@ -449,7 +632,7 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
                 [-7.1086, -7.0725, -6.9211]]]
         )
 
-        self.assertTrue(torch.allclose(output.prediction_logits[:, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(output.prediction_logits[: , : 3, : 3], expected_slice, atol=1e-4))
 
         expected_shape_2 = torch.Size((1, 2))
         self.assertEqual(output.seq_relationship_logits.shape, expected_shape_2)
@@ -460,7 +643,7 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(output.seq_relationship_logits, expected_slice_2, atol=1e-4))
 
-    @slow
+    @ slow
     def test_inference_nlvr_pre(self):
         model = VisualBertForPreTraining.from_pretrained("gchhablani/visualbert-nlvr2-pre")
 
@@ -488,7 +671,7 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
                 [-7.2381, -7.3971, -6.8986]]]
         )
 
-        self.assertTrue(torch.allclose(output.prediction_logits[:, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(output.prediction_logits[: , : 3, : 3], expected_slice, atol=1e-4))
 
         expected_shape_2 = torch.Size((1, 2))
         self.assertEqual(output.seq_relationship_logits.shape, expected_shape_2)
@@ -499,7 +682,7 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(output.seq_relationship_logits, expected_slice_2, atol=1e-4))
 
-    @slow
+    @ slow
     def test_inference_vcr_coco_pre(self):
         model = VisualBertForPreTraining.from_pretrained("gchhablani/visualbert-vcr-coco-pre")
 
@@ -527,7 +710,7 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
                 [-8.2512, -9.5826, -8.9046]]]
         )
 
-        self.assertTrue(torch.allclose(output.prediction_logits[:, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(output.prediction_logits[: , : 3, : 3], expected_slice, atol=1e-4))
 
         expected_shape_2 = torch.Size((1, 2))
         self.assertEqual(output.seq_relationship_logits.shape, expected_shape_2)
@@ -538,7 +721,7 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(output.seq_relationship_logits, expected_slice_2, atol=1e-4))
 
-    @slow
+    @ slow
     def test_inference_vcr_pre(self):
         model = VisualBertForPreTraining.from_pretrained("gchhablani/visualbert-vcr-pre")
 
@@ -566,7 +749,7 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
                 [-8.1837, -8.8348, -8.9581]]]
         )
 
-        self.assertTrue(torch.allclose(output.prediction_logits[:, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(output.prediction_logits[: , : 3, : 3], expected_slice, atol=1e-4))
 
         expected_shape_2 = torch.Size((1, 2))
         self.assertEqual(output.seq_relationship_logits.shape, expected_shape_2)
@@ -577,7 +760,7 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(output.seq_relationship_logits, expected_slice_2, atol=1e-4))
 
-    @slow
+    @ slow
     def test_inference_vqa(self):
         model = VisualBertForVQA.from_pretrained("gchhablani/visualbert-vqa")
 
@@ -604,9 +787,9 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
               -4.4139, -3.1491, -3.8997]]
         )
 
-        self.assertTrue(torch.allclose(output.logits[:, :10], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(output.logits[: , : 10], expected_slice, atol=1e-4))
 
-    @slow
+    @ slow
     def test_inference_nlvr(self):
         model = VisualBertForNLVR.from_pretrained("gchhablani/visualbert-nlvr2")
 
@@ -634,7 +817,7 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(output.logits, expected_slice, atol=1e-4))
 
-    @slow
+    @ slow
     def test_inference_vcr(self):
         model = VisualBertForMultipleChoice.from_pretrained("gchhablani/visualbert-vcr")
 
