@@ -1,5 +1,5 @@
 import warnings
-from typing import TYPE_CHECKING, List, Optional, Union
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -182,14 +182,14 @@ class TokenClassificationPipeline(Pipeline):
 
         Return:
             A list or a list of list of :obj:`dict`: Each result comes as a list of dictionaries (one for each token in
-            the corresponding input, or each entity if this pipeline was instantiated with an aggregation_strategy
-            :obj:`grouped_entities=True`) with the following keys:
+            the corresponding input, or each entity if this pipeline was instantiated with an aggregation_strategy)
+            with the following keys:
 
             - **word** (:obj:`str`) -- The token/word classified.
             - **score** (:obj:`float`) -- The corresponding probability for :obj:`entity`.
             - **entity** (:obj:`str`) -- The entity predicted for that token/word (it is named `entity_group` when
               `aggregation_strategy` is not :obj:`"none"`.
-            - **index** (:obj:`int`, only present when ``self.grouped_entities=False``) -- The index of the
+            - **index** (:obj:`int`, only present when ``aggregation_strategy="none"``) -- The index of the
               corresponding token in the sentence.
             - **start** (:obj:`int`, `optional`) -- The index of the start of the corresponding entity in the sentence.
               Only exists if the offsets are available within the tokenizer
@@ -233,76 +233,99 @@ class TokenClassificationPipeline(Pipeline):
                         entities = self.model(**tokens)[0][0].cpu().numpy()
                         input_ids = tokens["input_ids"].cpu().numpy()[0]
 
-            score = np.exp(entities) / np.exp(entities).sum(-1, keepdims=True)
-            labels_idx = score.argmax(axis=-1)
-
-            entities = []
-            # Filter to labels not in `self.ignore_labels`
-            # Filter special_tokens
-            filtered_labels_idx = [
-                (idx, label_idx)
-                for idx, label_idx in enumerate(labels_idx)
-                if (self.model.config.id2label[label_idx] not in self.ignore_labels) and not special_tokens_mask[idx]
+            scores = np.exp(entities) / np.exp(entities).sum(-1, keepdims=True)
+            pre_entities = self.gather_pre_entities(sentence, input_ids, scores, offset_mapping, special_tokens_mask)
+            grouped_entities = self.aggregate(pre_entities, self.aggregation_strategy)
+            # Filter anything that is in self.ignore_labels
+            entities = [
+                entity
+                for entity in grouped_entities
+                if entity.get("entity", None) not in self.ignore_labels
+                and entity.get("entity_group", None) not in self.ignore_labels
             ]
-
-            for idx, label_idx in filtered_labels_idx:
-                if offset_mapping is not None:
-                    start_ind, end_ind = offset_mapping[idx]
-                    word_ref = sentence[start_ind:end_ind]
-                    word = self.tokenizer.convert_ids_to_tokens([int(input_ids[idx])])[0]
-                    is_subword = len(word_ref) != len(word)
-
-                    if int(input_ids[idx]) == self.tokenizer.unk_token_id:
-                        word = word_ref
-                        is_subword = False
-                else:
-                    word = self.tokenizer.convert_ids_to_tokens(int(input_ids[idx]))
-
-                    start_ind = None
-                    end_ind = None
-
-                entity = {
-                    "word": word,
-                    "score": score[idx][label_idx].item(),
-                    "entity": self.model.config.id2label[label_idx],
-                    "index": idx,
-                    "start": start_ind,
-                    "end": end_ind,
-                }
-                # These fields will be consumed by self.aggregate and not appear
-                # in the final result
-                if self.aggregation_strategy != AggregationStrategy.NONE:
-                    entity["is_subword"] = is_subword
-                if self.aggregation_strategy == AggregationStrategy.AVERAGE:
-                    # AVERAGE needs to keep intermediate scores.
-                    entity["scores"] = score[idx]
-
-                entities += [entity]
-
-            # Might be no-op for NONE strategy
-            grouped_entities = self.aggregate(entities, self.aggregation_strategy)
-            answers += [grouped_entities]
+            answers.append(entities)
 
         if len(answers) == 1:
             return answers[0]
         return answers
 
-    def aggregate(self, entities: List[dict], aggregation_strategy: AggregationStrategy) -> List[dict]:
+    def gather_pre_entities(
+        self,
+        sentence: str,
+        input_ids: np.ndarray,
+        scores: np.ndarray,
+        offset_mapping: Optional[List[Tuple[int, int]]],
+        special_tokens_mask: np.ndarray,
+    ) -> List[dict]:
+        """Fuse various numpy arrays into dicts with all the information needed for aggregation"""
+        pre_entities = []
+        for idx, token_scores in enumerate(scores):
+            # Filter special_tokens, they should only occur
+            # at the sentence boundaries since we're not encoding pairs of
+            # sentences so we don't have to keep track of those.
+            if special_tokens_mask[idx]:
+                continue
+
+            word = self.tokenizer.convert_ids_to_tokens(int(input_ids[idx]))
+            if offset_mapping is not None:
+                start_ind, end_ind = offset_mapping[idx]
+                word_ref = sentence[start_ind:end_ind]
+                is_subword = len(word_ref) != len(word)
+
+                if int(input_ids[idx]) == self.tokenizer.unk_token_id:
+                    word = word_ref
+                    is_subword = False
+            else:
+                start_ind = None
+                end_ind = None
+                is_subword = False
+
+            pre_entity = {
+                "word": word,
+                "scores": token_scores,
+                "start": start_ind,
+                "end": end_ind,
+                "index": idx,
+                "is_subword": is_subword,
+            }
+            pre_entities.append(pre_entity)
+        return pre_entities
+
+    def aggregate(self, pre_entities: List[dict], aggregation_strategy: AggregationStrategy) -> List[dict]:
+        if aggregation_strategy in {AggregationStrategy.NONE, AggregationStrategy.SIMPLE}:
+            entities = []
+            for pre_entity in pre_entities:
+                entity_idx = pre_entity["scores"].argmax()
+                score = pre_entity["scores"][entity_idx]
+                entity = {
+                    "entity": self.model.config.id2label[entity_idx],
+                    "score": score,
+                    "index": pre_entity["index"],
+                    "word": pre_entity["word"],
+                    "start": pre_entity["start"],
+                    "end": pre_entity["end"],
+                }
+                entities.append(entity)
+        else:
+            entities = self.aggregate_words(pre_entities, aggregation_strategy)
+
         if aggregation_strategy == AggregationStrategy.NONE:
             return entities
-        if aggregation_strategy != AggregationStrategy.SIMPLE:
-            entities = self.aggregate_words(entities, aggregation_strategy)
         return self.group_entities(entities)
 
     def aggregate_word(self, entities: List[dict], aggregation_strategy: AggregationStrategy) -> dict:
         word = self.tokenizer.convert_tokens_to_string([entity["word"] for entity in entities])
         if aggregation_strategy == AggregationStrategy.FIRST:
-            entity = entities[0]["entity"]
-            score = entities[0]["score"]
+            scores = entities[0]["scores"]
+            idx = scores.argmax()
+            score = scores[idx]
+            entity = self.model.config.id2label[idx]
         elif aggregation_strategy == AggregationStrategy.MAX:
-            max_entity = max(entities, key=lambda entity: entity["score"])
-            score = max_entity["score"]
-            entity = max_entity["entity"]
+            max_entity = max(entities, key=lambda entity: entity["scores"].max())
+            scores = max_entity["scores"]
+            idx = scores.argmax()
+            score = scores[idx]
+            entity = self.model.config.id2label[idx]
         elif aggregation_strategy == AggregationStrategy.AVERAGE:
             scores = np.stack([entity["scores"] for entity in entities])
             average_scores = np.nanmean(scores, axis=0)
@@ -367,6 +390,16 @@ class TokenClassificationPipeline(Pipeline):
         }
         return entity_group
 
+    def get_tag(self, entity_name: str) -> Tuple[str, str]:
+        if "-" in entity_name:
+            # Assume it's B-TAG I-TAG format
+            bi, tag = entity_name.split("-")
+        else:
+            # It's not in B-, I- format
+            bi = "B"
+            tag = entity_name
+        return bi, tag
+
     def group_entities(self, entities: List[dict]) -> List[dict]:
         """
         Find and group together the adjacent tokens with the same entity predicted.
@@ -385,16 +418,14 @@ class TokenClassificationPipeline(Pipeline):
 
             # If the current entity is similar and adjacent to the previous entity,
             # append it to the disaggregated entity group
-            # The split is meant to account for the "B" and "I" suffixes
+            # The split is meant to account for the "B" and "I" prefixes
             # Shouldn't merge if both entities are B-type
-            bi, tag = entity["entity"].split("-")
-            last_bi, last_tag = entity_group_disagg[-1]["entity"].split("-")
-            # Index might not be available if we aggregate words first.
-            index_agree = entity["index"] == entity_group_disagg[-1]["index"] + 1 if "index" in entity else True
-            if (tag == last_tag and bi != "B") and index_agree:
+            bi, tag = self.get_tag(entity["entity"])
+            last_bi, last_tag = self.get_tag(entity_group_disagg[-1]["entity"])
+
+            if tag == last_tag and bi != "B":
                 # Modify subword type to be previous_type
                 entity_group_disagg.append(entity)
-                # Group the entities at the last entity
             else:
                 # If the current entity is different from the previous entity
                 # aggregate the disaggregated entity group
