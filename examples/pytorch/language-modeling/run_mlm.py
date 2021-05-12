@@ -120,7 +120,7 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
     validation_split_percentage: Optional[int] = field(
-        default=5,
+        default=None,
         metadata={
             "help": "The percentage of the train set used as validation set in case there's no validation split"
         },
@@ -241,6 +241,8 @@ def main():
         # Downloading and loading a dataset from the hub.
         datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir)
         if "validation" not in datasets.keys():
+            if data_args.validation_split_percentage == None:
+                data_args.validation_split_percentage = 5
             datasets["validation"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
@@ -263,6 +265,23 @@ def main():
         if extension == "txt":
             extension = "text"
         datasets = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
+
+        # If --do_eval is set but --validation_file is None
+        # Use validation split from training dataset
+        if training_args.do_eval and "validation" not in datasets.keys() and data_args.validation_split_percentage:
+            datasets["validation"] = load_dataset(
+                extension,
+                data_files=data_files,
+                split=f"train[:{data_args.validation_split_percentage}%]",
+                cache_dir=model_args.cache_dir,
+            )
+            datasets["train"] = load_dataset(
+                extension,
+                data_files=data_files,
+                split=f"train[{data_args.validation_split_percentage}%:]",
+                cache_dir=model_args.cache_dir,
+            )
+
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
@@ -417,7 +436,7 @@ def main():
 
     if training_args.do_eval:
         if "validation" not in tokenized_datasets:
-            raise ValueError("--do_eval requires a validation dataset")
+            raise ValueError("--do_eval requires a validation dataset or set --validation_split_percentage")
         eval_dataset = tokenized_datasets["validation"]
         if data_args.max_eval_samples is not None:
             eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
