@@ -290,7 +290,8 @@ class TFRoFormerSelfAttention(tf.keras.layers.Layer):
         rotate_half_key_layer = tf.stack([-key_layer[..., 1::2], key_layer[..., ::2]], axis=-1)
         rotate_half_key_layer = tf.reshape(rotate_half_key_layer, shape_list(key_layer))
         key_layer = key_layer * cos_pos + rotate_half_key_layer * sin_pos
-        return query_layer,key_layer
+        return query_layer, key_layer
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->RoFormer
 class TFRoFormerSelfOutput(tf.keras.layers.Layer):
