@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import os
 import unittest
 
@@ -33,6 +32,7 @@ SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixture
 class BertGenerationTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = BertGenerationTokenizer
+    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()

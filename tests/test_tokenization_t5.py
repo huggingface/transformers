@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import unittest
 
 from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, T5Tokenizer, T5TokenizerFast
@@ -40,6 +39,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = T5Tokenizer
     rust_tokenizer_class = T5TokenizerFast
     test_rust_tokenizer = True
+    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()

@@ -38,6 +38,7 @@ class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = MBart50Tokenizer
     rust_tokenizer_class = MBart50TokenizerFast
     test_rust_tokenizer = True
+    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()
