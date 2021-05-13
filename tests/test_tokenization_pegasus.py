@@ -31,6 +31,7 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = PegasusTokenizer
     rust_tokenizer_class = PegasusTokenizerFast
     test_rust_tokenizer = True
+    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()
@@ -104,6 +105,7 @@ class BigBirdPegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = PegasusTokenizer
     rust_tokenizer_class = PegasusTokenizerFast
     test_rust_tokenizer = True
+    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()

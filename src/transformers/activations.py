@@ -52,6 +52,10 @@ def gelu_fast(x):
     return 0.5 * x * (1.0 + torch.tanh(x * 0.7978845608 * (1.0 + 0.044715 * x * x)))
 
 
+def quick_gelu(x):
+    return x * torch.sigmoid(1.702 * x)
+
+
 def _silu_python(x):
     """
     See Gaussian Error Linear Units (Hendrycks et al., https://arxiv.org/abs/1606.08415) where the SiLU (Sigmoid Linear
@@ -85,6 +89,7 @@ ACT2FN = {
     "tanh": torch.tanh,
     "gelu_new": gelu_new,
     "gelu_fast": gelu_fast,
+    "quick_gelu": quick_gelu,
     "mish": mish,
     "linear": linear_act,
     "sigmoid": torch.sigmoid,

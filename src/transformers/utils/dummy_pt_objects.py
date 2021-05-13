@@ -888,6 +888,45 @@ class CamembertModel:
         requires_backends(self, ["torch"])
 
 
+CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class CLIPModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CLIPPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CLIPTextModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CLIPVisionModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

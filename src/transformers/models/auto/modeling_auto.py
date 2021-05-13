@@ -81,6 +81,7 @@ from ..camembert.modeling_camembert import (
     CamembertForTokenClassification,
     CamembertModel,
 )
+from ..clip.modeling_clip import CLIPModel
 from ..convbert.modeling_convbert import (
     ConvBertForMaskedLM,
     ConvBertForMultipleChoice,
@@ -308,6 +309,7 @@ from .configuration_auto import (
     BlenderbotConfig,
     BlenderbotSmallConfig,
     CamembertConfig,
+    CLIPConfig,
     ConvBertConfig,
     CTRLConfig,
     DebertaConfig,
@@ -363,6 +365,7 @@ MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
         (RoFormerConfig, RoFormerModel),
+        (CLIPConfig, CLIPModel),
         (BigBirdPegasusConfig, BigBirdPegasusModel),
         (DeiTConfig, DeiTModel),
         (LukeConfig, LukeModel),
