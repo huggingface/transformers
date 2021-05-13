@@ -1599,11 +1599,9 @@ To configure apex AMP-like mode set:
 
 .. code-block:: json
 
-    {
-        "amp": {
-            "enabled": "auto",
-            "opt_level": "auto"
-        }
+    "amp": {
+        "enabled": "auto",
+        "opt_level": "auto"
     }
 
 and the :class:`~transformers.Trainer` will automatically configure it based on the values of ``args.fp16_backend`` and
