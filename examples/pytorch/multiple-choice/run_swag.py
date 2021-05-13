@@ -46,7 +46,7 @@ from transformers.utils import check_min_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.6.0.dev0")
+check_min_version("4.7.0.dev0")
 
 logger = logging.getLogger(__name__)
 
@@ -347,9 +347,9 @@ def main():
         return {k: [v[i : i + 4] for i in range(0, len(v), 4)] for k, v in tokenized_examples.items()}
 
     if training_args.do_train:
-        train_dataset = datasets["train"]
         if "train" not in datasets:
             raise ValueError("--do_train requires a train dataset")
+        train_dataset = datasets["train"]
         if data_args.max_train_samples is not None:
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
         train_dataset = train_dataset.map(
@@ -428,7 +428,14 @@ def main():
         trainer.save_metrics("eval", metrics)
 
     if training_args.push_to_hub:
-        trainer.push_to_hub()
+        trainer.push_to_hub(
+            finetuned_from=model_args.model_name_or_path,
+            tags="multiple-choice",
+            dataset_tags="swag",
+            dataset_args="regular",
+            dataset="SWAG",
+            language="en",
+        )
 
 
 def _mp_fn(index):

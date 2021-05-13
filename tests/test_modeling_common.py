@@ -177,6 +177,13 @@ class ModelTesterMixin:
                 for k in _keys_to_ignore_on_save:
                     self.assertNotIn(k, state_dict_saved)
 
+                # Test we can load the state dict in the model, necessary for the checkpointing API in Trainer.
+                load_result = model.load_state_dict(state_dict_saved, strict=False)
+                self.assertTrue(
+                    len(load_result.missing_keys) == 0 or load_result.missing_keys == model._keys_to_ignore_on_save
+                )
+                self.assertTrue(len(load_result.unexpected_keys) == 0)
+
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
             module.weight.data.fill_(3)
@@ -1043,7 +1050,6 @@ class ModelTesterMixin:
                 with tempfile.TemporaryDirectory() as temp_dir_name:
                     model.base_model.save_pretrained(temp_dir_name)
                     model, loading_info = model_class.from_pretrained(temp_dir_name, output_loading_info=True)
-
                     with self.subTest(msg=f"Missing keys for {model.__class__.__name__}"):
                         self.assertGreater(len(loading_info["missing_keys"]), 0)
 
