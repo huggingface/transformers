@@ -38,7 +38,11 @@ if is_torch_available():
         RoFormerForTokenClassification,
         RoFormerModel,
     )
-    from transformers.models.roformer.modeling_roformer import ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.roformer.modeling_roformer import (
+        ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        RoFormerSelfAttention,
+        RoFormerSinusoidalPositionalEmbedding,
+    )
 
 
 class RoFormerModelTester:
@@ -472,3 +476,104 @@ class RoFormerModelIntegrationTest(unittest.TestCase):
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+
+
+@require_torch
+class RoFormerSinusoidalPositionalEmbeddingTest(unittest.TestCase):
+    tolerance = 1e-4
+
+    def test_basic(self):
+        input_ids = torch.tensor([[4, 10]], dtype=torch.long, device=torch_device)
+        emb1 = RoFormerSinusoidalPositionalEmbedding(num_positions=6, embedding_dim=6).to(torch_device)
+        emb = emb1(input_ids.shape)
+        desired_weights = torch.tensor(
+            [[0.0000, 0.0000, 0.0000, 1.0000, 1.0000, 1.0000], [0.8415, 0.0464, 0.0022, 0.5403, 0.9989, 1.0000]]
+        ).to(torch_device)
+        self.assertTrue(
+            torch.allclose(emb, desired_weights, atol=self.tolerance),
+            msg=f"\nexp:\n{desired_weights}\ngot:\n{emb[0]}\n",
+        )
+
+    def test_positional_emb_weights_against_roformer(self):
+
+        desired_weights = torch.tensor(
+            [
+                [0.0000, 0.0000, 0.0000, 0.0000, 0.0000],
+                [0.8415, 0.8219, 0.8020, 0.7819, 0.7617],
+                [0.9093, 0.9364, 0.9581, 0.9749, 0.9870],
+            ]
+        ).to(torch_device)
+        emb1 = RoFormerSinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512).to(torch_device)
+        weights = emb1.weight.data[:3, :5].to(torch_device)
+
+        self.assertTrue(
+            torch.allclose(weights, desired_weights, atol=self.tolerance),
+            msg=f"\nexp:\n{desired_weights}\ngot:\n{weights}\n",
+        )
+
+
+@require_torch
+class RoFormerSelfAttentionRotaryPositionEmbeddingTest(unittest.TestCase):
+    tolerance = 1e-4
+
+    def test_apply_rotary_position_embeddings(self):
+        # 2,12,16,64
+        query_layer = (
+            torch.arange(2 * 12 * 16 * 64, dtype=torch.float, device=torch_device).reshape(2, 12, 16, 64) / 100
+        ).to(torch_device)
+        key_layer = (
+            -torch.arange(2 * 12 * 16 * 64, dtype=torch.float, device=torch_device).reshape(2, 12, 16, 64) / 100
+        ).to(torch_device)
+        embed_positions = RoFormerSinusoidalPositionalEmbedding(num_positions=32, embedding_dim=64).to(torch_device)
+        sinusoidal_pos = embed_positions([2, 16, 768])[None, None, :, :]
+
+        query_layer, key_layer = RoFormerSelfAttention.apply_rotary_position_embeddings(
+            sinusoidal_pos, query_layer, key_layer
+        )
+
+        desired_query_layer = torch.tensor(
+            [
+                [0.0000, 0.0100, 0.0200, 0.0300, 0.0400, 0.0500, 0.0600, 0.0700],
+                [-0.2012, 0.8897, 0.0263, 0.9401, 0.2074, 0.9463, 0.3481, 0.9343],
+                [-1.7057, 0.6271, -1.2145, 1.3897, -0.6303, 1.7647, -0.1173, 1.8985],
+                [-2.1731, -1.6397, -2.7358, 0.2854, -2.1840, 1.7183, -1.3018, 2.4871],
+                [0.2717, -3.6173, -2.9206, -2.1988, -3.6638, 0.3858, -2.9155, 2.2980],
+                [3.9859, -2.1580, -0.7984, -4.4904, -4.1181, -2.0252, -4.4782, 1.1253],
+            ]
+        ).to(torch_device)
+        desired_key_layer = torch.tensor(
+            [
+                [0.0000, -0.0100, -0.0200, -0.0300, -0.0400, -0.0500, -0.0600, -0.0700],
+                [0.2012, -0.8897, -0.0263, -0.9401, -0.2074, -0.9463, -0.3481, -0.9343],
+                [1.7057, -0.6271, 1.2145, -1.3897, 0.6303, -1.7647, 0.1173, -1.8985],
+                [2.1731, 1.6397, 2.7358, -0.2854, 2.1840, -1.7183, 1.3018, -2.4871],
+                [-0.2717, 3.6173, 2.9206, 2.1988, 3.6638, -0.3858, 2.9155, -2.2980],
+                [-3.9859, 2.1580, 0.7984, 4.4904, 4.1181, 2.0252, 4.4782, -1.1253],
+            ]
+        ).to(torch_device)
+
+        self.assertTrue(
+            torch.allclose(query_layer[0, 0, :6, :8], desired_query_layer, atol=self.tolerance),
+            msg=f"\nexp:\n{desired_query_layer}\ngot:\n{query_layer}\n",
+        )
+        self.assertTrue(
+            torch.allclose(key_layer[0, 0, :6, :8], desired_key_layer, atol=self.tolerance),
+            msg=f"\nexp:\n{desired_key_layer}\ngot:\n{key_layer}\n",
+        )
+
+    def test_positional_emb_weights_against_roformer(self):
+
+        desired_weights = torch.tensor(
+            [
+                [0.0000, 0.0000, 0.0000, 0.0000, 0.0000],
+                [0.8415, 0.8219, 0.8020, 0.7819, 0.7617],
+                [0.9093, 0.9364, 0.9581, 0.9749, 0.9870],
+            ]
+        ).to(torch_device)
+        emb1 = RoFormerSinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512).to(torch_device)
+        weights = emb1.weight.data[:3, :5].to(torch_device)
+
+        self.assertTrue(
+            torch.allclose(weights, desired_weights, atol=self.tolerance),
+            msg=f"\nexp:\n{desired_weights}\ngot:\n{weights}\n",
+        )
