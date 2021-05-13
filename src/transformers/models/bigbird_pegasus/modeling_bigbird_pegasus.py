@@ -475,13 +475,13 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
             [
                 to_mask[:, :, :, : 3 * to_block_size],
                 to_mask[:, :, :, -to_block_size:],
-                first_context_layer.new_ones([bsz, 1, 1, n_rand_blocks * to_block_size]),
+                to_mask.new_ones([bsz, 1, 1, n_rand_blocks * to_block_size]),
             ],
             dim=3,
         )
         second_rand_pad = torch.cat(
             [
-                first_context_layer.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]),
+                rand_mask.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]),
                 rand_mask[:, :, 0],
             ],
             dim=3,
@@ -609,13 +609,13 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
             [
                 to_mask[:, :, :, :to_block_size],
                 to_mask[:, :, :, -3 * to_block_size :],
-                context_layer.new_ones([bsz, 1, 1, n_rand_blocks * to_block_size]),
+                to_mask.new_ones([bsz, 1, 1, n_rand_blocks * to_block_size]),
             ],
             dim=3,
         )
         second_last_rand_pad = torch.cat(
             [
-                context_layer.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]),
+                rand_mask.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]),
                 rand_mask[:, :, -1],
             ],
             dim=3,
