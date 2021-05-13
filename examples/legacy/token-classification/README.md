@@ -1,6 +1,6 @@
 ## Token classification
 
-Based on the scripts [`run_ner.py`](https://github.com/huggingface/transformers/blob/master/examples/contrib/legacy/token-classification/run_ner.py).
+Based on the scripts [`run_ner.py`](https://github.com/huggingface/transformers/blob/master/examples/legacy/token-classification/run_ner.py).
 
 The following examples are covered in this section:
 
