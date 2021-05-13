@@ -15,6 +15,7 @@
 
 
 import inspect
+import itertools
 import os
 import pickle
 import re
@@ -99,6 +100,13 @@ class TokenizerTesterMixin:
     from_pretrained_filter = None
     from_pretrained_vocab_key = "vocab_file"
     test_seq2seq = True
+
+    # set to True to test a sentencepiece tokenizer
+    test_sentencepiece = False
+
+    # set to True to ignore casing when testing a sentencepiece tokenizer
+    # test_sentencepiece must also be set to True
+    test_sentencepiece_ignore_case = False
 
     def setUp(self) -> None:
         # Tokenizer.filter makes it possible to filter which Tokenizer to case based on all the
@@ -215,6 +223,38 @@ class TokenizerTesterMixin:
             {value: batch_encode_plus_sequences[value][i] for value in batch_encode_plus_sequences.keys()}
             for i in range(len(batch_encode_plus_sequences["input_ids"]))
         ]
+
+    def test_subword_regularization_tokenizer(self) -> None:
+        if not self.test_sentencepiece:
+            return
+
+        # Subword regularization is only available for the slow tokenizer.
+        sp_model_kwargs = {"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
+        tokenizer = self.get_tokenizer(sp_model_kwargs=sp_model_kwargs)
+
+        self.assertTrue(hasattr(tokenizer, "sp_model_kwargs"))
+        self.assertIsNotNone(tokenizer.sp_model_kwargs)
+        self.assertTrue(isinstance(tokenizer.sp_model_kwargs, dict))
+        self.assertEqual(tokenizer.sp_model_kwargs, sp_model_kwargs)
+        self.check_subword_sampling(tokenizer)
+
+    def test_pickle_subword_regularization_tokenizer(self) -> None:
+        if not self.test_sentencepiece:
+            return
+
+        """Google pickle __getstate__ __setstate__ if you are struggling with this."""
+        # Subword regularization is only available for the slow tokenizer.
+        sp_model_kwargs = {"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
+        tokenizer = self.get_tokenizer(sp_model_kwargs=sp_model_kwargs)
+        tokenizer_bin = pickle.dumps(tokenizer)
+        del tokenizer
+        tokenizer_new = pickle.loads(tokenizer_bin)
+
+        self.assertTrue(hasattr(tokenizer_new, "sp_model_kwargs"))
+        self.assertIsNotNone(tokenizer_new.sp_model_kwargs)
+        self.assertTrue(isinstance(tokenizer_new.sp_model_kwargs, dict))
+        self.assertEqual(tokenizer_new.sp_model_kwargs, sp_model_kwargs)
+        self.check_subword_sampling(tokenizer_new)
 
     def test_model_input_names_signature(self):
         accepted_model_main_input_names = [
@@ -1726,6 +1766,46 @@ class TokenizerTesterMixin:
 
             # add pad_token_id to pass subsequent tests
             tokenizer.add_special_tokens({"pad_token": "<PAD>"})
+
+    def check_subword_sampling(
+        self,
+        tokenizer: PreTrainedTokenizer,
+        text: str = None,
+    ) -> None:
+        """
+        Check if the tokenizer generates different results when subword regularization is enabled.
+
+        Subword regularization augments training data with subword sampling.
+        This has a random component.
+
+        Args:
+            tokenizer: The tokenizer to check.
+            text: The text to use for the checks.
+        """
+        text = "This is a test for subword regularization." if text is None else text
+        if self.test_sentencepiece_ignore_case:
+            text = text.lower()
+
+        tokens_list = []
+        for _ in range(5):
+            tokens_list.append(tokenizer.tokenize(text))
+
+        # the list of different pairs of tokens_list
+        combinations = itertools.combinations(tokens_list, 2)
+
+        # check of sampling is done
+        subword_sampling_found = False
+        for combination in combinations:
+            if combination[0] != combination[1]:
+                subword_sampling_found = True
+        self.assertTrue(subword_sampling_found)
+
+        # check if converting back to original text works
+        for tokens in tokens_list:
+            if self.test_sentencepiece_ignore_case:
+                self.assertEqual(text, tokenizer.convert_tokens_to_string(tokens).lower())
+            else:
+                self.assertEqual(text, tokenizer.convert_tokens_to_string(tokens))
 
     @require_torch
     @slow

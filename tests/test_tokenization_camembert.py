@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import os
 import unittest
 
@@ -37,6 +36,7 @@ class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = CamembertTokenizer
     rust_tokenizer_class = CamembertTokenizerFast
     test_rust_tokenizer = True
+    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()

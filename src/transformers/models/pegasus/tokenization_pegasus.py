@@ -14,7 +14,7 @@
 # limitations under the License.
 import os
 from shutil import copyfile
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
@@ -77,6 +77,20 @@ class PegasusTokenizer(PreTrainedTokenizer):
             tokenizer
             <https://github.com/google-research/pegasus/blob/939830367bcf411193d2b5eca2f2f90f3f9260ca/pegasus/ops/pretrain_parsing_ops.cc#L66>`__
             that uses the tokens 2 - 104 only for pretraining
+        sp_model_kwargs (:obj:`dict`, `optional`):
+            Will be passed to the ``SentencePieceProcessor.__init__()`` method. The `Python wrapper for SentencePiece
+            <https://github.com/google/sentencepiece/tree/master/python>`__ can be used, among other things, to set:
+
+            - ``enable_sampling``: Enable subword regularization.
+            - ``nbest_size``: Sampling parameters for unigram. Invalid for BPE-Dropout.
+
+              - ``nbest_size = {0,1}``: No sampling is performed.
+              - ``nbest_size > 1``: samples from the nbest_size results.
+              - ``nbest_size < 0``: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+                using forward-filtering-and-backward-sampling algorithm.
+
+            - ``alpha``: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+              BPE-dropout.
     """
     vocab_files_names = VOCAB_FILES_NAMES
 
@@ -95,10 +109,10 @@ class PegasusTokenizer(PreTrainedTokenizer):
         mask_token_sent="<mask_1>",
         additional_special_tokens=None,
         offset=103,  # entries 2 - 104 are only used for pretraining
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs
-    ):
+    ) -> None:
         self.offset = offset
-
         if additional_special_tokens is not None:
             assert isinstance(
                 additional_special_tokens, list
@@ -123,6 +137,8 @@ class PegasusTokenizer(PreTrainedTokenizer):
             additional_special_tokens = [mask_token_sent] if mask_token_sent is not None else []
             additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
 
+        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+
         super().__init__(
             eos_token=eos_token,
             unk_token=unk_token,
@@ -131,11 +147,12 @@ class PegasusTokenizer(PreTrainedTokenizer):
             mask_token_sent=mask_token_sent,
             offset=offset,
             additional_special_tokens=additional_special_tokens,
+            sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
         self.mask_token_sent = mask_token_sent
         self.vocab_file = vocab_file
-        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
 
         # add special tokens to encoder dict
@@ -175,16 +192,17 @@ class PegasusTokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d):
         self.__dict__ = d
-        self.sp_model = spm.SentencePieceProcessor()
+
+        # for backward compatibility
+        if not hasattr(self, "sp_model_kwargs"):
+            self.sp_model_kwargs = {}
+
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
-    def _tokenize(self, text, sample=False):
+    def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
-        if not sample:
-            pieces = self.sp_model.EncodeAsPieces(text)
-        else:
-            pieces = self.sp_model.SampleEncodeAsPieces(text, 64, 0.1)
-        return pieces
+        return self.sp_model.encode(text, out_type=str)
 
     def _convert_token_to_id(self, token: str) -> int:
         """Converts a token (str) to an id using the vocab."""

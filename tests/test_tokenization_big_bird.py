@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import os
 import unittest
 
@@ -36,11 +35,12 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = BigBirdTokenizer
     rust_tokenizer_class = BigBirdTokenizerFast
     test_rust_tokenizer = True
+    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()
 
-        tokenizer = BigBirdTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = self.tokenizer_class(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
 
     def test_rust_and_python_full_tokenizers(self):

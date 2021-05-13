@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import os
 import unittest
 
@@ -34,6 +33,7 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     rust_tokenizer_class = ReformerTokenizerFast
     test_rust_tokenizer = True
     test_seq2seq = False
+    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()
