@@ -19,6 +19,8 @@ import warnings
 from collections import OrderedDict
 
 from ...utils import logging
+
+# Add modeling imports here
 from ..albert.modeling_tf_albert import (
     TFAlbertForMaskedLM,
     TFAlbertForMultipleChoice,
@@ -146,8 +148,6 @@ from ..roberta.modeling_tf_roberta import (
     TFRobertaForTokenClassification,
     TFRobertaModel,
 )
-
-# Add modeling imports here
 from ..roformer.modeling_tf_roformer import (
     TFRoFormerForCausalLM,
     TFRoFormerForMaskedLM,
