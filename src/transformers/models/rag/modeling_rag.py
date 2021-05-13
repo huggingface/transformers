@@ -1129,7 +1129,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
     def set_retriever(self, retriever: RagRetriever):
         self.rag.retriever = retriever
 
-    def set_context_encoder_for_training(self,ctx_encoder):
+    def set_context_encoder_for_training(self, ctx_encoder: PreTrainedModel):
         self.rag.context_encoder_training=True
         self.rag.ctx_encoder = ctx_encoder
 
