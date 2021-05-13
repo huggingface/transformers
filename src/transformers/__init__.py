@@ -469,6 +469,7 @@ if is_torch_available():
             "load_tf_weights_in_albert",
         ]
     )
+
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_CAUSAL_LM_MAPPING",
@@ -499,7 +500,6 @@ if is_torch_available():
             "AutoModelWithLMHead",
         ]
     )
-
     _import_structure["models.bart"].extend(
         [
             "BART_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -512,6 +512,7 @@ if is_torch_available():
             "PretrainedBartModel",
         ]
     )
+
     _import_structure["models.bert"].extend(
         [
             "BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1086,6 +1087,7 @@ if is_tf_available():
             "TFAlbertPreTrainedModel",
         ]
     )
+
     _import_structure["models.auto"].extend(
         [
             "TF_MODEL_FOR_CAUSAL_LM_MAPPING",

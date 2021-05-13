@@ -53,7 +53,18 @@ class CustomBasicTokenizer(BasicTokenizer):
         try:
             import jieba
         except ImportError:
-            raise ImportError("Please install jieba for Chinese pretokenize.")
+            logger.warning("Can't import jieba, it will tokenize chinese chars like BertTokenizer. If you want to use jieba, please pip install jieba first.")
+            output = []
+            for char in text:
+                cp = ord(char)
+                if self._is_chinese_char(cp):
+                    output.append(" ")
+                    output.append(char)
+                    output.append(" ")
+                else:
+                    output.append(char)
+            return "".join(output)
+
         output = []
         for wholeword in jieba.cut(text, HMM=False):
             if wholeword in self.vocab:
@@ -80,8 +91,8 @@ class RoFormerTokenizer(BertTokenizer):
     and runs end-to-end tokenization: punctuation splitting and wordpiece. Refer to superclass
     :class:`~transformers.BertTokenizer` for usage examples and documentation concerning parameters.
 
-    when use_jieba=True :class:`~transformers.RoFormerTokenizer` use jieba tokenizer to pretokenize the sentence. e.g.
-    今天天气非常好。-> jieba pretokenize ['今天天气', '非常', '好', '。'] '今天天气' not in tokenizer.vocab but '非常' in tokenizer.vocab
+    when use_jieba=True :class:`~transformers.RoFormerTokenizer` use jieba tokenizer to pretokenize the sentence. 
+    e.g.今天天气非常好。-> jieba pretokenize ['今天天气', '非常', '好', '。'] '今天天气' not in tokenizer.vocab but '非常' in tokenizer.vocab
 
     Example::
 

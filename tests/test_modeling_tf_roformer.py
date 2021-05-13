@@ -14,10 +14,9 @@
 # limitations under the License.
 
 
-
 import unittest
 
-from transformers import is_tf_available, RoFormerConfig
+from transformers import RoFormerConfig, is_tf_available
 from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
@@ -137,7 +136,7 @@ class TFRoFormerModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_lm_head(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.is_decoder = True
         model = TFRoFormerForCausalLM(config=config)
@@ -292,19 +291,20 @@ class TFRoFormerModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = TFRoFormerModel.from_pretrained("roformer_chinese_base")
+        model = TFRoFormerModel.from_pretrained("junnyu/roformer_chinese_base")
         self.assertIsNotNone(model)
+
 
 @require_tf
 class TFRoFormerModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = TFRoFormerForMaskedLM.from_pretrained("roformer_chinese_base")
+        model = TFRoFormerForMaskedLM.from_pretrained("junnyu/roformer_chinese_base")
         input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
         # TODO Replace vocab size
-        vocab_size = 32000
+        vocab_size = 50000
 
         expected_shape = [1, 6, vocab_size]
         self.assertEqual(output.shape, expected_shape)
@@ -315,12 +315,10 @@ class TFRoFormerModelIntegrationTest(unittest.TestCase):
         expected_slice = tf.constant(
             [
                 [
-                    [-0.05243197, -0.04498899, 0.05512108],
-                    [-0.07444685, -0.01064632, 0.04352357],
-                    [-0.05020351, 0.05530146, 0.00700043],
+                    [-0.12053341, -1.0264901, 0.29221946],
+                    [-1.5133783, 0.197433, 0.15190607],
+                    [-5.0135403, -3.900256, -0.84038764],
                 ]
             ]
         )
         tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=1e-4)
-
-

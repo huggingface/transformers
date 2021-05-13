@@ -38,7 +38,6 @@ class RoFormerConfig(PretrainedConfig):
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
 
-
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50000):
             Vocabulary size of the RoFormer model. Defines the number of different tokens that can be represented by
@@ -69,11 +68,11 @@ class RoFormerConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if ``config.is_decoder=True``.
+        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
 
         Example::
 

@@ -704,7 +704,6 @@ ROFORMER_START_DOCSTRING = r"""
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
-
     Parameters:
         config (:class:`~transformers.RoFormerConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
@@ -713,7 +712,6 @@ ROFORMER_START_DOCSTRING = r"""
 """
 
 ROFORMER_INPUTS_DOCSTRING = r"""
-
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
@@ -726,7 +724,6 @@ ROFORMER_INPUTS_DOCSTRING = r"""
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
-
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
@@ -735,15 +732,12 @@ ROFORMER_INPUTS_DOCSTRING = r"""
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
             1]``:
 
-
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
-
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
-
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -827,24 +821,23 @@ class RoFormerModel(RoFormerPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        encoder_hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
-        `optional`): Sequence of hidden-states at the output of the last layer of the encoder. Used in the
-        cross-attention if the model is configured as a decoder. encoder_attention_mask (:obj:`torch.FloatTensor` of
-        shape :obj:`(batch_size, sequence_length)`, `optional`): Mask to avoid performing attention on the padding
-        token indices of the encoder input. This mask is used in the cross-attention if the model is configured as a
-        decoder. Mask values selected in ``[0, 1]``:
-
+        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
+        encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having
-        4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`): Contains
-        precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding. If
-        :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids` (those
-        that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)` instead of all
-        :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`. use_cache (:obj:`bool`, `optional`): If
-        set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up decoding
-        (see :obj:`past_key_values`).
+        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
+            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
+            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
+        use_cache (:obj:`bool`, `optional`):
+            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
+            decoding (see :obj:`past_key_values`).
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -974,10 +967,10 @@ class RoFormerForMaskedLM(RoFormerPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`): Labels for
-        computing the masked language modeling loss. Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see
-        ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed
-        for the tokens with labels in ``[0, ..., config.vocab_size]``.
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
+            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1072,32 +1065,29 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        encoder_hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
-        `optional`): Sequence of hidden-states at the output of the last layer of the encoder. Used in the
-        cross-attention if the model is configured as a decoder. encoder_attention_mask (:obj:`torch.FloatTensor` of
-        shape :obj:`(batch_size, sequence_length)`, `optional`): Mask to avoid performing attention on the padding
-        token indices of the encoder input. This mask is used in the cross-attention if the model is configured as a
-        decoder. Mask values selected in ``[0, 1]``:
-
+        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
+        encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having
-        4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`): Contains
-        precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding. If
-        :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids` (those
-        that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)` instead of all
-        :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`. labels (:obj:`torch.LongTensor` of
-        shape :obj:`(batch_size, sequence_length)`, `optional`): Labels for computing the left-to-right language
-        modeling loss (next word prediction). Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see
-        ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed
-        for the tokens with labels n ``[0, ..., config.vocab_size]``. use_cache (:obj:`bool`, `optional`): If set to
-        :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up decoding (see
-        :obj:`past_key_values`).
-
+        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
+            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
+            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
+            ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are
+            ignored (masked), the loss is only computed for the tokens with labels n ``[0, ..., config.vocab_size]``.
+        use_cache (:obj:`bool`, `optional`):
+            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
+            decoding (see :obj:`past_key_values`).
 
         Returns:
-
 
         Example::
 
@@ -1234,10 +1224,10 @@ class RoFormerForSequenceClassification(RoFormerPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`): Labels for computing the sequence
-        classification/regression loss. Indices should be in :obj:`[0, ..., config.num_labels - 1]`. If
-        :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss), If :obj:`config.num_labels > 1`
-        a classification loss is computed (Cross-Entropy).
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1316,9 +1306,10 @@ class RoFormerForMultipleChoice(RoFormerPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`): Labels for computing the multiple
-        choice classification loss. Indices should be in ``[0, ..., num_choices-1]`` where :obj:`num_choices` is the
-        size of the second dimension of the input tensors. (See :obj:`input_ids` above)
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
+            num_choices-1]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
+            :obj:`input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -1405,8 +1396,9 @@ class RoFormerForTokenClassification(RoFormerPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`): Labels for
-        computing the token classification loss. Indices should be in ``[0, ..., config.num_labels - 1]``.
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1492,13 +1484,14 @@ class RoFormerForQuestionAnswering(RoFormerPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`): Labels for position
-        (index) of the start of the labelled span for computing the token classification loss. Positions are clamped to
-        the length of the sequence (:obj:`sequence_length`). Position outside of the sequence are not taken into
-        account for computing the loss. end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`,
-        `optional`): Labels for position (index) of the end of the labelled span for computing the token classification
-        loss. Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
-        sequence are not taken into account for computing the loss.
+        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for position (index) of the start of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
+        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for position (index) of the end of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
