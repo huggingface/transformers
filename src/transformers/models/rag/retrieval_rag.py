@@ -548,7 +548,7 @@ class RagRetriever:
         return retrieved_doc_embeds, doc_ids, self.index.get_doc_dicts(doc_ids)
 
 
-    def set_ctx_encoder_tokenizer(self,ctx_encoder_tokenizer):
+    def set_ctx_encoder_tokenizer(self, ctx_encoder_tokenizer: PreTrainedTokenizer):
         #used in end2end retriever training
         self.ctx_encoder_tokenizer=ctx_encoder_tokenizer
         self.return_tokenized_docs=True
