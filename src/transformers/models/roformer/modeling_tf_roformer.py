@@ -240,22 +240,7 @@ class TFRoFormerSelfAttention(tf.keras.layers.Layer):
         value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
 
         if sinusoidal_pos is not None:
-            # https://kexue.fm/archives/8265
-            # sin [batch_size, num_heads, sequence_length, embed_size_per_head//2]
-            # cos [batch_size, num_heads, sequence_length, embed_size_per_head//2]
-            sin, cos = tf.split(sinusoidal_pos, num_or_size_splits=2, axis=-1)
-            # sin [θ0,θ1,θ2......θd/2-1]-> sin_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
-            # cos [θ0,θ1,θ2......θd/2-1]-> cos_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
-            sin_pos = tf.repeat(sin, 2, axis=-1)
-            cos_pos = tf.repeat(cos, 2, axis=-1)
-            # rotate_half_query_layer [-q1,q0,-q3,q2......,-qd-1,qd-2]
-            rotate_half_query_layer = tf.stack([-query_layer[..., 1::2], query_layer[..., ::2]], axis=-1)
-            rotate_half_query_layer = tf.reshape(rotate_half_query_layer, shape_list(query_layer))
-            query_layer = query_layer * cos_pos + rotate_half_query_layer * sin_pos
-            # rotate_half_key_layer [-k1,k0,-k3,k2......,-kd-1,kd-2]
-            rotate_half_key_layer = tf.stack([-key_layer[..., 1::2], key_layer[..., ::2]], axis=-1)
-            rotate_half_key_layer = tf.reshape(rotate_half_key_layer, shape_list(key_layer))
-            key_layer = key_layer * cos_pos + rotate_half_key_layer * sin_pos
+            query_layer, key_layer = self.apply_rotary_position_embeddings(sinusoidal_pos, query_layer, key_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         # (batch size, num_heads, seq_len_q, seq_len_k)
@@ -286,6 +271,25 @@ class TFRoFormerSelfAttention(tf.keras.layers.Layer):
         outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
 
         return outputs
+
+    @staticmethod
+    def apply_rotary_position_embeddings(sinusoidal_pos, query_layer, key_layer):
+        # https://kexue.fm/archives/8265
+        # sin [batch_size, num_heads, sequence_length, embed_size_per_head//2]
+        # cos [batch_size, num_heads, sequence_length, embed_size_per_head//2]
+        sin, cos = tf.split(sinusoidal_pos, num_or_size_splits=2, axis=-1)
+        # sin [θ0,θ1,θ2......θd/2-1]-> sin_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
+        # cos [θ0,θ1,θ2......θd/2-1]-> cos_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
+        sin_pos = tf.repeat(sin, 2, axis=-1)
+        cos_pos = tf.repeat(cos, 2, axis=-1)
+        # rotate_half_query_layer [-q1,q0,-q3,q2......,-qd-1,qd-2]
+        rotate_half_query_layer = tf.stack([-query_layer[..., 1::2], query_layer[..., ::2]], axis=-1)
+        rotate_half_query_layer = tf.reshape(rotate_half_query_layer, shape_list(query_layer))
+        query_layer = query_layer * cos_pos + rotate_half_query_layer * sin_pos
+        # rotate_half_key_layer [-k1,k0,-k3,k2......,-kd-1,kd-2]
+        rotate_half_key_layer = tf.stack([-key_layer[..., 1::2], key_layer[..., ::2]], axis=-1)
+        rotate_half_key_layer = tf.reshape(rotate_half_key_layer, shape_list(key_layer))
+        key_layer = key_layer * cos_pos + rotate_half_key_layer * sin_pos
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->RoFormer
