@@ -40,6 +40,7 @@ ES_CODE = 10
 class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = Speech2TextTokenizer
     test_rust_tokenizer = False
+    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()

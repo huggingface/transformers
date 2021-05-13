@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import unittest
 
 from transformers import BarthezTokenizer, BarthezTokenizerFast, BatchEncoding
@@ -24,12 +23,13 @@ from .test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 @require_sentencepiece
-@slow
+@slow  # see https://github.com/huggingface/transformers/issues/11457
 class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = BarthezTokenizer
     rust_tokenizer_class = BarthezTokenizerFast
     test_rust_tokenizer = True
+    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()
