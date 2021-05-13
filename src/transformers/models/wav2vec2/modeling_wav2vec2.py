@@ -68,35 +68,40 @@ def _compute_mask_indices(
     Adapted from `fairseq's data_utils.py
     <https://github.com/pytorch/fairseq/blob/e0788f7007a8473a76db573985031f3c94201e79/fairseq/data/data_utils.py#L376>`__.
     """
-    bsz, all_sz = shape
-    mask = torch.full((bsz, all_sz), False, device=device)
-    min_len_unique, mask_idcs = float("Inf"), []
+    batch_size, seq_length_for_masking = shape
+    mask = torch.full((batch_size, seq_length_for_masking), False, device=device)
+    min_len_unique = float("Inf")
+    mask_idcs = []
     padding_mask = attention_mask.ne(1) if attention_mask is not None else None
     if padding_mask is not None:
-        sz = all_sz - torch.sum(padding_mask, 1)
-        num_mask = (((sz * mask_prob) / mask_length) + torch.rand(bsz, device=device)).int()
+        seq_lengths_for_masking = seq_length_for_masking - torch.sum(padding_mask, 1)
+        num_masks = (
+            ((seq_lengths_for_masking * mask_prob) / mask_length) + torch.rand(batch_size, device=device)
+        ).int()
     else:
-        sz = torch.full([bsz], all_sz, device=device)
-        all_num_mask = ((all_sz * mask_prob) / mask_length) + torch.rand(1, device=device)[0]
-        num_mask = torch.full([bsz], all_num_mask, device=device, dtype=torch.int32)
+        seq_lengths_for_masking = torch.full([batch_size], seq_length_for_masking, device=device)
+        all_num_mask = ((seq_length_for_masking * mask_prob) / mask_length) + torch.rand(1, device=device)[0]
+        # make sure masks is at least of length min_masks`
+        num_masks = torch.full([batch_size], all_num_mask, device=device, dtype=torch.int32)
 
-    num_mask[num_mask < min_masks] = min_masks
-    for i in range(bsz):
-        curr_num_mask = int(num_mask[i])
-        curr_sz = sz[i]
-        lengths = torch.full([curr_num_mask], mask_length, device=device)
+    # make sure masks is at least of length min_masks`
+    num_masks[num_masks < min_masks] = min_masks
+    for i in range(batch_size):
+        num_mask = int(num_masks[i])
+        curr_seq_length_for_masking = seq_lengths_for_masking[i]
+        lengths = torch.full([num_mask], mask_length, device=device)
         if torch.sum(lengths) == 0:
-            lengths[0] = min(mask_length, curr_sz - 1)
+            lengths[0] = min(mask_length, curr_seq_length_for_masking - 1)
 
         min_len = lengths[0]
-        if curr_sz - min_len <= curr_num_mask:
-            min_len = curr_sz - curr_num_mask - 1
-        rg = torch.arange(curr_sz - min_len, device=device, dtype=torch.float32)
-        mask_idc = rg.gather(dim=0, index=torch.multinomial(rg, curr_num_mask, replacement=False))
+        if curr_seq_length_for_masking - min_len <= num_mask:
+            min_len = curr_seq_length_for_masking - num_mask - 1
+        rg = torch.arange(curr_seq_length_for_masking - min_len, device=device, dtype=torch.float32)
+        mask_idc = rg.gather(dim=0, index=torch.multinomial(rg, num_mask, replacement=False))
         mask_idc = mask_idc.repeat(lengths[0]) + torch.flatten(
             torch.arange(lengths[0], device=device).repeat(mask_idc.size()[0], 1).T
         )
-        mask_idc_unique = torch.unique(mask_idc[mask_idc < curr_sz])
+        mask_idc_unique = torch.unique(mask_idc[mask_idc < curr_seq_length_for_masking])
         min_len_unique = min(min_len_unique, mask_idc_unique.size()[0])
         mask_idcs.append(mask_idc_unique)
 
