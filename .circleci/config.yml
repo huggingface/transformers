@@ -379,6 +379,8 @@ jobs:
                   keys:
                       - v0.4-deploy_doc-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: pip install --upgrade pip
             - run: pip install ."[docs]"
             - save_cache:
                   key: v0.4-deploy_doc-{{ checksum "setup.py" }}
