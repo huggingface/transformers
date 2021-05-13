@@ -27,6 +27,7 @@ There are two categories of pipeline abstractions to be aware about:
     - :class:`~transformers.ConversationalPipeline`
     - :class:`~transformers.FeatureExtractionPipeline`
     - :class:`~transformers.FillMaskPipeline`
+    - :class:`~transformers.ImageClassificationPipeline`
     - :class:`~transformers.QuestionAnsweringPipeline`
     - :class:`~transformers.SummarizationPipeline`
     - :class:`~transformers.TextClassificationPipeline`
@@ -36,7 +37,6 @@ There are two categories of pipeline abstractions to be aware about:
     - :class:`~transformers.ZeroShotClassificationPipeline`
     - :class:`~transformers.Text2TextGenerationPipeline`
     - :class:`~transformers.TableQuestionAnsweringPipeline`
-    - :class:`~transformers.ImageClassificationPipeline`
 
 The pipeline abstraction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
