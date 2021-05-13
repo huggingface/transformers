@@ -28,7 +28,6 @@ from ..bert.modeling_flax_bert import (
     FlaxBertForTokenClassification,
     FlaxBertModel,
 )
-from ..gpt2.modeling_flax_gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model
 from ..electra.modeling_flax_electra import (
     FlaxElectraForMaskedLM,
     FlaxElectraForMultipleChoice,
@@ -38,6 +37,7 @@ from ..electra.modeling_flax_electra import (
     FlaxElectraForTokenClassification,
     FlaxElectraModel,
 )
+from ..gpt2.modeling_flax_gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model
 from ..roberta.modeling_flax_roberta import (
     FlaxRobertaForMaskedLM,
     FlaxRobertaForMultipleChoice,
@@ -47,7 +47,7 @@ from ..roberta.modeling_flax_roberta import (
     FlaxRobertaModel,
 )
 from .auto_factory import auto_class_factory
-from .configuration_auto import BertConfig, ElectraConfig, RobertaConfig, GPT2Config
+from .configuration_auto import BertConfig, ElectraConfig, GPT2Config, RobertaConfig
 
 
 logger = logging.get_logger(__name__)

@@ -200,6 +200,7 @@ class FlaxGPT2LMHeadModel:
     def from_pretrained(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
+
 class FlaxGPT2Model:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
@@ -217,7 +218,7 @@ class FlaxElectraForMaskedLM:
     def from_pretrained(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
-  
+
 class FlaxElectraForMultipleChoice:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])

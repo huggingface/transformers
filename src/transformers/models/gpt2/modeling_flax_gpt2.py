@@ -159,6 +159,40 @@ class FlaxGPT2Attention(nn.Module):
         if not deterministic and self.config.attn_pdrop > 0.0:
             dropout_rng = self.make_rng("dropout")
 
+        # During fast autoregressive decoding, we feed one position at a time,
+        # and cache the keys and values step by step.
+        if self.decode:
+            # detect if we're initializing by absence of existing cache data.
+            is_initialized = self.has_variable("cache", "cached_key")
+            cached_key = self.variable("cache", "cached_key", jnp.zeros, key.shape, key.dtype)
+            cached_value = self.variable("cache", "cached_value", jnp.zeros, value.shape, value.dtype)
+            cache_index = self.variable("cache", "cache_index", lambda: jnp.array(0, dtype=jnp.int32))
+            if is_initialized:
+                *batch_dims, max_length, num_heads, depth_per_head = cached_key.value.shape
+                # shape check of cached keys against query input
+                expected_shape = tuple(batch_dims) + (1, num_heads, depth_per_head)
+                if expected_shape != query.shape:
+                    raise ValueError(
+                        "Autoregressive cache shape error, "
+                        "expected query shape %s instead got %s." % (expected_shape, query.shape)
+                    )
+                # update key, value caches with our new 1d spatial slices
+                cur_index = cache_index.value
+                indices = (0,) * len(batch_dims) + (cur_index, 0, 0)
+                key = lax.dynamic_update_slice(cached_key.value, key, indices)
+                value = lax.dynamic_update_slice(cached_value.value, value, indices)
+                cached_key.value = key
+                cached_value.value = value
+                cache_index.value = cache_index.value + 1
+                # causal mask for cached decoder self-attention:
+                # our single query position should only attend to those key
+                # positions that have already been generated and cached,
+                # not the remaining zero elements.
+                attention_bias = combine_masks(
+                    attention_bias,
+                    jnp.broadcast_to(jnp.arange(max_length) <= cur_index, tuple(batch_dims) + (1, 1, max_length)),
+                )
+
         attn_output = dot_product_attention(
             query,
             key,
