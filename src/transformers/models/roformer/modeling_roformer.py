@@ -270,24 +270,7 @@ class RoFormerSelfAttention(nn.Module):
             key_layer = self.transpose_for_scores(self.key(hidden_states))
             value_layer = self.transpose_for_scores(self.value(hidden_states))
             if sinusoidal_pos is not None:
-                # https://kexue.fm/archives/8265
-                # sin [batch_size, num_heads, sequence_length, embed_size_per_head//2]
-                # cos [batch_size, num_heads, sequence_length, embed_size_per_head//2]
-                sin, cos = sinusoidal_pos.chunk(2, dim=-1)
-                # sin [θ0,θ1,θ2......θd/2-1]-> sin_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
-                sin_pos = torch.repeat_interleave(sin, 2, dim=-1)
-                # cos [θ0,θ1,θ2......θd/2-1]-> cos_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
-                cos_pos = torch.repeat_interleave(cos, 2, dim=-1)
-                # rotate_half_query_layer [-q1,q0,-q3,q2......,-qd-1,qd-2]
-                rotate_half_query_layer = torch.stack(
-                    [-query_layer[..., 1::2], query_layer[..., ::2]], dim=-1
-                ).reshape_as(query_layer)
-                query_layer = query_layer * cos_pos + rotate_half_query_layer * sin_pos
-                # rotate_half_key_layer [-k1,k0,-k3,k2......,-kd-1,kd-2]
-                rotate_half_key_layer = torch.stack([-key_layer[..., 1::2], key_layer[..., ::2]], dim=-1).reshape_as(
-                    key_layer
-                )
-                key_layer = key_layer * cos_pos + rotate_half_key_layer * sin_pos
+                self.apply_rotary_position_embeddings(sinusoidal_pos, query_layer, key_layer)
 
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
@@ -329,6 +312,26 @@ class RoFormerSelfAttention(nn.Module):
         if self.is_decoder:
             outputs = outputs + (past_key_value,)
         return outputs
+
+    @staticmethod
+    def apply_rotary_position_embeddings(sinusoidal_pos, query_layer, key_layer):
+        # https://kexue.fm/archives/8265
+        # sin [batch_size, num_heads, sequence_length, embed_size_per_head//2]
+        # cos [batch_size, num_heads, sequence_length, embed_size_per_head//2]
+        sin, cos = sinusoidal_pos.chunk(2, dim=-1)
+        # sin [θ0,θ1,θ2......θd/2-1] -> sin_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
+        sin_pos = torch.repeat_interleave(sin, 2, dim=-1)
+        # cos [θ0,θ1,θ2......θd/2-1] -> cos_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
+        cos_pos = torch.repeat_interleave(cos, 2, dim=-1)
+        # rotate_half_query_layer [-q1,q0,-q3,q2......,-qd-1,qd-2]
+        rotate_half_query_layer = torch.stack([-query_layer[..., 1::2], query_layer[..., ::2]], dim=-1).reshape_as(
+            query_layer
+        )
+        query_layer = query_layer * cos_pos + rotate_half_query_layer * sin_pos
+        # rotate_half_key_layer [-k1,k0,-k3,k2......,-kd-1,kd-2]
+        rotate_half_key_layer = torch.stack([-key_layer[..., 1::2], key_layer[..., ::2]], dim=-1).reshape_as(key_layer)
+        key_layer = key_layer * cos_pos + rotate_half_key_layer * sin_pos
+        return query_layer, key_layer
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->RoFormer
