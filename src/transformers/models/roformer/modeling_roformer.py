@@ -429,6 +429,7 @@ class RoFormerOutput(nn.Module):
 
 
 class RoFormerLayer(nn.Module):
+    # Copied from transformers.models.bert.modeling_bert.BertLayer.__init__ with Bert->RoFormer
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -442,6 +443,7 @@ class RoFormerLayer(nn.Module):
         self.intermediate = RoFormerIntermediate(config)
         self.output = RoFormerOutput(config)
 
+    # End Copy
     def forward(
         self,
         hidden_states,
