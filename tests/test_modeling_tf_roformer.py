@@ -35,6 +35,10 @@ if is_tf_available():
         TFRoFormerForTokenClassification,
         TFRoFormerModel,
     )
+    from transformers.models.roformer.modeling_tf_roformer import (
+        TFRoFormerSelfAttention,
+        TFRoFormerSinusoidalPositionalEmbedding,
+    )
 
 
 class TFRoFormerModelTester:
@@ -322,3 +326,76 @@ class TFRoFormerModelIntegrationTest(unittest.TestCase):
             ]
         )
         tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=1e-4)
+
+
+@require_tf
+class TFRoFormerSinusoidalPositionalEmbeddingTest(unittest.TestCase):
+    tolerance = 1e-4
+
+    def test_basic(self):
+        input_ids = tf.constant([[4, 10]])
+        emb1 = TFRoFormerSinusoidalPositionalEmbedding(num_positions=6, embedding_dim=6)
+
+        emb = emb1(input_ids.shape)
+        desired_weights = tf.constant(
+            [[0.0000, 0.0000, 0.0000, 1.0000, 1.0000, 1.0000], [0.8415, 0.0464, 0.0022, 0.5403, 0.9989, 1.0000]]
+        )
+
+        tf.debugging.assert_near(emb, desired_weights, atol=self.tolerance)
+
+    def test_positional_emb_weights_against_roformer(self):
+
+        desired_weights = tf.constant(
+            [
+                [0.0000, 0.0000, 0.0000, 0.0000, 0.0000],
+                [0.8415, 0.8219, 0.8020, 0.7819, 0.7617],
+                [0.9093, 0.9364, 0.9581, 0.9749, 0.9870],
+            ]
+        )
+        emb1 = TFRoFormerSinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512)
+        emb1([2, 16, 512])
+        weights = emb1.weight[:3, :5]
+
+        tf.debugging.assert_near(weights, desired_weights, atol=self.tolerance)
+
+
+@require_tf
+class TFRoFormerSelfAttentionRotaryPositionEmbeddingTest(unittest.TestCase):
+    tolerance = 1e-4
+
+    def test_apply_rotary_position_embeddings(self):
+        # 2,12,16,64
+        query_layer = tf.reshape(tf.range(2 * 12 * 16 * 64, dtype=tf.float32), shape=(2, 12, 16, 64)) / 100
+
+        key_layer = -tf.reshape(tf.range(2 * 12 * 16 * 64, dtype=tf.float32), shape=(2, 12, 16, 64)) / 100
+
+        embed_positions = TFRoFormerSinusoidalPositionalEmbedding(num_positions=32, embedding_dim=64)
+        sinusoidal_pos = embed_positions([2, 16, 768])[None, None, :, :]
+
+        query_layer, key_layer = TFRoFormerSelfAttention.apply_rotary_position_embeddings(
+            sinusoidal_pos, query_layer, key_layer
+        )
+
+        desired_query_layer = tf.constant(
+            [
+                [0.0000, 0.0100, 0.0200, 0.0300, 0.0400, 0.0500, 0.0600, 0.0700],
+                [-0.2012, 0.8897, 0.0263, 0.9401, 0.2074, 0.9463, 0.3481, 0.9343],
+                [-1.7057, 0.6271, -1.2145, 1.3897, -0.6303, 1.7647, -0.1173, 1.8985],
+                [-2.1731, -1.6397, -2.7358, 0.2854, -2.1840, 1.7183, -1.3018, 2.4871],
+                [0.2717, -3.6173, -2.9206, -2.1988, -3.6638, 0.3858, -2.9155, 2.2980],
+                [3.9859, -2.1580, -0.7984, -4.4904, -4.1181, -2.0252, -4.4782, 1.1253],
+            ]
+        )
+        desired_key_layer = tf.constant(
+            [
+                [0.0000, -0.0100, -0.0200, -0.0300, -0.0400, -0.0500, -0.0600, -0.0700],
+                [0.2012, -0.8897, -0.0263, -0.9401, -0.2074, -0.9463, -0.3481, -0.9343],
+                [1.7057, -0.6271, 1.2145, -1.3897, 0.6303, -1.7647, 0.1173, -1.8985],
+                [2.1731, 1.6397, 2.7358, -0.2854, 2.1840, -1.7183, 1.3018, -2.4871],
+                [-0.2717, 3.6173, 2.9206, 2.1988, 3.6638, -0.3858, 2.9155, -2.2980],
+                [-3.9859, 2.1580, 0.7984, 4.4904, 4.1181, 2.0252, 4.4782, -1.1253],
+            ]
+        )
+
+        tf.debugging.assert_near(query_layer[0, 0, :6, :8], desired_query_layer, atol=self.tolerance)
+        tf.debugging.assert_near(key_layer[0, 0, :6, :8], desired_key_layer, atol=self.tolerance)
