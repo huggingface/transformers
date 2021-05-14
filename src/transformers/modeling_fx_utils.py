@@ -228,6 +228,16 @@ def symbolic_trace(
 
     Returns:
         :obj:`torch.fx.GraphModule`: A GraphModule constructed by recording operations seen while tracing the model.
+
+    Example::
+
+        from transformers.modeling_fx_utils import symbolic_trace
+        traced_model = symbolic_trace(
+            model,
+            input_names=["input_ids", "attention_mask", "token_type_ids"],
+            batch_size=1,
+            sequence_length=128,
+        )
     """
     if input_names is None:
         input_names = model.dummy_inputs.keys()
