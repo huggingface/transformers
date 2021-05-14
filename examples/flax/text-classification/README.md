@@ -83,24 +83,27 @@ We also ran each task once on a single V100 GPU, 8 V100 GPUs, and 8 Cloud v3 TPU
 overall training time below. For comparison we ran Pytorch's [run_glue.py](https://github.com/huggingface/transformers/blob/master/examples/pytorch/text-classification/run_glue.py) on a single GPU (last column).
 
 
-| Task  | TPU v3-8  | 8 GPU      | 1 GPU      | 1 GPU (Pytorch) |
+| Task  | TPU v3-8  | 8 GPU      | [1 GPU](https://tensorboard.dev/experiment/mkPS4Zh8TnGe1HB6Yzwj4Q)  | 1 GPU (Pytorch) |
 |-------|-----------|------------|------------|-----------------|
-| CoLA  |  1m 46s   |  1m 26s    | 3m 6s      | 4m 6s           |
-| SST-2 |  5m 30s   |  6m 28s    | 22m 6s     | 34m 37s         |
-| MRPC  |  1m 32s   |  1m 14s    | 2m 17s     | 2m 56s          |
-| STS-B |  1m 33s   |  1m 12s    | 2m 11s     | 2m 48s          |
-| QQP   | 24m 40s   | 31m 48s    | 1h 20m 15s | 2h 54m          |
-| MNLI  | 26m 30s   | 33m 55s    | 2h 7m 30s  | 3h 7m 6s        |
-| QNLI  |  8m       |  9m 40s    | 34m 20s    | 49m 8s          |
-| RTE   |  1m 21s   |     55s    | 1m 8s      | 1m 16s          |
-| WNLI  |  1m 12s   |     48s    | 38s        | 36s             |
+| CoLA  |  1m 46s   |  1m 26s    | 3m 9s      | 4m 6s           |
+| SST-2 |  5m 30s   |  6m 28s    | 22m 33s    | 34m 37s         |
+| MRPC  |  1m 32s   |  1m 14s    | 2m 20s     | 2m 56s          |
+| STS-B |  1m 33s   |  1m 12s    | 2m 16s     | 2m 48s          |
+| QQP   | 24m 40s   | 31m 48s    | 1h 59m 41s | 2h 54m          |
+| MNLI  | 26m 30s   | 33m 55s    | 2h 9m 37s  | 3h 7m 6s        |
+| QNLI  |  8m       |  9m 40s    | 34m 40s    | 49m 8s          |
+| RTE   |  1m 21s   |     55s    | 1m 10s     | 1m 16s          |
+| WNLI  |  1m 12s   |     48s    | 39s        | 36s             |
 |-------|
-| **TOTAL** | 1h 13m | 1h 28m | 4h 34m | 6h 37m      |
-| **COST*** | $9.60     | $29.10     | $11.33     | $16.41          |
+| **TOTAL** | 1h 13m | 1h 28m | 5h 16m | 6h 37m      |
+| **COST*** | $9.60     | $29.10     | $13.06 | $16.41          |
 
 
 *All experiments are ran on Google Cloud Platform. Prices are on-demand prices
-(not preemptible), obtained from the following tables:
-[TPU pricing table](https://cloud.google.com/tpu/pricing),
-[GPU pricing table](https://cloud.google.com/compute/gpus-pricing). GPU
-experiments are ran without further optimizations besides JAX transformations.
+(not preemptible), obtained on May 12, 2021 for zone Iowa (us-central1) using
+the following tables:
+[TPU pricing table](https://cloud.google.com/tpu/pricing) ($2.40/h for v3-8),
+[GPU pricing table](https://cloud.google.com/compute/gpus-pricing) ($2.48/h per
+V100 GPU). GPU experiments are ran without further optimizations besides JAX
+transformations. GPU experiments are ran with full precision (fp32). "TPU v3-8"
+are 8 TPU cores on 4 chips (each chips has 2 cores), while "8 GPU" are 8 GPU chips.
