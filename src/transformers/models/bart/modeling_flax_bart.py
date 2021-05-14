@@ -1464,19 +1464,21 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
 
         hidden_states = outputs[0]  # last hidden state
 
-        eos_mask = jnp.where(input_ids == self.config.eos_token_id * jnp.ones_like(input_ids), 1, 0)
+        eos_mask = jnp.where(input_ids == self.config.eos_token_id, 1, 0)
 
         # The first condition is necessary to overcome jax._src.errors.ConcretizationTypeError
         if type(eos_mask) != jax.interpreters.partial_eval.DynamicJaxprTracer:
             if len(jnp.unique(eos_mask.sum(1))) > 1:
                 raise ValueError("All examples must have the same number of <eos> tokens.")
 
-        if (hidden_states[eos_mask, :].shape[0] == 0) and (input_ids.shape != (1, 1)):
-            raise ValueError("There are missing <eos> tokens in input_ids")
-        else:
-            sentence_representation = hidden_states[eos_mask, :].reshape(
-                hidden_states.shape[0], -1, hidden_states.shape[-1]
-            )[:, -1, :]
+            if any(eos_mask.sum(1) == 0):
+                raise ValueError("There are missing <eos> tokens in input_ids")
+
+            # Ensure to keep 1 only for the last <eos> token for each example
+            eos_mask_noised = eos_mask + jnp.arange(eos_mask.shape[1]) * 1e-3
+            eos_mask = jnp.where(eos_mask_noised == eos_mask_noised.max(1).reshape(-1, 1), 1, 0)
+
+        sentence_representation = jnp.einsum("ijk, ij -> ijk", hidden_states, eos_mask).sum(1)
         logits = self.classification_head(sentence_representation, deterministic=deterministic)
 
         if not return_dict:
