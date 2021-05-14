@@ -560,20 +560,3 @@ class RoFormerSelfAttentionRotaryPositionEmbeddingTest(unittest.TestCase):
             torch.allclose(key_layer[0, 0, :6, :8], desired_key_layer, atol=self.tolerance),
             msg=f"\nexp:\n{desired_key_layer}\ngot:\n{key_layer}\n",
         )
-
-    def test_positional_emb_weights_against_roformer(self):
-
-        desired_weights = torch.tensor(
-            [
-                [0.0000, 0.0000, 0.0000, 0.0000, 0.0000],
-                [0.8415, 0.8219, 0.8020, 0.7819, 0.7617],
-                [0.9093, 0.9364, 0.9581, 0.9749, 0.9870],
-            ]
-        ).to(torch_device)
-        emb1 = RoFormerSinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512).to(torch_device)
-        weights = emb1.weight.data[:3, :5].to(torch_device)
-
-        self.assertTrue(
-            torch.allclose(weights, desired_weights, atol=self.tolerance),
-            msg=f"\nexp:\n{desired_weights}\ngot:\n{weights}\n",
-        )
