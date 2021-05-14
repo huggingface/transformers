@@ -119,6 +119,7 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "VisualBertForRegionToPhraseAlignment",
     "VisualBertForVisualReasoning",
     "VisualBertForQuestionAnswering",
+    "VisualBertForMultipleChoice",
     "VisualBertForQuestionAnsweringAdvanced",
 ]
 

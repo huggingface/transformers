@@ -1284,6 +1284,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
         self.visual_bert = VisualBertModel(config)
         # TO-CHECK
         # self.sequence_summary = SequenceSummary(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.cls = nn.Linear(config.hidden_size, 1)
 
         self.init_weights()
@@ -1370,6 +1371,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
         _, pooled_output = outputs[0], outputs[1]
 
         # pooled_output = self.sequence_summary(sequence_output)
+        pooled_output = self.dropout(pooled_output)
         logits = self.cls(pooled_output)
         reshaped_logits = logits.view(-1, num_choices)
 
@@ -1444,9 +1446,6 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # TO-CHECK
-        assert (
-            attention_mask.sum(1) >= 2
-        ), "The text attention mask in `VisualBertForQuestionAnswering` must have atleast two tokens to attend to."
         # Get the index of the last text token
         index_to_gather = attention_mask.sum(1) - 2  # as in original code
 
@@ -1679,9 +1678,9 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
         )
 
 
-class FlickrAttention(nn.Module):
+class RegionToPhraseAttention(nn.Module):
     def __init__(self, config):
-        super(FlickrAttention, self).__init__()
+        super().__init__()
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
                 "The hidden size (%d) is not a multiple of the number of attention "
@@ -1741,7 +1740,7 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         self.visual_bert = VisualBertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.cls = VisualBertPreTrainingHeads(config)
-        self.attention = FlickrAttention(config)
+        self.attention = RegionToPhraseAttention(config)
 
         self.init_weights()
 

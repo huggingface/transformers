@@ -62,8 +62,9 @@ def load_state_dict(checkpoint_path):
     return sd
 
 
-def get_new_dict(d, rename_keys_prefix=rename_keys_prefix):
+def get_new_dict(d, config, rename_keys_prefix=rename_keys_prefix):
     new_d = OrderedDict()
+    new_d["visual_bert.embeddings.position_ids"] = torch.arange(config.max_position_embeddings).expand((1, -1))
     # detector_d = OrderedDict()
     for key in d:
         if "detector" in key:
@@ -123,7 +124,8 @@ def convert_visual_bert_checkpoint(checkpoint_path, pytorch_dump_folder_path):
 
     # Load State Dict
     state_dict = load_state_dict(checkpoint_path)
-    new_state_dict = get_new_dict(state_dict)
+
+    new_state_dict = get_new_dict(state_dict, config)
 
     if model_type == "pretraining":
         model = VisualBertForPreTraining(config)
