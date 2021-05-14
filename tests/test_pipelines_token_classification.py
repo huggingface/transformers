@@ -70,8 +70,8 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
         tokenizer = AutoTokenizer.from_pretrained(NER_MODEL, use_fast=True)
         sentence = """Consuelo Araújo Noguera, ministra de cultura del presidente Andrés Pastrana (1998.2002) fue asesinada por las Farc luego de haber permanecido secuestrada por algunos meses."""
 
-        nlp_ner = pipeline("ner", model=model, tokenizer=tokenizer)
-        output = nlp_ner(sentence)
+        token_classifier = pipeline("ner", model=model, tokenizer=tokenizer)
+        output = token_classifier(sentence)
         self.assertEqual(
             nested_simplify(output[:3]),
             [
@@ -81,8 +81,8 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
             ],
         )
 
-        nlp_ner = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="simple")
-        output = nlp_ner(sentence)
+        token_classifier = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="simple")
+        output = token_classifier(sentence)
         self.assertEqual(
             nested_simplify(output[:3]),
             [
@@ -92,8 +92,8 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
             ],
         )
 
-        nlp_ner = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="first")
-        output = nlp_ner(sentence)
+        token_classifier = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="first")
+        output = token_classifier(sentence)
         self.assertEqual(
             nested_simplify(output[:3]),
             [
@@ -103,8 +103,8 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
             ],
         )
 
-        nlp_ner = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="max")
-        output = nlp_ner(sentence)
+        token_classifier = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="max")
+        output = token_classifier(sentence)
         self.assertEqual(
             nested_simplify(output[:3]),
             [
@@ -114,8 +114,8 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
             ],
         )
 
-        nlp_ner = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="average")
-        output = nlp_ner(sentence)
+        token_classifier = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="average")
+        output = token_classifier(sentence)
         self.assertEqual(
             nested_simplify(output[:3]),
             [
@@ -133,8 +133,8 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
         model = AutoModelForTokenClassification.from_pretrained(NER_MODEL)
         tokenizer = AutoTokenizer.from_pretrained(NER_MODEL, use_fast=True)
         sentence = """Enzo works at the the UN"""
-        nlp_ner = pipeline("ner", model=model, tokenizer=tokenizer)
-        output = nlp_ner(sentence)
+        token_classifier = pipeline("ner", model=model, tokenizer=tokenizer)
+        output = token_classifier(sentence)
         self.assertEqual(
             nested_simplify(output),
             [
@@ -144,8 +144,8 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
             ],
         )
 
-        nlp_ner = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="simple")
-        output = nlp_ner(sentence)
+        token_classifier = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="simple")
+        output = token_classifier(sentence)
         self.assertEqual(
             nested_simplify(output),
             [
@@ -154,8 +154,8 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
             ],
         )
 
-        nlp_ner = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="first")
-        output = nlp_ner(sentence)
+        token_classifier = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="first")
+        output = token_classifier(sentence)
         self.assertEqual(
             nested_simplify(output[:3]),
             [
@@ -164,8 +164,8 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
             ],
         )
 
-        nlp_ner = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="max")
-        output = nlp_ner(sentence)
+        token_classifier = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="max")
+        output = token_classifier(sentence)
         self.assertEqual(
             nested_simplify(output[:3]),
             [
@@ -174,8 +174,8 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
             ],
         )
 
-        nlp_ner = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="average")
-        output = nlp_ner(sentence)
+        token_classifier = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="average")
+        output = token_classifier(sentence)
         self.assertEqual(
             nested_simplify(output),
             [
@@ -188,14 +188,15 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
     def test_aggregation_strategy(self):
         model_name = self.small_models[0]
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        nlp = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
+        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
         # Just to understand scores indexes in this test
         self.assertEqual(
-            nlp.model.config.id2label,
+            token_classifier.model.config.id2label,
             {0: "O", 1: "B-MISC", 2: "I-MISC", 3: "B-PER", 4: "I-PER", 5: "B-ORG", 6: "I-ORG", 7: "B-LOC", 8: "I-LOC"},
         )
         example = [
             {
+                # fmt : off
                 "scores": np.array([0, 0, 0, 0, 0.9968166351318359, 0, 0, 0]),
                 "index": 1,
                 "is_subword": False,
@@ -204,6 +205,7 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
                 "end": 2,
             },
             {
+                # fmt : off
                 "scores": np.array([0, 0, 0, 0, 0.9957635998725891, 0, 0, 0]),
                 "index": 2,
                 "is_subword": True,
@@ -223,7 +225,7 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
             },
         ]
         self.assertEqual(
-            nested_simplify(nlp.aggregate(example, AggregationStrategy.NONE)),
+            nested_simplify(token_classifier.aggregate(example, AggregationStrategy.NONE)),
             [
                 {"end": 2, "entity": "I-PER", "score": 0.997, "start": 0, "word": "En", "index": 1},
                 {"end": 4, "entity": "I-PER", "score": 0.996, "start": 2, "word": "##zo", "index": 2},
@@ -231,28 +233,28 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
             ],
         )
         self.assertEqual(
-            nested_simplify(nlp.aggregate(example, AggregationStrategy.SIMPLE)),
+            nested_simplify(token_classifier.aggregate(example, AggregationStrategy.SIMPLE)),
             [
                 {"entity_group": "PER", "score": 0.996, "word": "Enzo", "start": 0, "end": 4},
                 {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 11, "end": 13},
             ],
         )
         self.assertEqual(
-            nested_simplify(nlp.aggregate(example, AggregationStrategy.FIRST)),
+            nested_simplify(token_classifier.aggregate(example, AggregationStrategy.FIRST)),
             [
                 {"entity_group": "PER", "score": 0.997, "word": "Enzo", "start": 0, "end": 4},
                 {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 11, "end": 13},
             ],
         )
         self.assertEqual(
-            nested_simplify(nlp.aggregate(example, AggregationStrategy.MAX)),
+            nested_simplify(token_classifier.aggregate(example, AggregationStrategy.MAX)),
             [
                 {"entity_group": "PER", "score": 0.997, "word": "Enzo", "start": 0, "end": 4},
                 {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 11, "end": 13},
             ],
         )
         self.assertEqual(
-            nested_simplify(nlp.aggregate(example, AggregationStrategy.AVERAGE)),
+            nested_simplify(token_classifier.aggregate(example, AggregationStrategy.AVERAGE)),
             [
                 {"entity_group": "PER", "score": 0.996, "word": "Enzo", "start": 0, "end": 4},
                 {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 11, "end": 13},
@@ -263,10 +265,10 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
     def test_aggregation_strategy_example2(self):
         model_name = self.small_models[0]
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        nlp = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
+        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
         # Just to understand scores indexes in this test
         self.assertEqual(
-            nlp.model.config.id2label,
+            token_classifier.model.config.id2label,
             {0: "O", 1: "B-MISC", 2: "I-MISC", 3: "B-PER", 4: "I-PER", 5: "B-ORG", 6: "I-ORG", 7: "B-LOC", 8: "I-LOC"},
         )
         example = [
@@ -300,7 +302,7 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
             },
         ]
         self.assertEqual(
-            nlp.aggregate(example, AggregationStrategy.NONE),
+            token_classifier.aggregate(example, AggregationStrategy.NONE),
             [
                 {"end": 2, "entity": "B-MISC", "score": 0.55, "start": 0, "word": "Ra", "index": 1},
                 {"end": 4, "entity": "B-LOC", "score": 0.8, "start": 2, "word": "##ma", "index": 2},
@@ -309,15 +311,15 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
         )
 
         self.assertEqual(
-            nlp.aggregate(example, AggregationStrategy.FIRST),
+            token_classifier.aggregate(example, AggregationStrategy.FIRST),
             [{"entity_group": "MISC", "score": 0.55, "word": "Ramazotti", "start": 0, "end": 13}],
         )
         self.assertEqual(
-            nlp.aggregate(example, AggregationStrategy.MAX),
+            token_classifier.aggregate(example, AggregationStrategy.MAX),
             [{"entity_group": "LOC", "score": 0.8, "word": "Ramazotti", "start": 0, "end": 13}],
         )
         self.assertEqual(
-            nested_simplify(nlp.aggregate(example, AggregationStrategy.AVERAGE)),
+            nested_simplify(token_classifier.aggregate(example, AggregationStrategy.AVERAGE)),
             [{"entity_group": "PER", "score": 0.35, "word": "Ramazotti", "start": 0, "end": 13}],
         )
 

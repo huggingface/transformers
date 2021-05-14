@@ -152,11 +152,11 @@ class TokenClassificationPipeline(Pipeline):
 
                 if grouped_entities is not None:
                     warnings.warn(
-                        f'`grouped_entities` is deprecated, defaulted to `aggregation_strategy="{aggregation_strategy}"` instead.'
+                        f'`grouped_entities` is deprecated and will be removed in version v5.0.0, defaulted to `aggregation_strategy="{aggregation_strategy}"` instead.'
                     )
                 if ignore_subwords is not None:
                     warnings.warn(
-                        f'`ignore_subwords` is deprecated, defaulted to `aggregation_strategy="{aggregation_strategy}"` instead.'
+                        f'`ignore_subwords` is deprecated and will be removed in version v5.0.0, defaulted to `aggregation_strategy="{aggregation_strategy}"` instead.'
                     )
         if isinstance(aggregation_strategy, str):
             aggregation_strategy = AggregationStrategy[aggregation_strategy.upper()]
@@ -391,9 +391,12 @@ class TokenClassificationPipeline(Pipeline):
         return entity_group
 
     def get_tag(self, entity_name: str) -> Tuple[str, str]:
-        if "-" in entity_name:
-            # Assume it's B-TAG I-TAG format
-            bi, tag = entity_name.split("-")
+        if entity_name.startwith("B-"):
+            bi = "B"
+            tag = entity_name[2:]
+        elif entity_name.startwith("I-"):
+            bi = "I"
+            tag = entity_name[2:]
         else:
             # It's not in B-, I- format
             bi = "B"
