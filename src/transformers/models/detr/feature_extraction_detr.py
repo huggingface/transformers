@@ -527,13 +527,14 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 )
 
         # Check that masks_path has a valid type
-        if self.format == "coco_panoptic":
-            if isinstance(masks_path, pathlib.Path):
-                valid_masks_path = True
-            if not valid_masks_path:
-                raise ValueError(
-                    "The path to the directory containing the mask PNG files should be provided as a `pathlib.Path` object."
-                )
+        if masks_path is not None:
+            if self.format == "coco_panoptic":
+                if isinstance(masks_path, pathlib.Path):
+                    valid_masks_path = True
+                if not valid_masks_path:
+                    raise ValueError(
+                        "The path to the directory containing the mask PNG files should be provided as a `pathlib.Path` object."
+                    )
 
         if not is_batched:
             images = [images]

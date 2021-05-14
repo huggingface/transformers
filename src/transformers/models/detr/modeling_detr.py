@@ -256,11 +256,26 @@ class FrozenBatchNorm2d(nn.Module):
         return x * scale + bias
 
 
-class Backbone(nn.Module):
+def replace_batch_normalization(m, name=""):
+    for attr_str in dir(m):
+        target_attr = getattr(m, attr_str)
+        if isinstance(target_attr, torch.nn.BatchNorm2d):
+            frozen = FrozenBatchNorm2d(target_attr.num_features)
+            bn = getattr(m, attr_str)
+            frozen.weight.data.copy_(bn.weight)
+            frozen.bias.data.copy_(bn.bias)
+            frozen.running_mean.data.copy_(bn.running_mean)
+            frozen.running_var.data.copy_(bn.running_var)
+            setattr(m, attr_str, frozen)
+    for n, ch in m.named_children():
+        replace_batch_normalization(ch, n)
+
+
+class TimmBackbone(nn.Module):
     """
     Timm convolutional backbone.
 
-    If resnet, replace nn.BatchNorm2d layers by FrozenBatchNorm2d defined above.
+    nn.BatchNorm2d layers are replaced by FrozenBatchNorm2d as defined above.
 
     """
 
@@ -268,11 +283,13 @@ class Backbone(nn.Module):
         super().__init__()
 
         kwargs = {}
-        if name in ["resnet18", "resnet34", "resnet50", "resnet101"]:
-            kwargs["norm_layer"] = FrozenBatchNorm2d
         if dilation:
             kwargs["output_stride"] = 16
-        self.body = create_model(name, pretrained=True, features_only=True, **kwargs)
+        backbone = create_model(name, pretrained=True, features_only=True, **kwargs)
+        # replace batch norm by frozen batch norm
+        with torch.no_grad():
+            replace_batch_normalization(backbone)
+        self.body = backbone
         self.return_intermediate_layers = return_intermediate_layers
         self.num_channels = self.body.feature_info.channels(-1)
 
@@ -1118,7 +1135,7 @@ class DetrModel(DetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = Backbone(config.backbone, config.train_backbone, config.dilation, config.return_intermediate_layers)
+        backbone = TimmBackbone(config.backbone, config.train_backbone, config.dilation, config.return_intermediate_layers)
         position_embeddings = build_position_encoding(config)
         self.backbone = Joiner(backbone, position_embeddings)
 
