@@ -63,7 +63,7 @@ Tips:
 3. For the VCR task, the authors use a fine-tuned ResNet detector for generating visual embeddings, for all the
    checkpoints. We do not provide the detector and its weights as a part of the package, but it will be available in
    the research projects, and the states can be loaded directly into the detector provided.
-   
+
 4. For tokenization of text, you can use any of the `BertTokenizer`s, although the authors used `bert-base-uncased`.
 
 Note: More tips will be added, and a demo notebook on how to use a detector to generate your own visual embeddings, and
