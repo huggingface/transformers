@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+import importlib
 import unittest
 
 from transformers import RoFormerTokenizer, RoFormerTokenizerFast
@@ -22,6 +23,21 @@ from transformers.testing_utils import require_tokenizers
 from .test_tokenization_common import TokenizerTesterMixin
 
 
+def is_jieba_available():
+    return importlib.util.find_spec("jieba") is not None
+
+
+def require_jieba(test_case):
+    """
+    Decorator marking a test that requires 🤗 Jieba. These tests are skipped when 🤗 Jieba isn't installed.
+    """
+    if not is_jieba_available():
+        return unittest.skip("test requires jieba")(test_case)
+    else:
+        return test_case
+
+
+@require_jieba
 @require_tokenizers
 class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
