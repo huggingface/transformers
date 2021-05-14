@@ -180,7 +180,8 @@ class ModelTesterMixin:
                 # Test we can load the state dict in the model, necessary for the checkpointing API in Trainer.
                 load_result = model.load_state_dict(state_dict_saved, strict=False)
                 self.assertTrue(
-                    len(load_result.missing_keys) == 0 or load_result.missing_keys == model._keys_to_ignore_on_save
+                    len(load_result.missing_keys) == 0
+                    or set(load_result.missing_keys) == set(model._keys_to_ignore_on_save)
                 )
                 self.assertTrue(len(load_result.unexpected_keys) == 0)
 
