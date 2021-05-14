@@ -45,7 +45,7 @@ from transformers.utils import check_min_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.6.0.dev0")
+check_min_version("4.7.0.dev0")
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -516,7 +516,14 @@ def main():
                             writer.write(f"{index}\t{item}\n")
 
     if training_args.push_to_hub:
-        trainer.push_to_hub()
+        kwargs = {"finetuned_from": model_args.model_name_or_path, "tags": "text-classification"}
+        if data_args.task_name is not None:
+            kwargs["language"] = "en"
+            kwargs["dataset_tags"] = "glue"
+            kwargs["dataset_args"] = data_args.task_name
+            kwargs["dataset"] = f"GLUE {data_args.task_name.upper()}"
+
+        trainer.push_to_hub(**kwargs)
 
 
 def _mp_fn(index):

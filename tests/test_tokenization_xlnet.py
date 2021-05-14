@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import os
 import unittest
 
@@ -33,6 +32,7 @@ class XLNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = XLNetTokenizer
     rust_tokenizer_class = XLNetTokenizerFast
     test_rust_tokenizer = True
+    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()

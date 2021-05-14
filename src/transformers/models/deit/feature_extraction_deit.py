@@ -38,8 +38,10 @@ class DeiTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     Args:
         do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to resize the input to a certain :obj:`size`.
-        size (:obj:`int`, `optional`, defaults to 256):
-            Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`.
+        size (:obj:`int` or :obj:`Tuple(int)`, `optional`, defaults to 256):
+            Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
+            integer is provided, then the input will be resized to (size, size). Only has an effect if :obj:`do_resize`
+            is set to :obj:`True`.
         resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BICUBIC`):
             An optional resampling filter. This can be one of :obj:`PIL.Image.NEAREST`, :obj:`PIL.Image.BOX`,
             :obj:`PIL.Image.BILINEAR`, :obj:`PIL.Image.HAMMING`, :obj:`PIL.Image.BICUBIC` or :obj:`PIL.Image.LANCZOS`.
@@ -115,7 +117,8 @@ class DeiTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         Returns:
             :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
 
-            - **pixel_values** -- Pixel values to be fed to a model.
+            - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
+              width).
         """
         # Input type checking for clearer error
         valid_images = False
