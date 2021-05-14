@@ -144,7 +144,7 @@ class DetrObjectDetectionOutput(ModelOutput):
 
 
 @dataclass
-class DetrForSegmentationOutput(ModelOutput):
+class DetrSegmentationOutput(ModelOutput):
     """
     Output type of :class:`~transformers.DetrForSegmentation`.
 
