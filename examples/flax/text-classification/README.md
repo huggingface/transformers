@@ -86,8 +86,8 @@ overall training time below. For comparison we ran Pytorch's [run_glue.py](https
 | Task  | TPU v3-8  | 8 GPU      | [1 GPU](https://tensorboard.dev/experiment/mkPS4Zh8TnGe1HB6Yzwj4Q)  | 1 GPU (Pytorch) |
 |-------|-----------|------------|------------|-----------------|
 | CoLA  |  1m 46s   |  1m 26s    | 3m 9s      | 4m 6s           |
-| SST-2 |  5m 30s   |  6m 28s    |      | 34m 37s         | ???
-| MRPC  |  1m 32s   |  1m 14s    |      | 2m 56s          | ???
+| SST-2 |  5m 30s   |  6m 28s    | 22m 33s    | 34m 37s         |
+| MRPC  |  1m 32s   |  1m 14s    | 2m 20s     | 2m 56s          |
 | STS-B |  1m 33s   |  1m 12s    | 2m 16s     | 2m 48s          |
 | QQP   | 24m 40s   | 31m 48s    | 1h 59m 41s | 2h 54m          |
 | MNLI  | 26m 30s   | 33m 55s    | 2h 9m 37s  | 3h 7m 6s        |
@@ -95,15 +95,15 @@ overall training time below. For comparison we ran Pytorch's [run_glue.py](https
 | RTE   |  1m 21s   |     55s    | 1m 10s     | 1m 16s          |
 | WNLI  |  1m 12s   |     48s    | 39s        | 36s             |
 |-------|
-| **TOTAL** | 1h 13m | 1h 28m | 4h 34m | 6h 37m      |
-| **COST*** | $9.60     | $29.10     | $11.33     | $16.41          |
+| **TOTAL** | 1h 13m | 1h 28m | 5h 16m | 6h 37m      |
+| **COST*** | $9.60     | $29.10     | $13.06 | $16.41          |
 
 
 *All experiments are ran on Google Cloud Platform. Prices are on-demand prices
 (not preemptible), obtained on May 12, 2021 for zone Iowa (us-central1) using
 the following tables:
-[TPU pricing table](https://cloud.google.com/tpu/pricing),
-[GPU pricing table](https://cloud.google.com/compute/gpus-pricing). GPU
-experiments are ran without further optimizations besides JAX transformations.
-GPU experiments are ran with full precision (fp32). "TPU v3-8" are 8 TPU cores
-on 4 chips (each chips has 2 cores), while "8 GPU" are 8 GPU chips.
+[TPU pricing table](https://cloud.google.com/tpu/pricing) ($2.40/h for v3-8),
+[GPU pricing table](https://cloud.google.com/compute/gpus-pricing) ($2.48/h per
+V100 GPU). GPU experiments are ran without further optimizations besides JAX
+transformations. GPU experiments are ran with full precision (fp32). "TPU v3-8"
+are 8 TPU cores on 4 chips (each chips has 2 cores), while "8 GPU" are 8 GPU chips.
