@@ -25,6 +25,8 @@ _import_structure = {
     "tokenization_roformer": ["RoFormerTokenizer"],
 }
 
+if is_tokenizers_available():
+    _import_structure["tokenization_roformer_fast"] = ["RoFormerTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_roformer"] = [
@@ -60,6 +62,9 @@ if is_tf_available():
 if TYPE_CHECKING:
     from .configuration_roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig
     from .tokenization_roformer import RoFormerTokenizer
+
+    if is_tokenizers_available():
+        from .tokenization_roformer_fast import RoFormerTokenizerFast
 
     if is_torch_available():
         from .modeling_roformer import (
