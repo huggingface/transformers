@@ -38,23 +38,23 @@ Tips:
 1. All the checkpoints are named in a way to depict whether these checkpoints are the `pretrained` checkpoints. The
    visual embedding dimensions differ in each case. Here is a description of the configurations:
    - visualbert-vqa-coco-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on CoCo dataset with masked
-     language modeling and sentence-image prediction tasks.
+    language modeling and sentence-image prediction tasks.
    - visualbert-vqa-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on VQA dataset with masked
-     language modeling and sentence-image prediction tasks, after pre-training on CoCo dataset.
+    language modeling and sentence-image prediction tasks, after pre-training on CoCo dataset.
    - visualbert-vqa: autoclass:: transformers.VisualBertForQuestionAnswering fine-tuned on VQA task, after pre-training
-     on CoCo and VQA dataset.
+    on CoCo and VQA dataset.
    - visualbert-nlvr2-coco-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on CoCo dataset with
-     masked language modeling and sentence-image prediction tasks.
+    masked language modeling and sentence-image prediction tasks.
    - visualbert-nlvr2-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on NLVR2 dataset with masked
-     language modeling and sentence-image prediction tasks, after pre-training on CoCo dataset.
+    language modeling and sentence-image prediction tasks, after pre-training on CoCo dataset.
    - visualbert-nlvr2: autoclass:: transformers.VisualBertForVisualReasoning fine-tuned on NLVR2 task, after
-     pre-training on CoCo and NLVR2 dataset.
+    pre-training on CoCo and NLVR2 dataset.
    - visualbert-vcr-coco-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on CoCo dataset with masked
-     language modeling and sentence-image prediction tasks.
+    language modeling and sentence-image prediction tasks.
    - visualbert-vcr-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on VCR dataset with masked
-     language modeling and sentence-image prediction tasks, after pre-training on CoCo dataset.
+    language modeling and sentence-image prediction tasks, after pre-training on CoCo dataset.
    - visualbert-vcr: autoclass:: transformers.VisualBertForMultipleChoice fine-tuned on VCR task, after pre-training on
-     CoCo and VCR dataset.
+    CoCo and VCR dataset.
 
 2. Most of the checkpoints provided work with the `VisualBertForPreTraining` configuration. Other checkpoints provided
    are for down-stream tasks - VQA, VCR, NLVR2. Hence, if you are not working on these downstream tasks, you should
