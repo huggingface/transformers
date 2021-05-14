@@ -18,9 +18,7 @@ Overview
 
 The VisualBERT model was proposed in `VisualBERT: A Simple and Performant Baseline for Vision and Language
 <https://arxiv.org/pdf/1908.03557>`__ by Liunian Harold Li, Mark Yatskar, Da Yin, Cho-Jui Hsieh, Kai-Wei Chang.
-
-The model is a multi-modal (vision-and-language) pre-trainded model trained with Masked Language Modeling on textual
-part, and Sentence-Image prediction task to predict whether two captions are matching for an image or not.
+VisualBERT is a neural network trained on a variety of (image, text) pairs.
 
 The abstract from the paper is the following:
 
@@ -36,25 +34,25 @@ verbs and image regions corresponding to their arguments.*
 Tips:
 
 1. All the checkpoints are named in a way to depict whether these checkpoints are the `pretrained` checkpoints. The
-   visual embedding dimensions differ in each case. Here is a description of the configurations:
+   visual embedding dimensions differ in each case. Here is a decription of the checkpoints:
    - visualbert-vqa-coco-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on CoCo dataset with masked
-    language modeling and sentence-image prediction tasks.
+     language modeling and sentence-image prediction tasks.
    - visualbert-vqa-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on VQA dataset with masked
-    language modeling and sentence-image prediction tasks, after pre-training on CoCo dataset.
+     language modeling and sentence-image prediction tasks, after pre-training on CoCo dataset.
    - visualbert-vqa: autoclass:: transformers.VisualBertForQuestionAnswering fine-tuned on VQA task, after pre-training
-    on CoCo and VQA dataset.
+     on CoCo and VQA dataset.
    - visualbert-nlvr2-coco-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on CoCo dataset with
-    masked language modeling and sentence-image prediction tasks.
+     masked language modeling and sentence-image prediction tasks.
    - visualbert-nlvr2-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on NLVR2 dataset with masked
-    language modeling and sentence-image prediction tasks, after pre-training on CoCo dataset.
+     language modeling and sentence-image prediction tasks, after pre-training on CoCo dataset.
    - visualbert-nlvr2: autoclass:: transformers.VisualBertForVisualReasoning fine-tuned on NLVR2 task, after
-    pre-training on CoCo and NLVR2 dataset.
+     pre-training on CoCo and NLVR2 dataset.
    - visualbert-vcr-coco-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on CoCo dataset with masked
-    language modeling and sentence-image prediction tasks.
+     language modeling and sentence-image prediction tasks.
    - visualbert-vcr-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on VCR dataset with masked
-    language modeling and sentence-image prediction tasks, after pre-training on CoCo dataset.
+     language modeling and sentence-image prediction tasks, after pre-training on CoCo dataset.
    - visualbert-vcr: autoclass:: transformers.VisualBertForMultipleChoice fine-tuned on VCR task, after pre-training on
-    CoCo and VCR dataset.
+     CoCo and VCR dataset.
 
 2. Most of the checkpoints provided work with the `VisualBertForPreTraining` configuration. Other checkpoints provided
    are for down-stream tasks - VQA, VCR, NLVR2. Hence, if you are not working on these downstream tasks, you should
@@ -68,6 +66,39 @@ Tips:
 
 Note: More tips will be added, and a demo notebook on how to use a detector to generate your own visual embeddings, and
 use the VisualBERT model for fine-tuning on your task.
+
+Usage
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+VisualBERT is a multi-modal vision and language model. It can be used for visual question answering, multiple choice, visual reasoning
+and region-to-phrase correspondence tasks. VisulBERT uses a BERT-like transformer to prepare embeddings for image-text pairs. 
+Both the text and visual features are then projected to a latent space with identical dimension.
+
+To feed images to the model, each image is passed through a pre-trained object detector and the regions and the bounding boxes are extracted. 
+The authors use the features generated after passing these regions through a pre-trained CNN like ResNet as visual embeddings. They also add
+absolute position embeddings, and feed the resulting sequence of vectors to a standard BERT model. The text input is concatenated in the front
+of the visual embeddings in the embedding layer, and is expected to be bound by [CLS] and a [SEP] tokens, as in BERT. The segment IDs must 
+also be set appropriately for the textual and visual parts. 
+
+The :class:`~transformers.BertTokenizer` is used to encode the text. A custom detector/feature extractor must be used to get the visual embeddings.
+The following example shows how to get the last hidden state using :class:`~transformers.VisualBertModel`:
+
+.. code-block::
+
+        >>> import torch
+        >>> from transformers import BertTokenizer, VisualBertModel
+
+        >>> model = VisualBertModel.from_pretrained("gchhablani/visualbert-vqa-coco-pre")
+        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+
+        >>> inputs = tokenizer("What is the man eating?", return_tensors="pt")
+        >>> visual_embeds = get_visual_embeddings(image_path) # this is a custom function that returns the visual embeddings given the image path
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+
+This model was contributed by `gchhablani <https://huggingface.co/gchhablani>`__. The original code can be found `here
+<https://github.com/uclanlp/visualbert>`__.
 
 VisualBertConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -49,7 +49,7 @@ class VisualBertConfig(PretrainedConfig):
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
             Vocabulary size of the VisualBERT model. Defines the number of different tokens that can be represented by
             the :obj:`inputs_ids` passed when calling :class:`~transformers.VisualBertModel`. Vocabulary size of the
-            model. Defines the different tokens that can be represented by the `inputs_ids` passed to the forward
+            model. Defines the different tokens that can be represented by the ``inputs_ids`` passed to the forward
             method of :class:`~transformers.VisualBertModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
@@ -79,23 +79,27 @@ class VisualBertConfig(PretrainedConfig):
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         bypass_transformer (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not the model should bypass the transformer for the visual embeddings. If set to `True`, the
-            model directly concatenates the visual embeddings from :class:`~transformers.VisualBertEmbeddings` with
+            Whether or not the model should bypass the transformer for the visual embeddings. If set to :obj:`True`,
+            the model directly concatenates the visual embeddings from :class:`~transformers.VisualBertEmbeddings` with
             text output from transformers, and then pass it to a self-attention layer.
+        special_visual_initialize (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not the visual token type and position type embedding weights should be initialized the same as the textual
+            token type and positive type embeddings. When set to :obj:`True`, the weights of the textual token type and position
+            type embeddings are copied to the respective visual embedding layers.
 
 
         Example::
 
-        >>> from transformers import VisualBertModel, VisualBertConfig
+            >>> from transformers import VisualBertModel, VisualBertConfig
 
-        >>> # Initializing a VisualBERT visualbert-vqa-coco-pre style configuration
-        >>> configuration = VisualBertConfig.from_pretrained('visualbert-vqa-coco-pre')
+            >>> # Initializing a VisualBERT visualbert-vqa-coco-pre style configuration
+            >>> configuration = VisualBertConfig.from_pretrained('visualbert-vqa-coco-pre')
 
-        >>> # Initializing a model from the visualbert-vqa-coco-pre style configuration
-        >>> model = VisualBertModel(configuration)
+            >>> # Initializing a model from the visualbert-vqa-coco-pre style configuration
+            >>> model = VisualBertModel(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
     """
 
     model_type = "visual_bert"
@@ -116,7 +120,7 @@ class VisualBertConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         bypass_transformer=False,
-        # TO-DO: Check if the following parameters are needed and if yes, then whether they are to be documented.
+        special_visual_initialize=True,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -138,3 +142,4 @@ class VisualBertConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
         self.bypass_transformer = bypass_transformer
+        self.special_visual_initialize = special_visual_initialize
