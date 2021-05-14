@@ -18,6 +18,7 @@
 import math
 import random
 from dataclasses import dataclass
+from collections import OrderedDict
 from typing import Dict, List, Optional, Tuple
 
 import torch
@@ -301,21 +302,18 @@ class TimmBackbone(nn.Module):
         # send pixel_values through the body to get list of feature maps
         feature_maps = self.body(pixel_values)
 
-        if self.return_intermediate_layers:
+        if not self.return_intermediate_layers:
+            # get final feature map
+            feature_map = feature_maps[-1]
+            # downsample the pixel_mask to match the shape of the feature map
+            mask = F.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
+            return feature_map, mask
+        else:
             out = []
-            for x in feature_maps:
-                mask = pixel_mask
-                assert mask is not None, "No intermediate mask provided"
-                mask = F.interpolate(mask[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
+            for i, x in enumerate(feature_maps):
+                mask = F.interpolate(pixel_mask[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
                 out.append((x, mask))
             return out
-
-        assert pixel_mask is not None, "No pixel mask provided"
-        # get final feature map
-        feature_map = feature_maps[-1]
-        # we downsample the pixel_mask to match the shape of the feature map
-        mask = F.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
-        return feature_map, mask
 
 
 class Joiner(nn.Sequential):
