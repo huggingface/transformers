@@ -1090,7 +1090,6 @@ if is_tf_available():
         "shape_list",
     ]
     # TensorFlow models structure
-
     _import_structure["models.albert"].extend(
         [
             "TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
