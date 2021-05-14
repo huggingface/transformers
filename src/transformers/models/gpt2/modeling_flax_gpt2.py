@@ -18,12 +18,13 @@ from typing import Any, Optional, Tuple
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.core.frozen_dict import FrozenDict
+from flax.core.frozen_dict import FrozenDict, unfreeze
 from flax.linen import combine_masks, dot_product_attention, make_causal_mask
+from flax.traverse_util import flatten_dict
 from jax import lax
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
+from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxBaseModelOutputWithPast, FlaxCausalLMOutput
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
 from ...utils import logging
 from .configuration_gpt2 import GPT2Config
@@ -131,8 +132,50 @@ class FlaxGPT2Attention(nn.Module):
     def _merge_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.embed_dim,))
 
+    @nn.compact
+    def _append_cache(self, key, value, query, combined_mask):
+        # detect if we're initializing by absence of existing cache data.
+        is_initialized = self.has_variable("cache", "cached_key")
+        cached_key = self.variable("cache", "cached_key", jnp.zeros, key.shape, key.dtype)
+        cached_value = self.variable("cache", "cached_value", jnp.zeros, value.shape, value.dtype)
+        cache_index = self.variable("cache", "cache_index", lambda: jnp.array(0, dtype=jnp.int32))
+
+        if is_initialized:
+            *batch_dims, max_length, num_heads, depth_per_head = cached_key.value.shape
+            # shape check of cached keys against query input
+            cur_index = cache_index.value
+            expected_shape = tuple(batch_dims) + (1, num_heads, depth_per_head)
+            if cur_index > 0 and expected_shape != query.shape:
+                raise ValueError(
+                    "Autoregressive cache shape error, "
+                    "expected query shape %s instead got %s." % (expected_shape, query.shape)
+                )
+            # update key, value caches with our new 1d spatial slices
+            indices = (0,) * len(batch_dims) + (cur_index, 0, 0)
+            key = lax.dynamic_update_slice(cached_key.value, key, indices)
+            value = lax.dynamic_update_slice(cached_value.value, value, indices)
+            cached_key.value = key
+            cached_value.value = value
+            num_updated_cache_vectors = query.shape[1] if cur_index == 0 else 1
+            cache_index.value = cache_index.value + num_updated_cache_vectors
+            # causal mask for cached decoder self-attention:
+            # our single query position should only attend to those key
+            # positions that have already been generated and cached,
+            # not the remaining zero elements.
+            pad_mask = jnp.broadcast_to(
+                jnp.arange(max_length) < cur_index + num_updated_cache_vectors,
+                tuple(batch_dims) + (1, num_updated_cache_vectors, max_length),
+            )
+            combined_mask = combine_masks(combined_mask, pad_mask)
+        return key, value, combined_mask
+
     def __call__(
-        self, hidden_states, attention_mask=None, deterministic: bool = True, output_attentions: bool = False
+        self,
+        hidden_states,
+        attention_mask=None,
+        deterministic: bool = True,
+        use_cache: bool = False,
+        output_attentions: bool = False,
     ):
         qkv_out = self.c_attn(hidden_states)
         query, key, value = jnp.split(qkv_out, 3, axis=2)
@@ -142,18 +185,18 @@ class FlaxGPT2Attention(nn.Module):
         value = self._split_heads(value)
 
         query_length, key_length = query.shape[1], key.shape[1]
-        causal_mask = self.causal_mask[:, :, key_length - query_length : key_length, :key_length]
 
-        combined_mask = causal_mask
+        if self.has_variable("cache", "cached_key"):
+            src_mask_length = self.variables["cache"]["cached_key"].shape[1]
+            mask_shift = self.variables["cache"]["cache_index"]
+        else:
+            src_mask_length = key_length
+            mask_shift = 0
+
+        combined_mask = self.causal_mask[:, :, mask_shift : mask_shift + query_length, :src_mask_length]
         if attention_mask is not None:
-            attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
-            combined_mask = combine_masks(causal_mask, attention_mask, dtype="i4")
-
-        attention_bias = lax.select(
-            combined_mask > 0,
-            jnp.full(combined_mask.shape, 0.0).astype(self.dtype),
-            jnp.full(combined_mask.shape, -1e4).astype(self.dtype),
-        )
+            attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -1))
+            combined_mask = combine_masks(combined_mask, attention_mask, dtype="i4")
 
         dropout_rng = None
         if not deterministic and self.config.attn_pdrop > 0.0:
@@ -161,37 +204,14 @@ class FlaxGPT2Attention(nn.Module):
 
         # During fast autoregressive decoding, we feed one position at a time,
         # and cache the keys and values step by step.
-        if self.decode:
-            # detect if we're initializing by absence of existing cache data.
-            is_initialized = self.has_variable("cache", "cached_key")
-            cached_key = self.variable("cache", "cached_key", jnp.zeros, key.shape, key.dtype)
-            cached_value = self.variable("cache", "cached_value", jnp.zeros, value.shape, value.dtype)
-            cache_index = self.variable("cache", "cache_index", lambda: jnp.array(0, dtype=jnp.int32))
-            if is_initialized:
-                *batch_dims, max_length, num_heads, depth_per_head = cached_key.value.shape
-                # shape check of cached keys against query input
-                expected_shape = tuple(batch_dims) + (1, num_heads, depth_per_head)
-                if expected_shape != query.shape:
-                    raise ValueError(
-                        "Autoregressive cache shape error, "
-                        "expected query shape %s instead got %s." % (expected_shape, query.shape)
-                    )
-                # update key, value caches with our new 1d spatial slices
-                cur_index = cache_index.value
-                indices = (0,) * len(batch_dims) + (cur_index, 0, 0)
-                key = lax.dynamic_update_slice(cached_key.value, key, indices)
-                value = lax.dynamic_update_slice(cached_value.value, value, indices)
-                cached_key.value = key
-                cached_value.value = value
-                cache_index.value = cache_index.value + 1
-                # causal mask for cached decoder self-attention:
-                # our single query position should only attend to those key
-                # positions that have already been generated and cached,
-                # not the remaining zero elements.
-                attention_bias = combine_masks(
-                    attention_bias,
-                    jnp.broadcast_to(jnp.arange(max_length) <= cur_index, tuple(batch_dims) + (1, 1, max_length)),
-                )
+        if use_cache:
+            key, value, combined_mask = self._append_cache(key, value, query, combined_mask)
+
+        attention_bias = lax.select(
+            combined_mask > 0,
+            jnp.full(combined_mask.shape, 0.0).astype(self.dtype),
+            jnp.full(combined_mask.shape, -1e4).astype(self.dtype),
+        )
 
         attn_output = dot_product_attention(
             query,
@@ -253,6 +273,7 @@ class FlaxGPT2Block(nn.Module):
         hidden_states,
         attention_mask=None,
         deterministic: bool = True,
+        use_cache: bool = False,
         output_attentions: bool = False,
     ):
         residual = hidden_states
@@ -261,6 +282,7 @@ class FlaxGPT2Block(nn.Module):
             hidden_states,
             attention_mask=attention_mask,
             deterministic=deterministic,
+            use_cache=use_cache,
             output_attentions=output_attentions,
         )
         # residual connection
@@ -305,7 +327,18 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(rngs, input_ids, attention_mask, position_ids)["params"]
+        return self.module.init(rngs, input_ids, attention_mask, position_ids, return_dict=False)["params"]
+
+    def init_cache(self, batch_size, max_decoding_length):
+        # init cache for fast decoding
+        input_ids = jnp.ones((batch_size, max_decoding_length))
+        attention_mask = jnp.ones_like(input_ids)
+        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+
+        init_variables = self.module.init(
+            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, use_cache=True
+        )
+        return init_variables["cache"]
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     def __call__(
@@ -314,6 +347,7 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
         attention_mask=None,
         position_ids=None,
         params: dict = None,
+        past_key_values: dict = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
@@ -327,7 +361,14 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if position_ids is None:
-            position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+            cache_shift = 0
+            if past_key_values is not None:
+                cache_shift = next(
+                    iter(v for k, v in flatten_dict(unfreeze(past_key_values)).items() if k[-1] == "cache_index")
+                )
+            position_ids = jnp.broadcast_to(
+                jnp.arange(cache_shift, cache_shift + jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape
+            )
 
         if attention_mask is None:
             attention_mask = jnp.ones_like(input_ids)
@@ -337,17 +378,40 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
         if dropout_rng is not None:
             rngs["dropout"] = dropout_rng
 
-        return self.module.apply(
-            {"params": params or self.params},
+        inputs = {"params": params or self.params}
+
+        if past_key_values:
+            inputs["cache"] = past_key_values
+            mutable = ["cache"]
+            use_cache = True
+        else:
+            mutable = use_cache = False
+
+        outputs = self.module.apply(
+            inputs,
             jnp.array(input_ids, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
             not train,
+            use_cache,
             output_attentions,
             output_hidden_states,
             return_dict,
             rngs=rngs,
+            mutable=mutable,
         )
+
+        if past_key_values is not None and return_dict:
+            # outputs is a tuple with cache
+            outputs, past_key_values = outputs
+            outputs["past_key_values"] = unfreeze(past_key_values["cache"])
+            return outputs
+        elif past_key_values is not None and not return_dict:
+            # outputs is a tuple with cache
+            outputs, past_key_values = outputs
+            outputs = outputs[:1] + (unfreeze(past_key_values["cache"]),) + outputs[1:]
+
+        return outputs
 
 
 class FlaxGPT2BlockCollection(nn.Module):
@@ -364,6 +428,7 @@ class FlaxGPT2BlockCollection(nn.Module):
         hidden_states,
         attention_mask=None,
         deterministic: bool = True,
+        use_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -375,7 +440,7 @@ class FlaxGPT2BlockCollection(nn.Module):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            layer_outputs = block(hidden_states, attention_mask, deterministic=deterministic)
+            layer_outputs = block(hidden_states, attention_mask, deterministic=deterministic, use_cache=use_cache)
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -389,8 +454,11 @@ class FlaxGPT2BlockCollection(nn.Module):
         if not return_dict:
             return tuple(v for v in outputs if v is not None)
 
-        return FlaxBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        return FlaxBaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=None,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
         )
 
 
@@ -423,6 +491,7 @@ class FlaxGPT2Module(nn.Module):
         attention_mask,
         position_ids,
         deterministic=True,
+        use_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -437,6 +506,7 @@ class FlaxGPT2Module(nn.Module):
             hidden_states,
             attention_mask,
             deterministic=deterministic,
+            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -487,6 +557,7 @@ class FlaxGPT2LMHeadModule(nn.Module):
         attention_mask,
         position_ids,
         deterministic: bool = True,
+        use_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -496,6 +567,7 @@ class FlaxGPT2LMHeadModule(nn.Module):
             attention_mask,
             position_ids,
             deterministic=deterministic,
+            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

@@ -103,6 +103,24 @@ class FlaxGPT2ModelTester:
         inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
 
+    def check_use_cache_forward(self, model_class_name, config, input_ids, attention_mask):
+        max_decoder_length = 20
+        model = model_class_name(config)
+
+        #        attention_mask[:, -1] = 1
+        attention_mask[:, :] = 1
+
+        past_key_values = model.init_cache(input_ids.shape[0], max_decoder_length)
+        outputs_cache = model(
+            input_ids[:, :-1], attention_mask=attention_mask[:, :-1], past_key_values=past_key_values
+        )
+        outputs_cache_next = model(input_ids[:, -1:], past_key_values=outputs_cache.past_key_values)
+
+        outputs = model(input_ids, attention_mask=attention_mask)
+
+        diff = np.max(np.abs((outputs_cache_next[0][0, -1, :5] - outputs[0][0, -1, :5])))
+        self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
+
 
 @require_flax
 class FlaxGPT2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
@@ -111,6 +129,11 @@ class FlaxGPT2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = FlaxGPT2ModelTester(self)
+
+    def test_use_cache_forward(self):
+        for model_class_name in self.all_model_classes:
+            config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+            self.model_tester.check_use_cache_forward(model_class_name, config, input_ids, attention_mask)
 
     @slow
     def test_model_from_pretrained(self):
