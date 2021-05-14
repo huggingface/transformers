@@ -26,6 +26,7 @@ from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_
 
 
 if is_flax_available():
+    import jax
     import jax.numpy as jnp
     from jax import lax
     from transformers.modeling_flax_pytorch_utils import (
@@ -148,43 +149,51 @@ class FlaxGPT2ModelTester:
         diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
-    def check_use_cache_generation(self, config, input_ids, attention_mask):
+    def check_use_cache_generation(self, config, input_ids):
+        # Test that generation loop can be compiled
+
+        def generate(init_sequences, prompt_ids, past_key_values):
+            def first_pass(prompt_ids):
+                logits, cache = model(prompt_ids, past_key_values=past_key_values)[:2]
+                next_token = jnp.argmax(logits[:, -1:], axis=-1)
+                return next_token, cache
+
+            def greedy_search_cond_fn(state):
+                cur_len, _, _, _ = state
+                return ~(cur_len == max_length - 1)
+
+            def greedy_search_body_fn(state):
+                cur_len, sequences, current_token, cache = state
+                next_sequences = lax.dynamic_update_slice(sequences, current_token, (0, cur_len))
+
+                next_logits, next_cache = model(current_token, past_key_values=cache)[:2]
+                next_token = jnp.argmax(next_logits, axis=-1)
+
+                return cur_len + 1, next_sequences, next_token, next_cache
+
+            next_token, cache = first_pass(prompt_ids)
+            init_state = (jnp.array(3), init_sequences, next_token, cache)
+
+            _, output_sequences, final_token, _ = lax.while_loop(
+                greedy_search_cond_fn, greedy_search_body_fn, init_state
+            )
+            output_sequences = lax.dynamic_update_slice(output_sequences, final_token, (0, max_length - 1))
+
+            return output_sequences
+
         model = FlaxGPT2LMHeadModel(config)
         max_length = 20
-        init_sequences = jnp.zeros(1, max_length)
-        attention_mask = jnp.ones_like(init_sequences)
-        prompt_ids = input_ids[0, :3]
+        batch_size = 1
 
-        past_key_values = model.init_cache(init_sequences.shape)
-
-        def first_pass(prompt_ids):
-            logits, cache = model(prompt_ids, past_key_values=past_key_values)[:2]
-            next_token = jnp.argmax(logits[:, -1:], axis=-1)
-            return next_token, cache
-
-        next_token, cache = first_pass(prompt_ids)
-        prompt_ids = lax.concatenate([prompt_ids, next_token], axis=-1)
+        init_sequences = jnp.zeros((batch_size, max_length), dtype="i4")
+        prompt_ids = input_ids[:1, :3]
         init_sequences = lax.dynamic_update_slice(init_sequences, prompt_ids, (0, 0))
+        past_key_values = model.init_cache(batch_size, max_length)
 
-        init_state = (jnp.array(0), init_sequences, next_token, cache)
+        jit_generate = jax.jit(generate)
+        output_sequences = jit_generate(init_sequences, prompt_ids, past_key_values)
 
-        def greedy_search_cond_fn(state):
-            cur_len, _, _, _ = state
-            return ~(cur_len == max_length)
-
-        def greedy_search_body_fn(state):
-            """Sampling loop state update."""
-            cur_len, sequences, current_token, cache = state
-            next_logits, next_cache = model(current_token, past_key_values=cache)[:2]
-            next_token = jnp.argmax(next_logits, axis=-1)
-
-            next_sequences = lax.dynamic_update_slice(sequences, next_token, (0, cur_len))
-
-            return cur_len + 1, next_sequences, next_token, next_cache
-
-        _, output_sequences, _, _ = lax.while_loop(greedy_search_cond_fn, greedy_search_body_fn, init_state)
-
-        print(output_sequences)
+        self.parent.assertEqual(output_sequences.shape, (1, max_length))
 
 
 @require_flax
@@ -206,6 +215,10 @@ class FlaxGPT2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
             self.model_tester.check_use_cache_forward_with_attn_mask(
                 model_class_name, config, input_ids, attention_mask
             )
+
+    def test_use_cache_generation(self):
+        config, input_ids, _ = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_use_cache_generation(config, input_ids)
 
     # overwrite from common since `attention_mask` is different
     @is_pt_flax_cross_test

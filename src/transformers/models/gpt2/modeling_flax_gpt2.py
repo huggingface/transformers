@@ -142,21 +142,14 @@ class FlaxGPT2Attention(nn.Module):
 
         if is_initialized:
             *batch_dims, max_length, num_heads, depth_per_head = cached_key.value.shape
-            # shape check of cached keys against query input
-            cur_index = cache_index.value
-            expected_shape = tuple(batch_dims) + (1, num_heads, depth_per_head)
-            if cur_index > 0 and expected_shape != query.shape:
-                raise ValueError(
-                    "Autoregressive cache shape error, "
-                    "expected query shape %s instead got %s." % (expected_shape, query.shape)
-                )
             # update key, value caches with our new 1d spatial slices
+            cur_index = cache_index.value
             indices = (0,) * len(batch_dims) + (cur_index, 0, 0)
             key = lax.dynamic_update_slice(cached_key.value, key, indices)
             value = lax.dynamic_update_slice(cached_value.value, value, indices)
             cached_key.value = key
             cached_value.value = value
-            num_updated_cache_vectors = query.shape[1] if cur_index == 0 else 1
+            num_updated_cache_vectors = query.shape[1]
             cache_index.value = cache_index.value + num_updated_cache_vectors
             # causal mask for cached decoder self-attention:
             # our single query position should only attend to those key
@@ -189,7 +182,10 @@ class FlaxGPT2Attention(nn.Module):
         if self.has_variable("cache", "cached_key"):
             mask_shift = self.variables["cache"]["cache_index"]
             max_decoder_length = self.variables["cache"]["cached_key"].shape[1]
-            causal_mask = self.causal_mask[:, :, mask_shift : mask_shift + query_length, :max_decoder_length]
+            #            causal_mask = self.causal_mask[:, :, mask_shift : mask_shift + query_length, :max_decoder_length]
+            causal_mask = lax.dynamic_slice(
+                self.causal_mask, (0, 0, mask_shift, 0), (1, 1, query_length, max_decoder_length)
+            )
         else:
             causal_mask = self.causal_mask[:, :, :query_length, :key_length]
 
@@ -361,15 +357,20 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
+        batch_size, sequence_length = input_ids.shape
+
         if position_ids is None:
-            cache_shift = 0
-            if past_key_values is not None:
+            if past_key_values is not None and input_ids.shape[-1] == 1:
                 cache_shift = next(
                     iter(v for k, v in flatten_dict(unfreeze(past_key_values)).items() if k[-1] == "cache_index")
                 )
-            position_ids = jnp.broadcast_to(
-                jnp.arange(cache_shift, cache_shift + jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape
-            )
+                position_ids = jnp.broadcast_to(
+                    jnp.arange(self.config.max_position_embeddings)[None, :],
+                    (batch_size, self.config.max_position_embeddings),
+                )
+                position_ids = lax.dynamic_slice(position_ids, (0, cache_shift), (batch_size, 1))
+            else:
+                position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
 
         if attention_mask is None:
             if past_key_values is not None:
@@ -377,14 +378,14 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
                     iter(v for k, v in flatten_dict(unfreeze(past_key_values)).items() if k[-1] != "cache_index")
                 ).shape[1]
             else:
-                cache_length = input_ids.shape[-1]
+                cache_length = sequence_length
 
             # Note that usually one would have to put 0's in the
             # attention_mask for x > input_ids.shape[-1] and x < cache_length.
             # But since GPT2 uses a causal mask, those positions are masked anyways.
             # Thus we can create a single static attention_mask here,
             # which is more efficient for compilation
-            attention_mask = jnp.ones(input_ids.shape[:1] + (cache_length,))
+            attention_mask = jnp.ones((batch_size, cache_length))
 
         # Handle any PRNG if needed
         rngs = {}
