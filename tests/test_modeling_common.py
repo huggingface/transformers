@@ -499,11 +499,14 @@ class ModelTesterMixin:
                     model_output = model(**prepared_inputs)
 
                     batch_size = input_ids.shape[0]
-                    encoder_seq_length = input_ids.shape[1]
-                    decoder_seq_length = decoder_attention_mask.shape[1]
+                    encoder_sequence_length = input_ids.shape[1]
+                    decoder_sequence_length = decoder_attention_mask.shape[1]
 
                     traced_model = symbolic_trace(
-                        model, input_names, batch_size=batch_size, seqlen=[encoder_seq_length, decoder_seq_length]
+                        model,
+                        input_names,
+                        batch_size=batch_size,
+                        sequence_length=[encoder_sequence_length, decoder_sequence_length],
                     )
 
                     traced_output = traced_model(**prepared_inputs)
@@ -519,17 +522,20 @@ class ModelTesterMixin:
                     model_output = model(**prepared_inputs)
 
                     batch_size = input_ids.shape[0]
-                    from transformers import AutoModelForMultipleChoice
 
-                    if model_class in AutoModelForMultipleChoice._model_mapping.values():
-                        seq_length = input_ids.shape[2]
+                    if model_class in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
+                        sequence_length = input_ids.shape[2]
                         num_choices = input_ids.shape[1]
                     else:
-                        seq_length = input_ids.shape[1]
+                        sequence_length = input_ids.shape[1]
                         num_choices = -1
 
                     traced_model = symbolic_trace(
-                        model, input_names, batch_size=batch_size, seqlen=seq_length, num_choices=num_choices
+                        model,
+                        input_names,
+                        batch_size=batch_size,
+                        sequence_length=sequence_length,
+                        num_choices=num_choices,
                     )
                     traced_output = traced_model(**prepared_inputs)
 

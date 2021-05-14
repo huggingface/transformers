@@ -8,7 +8,13 @@ from torch.fx import GraphModule, Node, Proxy, Tracer
 from . import PreTrainedModel
 
 
-class CustomProxy(Proxy):
+class HFProxy(Proxy):
+    """
+    Proxy that is able to provide the proper ranks, shapes and boolean values during symbolic tracing by implementing
+    the dim, size and __bool__ methods. It can be easily extended by either adding new methods or extending the
+    existing ones.
+    """
+
     def __init__(self, node: Node, tracer: Optional[Tracer] = None):
         super().__init__(node, tracer=tracer)
         if hasattr(self, "tracer") and self.tracer is not None:
@@ -112,13 +118,20 @@ class CustomProxy(Proxy):
         return False
 
 
-class CustomTracer(Tracer):
-    def __init__(self, batch_size=1, seqlen=[128, 128], num_choices=-1):
+class HFTracer(Tracer):
+    """
+    Tracer that is able to symbolically trace models from the library (currently BERT, ELECTRA and T5). To do that, it
+    uses the HFProxy instead of the regular PyTorch torch.fx.Proxy.
+    """
+
+    def __init__(self, batch_size=1, sequence_length=[128, 128], num_choices=-1):
         super().__init__()
-        encoder_seqlen = seqlen[0] if isinstance(seqlen, (list, tuple)) else seqlen
-        decoder_seqlen = seqlen[1] if isinstance(seqlen, (list, tuple)) else -1
-        self.encoder_shape = [batch_size, encoder_seqlen]
-        self.decoder_shape = [batch_size, decoder_seqlen] if decoder_seqlen > 0 else list(self.encoder_shape)
+        encoder_sequence_length = sequence_length[0] if isinstance(sequence_length, (list, tuple)) else sequence_length
+        decoder_sequence_length = sequence_length[1] if isinstance(sequence_length, (list, tuple)) else -1
+        self.encoder_shape = [batch_size, encoder_sequence_length]
+        self.decoder_shape = (
+            [batch_size, decoder_sequence_length] if decoder_sequence_length > 0 else list(self.encoder_shape)
+        )
         self.num_choices = num_choices
         if self.num_choices > 0:
             self.encoder_shape[0] *= self.num_choices
@@ -126,7 +139,7 @@ class CustomTracer(Tracer):
         self.prev_module = None
 
     def proxy(self, node: Node):
-        return CustomProxy(node, self)
+        return HFProxy(node, self)
 
     def _insert_module_as_submodule(self, mod):
         """
@@ -192,7 +205,7 @@ def symbolic_trace(
     model: PreTrainedModel,
     input_names: Optional[List[str]] = None,
     batch_size: int = 1,
-    seqlen: Union[int, List[int]] = [128, 128],
+    sequence_length: Union[int, List[int]] = [128, 128],
     num_choices: int = -1,
 ) -> GraphModule:
 
@@ -200,14 +213,18 @@ def symbolic_trace(
     Performs symbolic tracing on the model.
 
     Args:
-        model (:obj:`PretrainedModel`): The model to trace.
-        input_names (:obj:`Optional[List[str]]`): The names of the inputs of the traced model.
-            If input_names is None, the model dummy_inputs keys are used instead.
-        batch_size (:obj:`int`): The batch size of the traced model inputs.
-        seqlen (:obj:`Union[int, List[int]]`): The sequence length of the traced model inputs.
-            For Seq2Seq models with differents sequence length between the encoder and the decoder inputs, seqlen must
-            be [encoder_sequence_length, decoder_sequence_length].
-        num_choices (:obj:`int`): The number of possible choices for MultipleChoice task.
+        model (:obj:`PretrainedModel`):
+            The model to trace.
+        input_names (:obj:`List[str]`, `optional`):
+            The names of the inputs of the traced model. If unset, model.dummy_inputs().keys() are used instead.
+        batch_size (:obj:`int`, `optional`, defaults to 1):
+            The batch size of the traced model inputs.
+        sequence_length (:obj:`int` or :obj:`List[int]]`):
+            The sequence length of the traced model inputs. For sequence-to-sequence models with different sequence
+            lengths between the encoder and the decoder inputs, this must be :obj:`[encoder_sequence_length,
+            decoder_sequence_length]`.
+        num_choices (:obj:`int`, `optional`, defaults to -1):
+            The number of possible choices for a multiple choice task.
 
     Returns:
         :obj:`torch.fx.GraphModule`: A GraphModule constructed by recording operations seen while tracing the model.
@@ -219,7 +236,7 @@ def symbolic_trace(
     # TODO: how to handle the case of the "return_dict" parameter.
     concrete_args = {p.name: p.default for p in sig.parameters.values() if p.name not in input_names}
 
-    tracer = CustomTracer(batch_size=batch_size, seqlen=seqlen, num_choices=num_choices)
+    tracer = HFTracer(batch_size=batch_size, sequence_length=sequence_length, num_choices=num_choices)
     traced_graph = tracer.trace(model, concrete_args=concrete_args)
     traced = torch.fx.GraphModule(model, traced_graph)
 
