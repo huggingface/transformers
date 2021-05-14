@@ -166,7 +166,6 @@ class FlaxModelTesterMixin:
     @is_pt_flax_cross_test
     def test_equivalence_flax_to_pt(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
                 # prepare inputs
@@ -208,7 +207,6 @@ class FlaxModelTesterMixin:
 
     def test_from_pretrained_save_pretrained(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
         for model_class in self.all_model_classes:
             if model_class.__name__ != "FlaxBertModel":
                 continue

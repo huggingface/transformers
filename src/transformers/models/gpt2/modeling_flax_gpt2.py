@@ -372,17 +372,19 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
             )
 
         if attention_mask is None:
-            assert position_ids is not None, "Cannot pass position_ids without attention_mask"
             if past_key_values is not None:
                 cache_length = next(
                     iter(v for k, v in flatten_dict(unfreeze(past_key_values)).items() if k[-1] != "cache_index")
                 ).shape[1]
-                attention_mask = jnp.zeros(input_ids.shape[:1] + (cache_length,))
-                attention_mask = lax.dynamic_update_slice(
-                    attention_mask, jnp.ones((input_ids.shape[0], input_ids.shape[1] + cache_shift)), (0, 0)
-                )
             else:
-                attention_mask = jnp.ones_like(input_ids)
+                cache_length = input_ids.shape[-1]
+
+            # Note that usually one would have to put 0's in the
+            # attention_mask for x > input_ids.shape[-1] and x < cache_length.
+            # But since GPT2 uses a causal mask, those positions are masked anyways.
+            # Thus we can create a single static attention_mask here,
+            # which is more efficient for compilation
+            attention_mask = jnp.ones(input_ids.shape[:1] + (cache_length,))
 
         # Handle any PRNG if needed
         rngs = {}

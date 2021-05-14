@@ -13,19 +13,29 @@
 # limitations under the License.
 
 
+import tempfile
 import unittest
 
 import numpy as np
 
-from transformers import GPT2Config, is_flax_available
-from transformers.testing_utils import require_flax, slow
+import transformers
+from transformers import GPT2Config, is_flax_available, is_torch_available
+from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 
 from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_flax_available():
     import jax.numpy as jnp
+    from jax import lax
+    from transformers.modeling_flax_pytorch_utils import (
+        convert_pytorch_state_dict_to_flax,
+        load_flax_weights_in_pytorch_model,
+    )
     from transformers.models.gpt2.modeling_flax_gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model
+
+if is_torch_available():
+    import torch
 
 
 class FlaxGPT2ModelTester:
@@ -138,6 +148,44 @@ class FlaxGPT2ModelTester:
         diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
+    def check_use_cache_generation(self, config, input_ids, attention_mask):
+        model = FlaxGPT2LMHeadModel(config)
+        max_length = 20
+        init_sequences = jnp.zeros(1, max_length)
+        attention_mask = jnp.ones_like(init_sequences)
+        prompt_ids = input_ids[0, :3]
+
+        past_key_values = model.init_cache(init_sequences.shape)
+
+        def first_pass(prompt_ids):
+            logits, cache = model(prompt_ids, past_key_values=past_key_values)[:2]
+            next_token = jnp.argmax(logits[:, -1:], axis=-1)
+            return next_token, cache
+
+        next_token, cache = first_pass(prompt_ids)
+        prompt_ids = lax.concatenate([prompt_ids, next_token], axis=-1)
+        init_sequences = lax.dynamic_update_slice(init_sequences, prompt_ids, (0, 0))
+
+        init_state = (jnp.array(0), init_sequences, next_token, cache)
+
+        def greedy_search_cond_fn(state):
+            cur_len, _, _, _ = state
+            return ~(cur_len == max_length)
+
+        def greedy_search_body_fn(state):
+            """Sampling loop state update."""
+            cur_len, sequences, current_token, cache = state
+            next_logits, next_cache = model(current_token, past_key_values=cache)[:2]
+            next_token = jnp.argmax(next_logits, axis=-1)
+
+            next_sequences = lax.dynamic_update_slice(sequences, next_token, (0, cur_len))
+
+            return cur_len + 1, next_sequences, next_token, next_cache
+
+        _, output_sequences, _, _ = lax.while_loop(greedy_search_cond_fn, greedy_search_body_fn, init_state)
+
+        print(output_sequences)
+
 
 @require_flax
 class FlaxGPT2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
@@ -158,6 +206,103 @@ class FlaxGPT2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
             self.model_tester.check_use_cache_forward_with_attn_mask(
                 model_class_name, config, input_ids, attention_mask
             )
+
+    # overwrite from common since `attention_mask` is different
+    @is_pt_flax_cross_test
+    def test_equivalence_pt_to_flax(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                # prepare inputs
+                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
+
+                # load corresponding PyTorch class
+                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
+                pt_model_class = getattr(transformers, pt_model_class_name)
+
+                batch_size, seq_length = pt_inputs["input_ids"].shape
+                rnd_start_indices = np.random.randint(0, seq_length - 1, size=(batch_size,))
+                for batch_idx, start_index in enumerate(rnd_start_indices):
+                    pt_inputs["attention_mask"][batch_idx, :start_index] = 0
+                    pt_inputs["attention_mask"][batch_idx, start_index:] = 1
+                    prepared_inputs_dict["attention_mask"][batch_idx, :start_index] = 0
+                    prepared_inputs_dict["attention_mask"][batch_idx, start_index:] = 1
+                pt_model = pt_model_class(config).eval()
+                fx_model = model_class(config, dtype=jnp.float32)
+
+                fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
+                fx_model.params = fx_state
+
+                with torch.no_grad():
+                    pt_outputs = pt_model(**pt_inputs).to_tuple()
+
+                fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
+                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+                for fx_output, pt_output in zip(fx_outputs, pt_outputs):
+                    self.assert_almost_equals(fx_output[:, -1], pt_output[:, -1].numpy(), 4e-2)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    pt_model.save_pretrained(tmpdirname)
+                    fx_model_loaded = model_class.from_pretrained(tmpdirname, from_pt=True)
+
+                fx_outputs_loaded = fx_model_loaded(**prepared_inputs_dict).to_tuple()
+                self.assertEqual(
+                    len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
+                )
+                for fx_output_loaded, pt_output in zip(fx_outputs_loaded, pt_outputs):
+                    self.assert_almost_equals(fx_output_loaded[:, -1], pt_output[:, -1].numpy(), 4e-2)
+
+    # overwrite from common since `attention_mask` is different
+    @is_pt_flax_cross_test
+    def test_equivalence_flax_to_pt(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                # prepare inputs
+                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
+
+                # load corresponding PyTorch class
+                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
+                pt_model_class = getattr(transformers, pt_model_class_name)
+
+                pt_model = pt_model_class(config).eval()
+                fx_model = model_class(config, dtype=jnp.float32)
+
+                pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
+                batch_size, seq_length = pt_inputs["input_ids"].shape
+                rnd_start_indices = np.random.randint(0, seq_length - 1, size=(batch_size,))
+                for batch_idx, start_index in enumerate(rnd_start_indices):
+                    pt_inputs["attention_mask"][batch_idx, :start_index] = 0
+                    pt_inputs["attention_mask"][batch_idx, start_index:] = 1
+                    prepared_inputs_dict["attention_mask"][batch_idx, :start_index] = 0
+                    prepared_inputs_dict["attention_mask"][batch_idx, start_index:] = 1
+
+                # make sure weights are tied in PyTorch
+                pt_model.tie_weights()
+
+                with torch.no_grad():
+                    pt_outputs = pt_model(**pt_inputs).to_tuple()
+
+                fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
+                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+                for fx_output, pt_output in zip(fx_outputs, pt_outputs):
+                    self.assert_almost_equals(fx_output[:, -1], pt_output[:, -1].numpy(), 4e-2)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    fx_model.save_pretrained(tmpdirname)
+                    pt_model_loaded = pt_model_class.from_pretrained(tmpdirname, from_flax=True)
+
+                with torch.no_grad():
+                    pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
+
+                self.assertEqual(
+                    len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch"
+                )
+                for fx_output, pt_output in zip(fx_outputs, pt_outputs_loaded):
+                    self.assert_almost_equals(fx_output[:, -1], pt_output[:, -1].numpy(), 4e-2)
 
     @slow
     def test_model_from_pretrained(self):
