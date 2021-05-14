@@ -34,8 +34,8 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
-    BaseModelOutputWithPoolingAndCrossAttentions,
+    BaseModelOutput,
+    BaseModelOutputWithPooling,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     SequenceClassifierOutput,
@@ -181,24 +181,6 @@ def add_code_sample_docstrings(
     return docstring_decorator
 
 
-# TO-CHECK: Vestige of the original code
-
-
-class BertLayerNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-12):
-        """Construct a layernorm module in the TF style (epsilon inside the square root)."""
-        super(BertLayerNorm, self).__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.bias = nn.Parameter(torch.zeros(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, x):
-        u = x.mean(-1, keepdim=True)
-        s = (x - u).pow(2).mean(-1, keepdim=True)
-        x = (x - u) / torch.sqrt(s + self.variance_epsilon)
-        return self.weight * x + self.bias
-
-
 class VisualBertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings and visual embeddings."""
 
@@ -213,9 +195,7 @@ class VisualBertEmbeddings(nn.Module):
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
 
-        # TO-CHECK
-        # self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)  # original eps=1e-12
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # TO-CHECK
@@ -241,14 +221,13 @@ class VisualBertEmbeddings(nn.Module):
 
     def forward(
         self,
-        input_ids=None,  # TO-CHECK
+        input_ids=None,
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
         visual_embeds=None,
         visual_token_type_ids=None,
         image_text_alignment=None,
-        # past_key_values_length=0, # TO-CHECK
     ):
         # TO-CHECK: Check if `confidence=None` and `visual_position_embeds=None` (or id) is needed.
         # `position_embeddings_visual` is not used in the original code.
@@ -290,7 +269,8 @@ class VisualBertEmbeddings(nn.Module):
             if image_text_alignment is not None:
 
                 # TO-DO: Find a way to handle this in a better way.
-                # image_text_alignment = Batch x image_length x alignment_number. Each element denotes the position of the word corresponding to the image feature. -1 is the padding value.
+                # image_text_alignment = Batch x image_length x alignment_number.
+                # Each element denotes the position of the word corresponding to the image feature. -1 is the padding value.
                 image_text_alignment_mask = (image_text_alignment != -1).long()
                 # Get rid of the -1.
                 image_text_alignment = image_text_alignment_mask * image_text_alignment
@@ -352,12 +332,12 @@ class VisualBertSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+
+        # TO-CHECK: Config doesn't have this, is this needed? Is it in PreTrainedConfig?
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             self.max_position_embeddings = config.max_position_embeddings
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
-
-        self.is_decoder = config.is_decoder
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -369,47 +349,14 @@ class VisualBertSelfAttention(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_value=None,
         output_attentions=False,
     ):
         mixed_query_layer = self.query(hidden_states)
 
-        # If this is instantiated as a cross-attention module, the keys
-        # and values come from an encoder; the attention mask needs to be
-        # such that the encoder's padding tokens are not attended to.
-        is_cross_attention = encoder_hidden_states is not None
-
-        if is_cross_attention and past_key_value is not None:
-            # reuse k,v, cross_attentions
-            key_layer = past_key_value[0]
-            value_layer = past_key_value[1]
-            attention_mask = encoder_attention_mask
-        elif is_cross_attention:
-            key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
-            value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
-            attention_mask = encoder_attention_mask
-        elif past_key_value is not None:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
-            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
-            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
-        else:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_layer, value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -454,8 +401,6 @@ class VisualBertSelfAttention(nn.Module):
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
-        if self.is_decoder:
-            outputs = outputs + (past_key_value,)
         return outputs
 
 
@@ -463,10 +408,7 @@ class VisualBertSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-
-        # TO-CHECK
-        # self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)  # original eps=1e-12
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
@@ -506,18 +448,12 @@ class VisualBertAttention(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_value=None,
         output_attentions=False,
     ):
         self_outputs = self.self(
             hidden_states,
             attention_mask,
             head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            past_key_value,
             output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
@@ -544,9 +480,7 @@ class VisualBertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        # TO-CHECK
-        # self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)  # original eps=1e-12
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
@@ -562,11 +496,6 @@ class VisualBertLayer(nn.Module):
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
         self.attention = VisualBertAttention(config)
-        self.is_decoder = config.is_decoder
-        self.add_cross_attention = config.add_cross_attention
-        if self.add_cross_attention:
-            assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
-            self.crossattention = VisualBertAttention(config)
         self.intermediate = VisualBertIntermediate(config)
         self.output = VisualBertOutput(config)
 
@@ -575,61 +504,22 @@ class VisualBertLayer(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_value=None,
         output_attentions=False,
     ):
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
             head_mask,
             output_attentions=output_attentions,
-            past_key_value=self_attn_past_key_value,
         )
         attention_output = self_attention_outputs[0]
 
-        # if decoder, the last output is tuple of self-attn cache
-        if self.is_decoder:
-            outputs = self_attention_outputs[1:-1]
-            present_key_value = self_attention_outputs[-1]
-        else:
-            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
-
-        cross_attn_present_key_value = None
-        if self.is_decoder and encoder_hidden_states is not None:
-            assert hasattr(
-                self, "crossattention"
-            ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
-
-            # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
-            cross_attention_outputs = self.crossattention(
-                attention_output,
-                attention_mask,
-                head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                cross_attn_past_key_value,
-                output_attentions,
-            )
-            attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
-
-            # add cross-attn cache to positions 3,4 of present_key_value tuple
-            cross_attn_present_key_value = cross_attention_outputs[-1]
-            present_key_value = present_key_value + cross_attn_present_key_value
+        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
         outputs = (layer_output,) + outputs
-
-        # if decoder, return the attn key/values as the last output
-        if self.is_decoder:
-            outputs = outputs + (present_key_value,)
 
         return outputs
 
@@ -650,38 +540,24 @@ class VisualBertEncoder(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_values=None,
-        use_cache=None,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
-        next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
-            past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
 
-                if use_cache:
-                    logger.warn(
-                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
-                        "`use_cache=False`..."
-                    )
-                    use_cache = False
-
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
+                        return module(*inputs, output_attentions)
 
                     return custom_forward
 
@@ -690,27 +566,18 @@ class VisualBertEncoder(nn.Module):
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
                 )
             else:
                 layer_outputs = layer_module(
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
                     output_attentions,
                 )
 
             hidden_states = layer_outputs[0]
-            if use_cache:
-                next_decoder_cache += (layer_outputs[-1],)
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
-                if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -720,19 +587,15 @@ class VisualBertEncoder(nn.Module):
                 v
                 for v in [
                     hidden_states,
-                    next_decoder_cache,
                     all_hidden_states,
                     all_self_attentions,
-                    all_cross_attentions,
                 ]
                 if v is not None
             )
-        return BaseModelOutputWithPastAndCrossAttentions(
+        return BaseModelOutput(
             last_hidden_state=hidden_states,
-            past_key_values=next_decoder_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
-            cross_attentions=all_cross_attentions,
         )
 
 
@@ -760,9 +623,7 @@ class VisualBertPredictionHeadTransform(nn.Module):
         else:
             self.transform_act_fn = config.hidden_act
 
-        # TO-CHECK
-        # self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -841,9 +702,7 @@ class VisualBertPreTrainedModel(PreTrainedModel):
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
-        # TO-CHECK
-        # elif isinstance(module, nn.LayerNorm):
-        elif isinstance(module, BertLayerNorm):
+        elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
@@ -1058,7 +917,7 @@ VISUAL_BERT_VQA_ADVANCED_SAMPLE = r"""
         >>> scores = outputs.logits
 """
 
-VISUAL_BERT_FLICKR_SAMPLE = r"""
+VISUAL_BERT_REGION_TO_PHRASE_SAMPLE = r"""
     Example::
         >>> # Assumption: `get_visual_embeddings(image)` gets the visual embeddings of the image in the batch.
         >>> from transformers import {tokenizer_class}, {model_class}
@@ -1072,10 +931,10 @@ VISUAL_BERT_FLICKR_SAMPLE = r"""
         >>> visual_embeds = get_visual_embeddings(image).unsqueeze(0)
         >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long) #example
         >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
-        >>> flickr_position = torch.ones((1, inputs["input_ids"].shape[-1]+visual_embeds.shape[-2]))
+        >>> region_to_phrase_position = torch.ones((1, inputs["input_ids"].shape[-1]+visual_embeds.shape[-2]))
 
         >>> inputs.update({{
-            "flickr_position": flickr_position,
+            "region_to_phrase_position": region_to_phrase_position,
             "visual_embeds": visual_embeds,
             "visual_token_type_ids": visual_token_type_ids,
             "visual_attention_mask": visual_attention_mask
@@ -1192,7 +1051,7 @@ class VisualBertModel(VisualBertPreTrainedModel):
 
         self.pooler = (
             VisualBertPooler(config) if add_pooling_layer else None
-        )  # TO-DO: Check if pooler is needed necessarily.
+        )  # TO-DO: Check if pooler is needed necessarily or optionally.
 
         self.bypass_transformer = config.bypass_transformer
 
@@ -1204,11 +1063,9 @@ class VisualBertModel(VisualBertPreTrainedModel):
 
         self.init_weights()  # self.apply(self.init_bert_weights) #Vestiges of old code
 
-    # TO-CHECK
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
 
-    # TO-CHECK
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
@@ -1222,12 +1079,12 @@ class VisualBertModel(VisualBertPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    @replace_return_docstrings(output_type=BaseModelOutputWithPoolingAndCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         tokenizer_checkpoint=_TOKENIZER_CHECKPOINT,
         checkpoint="gchhablani/visualbert-vqa-coco-pre",
-        output_type=BaseModelOutputWithPoolingAndCrossAttentions,
+        output_type=BaseModelOutputWithPooling,
         config_class="gchhablani/visualbert-vqa-coco-pre",
         code_sample=VISUAL_BERT_MODEL_SAMPLE,
     )
@@ -1243,10 +1100,6 @@ class VisualBertModel(VisualBertPreTrainedModel):
         visual_attention_mask=None,
         visual_token_type_ids=None,
         image_text_alignment=None,
-        # encoder_hidden_states=None,
-        # encoder_attention_mask=None,
-        # past_key_values=None,
-        # use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1257,11 +1110,6 @@ class VisualBertModel(VisualBertPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # if self.config.is_decoder:
-        #     use_cache = use_cache if use_cache is not None else self.config.use_cache
-        # else:
-        use_cache = False
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -1276,12 +1124,9 @@ class VisualBertModel(VisualBertPreTrainedModel):
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        # past_key_values_length
-        # past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length)), device=device)
-            # attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
+
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
@@ -1334,7 +1179,6 @@ class VisualBertModel(VisualBertPreTrainedModel):
             visual_embeds=visual_embeds,
             visual_token_type_ids=visual_token_type_ids,
             image_text_alignment=image_text_alignment,
-            # past_key_values_length=past_key_values_length,
         )
 
         if self.bypass_transformer and visual_embeds is not None:
@@ -1344,17 +1188,10 @@ class VisualBertModel(VisualBertPreTrainedModel):
             visual_embedding_output = embedding_output[:, text_length:, :]
 
             text_extended_attention_mask = extended_attention_mask[:, :, text_length, :text_length]
-            # text_encoder_hidden_states = encoder_hidden_states[:, :text_length, :]
-            # text_encoder_attention_mask = encoder_extended_attention_mask[:, :, :text_length, :text_length]
-
-            # TO-DO: Check how past-key values work and whether they are required to be modified and added here
 
             encoded_outputs = self.encoder(
                 text_embedding_output,
                 attention_mask=text_extended_attention_mask,
-                # encoder_hidden_states=text_encoder_hidden_states,
-                # encoder_attention_mask=text_encoder_attention_mask,
-                use_cache=use_cache,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -1369,10 +1206,6 @@ class VisualBertModel(VisualBertPreTrainedModel):
                 embedding_output,
                 attention_mask=extended_attention_mask,
                 head_mask=head_mask,
-                # encoder_hidden_states=encoder_hidden_states,
-                # encoder_attention_mask=encoder_extended_attention_mask,
-                # past_key_values=past_key_values,
-                use_cache=use_cache,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -1384,13 +1217,11 @@ class VisualBertModel(VisualBertPreTrainedModel):
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPoolingAndCrossAttentions(  # Changed
+        return BaseModelOutputWithPooling(  # Changed
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            past_key_values=encoder_outputs.past_key_values,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-            cross_attentions=encoder_outputs.cross_attentions,
         )
 
 
@@ -1412,10 +1243,6 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
 
         self.visual_bert = VisualBertModel(config)
         self.cls = VisualBertPreTrainingHeads(config)
-
-        # UNUSED
-        # self.cut_first = cut_first
-        # self.hard_cap_seq_len = hard_cap_seq_len
 
         self.init_weights()
 
@@ -1672,7 +1499,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
     """,
     VISUAL_BERT_START_DOCSTRING,
 )
-class VisualBertForVQA(VisualBertPreTrainedModel):
+class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1776,7 +1603,7 @@ class VisualBertForVQA(VisualBertPreTrainedModel):
     """,
     VISUAL_BERT_START_DOCSTRING,
 )
-class VisualBertForVQAAdvanced(VisualBertPreTrainedModel):
+class VisualBertForQuestionAnsweringAdvanced(VisualBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -1862,11 +1689,11 @@ class VisualBertForVQAAdvanced(VisualBertPreTrainedModel):
 @add_start_docstrings(
     """
     VisualBert Model with a sequence classification head on top (a dropout and a linear layer on top of the pooled
-    output) for NLVR task.
+    output) for Visual Reasoning e.g. for NLVR task.
     """,
     VISUAL_BERT_START_DOCSTRING,
 )
-class VisualBertForNLVR(VisualBertPreTrainedModel):
+class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -2000,18 +1827,19 @@ class FlickrAttention(nn.Module):
 
 @add_start_docstrings(
     """
-    VisualBert Model with a MLM head and an attention layer on top for Flickr30 Entities tasks.
+    VisualBert Model with a Masked Language Modeling head and an attention layer on top for Region-to-Phrase Alignment
+    e.g. for Flickr30 Entities task.
     """,
     VISUAL_BERT_START_DOCSTRING,
 )
-class VisualBertForFlickr(VisualBertPreTrainedModel):
+class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         self.visual_bert = VisualBertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.cls = VisualBertPreTrainingHeads(config)
-        self.flickr_attention = FlickrAttention(config)
+        self.attention = FlickrAttention(config)
 
         self.init_weights()
 
@@ -2022,7 +1850,7 @@ class VisualBertForFlickr(VisualBertPreTrainedModel):
         checkpoint="gchhablani/visualbert-vqa-coco-pre",
         output_type=SequenceClassifierOutput,
         config_class="gchhablani/visualbert-vqa-coco-pre",
-        code_sample=VISUAL_BERT_FLICKR_SAMPLE,
+        code_sample=VISUAL_BERT_REGION_TO_PHRASE_SAMPLE,
     )
     def forward(
         self,
@@ -2039,11 +1867,11 @@ class VisualBertForFlickr(VisualBertPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        flickr_position=None,
+        region_to_phrase_position=None,
         labels=None,
     ):
         r"""
-        flickr_position (:obj:`torch.LongTensor` of shape ``(batch_size, total_sequence_length)``, `optional`):
+        region_to_phrase_position (:obj:`torch.LongTensor` of shape ``(batch_size, total_sequence_length)``, `optional`):
             The positions depicting the position of the image embedding corresponding to the textual tokens.
 
         labels (:obj:`torch.LongTensor` of shape ``(batch_size, total_sequence_length, visual_sequence_length)``, `optional`):
@@ -2051,7 +1879,9 @@ class VisualBertForFlickr(VisualBertPreTrainedModel):
             outputs from the attention layer.
 
         """
-        assert flickr_position is not None, "`flickr_position` should not be None when using Flickr Model."
+        assert (
+            region_to_phrase_position is not None
+        ), "`region_to_phrase_position` should not be None when using Flickr Model."
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2074,18 +1904,18 @@ class VisualBertForFlickr(VisualBertPreTrainedModel):
         sequence_output = outputs[0]
         # pooled_output = outputs[1]
         # UNUSED
-        # entities_num = (flickr_position != -1).long().view(-1).sum(-1)
-        flickr_position_mask = (flickr_position != -1).long()
+        # entities_num = (region_to_phrase_position != -1).long().view(-1).sum(-1)
+        region_to_phrase_position_mask = (region_to_phrase_position != -1).long()
 
         # Make the -1 become 0
-        flickr_position = flickr_position * flickr_position_mask
+        region_to_phrase_position = region_to_phrase_position * region_to_phrase_position_mask
 
         # Selected_positions = batch x selected position x dim
         # TO-CHECK - If batched_index_select is needed
-        expanded_flickr_positions = flickr_position.unsqueeze(2).expand(
-            flickr_position.size(0), flickr_position.size(1), sequence_output.size(2)
+        expanded_region_to_phrase_positions = region_to_phrase_position.unsqueeze(2).expand(
+            region_to_phrase_position.size(0), region_to_phrase_position.size(1), sequence_output.size(2)
         )
-        selected_positions = sequence_output.gather(1, expanded_flickr_positions)
+        selected_positions = sequence_output.gather(1, expanded_region_to_phrase_positions)
 
         # Visual Features = batch x visual_feature_length x dim
         visual_features = sequence_output[
@@ -2093,7 +1923,7 @@ class VisualBertForFlickr(VisualBertPreTrainedModel):
         ]  # This will need separate image and visual masks.
         assert visual_features.size(1) == visual_attention_mask.size(1)
 
-        logits = self.flickr_attention(selected_positions, visual_features, visual_attention_mask)
+        logits = self.attention(selected_positions, visual_features, visual_attention_mask)
 
         loss = None
 

@@ -33,12 +33,12 @@ if is_torch_available():
 
     from transformers import (
         VisualBertConfig,
-        VisualBertForFlickr,
         VisualBertForMultipleChoice,
-        VisualBertForNLVR,
         VisualBertForPreTraining,
-        VisualBertForVQA,
-        VisualBertForVQAAdvanced,
+        VisualBertForQuestionAnswering,
+        VisualBertForQuestionAnsweringAdvanced,
+        VisualBertForRegionToPhraseAlignment,
+        VisualBertForVisualReasoning,
         VisualBertModel,
     )
     from transformers.models.visual_bert.modeling_visual_bert import VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST
@@ -248,7 +248,7 @@ class VisualBertModelTester:
         return config, input_dict
 
     def prepare_config_and_inputs_for_flickr(self):
-        flickr_position = torch.cat(
+        region_to_phrase_position = torch.cat(
             (
                 ids_tensor([self.batch_size, self.seq_length], self.visual_seq_length),
                 torch.ones(self.batch_size, self.visual_seq_length, dtype=torch.long, device=torch_device) * -1,
@@ -263,7 +263,7 @@ class VisualBertModelTester:
 
         config, input_dict = self.prepare_config_and_inputs_for_common()
 
-        input_dict.update({"flickr_position": flickr_position, "labels": flickr_labels})
+        input_dict.update({"region_to_phrase_position": region_to_phrase_position, "labels": flickr_labels})
         return config, input_dict
 
     def create_and_check_model(self, config, input_dict):
@@ -287,14 +287,14 @@ class VisualBertModelTester:
         )
 
     def create_and_check_for_vqa(self, config, input_dict):
-        model = VisualBertForVQA(config=config)
+        model = VisualBertForQuestionAnswering(config=config)
         model.to(torch_device)
         model.eval()
         result = model(**input_dict)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_for_vqa_advanced(self, config, input_dict):
-        model = VisualBertForVQAAdvanced(config=config)
+        model = VisualBertForQuestionAnsweringAdvanced(config=config)
         model.to(torch_device)
         model.eval()
         result = model(**input_dict)
@@ -310,14 +310,14 @@ class VisualBertModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
     def create_and_check_for_nlvr(self, config, input_dict):
-        model = VisualBertForNLVR(config=config)
+        model = VisualBertForVisualReasoning(config=config)
         model.to(torch_device)
         model.eval()
         result = model(**input_dict)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_for_flickr(self, config, input_dict):
-        model = VisualBertForFlickr(config=config)
+        model = VisualBertForRegionToPhraseAlignment(config=config)
         model.to(torch_device)
         model.eval()
         result = model(**input_dict)
@@ -333,10 +333,10 @@ class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
         (
             VisualBertModel,
             VisualBertForMultipleChoice,
-            VisualBertForNLVR,
-            VisualBertForFlickr,
-            VisualBertForVQA,
-            VisualBertForVQAAdvanced,
+            VisualBertForVisualReasoning,
+            VisualBertForRegionToPhraseAlignment,
+            VisualBertForQuestionAnswering,
+            VisualBertForQuestionAnsweringAdvanced,
             VisualBertForPreTraining,
         )
         if is_torch_available()
@@ -363,8 +363,8 @@ class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
                             .contiguous()
                         )
 
-        elif model_class == VisualBertForFlickr:
-            inputs_dict["flickr_position"] = torch.zeros(
+        elif model_class == VisualBertForRegionToPhraseAlignment:
+            inputs_dict["region_to_phrase_position"] = torch.zeros(
                 (self.model_tester.batch_size, self.model_tester.seq_length + self.model_tester.visual_seq_length),
                 dtype=torch.long,
                 device=torch_device,
@@ -386,7 +386,7 @@ class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
                 )
 
             # Flickr expects float labels
-            elif model_class == VisualBertForFlickr:
+            elif model_class == VisualBertForRegionToPhraseAlignment:
                 inputs_dict["labels"] = torch.ones(
                     (
                         self.model_tester.batch_size,
@@ -398,19 +398,19 @@ class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
                 )
 
             # VQA expects float labels
-            elif model_class == VisualBertForVQA:
+            elif model_class == VisualBertForQuestionAnswering:
                 inputs_dict["labels"] = torch.ones(
                     (self.model_tester.batch_size, self.model_tester.num_labels),
                     dtype=torch.float,
                     device=torch_device,
                 )
 
-            elif model_class == VisualBertForNLVR:
+            elif model_class == VisualBertForVisualReasoning:
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size), dtype=torch.long, device=torch_device
                 )
 
-            elif model_class == VisualBertForVQAAdvanced:
+            elif model_class == VisualBertForQuestionAnsweringAdvanced:
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length + self.model_tester.visual_seq_length),
                     dtype=torch.long,
@@ -820,7 +820,7 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_vqa(self):
-        model = VisualBertForVQA.from_pretrained("gchhablani/visualbert-vqa")
+        model = VisualBertForQuestionAnswering.from_pretrained("gchhablani/visualbert-vqa")
 
         input_ids = torch.tensor([1, 2, 3, 4, 5, 6]).reshape(1, -1)
         token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1]).reshape(1, -1)
@@ -851,7 +851,7 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_nlvr(self):
-        model = VisualBertForNLVR.from_pretrained("gchhablani/visualbert-nlvr2")
+        model = VisualBertForVisualReasoning.from_pretrained("gchhablani/visualbert-nlvr2")
 
         input_ids = torch.tensor([1, 2, 3, 4, 5, 6]).reshape(1, -1)
         token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1]).reshape(1, -1)

@@ -82,9 +82,6 @@ class VisualBertConfig(PretrainedConfig):
             Whether or not the model should bypass the transformer for the visual embeddings. If set to `True`, the
             model directly concatenates the visual embeddings from :class:`~transformers.VisualBertEmbeddings` with
             text output from transformers, and then pass it to a self-attention layer.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if ``config.is_decoder=True``.
 
 
         Example::
@@ -120,8 +117,6 @@ class VisualBertConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         bypass_transformer=False,
         # TO-DO: Check if the following parameters are needed and if yes, then whether they are to be documented.
-        # use_cache=True,
-        # is_encoder_decoder=False,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -142,6 +137,4 @@ class VisualBertConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
-        # self.use_cache = use_cache
         self.bypass_transformer = bypass_transformer
-        # self.is_encoder_decoder = is_encoder_decoder

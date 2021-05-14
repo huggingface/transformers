@@ -1,5 +1,5 @@
 .. 
-    Copyright 2020 The HuggingFace Team. All rights reserved.
+    Copyright 2021 The HuggingFace Team. All rights reserved.
 
     Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
     the License. You may obtain a copy of the License at
@@ -19,8 +19,8 @@ Overview
 The VisualBERT model was proposed in `VisualBERT: A Simple and Performant Baseline for Vision and Language
 <https://arxiv.org/pdf/1908.03557>`__ by Liunian Harold Li, Mark Yatskar, Da Yin, Cho-Jui Hsieh, Kai-Wei Chang.
 
-The model is a multi-modal (image+text) pre-trainded model trained with Masked Language Modeling on textual part, and
-Sentence-Image prediction task to predict whether two captions are matching for an image or not.
+The model is a multi-modal (vision-and-language) pre-trainded model trained with Masked Language Modeling on textual
+part, and Sentence-Image prediction task to predict whether two captions are matching for an image or not.
 
 The abstract from the paper is the following:
 
@@ -35,16 +35,39 @@ verbs and image regions corresponding to their arguments.*
 
 Tips:
 
-1. Most of the checkpoints provided work with the `VisualBertForPreTraining` configuration. Other models provided are
-   for down-stream tasks - VQA, VCR, NLVR2, Flickr. Hence, if not working on these downstream tasks, you should create
-   your own model or use one of these if it fits your needs.
-2. For the VCR task, the authors use a fine-tuned decoder for generating visual embeddings, for all the checkpoints. We
-   do not provide the detector and its weights as a part of the library, but it will be available in the research
-   projects, and the states can be loaded directly into the detector.
-3. For tokenization of text, you can use any of the `BertTokenizer`s, although the authors used `bert-base-uncased`.
+1. All the checkpoints are named in a way to depict whether these checkpoints are the `pretrained` checkpoints. The
+   visual embedding dimensions differ in each case. Here is a description of the configurations:
+   - visualbert-vqa-coco-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on CoCo dataset with masked
+     language modeling and sentence-image prediction tasks.
+   - visualbert-vqa-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on VQA dataset with masked
+     language modeling and sentence-image prediction tasks, after pre-training on CoCo dataset.
+   - visualbert-vqa: autoclass:: transformers.VisualBertForQuestionAnswering fine-tuned on VQA task, after pre-training
+     on CoCo and VQA dataset.
+   - visualbert-nlvr2-coco-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on CoCo dataset with
+     masked language modeling and sentence-image prediction tasks.
+   - visualbert-nlvr2-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on NLVR2 dataset with masked
+     language modeling and sentence-image prediction tasks, after pre-training on CoCo dataset.
+   - visualbert-nlvr2: autoclass:: transformers.VisualBertForVisualReasoning fine-tuned on NLVR2 task, after
+     pre-training on CoCo and NLVR2 dataset.
+   - visualbert-vcr-coco-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on CoCo dataset with masked
+     language modeling and sentence-image prediction tasks.
+   - visualbert-vcr-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on VCR dataset with masked
+     language modeling and sentence-image prediction tasks, after pre-training on CoCo dataset.
+   - visualbert-vcr: autoclass:: transformers.VisualBertForMultipleChoice fine-tuned on VCR task, after pre-training on
+     CoCo and VCR dataset.
 
-Note: More tips will be added, probably even a demo notebook too, on how to use a detector to generate your own visual
-embeddings soon, and use the VisualBERT model for fine-tuning on your task. :)
+2. Most of the checkpoints provided work with the `VisualBertForPreTraining` configuration. Other checkpoints provided
+   are for down-stream tasks - VQA, VCR, NLVR2. Hence, if you are not working on these downstream tasks, you should
+   create your own model and pre-train it or use one of these if it fits your needs.
+
+3. For the VCR task, the authors use a fine-tuned ResNet detector for generating visual embeddings, for all the
+   checkpoints. We do not provide the detector and its weights as a part of the package, but it will be available in
+   the research projects, and the states can be loaded directly into the detector provided.
+   
+4. For tokenization of text, you can use any of the `BertTokenizer`s, although the authors used `bert-base-uncased`.
+
+Note: More tips will be added, and a demo notebook on how to use a detector to generate your own visual embeddings, and
+use the VisualBERT model for fine-tuning on your task.
 
 VisualBertConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -66,17 +89,17 @@ VisualBertForPreTraining
     :members: forward
 
 
-VisualBertForVQA
+VisualBertForQuestionAnswering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.VisualBertForVQA
+.. autoclass:: transformers.VisualBertForQuestionAnswering
     :members: forward
 
 
-VisualBertForVQAAdvanced
+VisualBertForQuestionAnsweringAdvanced
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.VisualBertForVQAAdvanced
+.. autoclass:: transformers.VisualBertForQuestionAnsweringAdvanced
     :members: forward
 
 
@@ -87,15 +110,15 @@ VisualBertForMultipleChoice
     :members: forward
 
 
-VisualBertForNLVR
+VisualBertForVisualReasoning
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.VisualBertForNLVR
+.. autoclass:: transformers.VisualBertForVisualReasoning
     :members: forward
 
 
-VisualBertForFlickr
+VisualBertForRegionToPhraseAlignment
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.VisualBertForFlickr
+.. autoclass:: transformers.VisualBertForRegionToPhraseAlignment
     :members: forward

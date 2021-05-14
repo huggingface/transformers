@@ -257,7 +257,7 @@ from ..tapas.modeling_tapas import (
     TapasModel,
 )
 from ..transfo_xl.modeling_transfo_xl import TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
-from ..visual_bert.modeling_visual_bert import VisualBertForMultipleChoice, VisualBertForPreTraining, VisualBertModel
+from ..visual_bert.modeling_visual_bert import VisualBertForPreTraining, VisualBertModel
 from ..vit.modeling_vit import ViTForImageClassification, ViTModel
 from ..wav2vec2.modeling_wav2vec2 import Wav2Vec2ForMaskedLM, Wav2Vec2Model
 from ..xlm.modeling_xlm import (
@@ -703,7 +703,6 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
-        (VisualBertConfig, VisualBertForMultipleChoice),
         (BigBirdConfig, BigBirdForMultipleChoice),
         (ConvBertConfig, ConvBertForMultipleChoice),
         (CamembertConfig, CamembertForMultipleChoice),

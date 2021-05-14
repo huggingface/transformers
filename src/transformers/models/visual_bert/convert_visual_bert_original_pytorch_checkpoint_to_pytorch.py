@@ -24,10 +24,10 @@ import torch
 from transformers import (
     VisualBertConfig,
     VisualBertForMultipleChoice,
-    VisualBertForNLVR,
     VisualBertForPreTraining,
-    VisualBertForVQA,
-    VisualBertForVQAAdvanced,
+    VisualBertForQuestionAnswering,
+    VisualBertForQuestionAnsweringAdvanced,
+    VisualBertForVisualReasoning,
 )
 from transformers.utils import logging
 
@@ -128,11 +128,11 @@ def convert_visual_bert_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     if model_type == "pretraining":
         model = VisualBertForPreTraining(config)
     elif model_type == "vqa":
-        model = VisualBertForVQA(config)
+        model = VisualBertForQuestionAnswering(config)
     elif model_type == "vqa_advanced":
-        model = VisualBertForVQAAdvanced(config)
+        model = VisualBertForQuestionAnsweringAdvanced(config)
     elif model_type == "nlvr":
-        model = VisualBertForNLVR(config)
+        model = VisualBertForVisualReasoning(config)
     elif model_type == "multichoice":
         model = VisualBertForMultipleChoice(config)
 
