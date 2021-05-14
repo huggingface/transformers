@@ -264,10 +264,8 @@ def is_torch_cuda_available():
 
 
 _torch_fx_available = False
-if is_torch_available():
-    import torch
-
-    _torch_fx_available = version.parse(torch.__version__) >= version.parse("1.8")
+if _torch_available:
+    _torch_fx_available = version.parse(_torch_version) >= version.parse("1.8")
 
 
 def is_torch_fx_available():
