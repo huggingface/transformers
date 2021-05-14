@@ -522,7 +522,6 @@ if is_torch_available():
             "PretrainedBartModel",
         ]
     )
-
     _import_structure["models.bert"].extend(
         [
             "BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
