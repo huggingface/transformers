@@ -120,12 +120,6 @@ def parse_args():
         help="Total number of training steps to perform. If provided, overrides num_train_epochs.",
     )
     parser.add_argument(
-        "--gradient_accumulation_steps",
-        type=int,
-        default=1,
-        help="Number of updates steps to accumulate before performing a backward/update pass.",
-    )
-    parser.add_argument(
         "--num_warmup_steps", type=int, default=0, help="Number of steps for the warmup in the lr scheduler."
     )
     parser.add_argument("--output_dir", type=str, default=None, help="Where to store the final model.")
@@ -457,12 +451,12 @@ def main():
     logger.info(f"===== Starting training ({num_epochs} epochs) =====")
     train_time = 0
 
+    # make sure weights are replicated on each device
+    state = replicate(state)
+
     for epoch in range(1, num_epochs + 1):
         logger.info(f"Epoch {epoch}")
         logger.info("  Training...")
-
-        # make sure weights are replicated on each device
-        state = replicate(state)
 
         train_start = time.time()
         train_metrics = []
@@ -500,6 +494,9 @@ def main():
             labels = batch.pop("labels")
             predictions = eval_step(state, batch)
             metric.add_batch(predictions=predictions, references=labels)
+
+            # make sure weights are replicated on each device
+            state = replicate(state)
 
         eval_metric = metric.compute()
         logger.info(f"    Done! Eval metrics: {eval_metric}")
