@@ -18,7 +18,6 @@
 import math
 import random
 from dataclasses import dataclass
-from collections import OrderedDict
 from typing import Dict, List, Optional, Tuple
 
 import torch
@@ -257,7 +256,7 @@ class FrozenBatchNorm2d(nn.Module):
         return x * scale + bias
 
 
-def replace_batch_normalization(m, name=""):
+def replace_batch_norm(m, name=""):
     for attr_str in dir(m):
         target_attr = getattr(m, attr_str)
         if isinstance(target_attr, torch.nn.BatchNorm2d):
@@ -269,7 +268,7 @@ def replace_batch_normalization(m, name=""):
             frozen.running_var.data.copy_(bn.running_var)
             setattr(m, attr_str, frozen)
     for n, ch in m.named_children():
-        replace_batch_normalization(ch, n)
+        replace_batch_norm(ch, n)
 
 
 class TimmBackbone(nn.Module):
@@ -286,13 +285,13 @@ class TimmBackbone(nn.Module):
         kwargs = {}
         if dilation:
             kwargs["output_stride"] = 16
-        backbone = create_model(name, pretrained=True, features_only=True, **kwargs)
+        backbone = create_model(name, pretrained=True, features_only=True, out_indices=(1, 2, 3, 4), **kwargs)
         # replace batch norm by frozen batch norm
         with torch.no_grad():
-            replace_batch_normalization(backbone)
+            replace_batch_norm(backbone)
         self.body = backbone
         self.return_intermediate_layers = return_intermediate_layers
-        self.num_channels = self.body.feature_info.channels(-1)
+        self.intermediate_channel_sizes = self.body.feature_info.channels()
 
         for name, parameter in self.body.named_parameters():
             if not train_backbone or "layer2" not in name and "layer3" not in name and "layer4" not in name:
@@ -1133,12 +1132,14 @@ class DetrModel(DetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = TimmBackbone(config.backbone, config.train_backbone, config.dilation, config.return_intermediate_layers)
+        backbone = TimmBackbone(
+            config.backbone, config.train_backbone, config.dilation, config.return_intermediate_layers
+        )
         position_embeddings = build_position_encoding(config)
         self.backbone = Joiner(backbone, position_embeddings)
 
         # Create projection layer
-        self.input_projection = nn.Conv2d(backbone.num_channels, config.d_model, kernel_size=1)
+        self.input_projection = nn.Conv2d(backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1)
 
         self.query_position_embeddings = nn.Embedding(config.num_queries, config.d_model)
 
@@ -1442,7 +1443,11 @@ class DetrForSegmentation(DetrPreTrainedModel):
 
         # segmentation head
         hidden_size, number_of_heads = config.d_model, config.encoder_attention_heads
-        self.mask_head = DetrMaskHeadSmallConv(hidden_size + number_of_heads, [1024, 512, 256], hidden_size)
+        intermediate_channel_sizes = self.detr.model.backbone[0].intermediate_channel_sizes
+
+        self.mask_head = DetrMaskHeadSmallConv(
+            hidden_size + number_of_heads, intermediate_channel_sizes[::-1][-3:], hidden_size
+        )
 
         self.init_weights()
 
@@ -1574,7 +1579,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
         # bbox_mask is of shape (batch_size, num_queries, number_of_attention_heads in bbox_attention, height/32, width/32)
         bbox_mask = self.bbox_attention(sequence_output, memory, mask=~mask)
 
-        seg_masks = self.mask_head(projected_feature_map, bbox_mask, [features[3][0], features[2][0], features[1][0]])
+        seg_masks = self.mask_head(projected_feature_map, bbox_mask, [features[2][0], features[1][0], features[0][0]])
 
         pred_masks = seg_masks.view(batch_size, self.detr.config.num_queries, seg_masks.shape[-2], seg_masks.shape[-1])
 

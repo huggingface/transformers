@@ -378,9 +378,6 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config.backbone = "tf_mobilenetv3_small_075"
 
         for model_class in self.all_model_classes:
-            # the mask head of DetrForSegmentation does not support any timm backbone
-            if model_class.__name__ == "DetrForSegmentation":
-                continue
             model = model_class(config)
             model.to(torch_device)
             model.eval()

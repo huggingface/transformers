@@ -98,13 +98,11 @@ Tips:
   `num_boxes` variable in the `SetCriterion` class of `modeling_detr.py`. When training on multiple nodes, this should
   be set to the average number of target boxes across all nodes, as can be seen in the original implementation `here
   <https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/models/detr.py#L227-L232>`__.
-- :class:`~transformers.DetrForObjectDetection` can be initialized with any convolutional backbone available in the
-  `timm library <https://github.com/rwightman/pytorch-image-models>`__. Initializing with a MobileNet backbone for
-  example can be done by setting the :obj:`backbone` attribute of :class:`~transformers.DetrConfig` to
-  :obj:`"tf_mobilenetv3_small_075"`, and then initializing :class:`~transformers.DetrForObjectDetection` with that
-  config. Note that :class:`~transformers.DetrForSegmentation` does not support any timm backbone, as the mask head
-  depends on the intermediate feature maps from a ResNet. One would need to update the mask head in order to work with
-  a different backbone.
+- :class:`~transformers.DetrForObjectDetection` and :class:`~transformers.DetrForSegmentation` can be initialized
+  with any convolutional backbone available in the `timm library
+  <https://github.com/rwightman/pytorch-image-models>`__. Initializing with a MobileNet backbone for example can be
+  done by setting the :obj:`backbone` attribute of :class:`~transformers.DetrConfig` to
+  :obj:`"tf_mobilenetv3_small_075"`, and then initializing the model with that config.
 - DETR resizes the input images such that the shortest side is at least a certain amount of pixels while the longest is
   at most 1333 pixels. At training time, scale augmentation is used such that the shortest side is randomly set to at
   least 480 and at most 800 pixels. At inference time, the shortest side is set to 800. One can use
