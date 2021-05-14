@@ -138,7 +138,7 @@ class FlaxModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes[
-            :-2
+            :-1
         ]:  # TODO(Patrick, Daniel) - ForSeqClassification and QA doesn't work yet -> need to investigate
             with self.subTest(model_class.__name__):
                 # prepare inputs
@@ -183,7 +183,7 @@ class FlaxModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes[
-            :-2
+            :-1
         ]:  # TODO(Patrick, Daniel) - ForSeqClassification and QA doesn't work yet -> need to investigate
             with self.subTest(model_class.__name__):
                 # prepare inputs
