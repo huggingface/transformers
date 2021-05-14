@@ -1104,7 +1104,6 @@ if is_tf_available():
             "TFAlbertPreTrainedModel",
         ]
     )
-
     _import_structure["models.auto"].extend(
         [
             "TF_MODEL_FOR_CAUSAL_LM_MAPPING",
