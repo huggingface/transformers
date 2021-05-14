@@ -16,12 +16,12 @@
 
 
 import math
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
-from copy import deepcopy
 from torch import nn
 from torch.nn import CrossEntropyLoss, KLDivLoss, LogSoftmax
 
@@ -111,9 +111,7 @@ class VisualBertEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(
-            config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id
-        )
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
@@ -133,8 +131,12 @@ class VisualBertEmbeddings(nn.Module):
         self.visual_position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
 
         if config.special_visual_initialize:
-            self.visual_token_type_embeddings.weight = torch.nn.Parameter(deepcopy(self.token_type_embeddings.weight.data), requires_grad=True)
-            self.visual_position_embeddings.weight = torch.nn.Parameter(deepcopy(self.position_embeddings.weight.data), requires_grad=True)
+            self.visual_token_type_embeddings.weight = torch.nn.Parameter(
+                deepcopy(self.token_type_embeddings.weight.data), requires_grad=True
+            )
+            self.visual_position_embeddings.weight = torch.nn.Parameter(
+                deepcopy(self.position_embeddings.weight.data), requires_grad=True
+            )
 
         self.visual_projection = nn.Linear(config.visual_embedding_dim, config.hidden_size)
 
@@ -156,7 +158,7 @@ class VisualBertEmbeddings(nn.Module):
         seq_length = input_shape[1]
 
         if position_ids is None:
-            position_ids = self.position_ids[:, : seq_length]
+            position_ids = self.position_ids[:, :seq_length]
 
         # TO-CHECK: FROM ORIGINAL CODE
         # if input_ids is not None:
@@ -181,7 +183,9 @@ class VisualBertEmbeddings(nn.Module):
 
         if visual_embeds is not None:
             if visual_token_type_ids is None:
-                visual_token_type_ids = torch.ones(visual_embeds.size()[:-1], dtype=torch.long, device=self.position_ids.device)
+                visual_token_type_ids = torch.ones(
+                    visual_embeds.size()[:-1], dtype=torch.long, device=self.position_ids.device
+                )
 
             visual_embeds = self.visual_projection(visual_embeds)
             visual_token_type_embeddings = self.visual_token_type_embeddings(visual_token_type_ids)
@@ -731,8 +735,8 @@ VISUAL_BERT_INPUTS_DOCSTRING = r"""
         visual_token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, visual_seq_length)`, `optional`):
             Segment token indices to indicate different portions of the visual embeds.
 
-            `What are token type IDs? <../glossary.html#token-type-ids>`_
-            The authors of VisualBERT set the `visual_token_type_ids` to `1` for all tokens.
+            `What are token type IDs? <../glossary.html#token-type-ids>`_ The authors of VisualBERT set the
+            `visual_token_type_ids` to `1` for all tokens.
 
         image_text_alignment (:obj:`torch.LongTensor` of shape :obj:`(batch_size, visual_seq_length, alignment_number)`, `optional`):
             Image-Text alignment uses to decide the position IDs of the visual embeddings.
@@ -1034,7 +1038,9 @@ class VisualBertModel(VisualBertPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        assert visual_embeds is not None, f"`visual_embeds` can not be of type {type(visual_embeds)} when using a VisualBert Model."
+        assert (
+            visual_embeds is not None
+        ), f"`visual_embeds` can not be of type {type(visual_embeds)} when using a VisualBert Model."
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
@@ -1317,9 +1323,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
             :obj:`input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        num_choices = (
-            input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-        )
+        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
         attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
@@ -1440,7 +1444,9 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # TO-CHECK
-        assert attention_mask.sum(1) >= 2, "The text attention mask in `VisualBertForQuestionAnswering` must have atleast two tokens to attend to."
+        assert (
+            attention_mask.sum(1) >= 2
+        ), "The text attention mask in `VisualBertForQuestionAnswering` must have atleast two tokens to attend to."
         # Get the index of the last text token
         index_to_gather = attention_mask.sum(1) - 2  # as in original code
 

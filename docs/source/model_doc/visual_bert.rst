@@ -33,36 +33,14 @@ verbs and image regions corresponding to their arguments.*
 
 Tips:
 
-1. All the checkpoints are named in a way to depict whether these checkpoints are the `pretrained` checkpoints. The
-   visual embedding dimensions differ in each case. Here is a decription of the checkpoints:
-   - visualbert-vqa-coco-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on CoCo dataset with masked
-     language modeling and sentence-image prediction tasks.
-   - visualbert-vqa-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on VQA dataset with masked
-     language modeling and sentence-image prediction tasks, after pre-training on CoCo dataset.
-   - visualbert-vqa: autoclass:: transformers.VisualBertForQuestionAnswering fine-tuned on VQA task, after pre-training
-     on CoCo and VQA dataset.
-   - visualbert-nlvr2-coco-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on CoCo dataset with
-     masked language modeling and sentence-image prediction tasks.
-   - visualbert-nlvr2-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on NLVR2 dataset with masked
-     language modeling and sentence-image prediction tasks, after pre-training on CoCo dataset.
-   - visualbert-nlvr2: autoclass:: transformers.VisualBertForVisualReasoning fine-tuned on NLVR2 task, after
-     pre-training on CoCo and NLVR2 dataset.
-   - visualbert-vcr-coco-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on CoCo dataset with masked
-     language modeling and sentence-image prediction tasks.
-   - visualbert-vcr-pre: autoclass:: transformers.VisualBertForPreTraining pre-trained on VCR dataset with masked
-     language modeling and sentence-image prediction tasks, after pre-training on CoCo dataset.
-   - visualbert-vcr: autoclass:: transformers.VisualBertForMultipleChoice fine-tuned on VCR task, after pre-training on
-     CoCo and VCR dataset.
+1. Most of the checkpoints provided work with the `VisualBertForPreTraining` configuration. Other checkpoints provided
+   are the fine-tuning checkpoints for down-stream tasks - VQA ('visualbert-vqa'), VCR ('visualbert-vcr'), NLVR2
+   ('visualbert-nlvr2'). Hence, if you are not working on these downstream tasks, it is recommended that you use the
+   pretrained checkpoints.
 
-2. Most of the checkpoints provided work with the `VisualBertForPreTraining` configuration. Other checkpoints provided
-   are for down-stream tasks - VQA, VCR, NLVR2. Hence, if you are not working on these downstream tasks, you should
-   create your own model and pre-train it or use one of these if it fits your needs.
-
-3. For the VCR task, the authors use a fine-tuned ResNet detector for generating visual embeddings, for all the
-   checkpoints. We do not provide the detector and its weights as a part of the package, but it will be available in
-   the research projects, and the states can be loaded directly into the detector provided.
-
-4. For tokenization of text, you can use any of the `BertTokenizer`s, although the authors used `bert-base-uncased`.
+2. For the VCR task, the authors use a fine-tuned detector for generating visual embeddings, for all the checkpoints.
+   We do not provide the detector and its weights as a part of the package, but it will be available in the research
+   projects, and the states can be loaded directly into the detector provided.
 
 Note: More tips will be added, and a demo notebook on how to use a detector to generate your own visual embeddings, and
 use the VisualBERT model for fine-tuning on your task.
@@ -70,18 +48,21 @@ use the VisualBERT model for fine-tuning on your task.
 Usage
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-VisualBERT is a multi-modal vision and language model. It can be used for visual question answering, multiple choice, visual reasoning
-and region-to-phrase correspondence tasks. VisulBERT uses a BERT-like transformer to prepare embeddings for image-text pairs. 
-Both the text and visual features are then projected to a latent space with identical dimension.
+VisualBERT is a multi-modal vision and language model. It can be used for visual question answering, multiple choice,
+visual reasoning and region-to-phrase correspondence tasks. VisulBERT uses a BERT-like transformer to prepare
+embeddings for image-text pairs. Both the text and visual features are then projected to a latent space with identical
+dimension.
 
-To feed images to the model, each image is passed through a pre-trained object detector and the regions and the bounding boxes are extracted. 
-The authors use the features generated after passing these regions through a pre-trained CNN like ResNet as visual embeddings. They also add
-absolute position embeddings, and feed the resulting sequence of vectors to a standard BERT model. The text input is concatenated in the front
-of the visual embeddings in the embedding layer, and is expected to be bound by [CLS] and a [SEP] tokens, as in BERT. The segment IDs must 
-also be set appropriately for the textual and visual parts. 
+To feed images to the model, each image is passed through a pre-trained object detector and the regions and the
+bounding boxes are extracted. The authors use the features generated after passing these regions through a pre-trained
+CNN like ResNet as visual embeddings. They also add absolute position embeddings, and feed the resulting sequence of
+vectors to a standard BERT model. The text input is concatenated in the front of the visual embeddings in the embedding
+layer, and is expected to be bound by [CLS] and a [SEP] tokens, as in BERT. The segment IDs must also be set
+appropriately for the textual and visual parts.
 
-The :class:`~transformers.BertTokenizer` is used to encode the text. A custom detector/feature extractor must be used to get the visual embeddings.
-The following example shows how to get the last hidden state using :class:`~transformers.VisualBertModel`:
+The :class:`~transformers.BertTokenizer` is used to encode the text. A custom detector/feature extractor must be used
+to get the visual embeddings. The following example shows how to get the last hidden state using
+:class:`~transformers.VisualBertModel`:
 
 .. code-block::
 

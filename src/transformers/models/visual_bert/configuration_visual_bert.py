@@ -83,9 +83,9 @@ class VisualBertConfig(PretrainedConfig):
             the model directly concatenates the visual embeddings from :class:`~transformers.VisualBertEmbeddings` with
             text output from transformers, and then pass it to a self-attention layer.
         special_visual_initialize (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not the visual token type and position type embedding weights should be initialized the same as the textual
-            token type and positive type embeddings. When set to :obj:`True`, the weights of the textual token type and position
-            type embeddings are copied to the respective visual embedding layers.
+            Whether or not the visual token type and position type embedding weights should be initialized the same as
+            the textual token type and positive type embeddings. When set to :obj:`True`, the weights of the textual
+            token type and position type embeddings are copied to the respective visual embedding layers.
 
 
         Example::
