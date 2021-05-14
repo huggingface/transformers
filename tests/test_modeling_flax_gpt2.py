@@ -24,6 +24,7 @@ from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_
 
 
 if is_flax_available():
+    import jax.numpy as jnp
     from transformers.models.gpt2.modeling_flax_gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model
 
 
@@ -107,18 +108,34 @@ class FlaxGPT2ModelTester:
         max_decoder_length = 20
         model = model_class_name(config)
 
-        #        attention_mask[:, -1] = 1
-        attention_mask[:, :] = 1
+        past_key_values = model.init_cache(input_ids.shape[0], max_decoder_length)
+        outputs_cache = model(input_ids[:, :-1], past_key_values=past_key_values)
+        outputs_cache_next = model(input_ids[:, -1:], past_key_values=outputs_cache.past_key_values)
+
+        outputs = model(input_ids)
+
+        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
+
+    def check_use_cache_forward_with_attn_mask(self, model_class_name, config, input_ids, attention_mask):
+        max_decoder_length = 20
+        model = model_class_name(config)
+
+        attention_mask_cache = jnp.concatenate(
+            [attention_mask, jnp.zeros((attention_mask.shape[0], max_decoder_length - attention_mask.shape[1]))],
+            axis=-1,
+        )
 
         past_key_values = model.init_cache(input_ids.shape[0], max_decoder_length)
-        outputs_cache = model(
-            input_ids[:, :-1], attention_mask=attention_mask[:, :-1], past_key_values=past_key_values
+
+        outputs_cache = model(input_ids[:, :-1], attention_mask=attention_mask_cache, past_key_values=past_key_values)
+        outputs_cache_next = model(
+            input_ids[:, -1:], past_key_values=outputs_cache.past_key_values, attention_mask=attention_mask_cache
         )
-        outputs_cache_next = model(input_ids[:, -1:], past_key_values=outputs_cache.past_key_values)
 
         outputs = model(input_ids, attention_mask=attention_mask)
 
-        diff = np.max(np.abs((outputs_cache_next[0][0, -1, :5] - outputs[0][0, -1, :5])))
+        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
 
@@ -134,6 +151,13 @@ class FlaxGPT2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
         for model_class_name in self.all_model_classes:
             config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
             self.model_tester.check_use_cache_forward(model_class_name, config, input_ids, attention_mask)
+
+    def test_use_cache_forward_with_attn_mask(self):
+        for model_class_name in self.all_model_classes:
+            config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+            self.model_tester.check_use_cache_forward_with_attn_mask(
+                model_class_name, config, input_ids, attention_mask
+            )
 
     @slow
     def test_model_from_pretrained(self):

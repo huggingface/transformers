@@ -124,7 +124,7 @@ class FlaxGPT2Attention(nn.Module):
         self.c_attn = FlaxConv1D(features=3 * self.embed_dim, dtype=self.dtype)
         self.c_proj = FlaxConv1D(self.embed_dim, dtype=self.dtype)
         self.resid_dropout = nn.Dropout(rate=config.resid_pdrop)
-        self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="i4"))
+        self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
 
     def _split_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.num_heads, self.head_dim))
@@ -133,7 +133,7 @@ class FlaxGPT2Attention(nn.Module):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.embed_dim,))
 
     @nn.compact
-    def _append_cache(self, key, value, query, combined_mask):
+    def _append_cache(self, key, value, query, attention_mask):
         # detect if we're initializing by absence of existing cache data.
         is_initialized = self.has_variable("cache", "cached_key")
         cached_key = self.variable("cache", "cached_key", jnp.zeros, key.shape, key.dtype)
@@ -166,8 +166,8 @@ class FlaxGPT2Attention(nn.Module):
                 jnp.arange(max_length) < cur_index + num_updated_cache_vectors,
                 tuple(batch_dims) + (1, num_updated_cache_vectors, max_length),
             )
-            combined_mask = combine_masks(combined_mask, pad_mask)
-        return key, value, combined_mask
+            attention_mask = combine_masks(pad_mask, attention_mask)
+        return key, value, attention_mask
 
     def __call__(
         self,
@@ -187,16 +187,17 @@ class FlaxGPT2Attention(nn.Module):
         query_length, key_length = query.shape[1], key.shape[1]
 
         if self.has_variable("cache", "cached_key"):
-            src_mask_length = self.variables["cache"]["cached_key"].shape[1]
             mask_shift = self.variables["cache"]["cache_index"]
+            max_decoder_length = self.variables["cache"]["cached_key"].shape[1]
+            causal_mask = self.causal_mask[:, :, mask_shift : mask_shift + query_length, :max_decoder_length]
         else:
-            src_mask_length = key_length
-            mask_shift = 0
+            causal_mask = self.causal_mask[:, :, :query_length, :key_length]
 
-        combined_mask = self.causal_mask[:, :, mask_shift : mask_shift + query_length, :src_mask_length]
-        if attention_mask is not None:
-            attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -1))
-            combined_mask = combine_masks(combined_mask, attention_mask, dtype="i4")
+        batch_size = hidden_states.shape[0]
+        causal_mask = jnp.broadcast_to(causal_mask, (batch_size,) + causal_mask.shape[1:])
+
+        attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape)
+        attention_mask = combine_masks(attention_mask, causal_mask)
 
         dropout_rng = None
         if not deterministic and self.config.attn_pdrop > 0.0:
@@ -205,12 +206,12 @@ class FlaxGPT2Attention(nn.Module):
         # During fast autoregressive decoding, we feed one position at a time,
         # and cache the keys and values step by step.
         if use_cache:
-            key, value, combined_mask = self._append_cache(key, value, query, combined_mask)
+            key, value, attention_mask = self._append_cache(key, value, query, attention_mask)
 
         attention_bias = lax.select(
-            combined_mask > 0,
-            jnp.full(combined_mask.shape, 0.0).astype(self.dtype),
-            jnp.full(combined_mask.shape, -1e4).astype(self.dtype),
+            attention_mask > 0,
+            jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
+            jnp.full(attention_mask.shape, -1e4).astype(self.dtype),
         )
 
         attn_output = dot_product_attention(
@@ -371,7 +372,17 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
             )
 
         if attention_mask is None:
-            attention_mask = jnp.ones_like(input_ids)
+            assert position_ids is not None, "Cannot pass position_ids without attention_mask"
+            if past_key_values is not None:
+                cache_length = next(
+                    iter(v for k, v in flatten_dict(unfreeze(past_key_values)).items() if k[-1] != "cache_index")
+                ).shape[1]
+                attention_mask = jnp.zeros(input_ids.shape[:1] + (cache_length,))
+                attention_mask = lax.dynamic_update_slice(
+                    attention_mask, jnp.ones((input_ids.shape[0], input_ids.shape[1] + cache_shift)), (0, 0)
+                )
+            else:
+                attention_mask = jnp.ones_like(input_ids)
 
         # Handle any PRNG if needed
         rngs = {}
