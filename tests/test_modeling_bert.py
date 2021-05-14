@@ -439,6 +439,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = (BertLMHeadModel,) if is_torch_available() else ()
+    fx_ready_model_classes = all_model_classes
     test_sequence_classification_problem_types = True
 
     # special case for ForPreTraining model
