@@ -44,7 +44,7 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class RoFormerTokenizer(PreTrainedTokenizer):
     r"""
-    Construct a RoFormer tokenizer. Based on `Jieba <https://pypi.org/project/jieba/>`.
+    Construct a RoFormer tokenizer. Based on `Rust Jieba <https://pypi.org/project/rjieba/>`.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
@@ -145,7 +145,7 @@ class RoFormerTokenizer(PreTrainedTokenizer):
             import rjieba
         except ImportError:
             raise ImportError(
-                "You need to install jieba to use RoFormerTokenizer."
+                "You need to install rjieba to use RoFormerTokenizer."
                 "See https://pypi.org/project/rjieba/ for installation."
             )
         self.jieba = rjieba

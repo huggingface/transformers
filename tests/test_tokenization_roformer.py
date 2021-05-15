@@ -119,7 +119,7 @@ class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         import rjieba
                     except ImportError:
                         raise ImportError(
-                            "You need to install jieba to use RoFormerTokenizer."
+                            "You need to install rjieba to use RoFormerTokenizer."
                             "See https://pypi.org/project/rjieba/ for installation."
                         )
                     tokenizer_new.jieba = rjieba
