@@ -1466,7 +1466,7 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
 
         eos_mask = jnp.where(input_ids == self.config.eos_token_id, 1, 0)
 
-        # The first condition is necessary to overcome jax._src.errors.ConcretizationTypeError
+        # The first condition is necessary to overcome jax._src.errors.ConcretizationTypeError during initialization
         if type(eos_mask) != jax.interpreters.partial_eval.DynamicJaxprTracer:
             if len(jnp.unique(eos_mask.sum(1))) > 1:
                 raise ValueError("All examples must have the same number of <eos> tokens.")
@@ -1475,7 +1475,7 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
                 raise ValueError("There are missing <eos> tokens in input_ids")
 
             # Ensure to keep 1 only for the last <eos> token for each example
-            eos_mask_noised = eos_mask + jnp.arange(eos_mask.shape[1]) * 1e-3
+            eos_mask_noised = eos_mask + jnp.arange(eos_mask.shape[1]) * 1e-6
             eos_mask = jnp.where(eos_mask_noised == eos_mask_noised.max(1).reshape(-1, 1), 1, 0)
 
         sentence_representation = jnp.einsum("ijk, ij -> ijk", hidden_states, eos_mask).sum(1)
