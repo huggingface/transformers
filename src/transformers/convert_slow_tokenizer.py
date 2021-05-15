@@ -23,7 +23,6 @@ from typing import Dict, List, Tuple
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
-from tokenizers.pre_tokenizers import PreTokenizer
 
 from .file_utils import requires_backends
 from .models.roformer.tokenization_utils import JiebaPreTokenizer
@@ -315,7 +314,7 @@ class RoFormerConverter(Converter):
             strip_accents=strip_accents,
             lowercase=do_lower_case,
         )
-        tokenizer.pre_tokenizer = PreTokenizer.custom(JiebaPreTokenizer(vocab))
+        tokenizer.pre_tokenizer = pre_tokenizers.PreTokenizer.custom(JiebaPreTokenizer(vocab))
 
         cls = str(self.original_tokenizer.cls_token)
         sep = str(self.original_tokenizer.sep_token)
