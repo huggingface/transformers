@@ -29,17 +29,17 @@ class JiebaPreTokenizer:
             lowercase=False,
         )
         try:
-            import jieba
+            import rjieba
         except ImportError:
             raise ImportError(
                 "You need to install jieba to use RoFormerTokenizer."
                 "See https://pypi.org/project/jieba/ for installation."
             )
-        self.jieba = jieba
+        self.jieba = rjieba
 
     def jieba_split(self, i: int, normalized_string: NormalizedString) -> List[NormalizedString]:
         splits = []
-        for token in self.jieba.cut(str(normalized_string), HMM=False):
+        for token in self.jieba.cut(str(normalized_string), False):
             if token in self.vocab:
                 splits.append(NormalizedString(token))
             else:

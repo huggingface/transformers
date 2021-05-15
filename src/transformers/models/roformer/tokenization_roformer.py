@@ -142,13 +142,13 @@ class RoFormerTokenizer(PreTrainedTokenizer):
             )
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
         try:
-            import jieba
+            import rjieba
         except ImportError:
             raise ImportError(
                 "You need to install jieba to use RoFormerTokenizer."
-                "See https://pypi.org/project/jieba/ for installation."
+                "See https://pypi.org/project/rjieba/ for installation."
             )
-        self.jieba = jieba
+        self.jieba = rjieba
 
     @property
     def do_lower_case(self):
@@ -164,7 +164,7 @@ class RoFormerTokenizer(PreTrainedTokenizer):
     def _tokenize(self, text, use_jieba=True):
         split_tokens = []
         if use_jieba:
-            for wholword in self.jieba.cut(text, HMM=False):
+            for wholword in self.jieba.cut(text, False):
                 if wholword in self.vocab:
                     split_tokens.append(wholword)
                 else:
