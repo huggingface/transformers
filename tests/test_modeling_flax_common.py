@@ -137,9 +137,7 @@ class FlaxModelTesterMixin:
     def test_equivalence_pt_to_flax(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in self.all_model_classes[
-            :-1
-        ]:  # TODO(Patrick, Daniel) - ForSeqClassification and QA doesn't work yet -> need to investigate
+        for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
                 # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
@@ -182,9 +180,7 @@ class FlaxModelTesterMixin:
     def test_equivalence_flax_to_pt(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in self.all_model_classes[
-            :-1
-        ]:  # TODO(Patrick, Daniel) - ForSeqClassification and QA doesn't work yet -> need to investigate
+        for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
                 # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
