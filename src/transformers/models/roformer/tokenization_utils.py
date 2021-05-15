@@ -33,7 +33,7 @@ class JiebaPreTokenizer:
         except ImportError:
             raise ImportError(
                 "You need to install jieba to use RoFormerTokenizer."
-                "See https://pypi.org/project/jieba/ for installation."
+                "See https://pypi.org/project/rjieba/ for installation."
             )
         self.jieba = rjieba
 
