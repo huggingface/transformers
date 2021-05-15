@@ -71,6 +71,8 @@ class RoFormerConfig(PretrainedConfig):
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if ``config.is_decoder=True``.
+        rotary_value (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not apply rotary position embeddings on value layer.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
 
@@ -105,6 +107,7 @@ class RoFormerConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         pad_token_id=0,
         gradient_checkpointing=False,
+        rotary_value=False,
         use_cache=True,
         **kwargs
     ):
@@ -123,4 +126,5 @@ class RoFormerConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.gradient_checkpointing = gradient_checkpointing
+        self.rotary_value = rotary_value
         self.use_cache = use_cache

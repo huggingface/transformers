@@ -214,6 +214,7 @@ class TFRoFormerSelfAttention(tf.keras.layers.Layer):
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
         self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
+        self.rotary_value = config.rotary_value
 
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
@@ -240,7 +241,12 @@ class TFRoFormerSelfAttention(tf.keras.layers.Layer):
         value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
 
         if sinusoidal_pos is not None:
-            query_layer, key_layer = self.apply_rotary_position_embeddings(sinusoidal_pos, query_layer, key_layer)
+            if self.rotary_value:
+                query_layer, key_layer, value_layer = self.apply_rotary_position_embeddings(
+                    sinusoidal_pos, query_layer, key_layer, value_layer
+                )
+            else:
+                query_layer, key_layer = self.apply_rotary_position_embeddings(sinusoidal_pos, query_layer, key_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         # (batch size, num_heads, seq_len_q, seq_len_k)
@@ -273,7 +279,7 @@ class TFRoFormerSelfAttention(tf.keras.layers.Layer):
         return outputs
 
     @staticmethod
-    def apply_rotary_position_embeddings(sinusoidal_pos, query_layer, key_layer):
+    def apply_rotary_position_embeddings(sinusoidal_pos, query_layer, key_layer, value_layer=None):
         # https://kexue.fm/archives/8265
         # sin [batch_size, num_heads, sequence_length, embed_size_per_head//2]
         # cos [batch_size, num_heads, sequence_length, embed_size_per_head//2]
@@ -290,6 +296,12 @@ class TFRoFormerSelfAttention(tf.keras.layers.Layer):
         rotate_half_key_layer = tf.stack([-key_layer[..., 1::2], key_layer[..., ::2]], axis=-1)
         rotate_half_key_layer = tf.reshape(rotate_half_key_layer, shape_list(key_layer))
         key_layer = key_layer * cos_pos + rotate_half_key_layer * sin_pos
+        if value_layer is not None:
+            # rotate_half_value_layer [-v1,v0,-v3,v2......,-vd-1,vd-2]
+            rotate_half_value_layer = tf.stack([-value_layer[..., 1::2], value_layer[..., ::2]], axis=-1)
+            rotate_half_value_layer = tf.reshape(rotate_half_value_layer, shape_list(value_layer))
+            value_layer = value_layer * cos_pos + rotate_half_value_layer * sin_pos
+            return query_layer, key_layer, value_layer
         return query_layer, key_layer
 
 
