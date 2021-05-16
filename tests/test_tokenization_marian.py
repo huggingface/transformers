@@ -74,6 +74,9 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "This is a test",
         )
 
+    def test_vocab_size(self):
+        self.assertEqual(self.get_tokenizer().vocab_size, 9)
+
     def test_tokenizer_equivalence_en_de(self):
         en_de_tokenizer = MarianTokenizer.from_pretrained(f"{ORG_NAME}opus-mt-en-de")
         batch = en_de_tokenizer(["I am a small frog"], return_tensors=None)

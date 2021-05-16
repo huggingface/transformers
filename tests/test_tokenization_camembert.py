@@ -45,6 +45,9 @@ class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = CamembertTokenizer(SAMPLE_VOCAB)
         tokenizer.save_pretrained(self.tmpdirname)
 
+    def test_vocab_size(self):
+        self.assertEqual(self.get_tokenizer().vocab_size, 1_005)
+
     def test_rust_and_python_bpe_tokenizers(self):
         tokenizer = CamembertTokenizer(SAMPLE_BPE_VOCAB)
         tokenizer.save_pretrained(self.tmpdirname)

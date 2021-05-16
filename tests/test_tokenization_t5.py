@@ -48,6 +48,9 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = T5Tokenizer(SAMPLE_VOCAB)
         tokenizer.save_pretrained(self.tmpdirname)
 
+    def test_vocab_size(self):
+        self.assertEqual(self.get_tokenizer().vocab_size, 1_100)
+
     def test_full_tokenizer(self):
         tokenizer = T5Tokenizer(SAMPLE_VOCAB)
 

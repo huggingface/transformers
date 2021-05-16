@@ -43,6 +43,9 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.tokenizer_class(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
 
+    def test_vocab_size(self):
+        self.assertEqual(self.get_tokenizer().vocab_size, 1_000)
+
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
             return

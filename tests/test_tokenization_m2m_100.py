@@ -69,6 +69,9 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "This is a test",
         )
 
+    def test_vocab_size(self):
+        self.assertEqual(self.get_tokenizer().vocab_size, 117)
+
     @unittest.skip("Skip this test while all models are still to be uploaded.")
     def test_pretrained_model_lists(self):
         pass

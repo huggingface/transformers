@@ -39,6 +39,9 @@ class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.save_pretrained(self.tmpdirname, legacy_format=False)
         self.tokenizer = tokenizer
 
+    def test_vocab_size(self):
+        self.assertEqual(self.get_tokenizer().vocab_size, 101_122)
+
     @require_torch
     def test_prepare_batch(self):
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]

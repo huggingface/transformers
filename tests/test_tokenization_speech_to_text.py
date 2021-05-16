@@ -60,6 +60,9 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = Speech2TextTokenizer.from_pretrained(self.tmpdirname)
         tokenizer.save_pretrained(self.tmpdirname)
 
+    def test_vocab_size(self):
+        self.assertEqual(self.get_tokenizer().vocab_size, 1_001)
+
     def test_full_tokenizer(self):
         tokenizer = Speech2TextTokenizer.from_pretrained(self.tmpdirname)
 
@@ -107,6 +110,9 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         self.assertEqual(self.tokenizer.lang_code_to_id["ru"], 6)
         self.assertEqual(self.tokenizer.lang_code_to_id["it"], 9)
         self.assertEqual(self.tokenizer.lang_code_to_id["de"], 11)
+
+    def test_vocab_size(self):
+        self.assertEqual(self.tokenizer.vocab_size, 10_000)
 
     def test_tokenizer_decode_ignores_language_codes(self):
         self.assertIn(ES_CODE, self.tokenizer.all_special_ids)

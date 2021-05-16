@@ -42,6 +42,9 @@ class XLNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.sanitize_special_tokens()
         tokenizer.save_pretrained(self.tmpdirname)
 
+    def test_vocab_size(self):
+        self.assertEqual(self.get_tokenizer().vocab_size, 1_000)
+
     def test_full_tokenizer(self):
         tokenizer = XLNetTokenizer(SAMPLE_VOCAB, keep_accents=True)
 

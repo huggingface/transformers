@@ -42,6 +42,9 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
 
+    def test_vocab_size(self):
+        self.assertEqual(self.get_tokenizer().vocab_size, 1_002)
+
     def test_full_tokenizer(self):
         tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB, keep_accents=True)
 

@@ -50,6 +50,9 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def get_input_output_texts(self, tokenizer):
         return ("This is a test", "This is a test")
 
+    def test_vocab_size(self):
+        self.assertEqual(self.get_tokenizer().vocab_size, 1_103)
+
     def test_mask_tokens_rust_pegasus(self):
         rust_tokenizer = self.rust_tokenizer_class.from_pretrained(self.tmpdirname)
         py_tokenizer = self.tokenizer_class.from_pretrained(self.tmpdirname)
