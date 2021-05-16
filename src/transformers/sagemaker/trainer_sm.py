@@ -242,7 +242,7 @@ class SageMakerTrainer(Trainer):
             if self.is_world_process_zero():
                 self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
         else:
-            super()._save_checkpoint(self, model, trial, metrics=metrics)
+            super()._save_checkpoint(model, trial, metrics=metrics)
 
     def _load_optimizer_and_scheduler(self, checkpoint):
         """If optimizer and scheduler states exist, load them."""
