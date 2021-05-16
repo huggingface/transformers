@@ -39,18 +39,16 @@ class JiebaPreTokenizer:
 
     def jieba_split(self, i: int, normalized_string: NormalizedString) -> List[NormalizedString]:
         splits = []
-        for token in self.jieba.cut(str(normalized_string), False):
+        for token, start, end in self.jieba.tokenize(str(normalized_string), hmm=False):
             if token in self.vocab:
-                splits.append(NormalizedString(token))
+                splits.append(normalized_string.slice((start, end)))
             else:
-                new_normalized_string = self.normalizers.normalize_str(token)
-                new_normalized_string_list = new_normalized_string.split()
-                if len(new_normalized_string_list) == 1:
-                    splits.append(NormalizedString(new_normalized_string))
-                else:
-                    for new_normalized_string in new_normalized_string_list:
-                        if new_normalized_string:
-                            splits.append(NormalizedString(new_normalized_string))
+                token_list = self.normalizers.normalize_str(token).split()
+                for token in token_list:
+                    if token:
+                        end = start + len(token)
+                        splits.append(normalized_string.slice((start, end)))
+                        start = end
 
         return splits
 
