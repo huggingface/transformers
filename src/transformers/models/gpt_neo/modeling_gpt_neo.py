@@ -736,7 +736,8 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-    ):  """
+    ):  
+        """
         Added functionality to break a model into parts
         This can run inference on GPT-Neo 2.7B in 6GB of VRam
         Expected speed is around 1 token/2s
