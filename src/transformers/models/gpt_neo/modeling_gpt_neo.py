@@ -736,7 +736,67 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-    ):
+    ):  """
+        Added functionality to break a model into parts
+        This can run inference on GPT-Neo 2.7B in 6GB of VRam
+        Expected speed is around 1 token/2s
+        
+        To load GPT-Neo in parts - 
+        1. Have between 5 and 9.5 GB of Vram
+        2. After loading the model in ram run:-
+        model.eval().half().to("cpu")
+        model.transformer.wte.to("cuda")
+        model.transformer.wpe.to("cuda")
+        model.transformer.ln_f.to("cuda")
+        model.lm_head.to("cuda")
+        torch.cuda.empty_cache()
+        """
+        breakmodel = False
+        if(torch.cuda.is_available()):
+            gpumem = torch.cuda.get_device_properties(torch.cuda.current_device()).total_memory/(1024**3)
+            if gpumem > 5 and gpumem < 9.5 and len(self.h) >= 32: #If low VRAM and Large model
+                cond1 = self.wpe.weight.data.device.type == "cuda"
+                cond2 = self.wte.weight.data.device.type == "cuda"
+                cond3 = self.ln_f.weight.data.device.type == "cuda"
+                if cond1 or cond2 or cond3: #If layers are found in cuda
+                    breakmodel = True
+        
+        
+        if breakmodel: 
+            #creates an attribute extrastorage in self to act as a cache in ram on first run
+            if not hasattr(self, 'extrastorage'):
+                import copy
+                setattr(self,"extrastorage",{})
+                self.wte.to("cuda")
+                self.wpe.to("cuda")
+                self.ln_f.to("cuda")
+                torch.cuda.empty_cache()
+                for i in range(len(self.h)):
+                    self.h[i].to("cpu")
+                    self.extrastorage[i] = copy.deepcopy(self.h[i])
+                    smalltensor = torch.tensor(0).to("cuda")
+                    for param1 in self.h[i].parameters():
+                        param1.data = smalltensor
+                    self.h[i].to("cuda")
+                for param in self.wte.parameters():
+                    param.requires_grad = False
+                for param in self.wpe.parameters():
+                    param.requires_grad = False
+                for i in range(len(self.h)):
+                    for param in self.h[i].parameters():
+                        param.requires_grad = False
+                for param in self.ln_f.parameters():
+                    param.requires_grad = False
+                for i in range(len(self.h)):
+                    for param in self.extrastorage[i].parameters():
+                        param.requires_grad = False
+                        param.data.pin_memory()
+                torch.cuda.empty_cache()
+                for param1,param2 in zip(self.h[len(self.h)-1].parameters(),self.extrastorage[len(self.h)-1].parameters()):
+                    param1.data = param2.data.to("cuda", non_blocking=True)
+                self.h[len(self.h)-1].to("cuda", non_blocking=True)
+                torch.cuda.empty_cache()                        
+        
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -825,6 +885,21 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
+            
+            if breakmodel : #Loads each layer one by one
+                if i == 0:
+                    for param1,param2 in zip(self.h[i].parameters(),self.h[len(self.h)-1].parameters()):
+                        param1.data = param2.data
+                    for param1,param2 in zip(self.h[0].parameters(),self.extrastorage[0].parameters()):
+                        param1.data = param2.data.to("cuda", non_blocking=True)
+                    self.h[0].to("cuda", non_blocking=True)
+                if i >= 1:
+                    for param1,param2 in zip(self.h[i].parameters(),self.h[i-1].parameters()):
+                        param1.data = param2.data
+                    for param1,param2 in zip(self.h[i].parameters(),self.extrastorage[i].parameters()):
+                        param1.data.copy_(param2.data, non_blocking=True)
+                    self.h[i].to("cuda", non_blocking=True)
+            
             attn_type = self.config.attention_layers[i]
             attn_mask = global_attention_mask if attn_type == "global" else local_attention_mask
 
