@@ -134,7 +134,7 @@ class TFRoFormerEmbeddings(tf.keras.layers.Layer):
 
         self.vocab_size = config.vocab_size
         self.type_vocab_size = config.type_vocab_size
-        self.hidden_size = config.hidden_size
+        self.embedding_size = config.embedding_size
         self.initializer_range = config.initializer_range
         self.embeddings_sum = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
@@ -144,14 +144,14 @@ class TFRoFormerEmbeddings(tf.keras.layers.Layer):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
                 name="weight",
-                shape=[self.vocab_size, self.hidden_size],
+                shape=[self.vocab_size, self.embedding_size],
                 initializer=get_initializer(self.initializer_range),
             )
 
         with tf.name_scope("token_type_embeddings"):
             self.token_type_embeddings = self.add_weight(
                 name="embeddings",
-                shape=[self.type_vocab_size, self.hidden_size],
+                shape=[self.type_vocab_size, self.embedding_size],
                 initializer=get_initializer(self.initializer_range),
             )
 
@@ -489,13 +489,12 @@ class TFRoFormerEncoder(tf.keras.layers.Layer):
         )
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHeadTransform with Bert->RoFormer
 class TFRoFormerPredictionHeadTransform(tf.keras.layers.Layer):
     def __init__(self, config: RoFormerConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
-            units=config.hidden_size,
+            units=config.embedding_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
         )
@@ -515,13 +514,12 @@ class TFRoFormerPredictionHeadTransform(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertLMPredictionHead with Bert->RoFormer
 class TFRoFormerLMPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config: RoFormerConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
         self.vocab_size = config.vocab_size
-        self.hidden_size = config.hidden_size
+        self.embedding_size = config.embedding_size
 
         self.transform = TFRoFormerPredictionHeadTransform(config, name="transform")
 
@@ -551,7 +549,7 @@ class TFRoFormerLMPredictionHead(tf.keras.layers.Layer):
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.transform(hidden_states=hidden_states)
         seq_length = shape_list(hidden_states)[1]
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.embedding_size])
         hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
@@ -582,6 +580,9 @@ class TFRoFormerMainLayer(tf.keras.layers.Layer):
         self.config = config
 
         self.embeddings = TFRoFormerEmbeddings(config, name="embeddings")
+        if config.embedding_size != config.hidden_size:
+            self.embeddings_project = tf.keras.layers.Dense(config.hidden_size, name="embeddings_project")
+
         self.encoder = TFRoFormerEncoder(config, name="encoder")
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
@@ -647,6 +648,9 @@ class TFRoFormerMainLayer(tf.keras.layers.Layer):
             inputs_embeds=inputs["inputs_embeds"],
             training=inputs["training"],
         )
+        if hasattr(self, "embeddings_project"):
+            embedding_output = self.embeddings_project(embedding_output, training=inputs["training"])
+
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]

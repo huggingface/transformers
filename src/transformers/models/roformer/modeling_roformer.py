@@ -179,12 +179,12 @@ class RoFormerEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.embedding_size, padding_idx=config.pad_token_id)
+        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.embedding_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, input_ids=None, token_type_ids=None, inputs_embeds=None):
@@ -644,16 +644,15 @@ class RoFormerEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->RoFormer
 class RoFormerPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.dense = nn.Linear(config.hidden_size, config.embedding_size)
         if isinstance(config.hidden_act, str):
             self.transform_act_fn = ACT2FN[config.hidden_act]
         else:
             self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -662,7 +661,6 @@ class RoFormerPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->RoFormer
 class RoFormerLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -670,7 +668,7 @@ class RoFormerLMPredictionHead(nn.Module):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.decoder = nn.Linear(config.embedding_size, config.vocab_size, bias=False)
 
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
@@ -704,6 +702,10 @@ class RoFormerPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_roformer
     base_model_prefix = "roformer"
     _keys_to_ignore_on_load_missing = []
+    _keys_to_ignore_on_load_unexpected = [
+        r"roformer\.embeddings_project\.weight",
+        r"roformer\.embeddings_project\.bias",
+    ]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -803,8 +805,11 @@ class RoFormerModel(RoFormerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-
         self.embeddings = RoFormerEmbeddings(config)
+
+        if config.embedding_size != config.hidden_size:
+            self.embeddings_project = nn.Linear(config.embedding_size, config.hidden_size)
+
         self.encoder = RoFormerEncoder(config)
 
         self.init_weights()
@@ -921,6 +926,8 @@ class RoFormerModel(RoFormerPreTrainedModel):
         embedding_output = self.embeddings(
             input_ids=input_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
+        if hasattr(self, "embeddings_project"):
+            embedding_output = self.embeddings_project(embedding_output)
 
         encoder_outputs = self.encoder(
             embedding_output,
