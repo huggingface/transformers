@@ -270,12 +270,12 @@ class FlaxDataCollatorForLanguageModeling:
 
 
 def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndarray:
-    nb_samples = len(samples_idx)
-    samples_to_remove = nb_samples % batch_size
+    num_samples = len(samples_idx)
+    samples_to_remove = num_samples % batch_size
 
     if samples_to_remove != 0:
         samples_idx = samples_idx[:-samples_to_remove]
-    sections_split = nb_samples // batch_size
+    sections_split = num_samples // batch_size
     batch_idx = np.split(samples_idx, sections_split)
     return batch_idx
 
@@ -495,7 +495,12 @@ if __name__ == "__main__":
 
     model = FlaxAutoModelForMaskedLM.from_config(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
 
-    num_train_steps = len(tokenized_datasets["train"]) * training_args.num_train_epochs
+    # Store some constant
+    num_epochs = int(training_args.num_train_epochs)
+    train_batch_size = int(training_args.per_device_train_train_batch_size) * jax.device_count()
+    eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
+
+    num_train_steps = len(tokenized_datasets["train"]) // train_batch_size * num_epochs
 
     # Create learning rate schedule
     warmup_fn = optax.linear_schedule(
@@ -530,7 +535,7 @@ if __name__ == "__main__":
         def loss_fn(params):
             labels = batch.pop("labels")
 
-            logits = model(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
+            logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
 
             # compute loss, ignore padded input tokens
             label_mask = jnp.where(labels > 0, 1.0, 0.0)
@@ -579,14 +584,9 @@ if __name__ == "__main__":
     # Replicate the train state on each device
     state = jax_utils.replicate(state)
 
-    # Store some constant
-    nb_epochs = int(training_args.num_train_epochs)
-    batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
-    eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
-
     train_metrics = []
     train_time = 0
-    epochs = tqdm(range(nb_epochs), desc=f"Epoch ... (1/{nb_epochs})", position=0)
+    epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
     for epoch in epochs:
         # ======================== Training ================================
         train_start = time.time()
@@ -597,7 +597,7 @@ if __name__ == "__main__":
         # Generate an epoch by shuffling sampling indices from the train dataset
         nb_training_samples = len(tokenized_datasets["train"])
         training_samples_idx = jax.random.permutation(input_rng, jnp.arange(nb_training_samples))
-        training_batch_idx = generate_batch_splits(training_samples_idx, batch_size)
+        training_batch_idx = generate_batch_splits(training_samples_idx, train_batch_size)
 
         # Gather the indexes for creating the batch and do a training step
         for batch_idx in tqdm(training_batch_idx, desc="Training...", position=1):
@@ -636,12 +636,12 @@ if __name__ == "__main__":
 
         # Update progress bar
         epochs.desc = (
-            f"Epoch... ({epoch + 1}/{nb_epochs} | Loss: {eval_metrics['loss']}, Acc: {eval_metrics['accuracy']})"
+            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {eval_metrics['loss']}, Acc: {eval_metrics['accuracy']})"
         )
 
         # Save metrics
         if has_tensorboard and jax.process_index() == 0:
-            cur_step = epoch * (len(tokenized_datasets["train"]) // batch_size)
+            cur_step = epoch * (len(tokenized_datasets["train"]) // train_batch_size)
             write_metric(train_metrics, eval_metrics, train_time, cur_step)
 
     # save last checkpoint
