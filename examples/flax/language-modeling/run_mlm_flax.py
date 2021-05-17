@@ -35,10 +35,11 @@ from tqdm import tqdm
 
 import jax
 import jax.numpy as jnp
+import optax
+
 from flax import jax_utils
-from flax.optim import Adam
-from flax.training import common_utils
-from flax.training.common_utils import get_metrics
+from flax.training import train_state
+from flax.training.common_utils import get_metrics, shard, onehot
 from jax.nn import log_softmax
 from transformers import (
     CONFIG_MAPPING,
@@ -269,58 +270,20 @@ class FlaxDataCollatorForLanguageModeling:
         return inputs, labels
 
 
-def create_learning_rate_scheduler(
-    factors="constant * linear_warmup * rsqrt_decay",
-    base_learning_rate=0.5,
-    warmup_steps=1000,
-    decay_factor=0.5,
-    steps_per_decay=20000,
-    steps_per_cycle=100000,
-):
-    """Creates learning rate schedule.
-    Interprets factors in the factors string which can consist of:
-    * constant: interpreted as the constant value,
-    * linear_warmup: interpreted as linear warmup until warmup_steps,
-    * rsqrt_decay: divide by square root of max(step, warmup_steps)
-    * rsqrt_normalized_decay: divide by square root of max(step/warmup_steps, 1)
-    * decay_every: Every k steps decay the learning rate by decay_factor.
-    * cosine_decay: Cyclic cosine decay, uses steps_per_cycle parameter.
-    Args:
-      factors: string, factors separated by "*" that defines the schedule.
-      base_learning_rate: float, the starting constant for the lr schedule.
-      warmup_steps: int, how many steps to warm up for in the warmup schedule.
-      decay_factor: float, the amount to decay the learning rate by.
-      steps_per_decay: int, how often to decay the learning rate.
-      steps_per_cycle: int, steps per cycle when using cosine decay.
-    Returns:
-      a function learning_rate(step): float -> {"learning_rate": float}, the
-      step-dependent lr.
-    """
-    factors = [n.strip() for n in factors.split("*")]
+def create_linear_decay_lr_fn(
+    num_train_steps: int, num_warmup_steps: int, learning_rate: float
+) -> Callable[[int], jnp.array]:
+    """Returns a linear warmup, linear_decay learning rate function."""
+    warmup_fn = optax.linear_schedule(init_value=0.0, end_value=learning_rate, transition_steps=num_warmup_steps)
 
-    def step_fn(step):
-        """Step to learning rate function."""
-        ret = 1.0
-        for name in factors:
-            if name == "constant":
-                ret *= base_learning_rate
-            elif name == "linear_warmup":
-                ret *= jnp.minimum(1.0, step / warmup_steps)
-            elif name == "rsqrt_decay":
-                ret /= jnp.sqrt(jnp.maximum(step, warmup_steps))
-            elif name == "rsqrt_normalized_decay":
-                ret *= jnp.sqrt(warmup_steps)
-                ret /= jnp.sqrt(jnp.maximum(step, warmup_steps))
-            elif name == "decay_every":
-                ret *= decay_factor ** (step // steps_per_decay)
-            elif name == "cosine_decay":
-                progress = jnp.maximum(0.0, (step - warmup_steps) / float(steps_per_cycle))
-                ret *= jnp.maximum(0.0, 0.5 * (1.0 + jnp.cos(jnp.pi * (progress % 1.0))))
-            else:
-                raise ValueError(f"Unknown factor {name}.")
-        return jnp.asarray(ret, dtype=jnp.float32)
+    decay_fn = optax.linear_schedule(
+        init_value=learning_rate, end_value=0, transition_steps=num_train_steps - num_warmup_steps
+    )
+    return optax.join_schedules(schedules=[warmup_fn, decay_fn], boundaries=[num_warmup_steps])
 
-    return step_fn
+
+def adamw(decay):
+    return optax.adamw(learning_rate=learning_rate_fn, b1=training_args.adam_beta1, b2=training_args.adam_beta2, eps=1e-6, weight_decay=decay)
 
 
 def compute_metrics(logits, labels, weights, label_smoothing=0.0):
@@ -369,7 +332,7 @@ def cross_entropy(logits, targets, weights=None, label_smoothing=0.0):
     normalizing_constant = -(
         confidence * jnp.log(confidence) + (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20)
     )
-    soft_targets = common_utils.onehot(targets, vocab_size, on_value=confidence, off_value=low_confidence)
+    soft_targets = onehot(targets, vocab_size, on_value=confidence, off_value=low_confidence)
 
     loss = -jnp.sum(soft_targets * log_softmax(logits), axis=-1)
     loss = loss - normalizing_constant
@@ -383,8 +346,8 @@ def cross_entropy(logits, targets, weights=None, label_smoothing=0.0):
     return loss.sum(), normalizing_factor
 
 
-def training_step(optimizer, batch, dropout_rng):
-    dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
+def train_step(state, batch, dropout_rng):
+#    dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
 
     def loss_fn(params):
         targets = batch.pop("labels")
@@ -396,14 +359,17 @@ def training_step(optimizer, batch, dropout_rng):
         loss, weight_sum = cross_entropy(logits, targets, token_mask)
         return loss / weight_sum
 
-    step = optimizer.state.step
-    lr = lr_scheduler_fn(step)
     grad_fn = jax.value_and_grad(loss_fn)
-    loss, grad = grad_fn(optimizer.target)
+    loss, grad = grad_fn(state.params)
     grad = jax.lax.pmean(grad, "batch")
-    optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
+    new_state = state.apply_gradient(grads=grad)
 
-    return loss, optimizer, new_dropout_rng
+#    step = optimizer.state.step
+#    lr = lr_scheduler_fn(step)
+#    optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
+
+    return new_state, loss
+#    return new_state, loss, state, new_dropout_rng
 
 
 def eval_step(params, batch):
@@ -633,25 +599,34 @@ if __name__ == "__main__":
     model = FlaxAutoModelForMaskedLM.from_config(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
 
     # Setup optimizer
-    optimizer = Adam(
-        learning_rate=training_args.learning_rate,
-        weight_decay=training_args.weight_decay,
-        beta1=training_args.adam_beta1,
-        beta2=training_args.adam_beta2,
-    ).create(model.params)
+#    optimizer = Adam(
+#        learning_rate=training_args.learning_rate,
+#        weight_decay=training_args.weight_decay,
+#        beta1=training_args.adam_beta1,
+#        beta2=training_args.adam_beta2,
+#    ).create(model.params)
 
     # Create learning rate scheduler
     # warmup_steps = 0 causes the Flax optimizer to return NaNs; warmup_steps = 1 is functionally equivalent.
-    lr_scheduler_fn = create_learning_rate_scheduler(
-        base_learning_rate=training_args.learning_rate, warmup_steps=max(training_args.warmup_steps, 1)
+#    lr_scheduler_fn = create_learning_rate_scheduler(
+#        base_learning_rate=training_args.learning_rate, warmup_steps=max(training_args.warmup_steps, 1)
+#    )
+
+    num_train_steps = len(tokenized_datasets["train"]) * training_args.num_train_epochs
+    learning_rate_fn = create_linear_decay_lr_fn(num_train_steps, training_args.warmup_steps, learning_rate=training_args.learning_rate)
+
+    train_state = train_state.TrainState.create(
+        apply_fn=model.__call__,
+        params=model.params,
+        tx=adamw(training_args.weight_decay)
     )
 
     # Create parallel version of the training and evaluation steps
-    p_training_step = jax.pmap(training_step, "batch", donate_argnums=(0,))
+    p_train_step = jax.pmap(train_step, "batch", donate_argnums=(0,))
     p_eval_step = jax.pmap(eval_step, "batch", donate_argnums=(0,))
 
     # Replicate the optimizer on each device
-    optimizer = jax_utils.replicate(optimizer)
+    train_state = jax_utils.replicate(train_state)
 
     # Store some constant
     nb_epochs = int(training_args.num_train_epochs)
@@ -676,8 +651,8 @@ if __name__ == "__main__":
             model_inputs = data_collator(samples, pad_to_multiple_of=16)
 
             # Model forward
-            model_inputs = common_utils.shard(model_inputs.data)
-            loss, optimizer, dropout_rngs = p_training_step(optimizer, model_inputs, dropout_rngs)
+            model_inputs = shard(model_inputs.data)
+            loss, optimizer, dropout_rngs = p_train_step(optimizer, model_inputs, dropout_rngs)
 
         epochs.write(f"Loss: {loss}")
 
@@ -692,7 +667,7 @@ if __name__ == "__main__":
             model_inputs = data_collator(samples, pad_to_multiple_of=16)
 
             # Model forward
-            model_inputs = common_utils.shard(model_inputs.data)
+            model_inputs = shard(model_inputs.data)
             metrics = p_eval_step(optimizer.target, model_inputs)
             eval_metrics.append(metrics)
 
