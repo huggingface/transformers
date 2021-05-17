@@ -40,7 +40,6 @@ import optax
 from flax import jax_utils
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
-from jax.nn import log_softmax
 from transformers import (
     CONFIG_MAPPING,
     MODEL_FOR_MASKED_LM_MAPPING,
@@ -281,42 +280,6 @@ def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndar
     return batch_idx
 
 
-def compute_metrics(logits, labels, weights):
-    loss, normalizer = cross_entropy(logits, labels, weights)
-    one_hot_accuracy = jnp.equal(jnp.argmax(logits, axis=-1), labels) * weights
-    accuracy = one_hot_accuracy.sum()
-    metrics = {"loss": loss, "accuracy": accuracy, "normalizer": normalizer}
-    metrics = jax.lax.psum(metrics, axis_name="batch")
-    return metrics
-
-
-def cross_entropy(logits, targets, weights=None):
-    """Compute cross entropy and entropy for log probs and targets.
-    Args:
-     logits: [batch, length, num_classes] float array.
-     targets: categorical targets [batch, length] int array.
-     weights: None or array of shape [batch, length]
-     label_smoothing: label smoothing constant, used to determine the on and off values.
-    Returns:
-      Tuple of scalar loss and batch normalizing factor.
-    """
-    if logits.ndim != targets.ndim + 1:
-        raise ValueError(f"Incorrect shapes. Got shape {logits.shape} logits and {targets.shape} targets")
-
-    vocab_size = logits.shape[-1]
-    soft_targets = onehot(targets, vocab_size)
-
-    loss = -jnp.sum(soft_targets * log_softmax(logits), axis=-1)
-
-    if weights is not None:
-        loss = loss * weights
-        normalizing_factor = weights.sum()
-    else:
-        normalizing_factor = np.prod(targets.shape)
-
-    return loss.sum(), normalizing_factor
-
-
 def write_metric(train_metrics, eval_metrics, train_time, step):
     summary_writer.scalar("train_time", train_time, step)
 
@@ -400,10 +363,6 @@ if __name__ == "__main__":
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 cache_dir=model_args.cache_dir,
             )
-
-        # TODO - delete after debugging
-    #        datasets["train"] = datasets["train"].select(range(2000))
-    #        datasets["validation"] = datasets["validation"].select(range(2000))
     else:
         data_files = {}
         if data_args.train_file is not None:
@@ -569,14 +528,18 @@ if __name__ == "__main__":
         dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
 
         def loss_fn(params):
-            targets = batch.pop("labels")
-
-            # Hide away tokens which doesn't participate in the optimization
-            token_mask = jnp.where(targets > 0, 1.0, 0.0)
+            labels = batch.pop("labels")
 
             logits = model(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
-            loss, weight_sum = cross_entropy(logits, targets, token_mask)
-            return loss / weight_sum
+
+            # compute loss, ignore padded input tokens
+            label_mask = jnp.where(labels > 0, 1.0, 0.0)
+            loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1])) * label_mask
+
+            # take average
+            loss = loss.sum() / label_mask.sum()
+
+            return loss
 
         grad_fn = jax.value_and_grad(loss_fn)
         loss, grad = grad_fn(state.params)
@@ -594,13 +557,22 @@ if __name__ == "__main__":
 
     # Define eval fn
     def eval_step(params, batch):
-        targets = batch.pop("labels")
+        labels = batch.pop("labels")
 
-        # Hide away tokens which doesn't participate in the optimization
-        token_mask = jnp.where(targets > 0, 1.0, 0.0)
         logits = model(**batch, params=params, train=False)[0]
 
-        return compute_metrics(logits, targets, token_mask)
+        # compute loss, ignore padded input tokens
+        label_mask = jnp.where(labels > 0, 1.0, 0.0)
+        loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1])) * label_mask
+
+        # compute accuracy
+        accuracy = jnp.equal(jnp.argmax(logits, axis=-1), labels) * label_mask
+
+        # summarize metrics
+        metrics = {"loss": loss.sum(), "accuracy": accuracy.sum(), "normalizer": label_mask.sum()}
+        metrics = jax.lax.psum(metrics, axis_name="batch")
+
+        return metrics
 
     p_eval_step = jax.pmap(eval_step, "batch", donate_argnums=(0,))
 
