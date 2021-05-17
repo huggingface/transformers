@@ -89,10 +89,10 @@ class TranslationNewFormatPipelineTests(unittest.TestCase):
     def test_translation_default_language_selection(self):
         model = "patrickvonplaten/t5-tiny-random"
         with pytest.warns(UserWarning, match=r".*translation_en_to_de.*"):
-            nlp = pipeline(task="translation", model=model)
-        self.assertEqual(nlp.task, "translation_en_to_de")
-        self.assertEquals(nlp.src_lang, "en")
-        self.assertEquals(nlp.tgt_lang, "de")
+            translator = pipeline(task="translation", model=model)
+        self.assertEqual(translator.task, "translation_en_to_de")
+        self.assertEquals(translator.src_lang, "en")
+        self.assertEquals(translator.tgt_lang, "de")
 
     @require_torch
     def test_translation_with_no_language_no_model_fails(self):
