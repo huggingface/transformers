@@ -1462,11 +1462,8 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         sequence_output = outputs[0]
 
         # TO-CHECK: From the original code
-        pooled_output = torch.gather(
-            sequence_output,
-            1,
-            index_to_gather.unsqueeze(-1).unsqueeze(-1).expand(index_to_gather.size(0), 1, sequence_output.size(-1)),
-        )
+        index_to_gather = index_to_gather.unsqueeze(-1).unsqueeze(-1).expand(index_to_gather.size(0), 1, sequence_output.size(-1))
+        pooled_output = torch.gather(sequence_output, 1, index_to_gather)
 
         pooled_output = self.dropout(pooled_output)
         logits = self.cls(pooled_output)
