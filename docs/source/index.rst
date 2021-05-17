@@ -10,6 +10,15 @@ PyTorch and TensorFlow.
 
 This is the documentation of our repository `transformers <https://github.com/huggingface/transformers>`_.
 
+If you are looking for custom support from the Hugging Face team
+-----------------------------------------------------------------------------------------------------------------------
+
+.. raw:: html
+
+    <a target="_blank" href="https://huggingface.co/support">
+        <img alt="HuggingFace Expert Acceleration Program" src="https://huggingface.co/front/thumbnails/support.png" style="max-width: 600px; border: 1px solid #eee; border-radius: 4px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
+    </a><br>
+
 Features
 -----------------------------------------------------------------------------------------------------------------------
 
