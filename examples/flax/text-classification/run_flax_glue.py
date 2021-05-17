@@ -123,7 +123,7 @@ def parse_args():
         "--num_warmup_steps", type=int, default=0, help="Number of steps for the warmup in the lr scheduler."
     )
     parser.add_argument("--output_dir", type=str, default=None, help="Where to store the final model.")
-    parser.add_argument("--seed", type=int, default=2, help="A seed for reproducible training.")
+    parser.add_argument("--seed", type=int, default=5, help="A seed for reproducible training.")
     args = parser.parse_args()
 
     # Sanity checks
@@ -148,6 +148,7 @@ def create_train_state(
     learning_rate_fn: Callable[[int], float],
     is_regression: bool,
     num_labels: int,
+    weight_decay: float,
 ) -> train_state.TrainState:
     """Create initial training state."""
 
@@ -166,8 +167,8 @@ def create_train_state(
         loss_fn: Callable = struct.field(pytree_node=False)
 
     # Creates a multi-optimizer consisting of two "Adam with weight decay" optimizers.
-    def adamw(weight_decay):
-        return optax.adamw(learning_rate=learning_rate_fn, b1=0.9, b2=0.999, eps=1e-6, weight_decay=weight_decay)
+    def adamw(decay):
+        return optax.adamw(learning_rate=learning_rate_fn, b1=0.9, b2=0.999, eps=1e-6, weight_decay=decay)
 
     def traverse(fn):
         def mask(data):
@@ -183,7 +184,7 @@ def create_train_state(
 
     tx = optax.chain(
         optax.masked(adamw(0.0), mask=traverse(lambda path, _: decay_path(path))),
-        optax.masked(adamw(0.01), mask=traverse(lambda path, _: not decay_path(path))),
+        optax.masked(adamw(weight_decay), mask=traverse(lambda path, _: not decay_path(path))),
     )
 
     if is_regression:
@@ -414,7 +415,9 @@ def main():
         len(train_dataset), train_batch_size, args.num_train_epochs, args.num_warmup_steps, args.learning_rate
     )
 
-    state = create_train_state(model, learning_rate_fn, is_regression, num_labels=num_labels)
+    state = create_train_state(
+        model, learning_rate_fn, is_regression, num_labels=num_labels, weight_decay=args.weight_decay
+    )
 
     # define step functions
     def train_step(
@@ -426,10 +429,10 @@ def main():
         def loss_fn(params):
             logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
             loss = state.loss_fn(logits, targets)
-            return loss, logits
+            return loss
 
-        grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-        (loss, logits), grad = grad_fn(state.params)
+        grad_fn = jax.value_and_grad(loss_fn)
+        loss, grad = grad_fn(state.params)
         grad = jax.lax.pmean(grad, "batch")
         new_state = state.apply_gradients(grads=grad)
         metrics = jax.lax.pmean({"loss": loss, "learning_rate": learning_rate_fn(state.step)}, axis_name="batch")
@@ -460,10 +463,11 @@ def main():
 
         train_start = time.time()
         train_metrics = []
-        rng, input_rng, dropout_rng = jax.random.split(rng, 3)
+        rng, input_rng = jax.random.split(rng)
 
         # train
         for batch in glue_train_data_collator(input_rng, train_dataset, train_batch_size):
+            rng, dropout_rng = jax.random.split(rng)
             dropout_rngs = shard_prng_key(dropout_rng)
             state, metrics = p_train_step(state, batch, dropout_rngs)
             train_metrics.append(metrics)
@@ -471,7 +475,6 @@ def main():
         logger.info(f"    Done! Training metrics: {unreplicate(metrics)}")
 
         logger.info("  Evaluating...")
-        rng, input_rng = jax.random.split(rng)
 
         # evaluate
         for batch in glue_eval_data_collator(eval_dataset, eval_batch_size):
@@ -484,19 +487,13 @@ def main():
 
         # make sure leftover batch is evaluated on one device
         if num_leftover_samples > 0 and jax.process_index() == 0:
-            # put weights on single device
-            state = unreplicate(state)
-
             # take leftover samples
             batch = eval_dataset[-num_leftover_samples:]
             batch = {k: jnp.array(v) for k, v in batch.items()}
 
             labels = batch.pop("labels")
-            predictions = eval_step(state, batch)
+            predictions = eval_step(unreplicate(state), batch)
             metric.add_batch(predictions=predictions, references=labels)
-
-            # make sure weights are replicated on each device
-            state = replicate(state)
 
         eval_metric = metric.compute()
         logger.info(f"    Done! Eval metrics: {eval_metric}")
