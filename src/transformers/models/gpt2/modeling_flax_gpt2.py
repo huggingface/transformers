@@ -82,8 +82,8 @@ GPT2_INPUTS_DOCSTRING = r"""
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
             config.max_position_embeddings - 1]``.
         past_key_values (:obj:`Dict[str, np.ndarray]`, `optional`, returned by ``init_cache`` or when passing previous ``past_key_values``):
-            Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast auto-regressive decoding.
-            Pre-computed key and value hidden-states are of shape `[batch_size, max_length]`.
+            Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
+            auto-regressive decoding. Pre-computed key and value hidden-states are of shape `[batch_size, max_length]`.
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
@@ -138,11 +138,9 @@ class FlaxGPT2Attention(nn.Module):
     @nn.compact
     def _concatenate_to_cache(self, key, value, query, attention_mask):
         """
-        This function takes projected key, value states from a single
-        input token and concatenates the states to cached states from
-        previous steps.
-        This function is slighly adapted from the official Flax
-        repository: https://github.com/google/flax/blob/491ce18759622506588784b4fca0e4bf05f8c8cd/flax/linen/attention.py#L252
+        This function takes projected key, value states from a single input token and concatenates the states to cached
+        states from previous steps. This function is slighly adapted from the official Flax repository:
+        https://github.com/google/flax/blob/491ce18759622506588784b4fca0e4bf05f8c8cd/flax/linen/attention.py#L252
         """
         # detect if we're initializing by absence of existing cache data.
         is_initialized = self.has_variable("cache", "cached_key")
@@ -343,7 +341,8 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
             batch_size (:obj:`int`):
                 batch_size used for fast auto-regressive decoding. Defines the batch size of the initialized cache.
             max_length (:obj:`int`):
-                maximum possible length for auto-regressive decoding. Defines the sequence length of the initialized cache.
+                maximum possible length for auto-regressive decoding. Defines the sequence length of the initialized
+                cache.
         """
         # init input variables to retrieve cache
         input_ids = jnp.ones((batch_size, max_length))
