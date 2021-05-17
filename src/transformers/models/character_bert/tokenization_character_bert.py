@@ -141,6 +141,14 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             strip_accents=strip_accents,
             **kwargs,
         )
+        # This prevents splitting special tokens during tokenization
+        self.unique_no_split_tokens = [
+            self.cls_token,
+            self.mask_token,
+            self.pad_token,
+            self.sep_token,
+            self.unk_token
+        ]
         self.do_basic_tokenize = do_basic_tokenize
         if do_basic_tokenize:
             self.basic_tokenizer = BasicTokenizer(
