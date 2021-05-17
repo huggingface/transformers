@@ -391,10 +391,10 @@ class TokenClassificationPipeline(Pipeline):
         return entity_group
 
     def get_tag(self, entity_name: str) -> Tuple[str, str]:
-        if entity_name.startwith("B-"):
+        if entity_name.startswith("B-"):
             bi = "B"
             tag = entity_name[2:]
-        elif entity_name.startwith("I-"):
+        elif entity_name.startswith("I-"):
             bi = "I"
             tag = entity_name[2:]
         else:
