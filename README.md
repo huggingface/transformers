@@ -38,7 +38,7 @@ limitations under the License.
 </p>
 
 <h3 align="center">
-<p>State-of-the-art Natural Language Processing for Jax, PyTorch and TensorFlow
+    <p>State-of-the-art Natural Language Processing for Jax, PyTorch and TensorFlow</p>
 </h3>
 
 🤗 Transformers provides thousands of pretrained models to perform tasks on texts such as classification, information extraction, question answering, summarization, translation, text generation and more in over 100 languages. Its aim is to make cutting-edge NLP easier to use for everyone.
@@ -61,6 +61,12 @@ Here are a few examples:
 - [Translation with T5](https://huggingface.co/t5-base?text=My+name+is+Wolfgang+and+I+live+in+Berlin)
 
 **[Write With Transformer](https://transformer.huggingface.co)**, built by the Hugging Face team, is the official demo of this repo’s text generation capabilities.
+
+## If you are looking for custom support from the Hugging Face team
+
+<a target="_blank" href="https://huggingface.co/support">
+    <img alt="HuggingFace Expert Acceleration Program" src="https://huggingface.co/front/thumbnails/support.png" style="max-width: 600px; border: 1px solid #eee; border-radius: 4px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
+</a><br>
 
 ## Quick tour
 
