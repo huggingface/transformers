@@ -81,6 +81,9 @@ GPT2_INPUTS_DOCSTRING = r"""
         position_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
             config.max_position_embeddings - 1]``.
+        past_key_values (:obj:`Dict[str, np.ndarray]`, `optional`, returned by ``init_cache`` or when passing previous ``past_key_values``):
+            Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast auto-regressive decoding.
+            Pre-computed key and value hidden-states are of shape `[batch_size, max_length]`.
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
@@ -133,7 +136,14 @@ class FlaxGPT2Attention(nn.Module):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.embed_dim,))
 
     @nn.compact
-    def _append_cache(self, key, value, query, attention_mask):
+    def _concatenate_to_cache(self, key, value, query, attention_mask):
+        """
+        This function takes projected key, value states from a single
+        input token and concatenates the states to cached states from
+        previous steps.
+        This function is slighly adapted from the official Flax
+        repository: https://github.com/google/flax/blob/491ce18759622506588784b4fca0e4bf05f8c8cd/flax/linen/attention.py#L252
+        """
         # detect if we're initializing by absence of existing cache data.
         is_initialized = self.has_variable("cache", "cached_key")
         cached_key = self.variable("cache", "cached_key", jnp.zeros, key.shape, key.dtype)
@@ -167,7 +177,7 @@ class FlaxGPT2Attention(nn.Module):
         hidden_states,
         attention_mask=None,
         deterministic: bool = True,
-        use_cache: bool = False,
+        _use_cache: bool = False,
         output_attentions: bool = False,
     ):
         qkv_out = self.c_attn(hidden_states)
@@ -182,7 +192,6 @@ class FlaxGPT2Attention(nn.Module):
         if self.has_variable("cache", "cached_key"):
             mask_shift = self.variables["cache"]["cache_index"]
             max_decoder_length = self.variables["cache"]["cached_key"].shape[1]
-            #            causal_mask = self.causal_mask[:, :, mask_shift : mask_shift + query_length, :max_decoder_length]
             causal_mask = lax.dynamic_slice(
                 self.causal_mask, (0, 0, mask_shift, 0), (1, 1, query_length, max_decoder_length)
             )
@@ -201,15 +210,17 @@ class FlaxGPT2Attention(nn.Module):
 
         # During fast autoregressive decoding, we feed one position at a time,
         # and cache the keys and values step by step.
-        if use_cache:
-            key, value, attention_mask = self._append_cache(key, value, query, attention_mask)
+        if _use_cache:
+            key, value, attention_mask = self._concatenate_to_cache(key, value, query, attention_mask)
 
+        # transform boolean mask into float mask
         attention_bias = lax.select(
             attention_mask > 0,
             jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
             jnp.full(attention_mask.shape, -1e4).astype(self.dtype),
         )
 
+        # usual dot product attention
         attn_output = dot_product_attention(
             query,
             key,
@@ -270,7 +281,7 @@ class FlaxGPT2Block(nn.Module):
         hidden_states,
         attention_mask=None,
         deterministic: bool = True,
-        use_cache: bool = False,
+        _use_cache: bool = False,
         output_attentions: bool = False,
     ):
         residual = hidden_states
@@ -279,7 +290,7 @@ class FlaxGPT2Block(nn.Module):
             hidden_states,
             attention_mask=attention_mask,
             deterministic=deterministic,
-            use_cache=use_cache,
+            _use_cache=_use_cache,
             output_attentions=output_attentions,
         )
         # residual connection
@@ -326,14 +337,21 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
 
         return self.module.init(rngs, input_ids, attention_mask, position_ids, return_dict=False)["params"]
 
-    def init_cache(self, batch_size, max_decoding_length):
-        # init cache for fast decoding
-        input_ids = jnp.ones((batch_size, max_decoding_length))
+    def init_cache(self, batch_size, max_length):
+        r"""
+        Args:
+            batch_size (:obj:`int`):
+                batch_size used for fast auto-regressive decoding. Defines the batch size of the initialized cache.
+            max_length (:obj:`int`):
+                maximum possible length for auto-regressive decoding. Defines the sequence length of the initialized cache.
+        """
+        # init input variables to retrieve cache
+        input_ids = jnp.ones((batch_size, max_length))
         attention_mask = jnp.ones_like(input_ids)
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
 
         init_variables = self.module.init(
-            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, use_cache=True
+            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, _use_cache=True
         )
         return init_variables["cache"]
 
@@ -361,6 +379,10 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
 
         if position_ids is None:
             if past_key_values is not None and input_ids.shape[-1] == 1:
+                # if `past_key_values` are passed and input_ids are
+                # longer than 1, we are in cached auto-regressive
+                # generation. It has to be made sure that position_ids
+                # are set correctly
                 cache_shift = next(
                     iter(v for k, v in flatten_dict(unfreeze(past_key_values)).items() if k[-1] == "cache_index")
                 )
@@ -373,6 +395,8 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
                 position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
 
         if attention_mask is None:
+            # if past_key_values are passed we need to create an
+            # attention_mask of the same length as `cache_length`
             if past_key_values is not None:
                 cache_length = next(
                     iter(v for k, v in flatten_dict(unfreeze(past_key_values)).items() if k[-1] != "cache_index")
@@ -394,12 +418,18 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
 
         inputs = {"params": params or self.params}
 
+        # if past_key_values are passed then cache is already initialized
+        # a private flag _use_cache has to be passed down to
+        # ensure cache is used.
+        # It has to be made sure that cache is marked as mutable so that
+        # it can be changed by FlaxGPT2Attention module
         if past_key_values:
             inputs["cache"] = past_key_values
             mutable = ["cache"]
-            use_cache = True
+            _use_cache = True
         else:
-            mutable = use_cache = False
+            mutable = False
+            _use_cache = False
 
         outputs = self.module.apply(
             inputs,
@@ -407,7 +437,7 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
             jnp.array(attention_mask, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
             not train,
-            use_cache,
+            _use_cache,
             output_attentions,
             output_hidden_states,
             return_dict,
@@ -415,13 +445,12 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
             mutable=mutable,
         )
 
+        # add updated cache to model output
         if past_key_values is not None and return_dict:
-            # outputs is a tuple with cache
             outputs, past_key_values = outputs
             outputs["past_key_values"] = unfreeze(past_key_values["cache"])
             return outputs
         elif past_key_values is not None and not return_dict:
-            # outputs is a tuple with cache
             outputs, past_key_values = outputs
             outputs = outputs[:1] + (unfreeze(past_key_values["cache"]),) + outputs[1:]
 
@@ -442,7 +471,7 @@ class FlaxGPT2BlockCollection(nn.Module):
         hidden_states,
         attention_mask=None,
         deterministic: bool = True,
-        use_cache: bool = False,
+        _use_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -454,7 +483,7 @@ class FlaxGPT2BlockCollection(nn.Module):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            layer_outputs = block(hidden_states, attention_mask, deterministic=deterministic, use_cache=use_cache)
+            layer_outputs = block(hidden_states, attention_mask, deterministic=deterministic, _use_cache=_use_cache)
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -505,7 +534,7 @@ class FlaxGPT2Module(nn.Module):
         attention_mask,
         position_ids,
         deterministic=True,
-        use_cache: bool = False,
+        _use_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -520,7 +549,7 @@ class FlaxGPT2Module(nn.Module):
             hidden_states,
             attention_mask,
             deterministic=deterministic,
-            use_cache=use_cache,
+            _use_cache=_use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -571,7 +600,7 @@ class FlaxGPT2LMHeadModule(nn.Module):
         attention_mask,
         position_ids,
         deterministic: bool = True,
-        use_cache: bool = False,
+        _use_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -581,7 +610,7 @@ class FlaxGPT2LMHeadModule(nn.Module):
             attention_mask,
             position_ids,
             deterministic=deterministic,
-            use_cache=use_cache,
+            _use_cache=_use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

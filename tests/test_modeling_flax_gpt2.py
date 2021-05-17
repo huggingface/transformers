@@ -158,7 +158,7 @@ class FlaxGPT2ModelTester:
         prompt_ids = input_ids[:1, :prompt_length]
 
         # put all generation logic into one function
-        def generate(prompt_ids, past_key_values):
+        def generate(prompt_ids):
             def first_pass(prompt_ids):
                 logits, cache = model(prompt_ids, past_key_values=past_key_values)[:2]
                 next_token = jnp.argmax(logits[:, -1:], axis=-1)
@@ -229,7 +229,8 @@ class FlaxGPT2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
         config, input_ids, _ = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_use_cache_generation(config, input_ids)
 
-    # overwrite from common since `attention_mask` is different
+    # overwrite from common since `attention_mask` in combination
+    # with `causal_mask` behaves slighly differently
     @is_pt_flax_cross_test
     def test_equivalence_pt_to_flax(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -276,7 +277,8 @@ class FlaxGPT2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 for fx_output_loaded, pt_output in zip(fx_outputs_loaded, pt_outputs):
                     self.assert_almost_equals(fx_output_loaded[:, -1], pt_output[:, -1].numpy(), 4e-2)
 
-    # overwrite from common since `attention_mask` is different
+    # overwrite from common since `attention_mask` in combination
+    # with `causal_mask` behaves slighly differently
     @is_pt_flax_cross_test
     def test_equivalence_flax_to_pt(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

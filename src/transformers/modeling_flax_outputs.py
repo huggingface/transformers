@@ -54,15 +54,9 @@ class FlaxBaseModelOutputWithPast(ModelOutput):
     Args:
         last_hidden_state (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        past_key_values (:obj:`Dict(Dict(jax_xla.DeviceArray))`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
-            Dict of :obj:`dict(jax_xla.DeviceArray)` of length :obj:`config.n_layers`, with each tuple having 2 tensors
-            of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
-            ``config.is_encoder_decoder=True`` 2 additional tensors of shape :obj:`(batch_size, num_heads,
-            encoder_sequence_length, embed_size_per_head)`.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-            ``config.is_encoder_decoder=True`` in the cross-attention blocks) that can be used (see
-            :obj:`past_key_values` input) to speed up sequential decoding.
+        past_key_values (:obj:`Dict[str, jax_xla.DeviceArray]`):
+            Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast auto-regressive decoding.
+            Pre-computed key and value hidden-states are of shape `[batch_size, max_length]`.
         hidden_states (:obj:`tuple(jax_xla.DeviceArray)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`jax_xla.DeviceArray` (one for the output of the embeddings + one for the output of each
             layer) of shape :obj:`(batch_size, sequence_length, hidden_size)`.
