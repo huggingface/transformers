@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Testing suite for the PyTorch CharacterBERT model. """
-import unittest
 import copy
+import unittest
 
 from tests.test_modeling_common import floats_tensor
 from transformers import is_torch_available
@@ -28,15 +28,15 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MODEL_FOR_PRETRAINING_MAPPING,
-        MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
-        MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
-        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         MODEL_FOR_CAUSAL_LM_MAPPING,
         MODEL_FOR_MASKED_LM_MAPPING,
+        MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+        MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
+        MODEL_FOR_PRETRAINING_MAPPING,
+        MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         CharacterBertConfig,
         CharacterBertForMaskedLM,
         CharacterBertForMultipleChoice,
@@ -48,9 +48,7 @@ if is_torch_available():
         CharacterBertLMHeadModel,
         CharacterBertModel,
     )
-    from transformers.models.character_bert.modeling_character_bert import (
-        CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
+    from transformers.models.character_bert.modeling_character_bert import CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class CharacterBertModelTester:
@@ -439,7 +437,7 @@ class CharacterBertConfigTester(ConfigTester):
     def create_and_test_config_common_properties(self):
         config = self.config_class(**self.inputs_dict)
         # NOTE: CharacterBERT does not rely on a wordpiece vocabulary
-        #self.parent.assertTrue(hasattr(config, "vocab_size"))
+        # self.parent.assertTrue(hasattr(config, "vocab_size"))
         self.parent.assertTrue(hasattr(config, "hidden_size"))
         self.parent.assertTrue(hasattr(config, "num_attention_heads"))
         self.parent.assertTrue(hasattr(config, "num_hidden_layers"))
@@ -451,6 +449,7 @@ def _config_zero_init(config):
         if "_range" in key or "_std" in key or "initializer_factor" in key:
             setattr(configs_no_init, key, 1e-10)
     return configs_no_init
+
 
 @require_torch
 class CharacterBertModelTest(ModelTesterMixin, unittest.TestCase):
@@ -581,7 +580,7 @@ class CharacterBertModelTest(ModelTesterMixin, unittest.TestCase):
         # a wordpiece vocabulary. This means we cannot resize embeddings
         # according to a new target vocabulary which may be larger.
         return
-    
+
     def test_resize_tokens_embeddings(self):
         # NOTE: CharacterBERT does not have a wordpiece embedding matrix nor
         # a wordpiece vocabulary. This means we cannot resize embeddings
@@ -697,12 +696,12 @@ class CharacterBertModelIntegrationTest(unittest.TestCase):
         model = CharacterBertForMaskedLM.from_pretrained("helboukkouri/character-bert")
         input_ids = torch.tensor([
             [
-                [259, 1, 260] + [261]*(50-3),
-                [259, 2, 260] + [261]*(50-3),
-                [259, 3, 260] + [261]*(50-3),
-                [259, 4, 260] + [261]*(50-3),
-                [259, 5, 260] + [261]*(50-3),
-                [259, 6, 260] + [261]*(50-3),
+                [259, 1, 260] + [261] * (50 - 3),
+                [259, 2, 260] + [261] * (50 - 3),
+                [259, 3, 260] + [261] * (50 - 3),
+                [259, 4, 260] + [261] * (50 - 3),
+                [259, 5, 260] + [261] * (50 - 3),
+                [259, 6, 260] + [261] * (50 - 3),
             ]
         ])
         output = model(input_ids)[0]

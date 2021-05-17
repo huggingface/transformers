@@ -14,11 +14,9 @@
 # limitations under the License.
 
 
-import os
 import unittest
 
 from transformers.models.character_bert.tokenization_character_bert import (
-    VOCAB_FILES_NAMES,
     BasicTokenizer,
     CharacterBertTokenizer,
     CharacterMapper,
@@ -26,9 +24,9 @@ from transformers.models.character_bert.tokenization_character_bert import (
     _is_punctuation,
     _is_whitespace,
 )
-from transformers.testing_utils import require_tokenizers, slow
+from transformers.testing_utils import require_tokenizers
 
-from .test_tokenization_common import TokenizerTesterMixin, filter_non_english
+from .test_tokenization_common import filter_non_english
 
 
 @require_tokenizers
@@ -70,7 +68,7 @@ class BertTokenizationTest(unittest.TestCase):
         self.assertListEqual(tokens, expected_tokens)
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), expected_ids)
         ids = tokenizer.encode(sequence, add_special_tokens=False)
-        self.assertListEqual(ids,expected_ids)
+        self.assertListEqual(ids, expected_ids)
 
         # Test UpperCase
         tokenizer = self.tokenizer_class.from_pretrained('helboukkouri/character-bert', do_lower_case=False)
@@ -96,7 +94,7 @@ class BertTokenizationTest(unittest.TestCase):
         self.assertListEqual(tokens, expected_tokens)
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), expected_ids)
         ids = tokenizer.encode(sequence, add_special_tokens=False)
-        self.assertListEqual(ids,expected_ids)
+        self.assertListEqual(ids, expected_ids)
 
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("helboukkouri/character-bert")

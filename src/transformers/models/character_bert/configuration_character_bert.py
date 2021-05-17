@@ -98,18 +98,19 @@ class CharacterBertConfig(PretrainedConfig):
         >>> configuration = model.config
     """
     model_type = "character_bert"
+
     def __init__(
         self,
         character_embeddings_dim=16,
         cnn_activation="relu",
         cnn_filters=[
-           [1, 32],
-           [2, 32],
-           [3, 64],
-           [4, 128],
-           [5, 256],
-           [6, 512],
-           [7, 1024]
+            [1, 32],
+            [2, 32],
+            [3, 64],
+            [4, 128],
+            [5, 256],
+            [6, 512],
+            [7, 1024]
         ],
         num_highway_layers=2,
         max_word_length=50,
