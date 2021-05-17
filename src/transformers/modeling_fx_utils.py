@@ -68,6 +68,8 @@ class HFProxy(Proxy):
             if self.tracer.num_choices <= 0:
                 raise ValueError("num_choices must be given to the CustomTracer for MultipleChoice tasks.")
             shape = shape[:1] + [self.tracer.num_choices] + shape[1:]
+        elif "hidden_states.s" in code_context:
+            shape = shape + [self.tracer.root.config.hidden_size]
         else:
             # Default case:
             #   - If self.size is called for an unpacking, retrieves the corresponding unpacking
