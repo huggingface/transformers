@@ -383,7 +383,9 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         target_ids_with_padding = [7, 8] * 6 + 4 * [-100]
 
         attention_mask = torch.tensor(
-            [[1] * 3 * chunk_length + [0] * chunk_length, [1] * 4 * chunk_length], device=torch_device, dtype=torch.long
+            [[1] * 3 * chunk_length + [0] * chunk_length, [1] * 4 * chunk_length],
+            device=torch_device,
+            dtype=torch.long,
         )
 
         input_ids = torch.tensor([sample_with_padding, sample_without_padding], device=torch_device, dtype=torch.long)
