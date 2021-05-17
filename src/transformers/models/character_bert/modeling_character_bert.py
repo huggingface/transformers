@@ -18,12 +18,11 @@
 CharacterCNN module from ELMo instead of a WordPiece embedding matrix.
 See: “CharacterBERT: Reconciling ELMo and BERT for Word-Level Open-Vocabulary
 Representations From Characters“ https://www.aclweb.org/anthology/2020.coling-main.609/ """
-from typing import Callable, Optional, Tuple
 import math
 import os
-
+import warnings
 from dataclasses import dataclass
-import numpy as np
+from typing import Callable, Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -39,19 +38,18 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_outputs import (
-    BaseModelOutputWithPoolingAndCrossAttentions,
     BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
-    NextSentencePredictorOutput,
     MultipleChoiceModelOutput,
+    NextSentencePredictorOutput,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
 from ...modeling_utils import (
     PreTrainedModel,
-    SequenceSummary,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
@@ -71,6 +69,7 @@ CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "helboukkouri/character-bert-medical",
     # See all CharacterBERT models at https://huggingface.co/models?filter=character_bert
 ]
+
 
 # Copied from transformers.models.bert.modeling_bert.load_tf_weights_in_bert with bert->character_bert
 def load_tf_weights_in_character_bert(model, config, tf_checkpoint_path):
@@ -883,6 +882,12 @@ class CharacterBertPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """ Initialize the weights """
+        if isinstance(module, CharacterCnn):
+            # We need to handle the case of this parameters since it is not an actual module
+            module._char_embedding_weights.data.normal_()
+            module._char_embedding_weights.data[0].fill_(0.)  # token padding
+            module._char_embedding_weights.data[
+                CharacterMapper.padding_character + 1].fill_(0.)  # character padding
         if isinstance(module, (nn.Linear, nn.Embedding)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -952,18 +957,18 @@ CHARACTER_BERT_INPUTS_DOCSTRING = r"""
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{1}`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-            
+
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-            
+
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`{1}`, `optional`):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
             1]``:
-            
+
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
-            
+
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`{1}`, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings.
@@ -972,10 +977,10 @@ CHARACTER_BERT_INPUTS_DOCSTRING = r"""
             `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
-            
+
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-            
+
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
@@ -1724,6 +1729,7 @@ class CharacterBertForSequenceClassification(CharacterBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
 
 @add_start_docstrings(
     """CharacterBERT Model with a multiple choice classification head on top (a linear layer on top of

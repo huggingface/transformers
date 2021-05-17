@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    character_bert,
     albert,
     auto,
     bart,
@@ -35,6 +34,7 @@ from . import (
     byt5,
     camembert,
     canine,
+    character_bert,
     clip,
     convbert,
     cpm,
