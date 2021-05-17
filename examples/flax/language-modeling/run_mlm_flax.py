@@ -23,6 +23,7 @@ https://huggingface.co/models?filter=masked-lm
 import logging
 import os
 import sys
+import time
 from dataclasses import dataclass, field
 
 # You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
@@ -39,7 +40,7 @@ import optax
 
 from flax import jax_utils
 from flax.training import train_state
-from flax.training.common_utils import get_metrics, shard, onehot
+from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
 from jax.nn import log_softmax
 from transformers import (
     CONFIG_MAPPING,
@@ -270,47 +271,24 @@ class FlaxDataCollatorForLanguageModeling:
         return inputs, labels
 
 
-def create_linear_decay_lr_fn(
-    num_train_steps: int, num_warmup_steps: int, learning_rate: float
-) -> Callable[[int], jnp.array]:
-    """Returns a linear warmup, linear_decay learning rate function."""
-    warmup_fn = optax.linear_schedule(init_value=0.0, end_value=learning_rate, transition_steps=num_warmup_steps)
+def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndarray:
+    nb_samples = len(samples_idx)
+    samples_to_remove = nb_samples % batch_size
 
-    decay_fn = optax.linear_schedule(
-        init_value=learning_rate, end_value=0, transition_steps=num_train_steps - num_warmup_steps
-    )
-    return optax.join_schedules(schedules=[warmup_fn, decay_fn], boundaries=[num_warmup_steps])
-
-
-def adamw(decay):
-    return optax.adamw(learning_rate=learning_rate_fn, b1=training_args.adam_beta1, b2=training_args.adam_beta2, eps=1e-6, weight_decay=decay)
+    if samples_to_remove != 0:
+        samples_idx = samples_idx[:-samples_to_remove]
+    sections_split = nb_samples // batch_size
+    batch_idx = np.split(samples_idx, sections_split)
+    return batch_idx
 
 
 def compute_metrics(logits, labels, weights, label_smoothing=0.0):
-    """Compute summary metrics."""
     loss, normalizer = cross_entropy(logits, labels, weights, label_smoothing)
-    acc, _ = accuracy(logits, labels, weights)
-    metrics = {"loss": loss, "accuracy": acc, "normalizer": normalizer}
+    one_hot_accuracy = jnp.equal(jnp.argmax(logits, axis=-1), labels) * weights
+    accuracy = one_hot_accuracy.sum()
+    metrics = {"loss": loss, "accuracy": accuracy, "normalizer": normalizer}
     metrics = jax.lax.psum(metrics, axis_name="batch")
     return metrics
-
-
-def accuracy(logits, targets, weights=None):
-    """Compute weighted accuracy for log probs and targets.
-    Args:
-     logits: [batch, length, num_classes] float array.
-     targets: categorical targets [batch, length] int array.
-     weights: None or array of shape [batch, length]
-    Returns:
-      Tuple of scalar loss and batch normalizing factor.
-    """
-    if logits.ndim != targets.ndim + 1:
-        raise ValueError(f"Incorrect shapes. Got shape {logits.shape} logits and {targets.shape} targets")
-
-    loss = jnp.equal(jnp.argmax(logits, axis=-1), targets)
-    loss *= weights
-
-    return loss.sum(), weights.sum()
 
 
 def cross_entropy(logits, targets, weights=None, label_smoothing=0.0):
@@ -346,54 +324,17 @@ def cross_entropy(logits, targets, weights=None, label_smoothing=0.0):
     return loss.sum(), normalizing_factor
 
 
-def train_step(state, batch, dropout_rng):
-#    dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
+def write_metric(train_metrics, eval_metrics, train_time, step):
+    summary_writer.scalar("train_time", train_time, step)
 
-    def loss_fn(params):
-        targets = batch.pop("labels")
+    train_metrics = get_metrics(train_metrics)
+    for key, vals in train_metrics.items():
+        tag = f"train_{key}"
+        for i, val in enumerate(vals):
+            summary_writer.scalar(tag, val, step - len(vals) + i + 1)
 
-        # Hide away tokens which doesn't participate in the optimization
-        token_mask = jnp.where(targets > 0, 1.0, 0.0)
-
-        logits = model(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
-        loss, weight_sum = cross_entropy(logits, targets, token_mask)
-        return loss / weight_sum
-
-    grad_fn = jax.value_and_grad(loss_fn)
-    loss, grad = grad_fn(state.params)
-    grad = jax.lax.pmean(grad, "batch")
-    new_state = state.apply_gradient(grads=grad)
-
-#    step = optimizer.state.step
-#    lr = lr_scheduler_fn(step)
-#    optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
-
-    return new_state, loss
-#    return new_state, loss, state, new_dropout_rng
-
-
-def eval_step(params, batch):
-    """
-    Calculate evaluation metrics on a batch.
-    """
-    targets = batch.pop("labels")
-
-    # Hide away tokens which doesn't participate in the optimization
-    token_mask = jnp.where(targets > 0, 1.0, 0.0)
-    logits = model(**batch, params=params, train=False)[0]
-
-    return compute_metrics(logits, targets, token_mask)
-
-
-def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndarray:
-    nb_samples = len(samples_idx)
-    samples_to_remove = nb_samples % batch_size
-
-    if samples_to_remove != 0:
-        samples_idx = samples_idx[:-samples_to_remove]
-    sections_split = nb_samples // batch_size
-    batch_idx = np.split(samples_idx, sections_split)
-    return batch_idx
+    for metric_name, value in eval_metrics.items():
+        summary_writer.scalar(f"eval_{metric_name}", value, step)
 
 
 if __name__ == "__main__":
@@ -452,6 +393,7 @@ if __name__ == "__main__":
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir)
+
         if "validation" not in datasets.keys():
             datasets["validation"] = load_dataset(
                 data_args.dataset_name,
@@ -465,6 +407,10 @@ if __name__ == "__main__":
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 cache_dir=model_args.cache_dir,
             )
+
+        # TODO - delete after debugging
+        datasets["train"] = datasets["train"].select(range(2000))
+        datasets["validation"] = datasets["validation"].select(range(2000))
     else:
         data_files = {}
         if data_args.train_file is not None:
@@ -576,7 +522,6 @@ if __name__ == "__main__":
         #
         # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
         # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
-
         tokenized_datasets = tokenized_datasets.map(
             group_texts,
             batched=True,
@@ -585,7 +530,7 @@ if __name__ == "__main__":
         )
 
     # Enable tensorboard only on the master node
-    if has_tensorboard and jax.host_id() == 0:
+    if has_tensorboard and jax.process_index() == 0:
         summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir).joinpath("logs").as_posix())
 
     # Data collator
@@ -598,63 +543,101 @@ if __name__ == "__main__":
 
     model = FlaxAutoModelForMaskedLM.from_config(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
 
-    # Setup optimizer
-#    optimizer = Adam(
-#        learning_rate=training_args.learning_rate,
-#        weight_decay=training_args.weight_decay,
-#        beta1=training_args.adam_beta1,
-#        beta2=training_args.adam_beta2,
-#    ).create(model.params)
-
-    # Create learning rate scheduler
-    # warmup_steps = 0 causes the Flax optimizer to return NaNs; warmup_steps = 1 is functionally equivalent.
-#    lr_scheduler_fn = create_learning_rate_scheduler(
-#        base_learning_rate=training_args.learning_rate, warmup_steps=max(training_args.warmup_steps, 1)
-#    )
-
     num_train_steps = len(tokenized_datasets["train"]) * training_args.num_train_epochs
-    learning_rate_fn = create_linear_decay_lr_fn(num_train_steps, training_args.warmup_steps, learning_rate=training_args.learning_rate)
 
-    train_state = train_state.TrainState.create(
+    # Create learning rate schedule
+    warmup_fn = optax.linear_schedule(init_value=0.0, end_value=training_args.learning_rate, transition_steps=training_args.warmup_steps)
+
+    decay_fn = optax.linear_schedule(
+        init_value=training_args.learning_rate, end_value=0, transition_steps=num_train_steps - training_args.warmup_steps
+    )
+    linear_decay_lr_schedule_fn = optax.join_schedules(schedules=[warmup_fn, decay_fn], boundaries=[training_args.warmup_steps])
+
+    # create adam optimizer
+    adamw = optax.adamw(learning_rate=linear_decay_lr_schedule_fn, b1=training_args.adam_beta1, b2=training_args.adam_beta2, eps=1e-6, weight_decay=training_args.weight_decay)
+
+    # Setup train state
+    state = train_state.TrainState.create(
         apply_fn=model.__call__,
         params=model.params,
-        tx=adamw(training_args.weight_decay)
+        tx=adamw
     )
+
+    # Define gradient update step fn
+    def train_step(state, batch, dropout_rng):
+        def loss_fn(params):
+            targets = batch.pop("labels")
+
+            # Hide away tokens which doesn't participate in the optimization
+            token_mask = jnp.where(targets > 0, 1.0, 0.0)
+
+            logits = model(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
+            loss, weight_sum = cross_entropy(logits, targets, token_mask)
+            return loss / weight_sum
+
+        grad_fn = jax.value_and_grad(loss_fn)
+        loss, grad = grad_fn(state.params)
+        grad = jax.lax.pmean(grad, "batch")
+        new_state = state.apply_gradients(grads=grad)
+
+        metrics = jax.lax.pmean({"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}, axis_name="batch")
+
+        return new_state, metrics
 
     # Create parallel version of the training and evaluation steps
     p_train_step = jax.pmap(train_step, "batch", donate_argnums=(0,))
+
+    # Define eval fn
+    def eval_step(params, batch):
+        targets = batch.pop("labels")
+
+        # Hide away tokens which doesn't participate in the optimization
+        token_mask = jnp.where(targets > 0, 1.0, 0.0)
+        logits = model(**batch, params=params, train=False)[0]
+
+        return compute_metrics(logits, targets, token_mask)
+
     p_eval_step = jax.pmap(eval_step, "batch", donate_argnums=(0,))
 
-    # Replicate the optimizer on each device
-    train_state = jax_utils.replicate(train_state)
+    # Replicate the train state on each device
+    state = jax_utils.replicate(state)
 
     # Store some constant
     nb_epochs = int(training_args.num_train_epochs)
     batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
     eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
 
+    train_metrics = []
+    train_time = 0
     epochs = tqdm(range(nb_epochs), desc=f"Epoch ... (1/{nb_epochs})", position=0)
     for epoch in epochs:
-
         # ======================== Training ================================
+        train_start = time.time()
+
         # Create sampling rng
-        rng, training_rng, eval_rng = jax.random.split(rng, 3)
+        rng, input_rng = jax.random.split(rng)
 
         # Generate an epoch by shuffling sampling indices from the train dataset
         nb_training_samples = len(tokenized_datasets["train"])
-        training_samples_idx = jax.random.permutation(training_rng, jnp.arange(nb_training_samples))
+        training_samples_idx = jax.random.permutation(input_rng, jnp.arange(nb_training_samples))
         training_batch_idx = generate_batch_splits(training_samples_idx, batch_size)
 
         # Gather the indexes for creating the batch and do a training step
         for batch_idx in tqdm(training_batch_idx, desc="Training...", position=1):
+            rng, dropout_rng = jax.random.split(input_rng)
+            dropout_rngs = shard_prng_key(dropout_rng)
+
             samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
             model_inputs = data_collator(samples, pad_to_multiple_of=16)
 
             # Model forward
             model_inputs = shard(model_inputs.data)
-            loss, optimizer, dropout_rngs = p_train_step(optimizer, model_inputs, dropout_rngs)
+            state, metrics = p_train_step(state, model_inputs, dropout_rngs)
+            train_metrics.append(metrics)
 
-        epochs.write(f"Loss: {loss}")
+        train_time += time.time() - train_start
+
+        epochs.write(f"Loss: {metrics['loss']}")
 
         # ======================== Evaluating ==============================
         nb_eval_samples = len(tokenized_datasets["validation"])
@@ -668,25 +651,26 @@ if __name__ == "__main__":
 
             # Model forward
             model_inputs = shard(model_inputs.data)
-            metrics = p_eval_step(optimizer.target, model_inputs)
+            metrics = p_eval_step(state.params, model_inputs)
             eval_metrics.append(metrics)
 
-        eval_metrics_np = get_metrics(eval_metrics)
-        eval_metrics_np = jax.tree_map(jnp.sum, eval_metrics_np)
-        eval_normalizer = eval_metrics_np.pop("normalizer")
-        eval_summary = jax.tree_map(lambda x: x / eval_normalizer, eval_metrics_np)
+        # normalize eval metrics
+        eval_metrics = get_metrics(eval_metrics)
+        eval_metrics = jax.tree_map(jnp.sum, eval_metrics)
+        eval_normalizer = eval_metrics.pop("normalizer")
+        eval_metrics = jax.tree_map(lambda x: x / eval_normalizer, eval_metrics)
 
         # Update progress bar
         epochs.desc = (
-            f"Epoch... ({epoch + 1}/{nb_epochs} | Loss: {eval_summary['loss']}, Acc: {eval_summary['accuracy']})"
+            f"Epoch... ({epoch + 1}/{nb_epochs} | Loss: {eval_metrics['loss']}, Acc: {eval_metrics['accuracy']})"
         )
 
         # Save metrics
-        if has_tensorboard and jax.host_id() == 0:
-            for name, value in eval_summary.items():
-                summary_writer.scalar(name, value, epoch)
+        if has_tensorboard and jax.process_index() == 0:
+            cur_step = epoch * (len(tokenized_datasets["train"]) // batch_size)
+            write_metric(train_metrics, eval_metrics, train_time, cur_step)
 
-        # save last checkpoint
-        if jax.host_id() == 0:
-            params = jax.device_get(jax.tree_map(lambda x: x[0], optimizer.target))
-            model.save_pretrained(training_args.output_dir, params=params)
+    # save last checkpoint
+    if jax.process_index() == 0:
+        params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+        model.save_pretrained(training_args.output_dir, params=params)
