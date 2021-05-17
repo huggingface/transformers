@@ -305,16 +305,9 @@ def cross_entropy(logits, targets, weights=None):
         raise ValueError(f"Incorrect shapes. Got shape {logits.shape} logits and {targets.shape} targets")
 
     vocab_size = logits.shape[-1]
-#    confidence = 1.0 - label_smoothing
-#    low_confidence = (1.0 - confidence) / (vocab_size - 1)
-#    normalizing_constant = -(
-#        confidence * jnp.log(confidence) + (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20)
-#    )
-#    soft_targets = onehot(targets, vocab_size, on_value=confidence, off_value=low_confidence)
     soft_targets = onehot(targets, vocab_size)
 
     loss = -jnp.sum(soft_targets * log_softmax(logits), axis=-1)
-#    loss = loss - normalizing_constant
 
     if weights is not None:
         loss = loss * weights
