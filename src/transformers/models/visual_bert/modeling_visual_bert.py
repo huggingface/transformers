@@ -1816,9 +1816,8 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         selected_positions = sequence_output.gather(1, expanded_region_to_phrase_positions)
 
         # Visual Features = batch x visual_feature_length x dim
-        visual_features = sequence_output[
-            :, attention_mask.size(1) :, :
-        ]  # This will need separate image and visual masks.
+        # This will need separate image and visual masks.
+        visual_features = sequence_output[:, attention_mask.size(1) :]
         assert visual_features.size(1) == visual_attention_mask.size(1)
 
         logits = self.attention(selected_positions, visual_features, visual_attention_mask)
