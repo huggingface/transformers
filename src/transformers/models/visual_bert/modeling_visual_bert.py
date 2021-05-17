@@ -200,9 +200,8 @@ class VisualBertEmbeddings(nn.Module):
                 image_text_alignment = image_text_alignment_mask * image_text_alignment
 
                 # Batch x image_length x alignment length x dim
-                visual_position_embeddings = self.position_embeddings(
-                    image_text_alignment
-                ) * image_text_alignment_mask.to(dtype=next(self.parameters()).dtype).unsqueeze(-1)
+                visual_position_embeddings = self.position_embeddings(image_text_alignment)
+                visual_position_embeddings *= image_text_alignment_mask.to(dtype=next(self.parameters()).dtype).unsqueeze(-1)
                 visual_position_embeddings = visual_position_embeddings.sum(2)
 
                 # We want to averge along the alignment_number dimension.
