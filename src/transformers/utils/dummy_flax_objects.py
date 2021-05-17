@@ -192,24 +192,6 @@ class FlaxBertPreTrainedModel:
         requires_backends(self, ["flax"])
 
 
-class FlaxGPT2LMHeadModel:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
-class FlaxGPT2Model:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
 class FlaxElectraForMaskedLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
@@ -270,6 +252,24 @@ class FlaxElectraModel:
 
 
 class FlaxElectraPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxGPT2LMHeadModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxGPT2Model:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 

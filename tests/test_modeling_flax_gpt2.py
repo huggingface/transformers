@@ -150,9 +150,15 @@ class FlaxGPT2ModelTester:
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
     def check_use_cache_generation(self, config, input_ids):
-        # Test that generation loop can be compiled
+        prompt_length = 3
+        model = FlaxGPT2LMHeadModel(config)
+        max_length = 10
+        batch_size = 1
 
-        def generate(init_sequences, prompt_ids, past_key_values):
+        prompt_ids = input_ids[:1, :prompt_length]
+
+        # put all generation logic into one function
+        def generate(prompt_ids, past_key_values):
             def first_pass(prompt_ids):
                 logits, cache = model(prompt_ids, past_key_values=past_key_values)[:2]
                 next_token = jnp.argmax(logits[:, -1:], axis=-1)
@@ -171,28 +177,31 @@ class FlaxGPT2ModelTester:
 
                 return cur_len + 1, next_sequences, next_token, next_cache
 
-            next_token, cache = first_pass(prompt_ids)
-            init_state = (jnp.array(3), init_sequences, next_token, cache)
+            # init tensor to be filled with generation result
+            init_sequences = jnp.zeros((batch_size, max_length), dtype="i4")
+            init_sequences = lax.dynamic_update_slice(init_sequences, prompt_ids, (0, 0))
 
+            # init past key values for cache
+            past_key_values = model.init_cache(batch_size, max_length)
+
+            # first pass with long prompt
+            next_token, cache = first_pass(prompt_ids)
+
+            # prepare state for generation loop
+            init_state = (jnp.array(prompt_length), init_sequences, next_token, cache)
+
+            # fast generation
             _, output_sequences, final_token, _ = lax.while_loop(
                 greedy_search_cond_fn, greedy_search_body_fn, init_state
             )
+
+            # append last token
             output_sequences = lax.dynamic_update_slice(output_sequences, final_token, (0, max_length - 1))
 
             return output_sequences
 
-        model = FlaxGPT2LMHeadModel(config)
-        max_length = 20
-        batch_size = 1
-
-        init_sequences = jnp.zeros((batch_size, max_length), dtype="i4")
-        prompt_ids = input_ids[:1, :3]
-        init_sequences = lax.dynamic_update_slice(init_sequences, prompt_ids, (0, 0))
-        past_key_values = model.init_cache(batch_size, max_length)
-
         jit_generate = jax.jit(generate)
-        output_sequences = jit_generate(init_sequences, prompt_ids, past_key_values)
-
+        output_sequences = jit_generate(prompt_ids)
         self.parent.assertEqual(output_sequences.shape, (1, max_length))
 
 
