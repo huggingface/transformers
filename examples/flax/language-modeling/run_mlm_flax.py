@@ -37,10 +37,9 @@ from tqdm import tqdm
 import jax
 import jax.numpy as jnp
 import optax
-
 from flax import jax_utils
 from flax.training import train_state
-from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
+from flax.training.common_utils import get_metrics, onehot, shard
 from jax.nn import log_softmax
 from transformers import (
     CONFIG_MAPPING,
@@ -403,8 +402,8 @@ if __name__ == "__main__":
             )
 
         # TODO - delete after debugging
-#        datasets["train"] = datasets["train"].select(range(2000))
-#        datasets["validation"] = datasets["validation"].select(range(2000))
+    #        datasets["train"] = datasets["train"].select(range(2000))
+    #        datasets["validation"] = datasets["validation"].select(range(2000))
     else:
         data_files = {}
         if data_args.train_file is not None:
@@ -540,25 +539,35 @@ if __name__ == "__main__":
     num_train_steps = len(tokenized_datasets["train"]) * training_args.num_train_epochs
 
     # Create learning rate schedule
-    warmup_fn = optax.linear_schedule(init_value=0.0, end_value=training_args.learning_rate, transition_steps=training_args.warmup_steps)
+    warmup_fn = optax.linear_schedule(
+        init_value=0.0, end_value=training_args.learning_rate, transition_steps=training_args.warmup_steps
+    )
 
     decay_fn = optax.linear_schedule(
-        init_value=training_args.learning_rate, end_value=0, transition_steps=num_train_steps - training_args.warmup_steps
+        init_value=training_args.learning_rate,
+        end_value=0,
+        transition_steps=num_train_steps - training_args.warmup_steps,
     )
-    linear_decay_lr_schedule_fn = optax.join_schedules(schedules=[warmup_fn, decay_fn], boundaries=[training_args.warmup_steps])
+    linear_decay_lr_schedule_fn = optax.join_schedules(
+        schedules=[warmup_fn, decay_fn], boundaries=[training_args.warmup_steps]
+    )
 
     # create adam optimizer
-    adamw = optax.adamw(learning_rate=linear_decay_lr_schedule_fn, b1=training_args.adam_beta1, b2=training_args.adam_beta2, eps=1e-6, weight_decay=training_args.weight_decay)
+    adamw = optax.adamw(
+        learning_rate=linear_decay_lr_schedule_fn,
+        b1=training_args.adam_beta1,
+        b2=training_args.adam_beta2,
+        eps=1e-6,
+        weight_decay=training_args.weight_decay,
+    )
 
     # Setup train state
-    state = train_state.TrainState.create(
-        apply_fn=model.__call__,
-        params=model.params,
-        tx=adamw
-    )
+    state = train_state.TrainState.create(apply_fn=model.__call__, params=model.params, tx=adamw)
 
     # Define gradient update step fn
     def train_step(state, batch, dropout_rng):
+        dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
+
         def loss_fn(params):
             targets = batch.pop("labels")
 
@@ -574,9 +583,11 @@ if __name__ == "__main__":
         grad = jax.lax.pmean(grad, "batch")
         new_state = state.apply_gradients(grads=grad)
 
-        metrics = jax.lax.pmean({"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}, axis_name="batch")
+        metrics = jax.lax.pmean(
+            {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}, axis_name="batch"
+        )
 
-        return new_state, metrics
+        return new_state, metrics, new_dropout_rng
 
     # Create parallel version of the training and evaluation steps
     p_train_step = jax.pmap(train_step, "batch", donate_argnums=(0,))
@@ -618,15 +629,12 @@ if __name__ == "__main__":
 
         # Gather the indexes for creating the batch and do a training step
         for batch_idx in tqdm(training_batch_idx, desc="Training...", position=1):
-            rng, dropout_rng = jax.random.split(input_rng)
-            dropout_rngs = shard_prng_key(dropout_rng)
-
             samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
             model_inputs = data_collator(samples, pad_to_multiple_of=16)
 
             # Model forward
             model_inputs = shard(model_inputs.data)
-            state, metrics = p_train_step(state, model_inputs, dropout_rngs)
+            state, metrics, dropout_rngs = p_train_step(state, model_inputs, dropout_rngs)
             train_metrics.append(metrics)
 
         train_time += time.time() - train_start
