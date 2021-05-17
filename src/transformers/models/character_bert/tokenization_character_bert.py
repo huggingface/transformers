@@ -15,8 +15,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for CharacterBERT."""
+import json
 import os
 import unicodedata
+from collections import OrderedDict
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -32,17 +34,20 @@ from ...tokenization_utils import (
     _is_punctuation,
     _is_whitespace,
 )
+from ...tokenization_utils_base import ADDED_TOKENS_FILE
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
+VOCAB_FILES_NAMES = {
+    "mlm_vocab_file": "mlm_vocab.txt",
+}
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "helboukkouri/character-bert": "https://huggingface.co/helboukkouri/character-bert/resolve/main/vocab.txt",
-        "helboukkouri/character-bert-medical": "https://huggingface.co/helboukkouri/character-bert-medical/resolve/main/vocab.txt",
+    "mlm_vocab_file": {
+        "helboukkouri/character-bert": "https://huggingface.co/helboukkouri/character-bert/resolve/main/mlm_vocab.txt",
+        "helboukkouri/character-bert-medical": "https://huggingface.co/helboukkouri/character-bert-medical/resolve/main/mlm_vocab.txt",
     }
 }
 
@@ -68,6 +73,17 @@ def whitespace_tokenize(text):
     return tokens
 
 
+def build_mlm_ids_to_tokens_mapping(mlm_vocab_file):
+    """Builds a Masked Language Modeling ids to masked tokens mapping."""
+    vocabulary = []
+    with open(mlm_vocab_file, "r", encoding="utf-8") as reader:
+        for line in reader:
+            line = line.strip()
+            if line:
+                vocabulary.append(line)
+    return OrderedDict(list(enumerate(vocabulary)))
+
+
 class CharacterBertTokenizer(PreTrainedTokenizer):
     """
     Construct a CharacterBERT tokenizer. Based on characters.
@@ -76,6 +92,9 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
     Users should refer to this superclass for more information regarding those methods.
 
     Args:
+        mlm_vocab_file (:obj:`str`, `optional`, defaults to :obj:`None`):
+            Path to the Masked Language Modeling vocabulary. This is used for
+            converting the output (token ids) of the MLM model into tokens.
         max_word_length (:obj:`int`, `optional`, defaults to :obj:`50`):
             The maximum token length in characters (actually, in bytes as any
             non-ascii characters will be converted to a sequence of utf-8 bytes).
@@ -114,6 +133,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
 
     def __init__(
         self,
+        mlm_vocab_file=None,
         max_word_length=50,
         do_lower_case=True,
         do_basic_tokenize=True,
@@ -149,6 +169,18 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             self.sep_token,
             self.unk_token
         ]
+        # This is used for converting MLM ids into tokens
+        if mlm_vocab_file is None:
+            self.ids_to_tokens = None
+        else:
+            if not os.path.isfile(mlm_vocab_file):
+                raise ValueError(
+                    f"Can't find a vocabulary file at path '{mlm_vocab_file}'. "
+                    "To load the vocabulary from a pretrained model use "
+                    "`tokenizer = CharacterBertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+                )
+            self.ids_to_tokens = build_mlm_ids_to_tokens_mapping(mlm_vocab_file)
+        # Tokenization is handled by BasicTokenizer
         self.do_basic_tokenize = do_basic_tokenize
         if do_basic_tokenize:
             self.basic_tokenizer = BasicTokenizer(
@@ -157,7 +189,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
                 tokenize_chinese_chars=tokenize_chinese_chars,
                 strip_accents=strip_accents,
             )
-        # This is responsible for converting tokens into character ids
+        # Then, a CharacterMapper is responsible for converting tokens into character ids
         self.max_word_length = max_word_length
         self._mapper = CharacterMapper(max_word_length=max_word_length)
 
@@ -165,6 +197,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         # NOTE: we overwrite this because CharacterBERT does not have self.vocab_size
         return (
             f"CharacterBertTokenizer(name_or_path='{self.name_or_path}', "
+            f"mlm_vocab_size={self.mlm_vocab_size}" if self.ids_to_tokens else ""
             f"model_max_len={self.model_max_length}, is_fast={self.is_fast}, "
             f"padding_side='{self.padding_side}', special_tokens={self.special_tokens_map_extended})"
         )
@@ -175,7 +208,17 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        raise NotImplementedError("CharacterBERT does not have a token vocabulary.")
+        raise NotImplementedError("CharacterBERT does not use a token vocabulary.")
+
+    @property
+    def mlm_vocab_size(self):
+        if self.ids_to_tokens is None:
+            raise ValueError(
+                "CharacterBertTokenizer was initialized without a MLM "
+                "vocabulary. You can either pass one manually or load a "
+                "pre-trained tokenizer using: "
+                "`tokenizer = CharacterBertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`")
+        return len(self.ids_to_tokens)
 
     def get_vocab(self):
         raise NotImplementedError("CharacterBERT does not have a token vocabulary.")
@@ -237,6 +280,18 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             else:
                 tokens.append(self._convert_id_to_token(indices))
         return tokens
+
+    def convert_mlm_id_to_token(self, mlm_id):
+        """Converts an index (integer) in a token (str) using the vocab."""
+        if self.ids_to_tokens is None:
+            raise ValueError(
+                "CharacterBertTokenizer was initialized without a MLM "
+                "vocabulary. You can either pass one manually or load a "
+                "pre-trained tokenizer using: "
+                "`tokenizer = CharacterBertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`")
+        assert mlm_id < self.mlm_vocab_size, \
+            "Attempting to convert a MLM id that is greater than the MLM vocabulary size."
+        return self.ids_to_tokens[mlm_id]
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[List[int]], token_ids_1: Optional[List[List[int]]] = None
@@ -561,17 +616,57 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         return encoded_inputs
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        logger.warn("CharacterBERT does not have a token vocabulary. Skipping saving `vocab.txt`.")
+        return ()
+
+    def save_mlm_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         # NOTE: CharacterBERT has no token vocabulary, this is just to allow
         # saving tokenizer configuration via CharacterBertTokenizer.save_pretrained
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
-                save_directory, (filename_prefix + "-" if filename_prefix else "") + 'vocab.txt'
+                save_directory, (filename_prefix + "-" if filename_prefix else "") + 'mlm_vocab.txt'
             )
         else:
             vocab_file = (filename_prefix + "-" if filename_prefix else "") + save_directory
-        with open(vocab_file, "w", encoding="utf-8") as _:
-            pass
+        with open(vocab_file, "w", encoding="utf-8") as f:
+            for _, token in self.ids_to_tokens.items():
+                f.write(token + '\n')
         return (vocab_file,)
+
+    def _save_pretrained(
+        self,
+        save_directory: Union[str, os.PathLike],
+        file_names: Tuple[str],
+        legacy_format: Optional[bool] = None,
+        filename_prefix: Optional[str] = None,
+    ) -> Tuple[str]:
+        """
+        Save a tokenizer using the slow-tokenizer/legacy format: vocabulary + added tokens.
+
+        Fast tokenizers can also be saved in a unique JSON file containing {config + vocab + added-tokens} using the
+        specific :meth:`~transformers.tokenization_utils_fast.PreTrainedTokenizerFast._save_pretrained`
+        """
+        if legacy_format is False:
+            raise ValueError(
+                "Only fast tokenizers (instances of PreTrainedTokenizerFast) can be saved in non legacy format."
+            )
+
+        save_directory = str(save_directory)
+
+        added_tokens_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE
+        )
+        added_vocab = self.get_added_vocab()
+        if added_vocab:
+            with open(added_tokens_file, "w", encoding="utf-8") as f:
+                out_str = json.dumps(added_vocab, ensure_ascii=False)
+                f.write(out_str)
+                logger.info(f"added tokens file saved in {added_tokens_file}")
+
+        vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
+        vocab_files += self.save_mlm_vocabulary(save_directory, filename_prefix=filename_prefix)
+
+        return file_names + vocab_files + (added_tokens_file,)
 
 
 class BasicTokenizer(object):
