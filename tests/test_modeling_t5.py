@@ -600,6 +600,37 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 input_names=["input_ids", "decoder_input_ids"],
             )
 
+    def test_generate_with_head_masking(self):
+        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config = config_and_inputs[0]
+        max_length = config_and_inputs[1].shape[-1] + 3
+        model = T5ForConditionalGeneration(config)
+
+        head_masking = {
+            "head_mask": torch.zeros(config.num_layers, config.num_heads),
+            "decoder_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads),
+            "cross_attn_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads),
+        }
+
+        for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
+            head_masks = {name: mask}
+            # Explicitly pass decoder_head_mask as it is required from T5 model when head_mask specified
+            if name == "head_mask":
+                head_masks["decoder_head_mask"] = torch.ones(config.num_decoder_layers, config.num_heads)
+
+            out = model.generate(
+                config_and_inputs[1],
+                num_beams=1,
+                max_length=max_length,
+                output_attentions=True,
+                return_dict_in_generate=True,
+                **head_masks,
+            )
+            # We check the state of decoder_attentions and cross_attentions just from the last step
+            attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
+            self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
+
 
 class T5EncoderOnlyModelTester:
     def __init__(
