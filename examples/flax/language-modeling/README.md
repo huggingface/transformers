@@ -38,11 +38,12 @@ in Norwegian on a single TPUv3-8 pod.
 
 The example script uses the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
 
-Let's start by creating a folder to save the trained model.
+Let's start by creating a folder to save the trained model and link to the `run_mlm_flax.py` script.
 
 ```bash
 export MODEL_DIR="./norwegian-roberta-base"
 mkdir -p ${MODEL_DIR}
+ln -s ~/transformers/examples/flax/language-modeling/run_mlm_flax.py run_mlm_flax.py
 ```
 
 ### Train tokenizer
