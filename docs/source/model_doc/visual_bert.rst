@@ -33,7 +33,7 @@ verbs and image regions corresponding to their arguments.*
 
 Tips:
 
-1. Most of the checkpoints provided work with the `VisualBertForPreTraining` configuration. Other checkpoints provided
+1. Most of the checkpoints provided work with the :class:`~transformers.VisualBertForPreTraining` configuration. Other checkpoints provided
    are the fine-tuning checkpoints for down-stream tasks - VQA ('visualbert-vqa'), VCR ('visualbert-vcr'), NLVR2
    ('visualbert-nlvr2'). Hence, if you are not working on these downstream tasks, it is recommended that you use the
    pretrained checkpoints.

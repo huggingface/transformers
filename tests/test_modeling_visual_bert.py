@@ -158,10 +158,7 @@ class VisualBertModelTester:
         if self.use_labels:
             masked_lm_labels = ids_tensor([self.batch_size, self.seq_length + self.visual_seq_length], self.vocab_size)
             sentence_image_labels = ids_tensor(
-                [
-                    self.batch_size,
-                ],
-                self.type_sequence_label_size,
+                [self.batch_size], self.type_sequence_label_size,
             )
 
         config, input_dict = self.prepare_config_and_inputs_for_common()

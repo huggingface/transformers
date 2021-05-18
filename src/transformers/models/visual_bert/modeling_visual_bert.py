@@ -195,9 +195,8 @@ class VisualBertEmbeddings(nn.Module):
                 image_text_alignment = image_text_alignment_mask * image_text_alignment
 
                 # Batch x image_length x alignment length x dim
-                visual_position_embeddings = self.position_embeddings(
-                    image_text_alignment
-                ) * image_text_alignment_mask.to(dtype=next(self.parameters()).dtype).unsqueeze(-1)
+                visual_position_embeddings = self.position_embeddings(image_text_alignment)
+                visual_position_embeddings *= image_text_alignment_mask.to(dtype=next(self.parameters()).dtype).unsqueeze(-1)
                 visual_position_embeddings = visual_position_embeddings.sum(2)
 
                 # We want to averge along the alignment_number dimension.
@@ -368,12 +367,7 @@ class VisualBertAttention(nn.Module):
         head_mask=None,
         output_attentions=False,
     ):
-        self_outputs = self.self(
-            hidden_states,
-            attention_mask,
-            head_mask,
-            output_attentions,
-        )
+        self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions)
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -1463,11 +1457,8 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         sequence_output = outputs[0]
 
         # TO-CHECK: From the original code
-        pooled_output = torch.gather(
-            sequence_output,
-            1,
-            index_to_gather.unsqueeze(-1).unsqueeze(-1).expand(index_to_gather.size(0), 1, sequence_output.size(-1)),
-        )
+        index_to_gather = index_to_gather.unsqueeze(-1).unsqueeze(-1).expand(index_to_gather.size(0), 1, sequence_output.size(-1))
+        pooled_output = torch.gather(sequence_output, 1, index_to_gather)
 
         pooled_output = self.dropout(pooled_output)
         logits = self.cls(pooled_output)
@@ -1811,9 +1802,8 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         selected_positions = sequence_output.gather(1, expanded_region_to_phrase_positions)
 
         # Visual Features = batch x visual_feature_length x dim
-        visual_features = sequence_output[
-            :, attention_mask.size(1) :, :
-        ]  # This will need separate image and visual masks.
+        # This will need separate image and visual masks.
+        visual_features = sequence_output[:, attention_mask.size(1) :]
         assert visual_features.size(1) == visual_attention_mask.size(1)
 
         logits = self.attention(selected_positions, visual_features, visual_attention_mask)
