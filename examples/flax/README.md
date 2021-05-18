@@ -36,7 +36,7 @@ All of our JAX/Flax models are designed to run efficiently on Google
 Cloud TPUs. Here is a guide for running jobs on Google Cloud TPU.
 (TODO: Add a link to the Cloud TPU JAX getting started guide once it's public)
 Each example README contains more details on the specific model and training
-procedure in question.
+procedure.
 
 ## Ported models
 
