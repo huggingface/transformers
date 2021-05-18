@@ -818,20 +818,6 @@ class BasicTokenizer(object):
         return "".join(output)
 
 
-def _make_bos_eos(
-    character: int,
-    padding_character: int,
-    beginning_of_word_character: int,
-    end_of_word_character: int,
-    max_word_length: int,
-):
-    char_ids = [padding_character] * max_word_length
-    char_ids[0] = beginning_of_word_character
-    char_ids[1] = character
-    char_ids[2] = end_of_word_character
-    return char_ids
-
-
 class CharacterMapper:
     """
     NOTE: Adapted from ElmoCharacterMapper:
@@ -858,30 +844,22 @@ class CharacterMapper:
         max_word_length: int = 50,
     ):
         self.max_word_length = max_word_length
-        self.beginning_of_sentence_characters = _make_bos_eos(
-            self.beginning_of_sentence_character,
-            self.padding_character,
-            self.beginning_of_word_character,
-            self.end_of_word_character,
-            self.max_word_length,
-        )
-        self.end_of_sentence_characters = _make_bos_eos(
-            self.end_of_sentence_character,
-            self.padding_character,
-            self.beginning_of_word_character,
-            self.end_of_word_character,
-            self.max_word_length,
-        )
-        self.mask_characters = _make_bos_eos(
-            self.mask_character,
-            self.padding_character,
-            self.beginning_of_word_character,
-            self.end_of_word_character,
-            self.max_word_length,
-        )
+        self.beginning_of_sentence_characters = \
+            self._make_char_id_sequence(self.beginning_of_sentence_character)
+        self.end_of_sentence_characters = \
+            self._make_char_id_sequence(self.end_of_sentence_character)
+        self.mask_characters = \
+            self._make_char_id_sequence(self.mask_character)
         # This is the character id sequence for the pad token (i.e. [PAD]).
         # We remove 1 because we will add 1 later on and it will be equal to 0.
         self.pad_characters = [PAD_TOKEN_CHAR_ID - 1] * self.max_word_length
+
+    def _make_char_id_sequence(self, character: int):
+        char_ids = [self.padding_character] * self.max_word_length
+        char_ids[0] = self.beginning_of_word_character
+        char_ids[1] = character
+        char_ids[2] = self.end_of_word_character
+        return char_ids
 
     def convert_word_to_char_ids(self, word: str) -> List[int]:
         if word == self.bos_token:
