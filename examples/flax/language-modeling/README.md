@@ -24,10 +24,6 @@ to compile them into efficient, fused accelerator code on both GPU and TPU.
 Models written in JAX/Flax are **immutable** and updated in a purely functional
 way which enables simple and efficient model parallelism.
 
-Given these characteristics, pre-training large language models using JAX/Flax with Cloud TPUs can be considerably more efficient than using other frameworks (TODO: adds stats below).
-
-Here, 
-
 ## Masked language modeling
 
 In the following, we demonstrate how to train a bi-directional transformer model 
@@ -125,3 +121,6 @@ TPUv3-8 pod. This should take less than 17 hours.
 ```
 
 For more detail on how masked language modeling works, please see [this TODO: (Patrick)]() google colab.
+
+
+## TODO(Patrick): Add comparison with PyTorch GPU/TPU
