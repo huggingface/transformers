@@ -47,6 +47,7 @@ ln -s ~/transformers/examples/flax/language-modeling/run_mlm_flax.py run_mlm_fla
 In a first step, we train a tokenizer to efficiently process the text input for the model. Similar to how it is shown in [How to train a new language model from scratch using Transformers and Tokenizers](https://huggingface.co/blog/how-to-train), we use a **`ByteLevelBPETokenizer`**.
 The tokenizer is trained on the complete Norwegian dataset of OSCAR
 and consequently saved in `${MODEL_DIR}`
+This should can take up to 3 hours ☕.
 
 ```python
 from datasets import load_dataset
