@@ -66,6 +66,7 @@ Current number of checkpoints: |checkpoints|
 
 .. |checkpoints| image:: https://img.shields.io/endpoint?url=https://huggingface.co/api/shields/models&color=brightgreen
 
+
 Contents
 -----------------------------------------------------------------------------------------------------------------------
 
@@ -84,7 +85,10 @@ The documentation is organized in five parts:
     - **INTERNAL HELPERS** for the classes and functions we use internally.
 
 The library currently contains Jax, PyTorch and Tensorflow implementations, pretrained model weights, usage scripts and
-conversion utilities for the following models:
+conversion utilities for the following models.
+
+Supported models
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ..
     This list is updated automatically from the README with `make fix-copies`. Do not update manually!
@@ -266,6 +270,9 @@ conversion utilities for the following models:
     Cross-Lingual Representation Learning For Speech Recognition <https://arxiv.org/abs/2006.13979>`__ by Alexis
     Conneau, Alexei Baevski, Ronan Collobert, Abdelrahman Mohamed, Michael Auli.
 
+
+Supported frameworks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. _bigtable:
 
