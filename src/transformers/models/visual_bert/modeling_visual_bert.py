@@ -16,7 +16,6 @@
 
 
 import math
-from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -131,12 +130,8 @@ class VisualBertEmbeddings(nn.Module):
         self.visual_position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
 
         if config.special_visual_initialize:
-            self.visual_token_type_embeddings.weight = torch.nn.Parameter(
-                deepcopy(self.token_type_embeddings.weight.data), requires_grad=True
-            )
-            self.visual_position_embeddings.weight = torch.nn.Parameter(
-                deepcopy(self.position_embeddings.weight.data), requires_grad=True
-            )
+            self.visual_token_type_embeddings.weight = self.token_type_embeddings.weight.clone()
+            self.visual_position_embeddings.weight = self.position_embeddings.weight.clone()
 
         self.visual_projection = nn.Linear(config.visual_embedding_dim, config.hidden_size)
 
