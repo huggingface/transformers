@@ -421,7 +421,6 @@ def main():
         metric = load_metric("glue", data_args.task_name)
     else:
         metric = load_metric("accuracy")
-    # compute_metrics
 
     # You can define your custom compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
     # predictions and label_ids field) and has to return a dictionary string to float.
