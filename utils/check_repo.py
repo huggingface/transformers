@@ -120,7 +120,6 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "VisualBertForVisualReasoning",
     "VisualBertForQuestionAnswering",
     "VisualBertForMultipleChoice",
-    "VisualBertForQuestionAnsweringAdvanced",
 ]
 
 # This is to make sure the transformers module imported is the one in the repo.

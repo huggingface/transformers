@@ -2801,15 +2801,6 @@ class VisualBertForQuestionAnswering:
         requires_backends(self, ["torch"])
 
 
-class VisualBertForQuestionAnsweringAdvanced:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class VisualBertForRegionToPhraseAlignment:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])

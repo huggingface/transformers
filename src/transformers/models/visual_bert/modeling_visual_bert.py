@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The HuggingFace Inc. team. and UCLA NLP All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +27,6 @@ from torch.nn import CrossEntropyLoss, KLDivLoss, LogSoftmax
 from ...activations import ACT2FN
 from ...file_utils import (
     ModelOutput,
-    _prepare_output_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
@@ -35,7 +34,6 @@ from ...file_utils import (
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
-    MaskedLMOutput,
     MultipleChoiceModelOutput,
     SequenceClassifierOutput,
 )
@@ -52,8 +50,6 @@ from .configuration_visual_bert import VisualBertConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "VisualBertConfig"
-_TOKENIZER_FOR_DOC = "BertTokenizer"
-_TOKENIZER_CHECKPOINT = "bert-base-uncased"
 
 VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "gchhablani/visualbert-vqa",
@@ -67,42 +63,6 @@ VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "gchhablani/visualbert-nlvr2-coco-pre"
     # See all VisualBERT models at https://huggingface.co/models?filter=visual_bert
 ]
-
-
-def mish(x):
-    return x * torch.tanh(nn.functional.softplus(x))
-
-
-def add_code_sample_docstrings(
-    *docstr,
-    tokenizer_class=None,
-    tokenizer_checkpoint=None,
-    checkpoint=None,
-    output_type=None,
-    config_class=None,
-    mask=None,
-    model_cls=None,
-    code_sample=None
-):
-    def docstring_decorator(fn):
-        # model_class defaults to function's class if not specified otherwise
-        model_class = fn.__qualname__.split(".")[0] if model_cls is None else model_cls
-
-        doc_kwargs = dict(
-            model_class=model_class,
-            tokenizer_class=tokenizer_class,
-            checkpoint=checkpoint,
-            mask=mask,
-            tokenizer_checkpoint=tokenizer_checkpoint,
-        )
-
-        output_doc = _prepare_output_docstrings(output_type, config_class) if output_type is not None else ""
-
-        built_doc = code_sample.format(**doc_kwargs)
-        fn.__doc__ = (fn.__doc__ or "") + "".join(docstr) + output_doc + built_doc
-        return fn
-
-    return docstring_decorator
 
 
 class VisualBertEmbeddings(nn.Module):
@@ -130,8 +90,12 @@ class VisualBertEmbeddings(nn.Module):
         self.visual_position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
 
         if config.special_visual_initialize:
-            self.visual_token_type_embeddings.weight = self.token_type_embeddings.weight.clone()
-            self.visual_position_embeddings.weight = self.position_embeddings.weight.clone()
+            self.visual_token_type_embeddings.weight.data = torch.nn.Parameter(
+                self.token_type_embeddings.weight.data.clone(), requires_grad=True
+            )
+            self.visual_position_embeddings.weight.data = torch.nn.Parameter(
+                self.position_embeddings.weight.data.clone(), requires_grad=True
+            )
 
         self.visual_projection = nn.Linear(config.visual_embedding_dim, config.hidden_size)
 
@@ -154,14 +118,6 @@ class VisualBertEmbeddings(nn.Module):
 
         if position_ids is None:
             position_ids = self.position_ids[:, :seq_length]
-
-        # TO-CHECK: FROM ORIGINAL CODE
-        # if input_ids is not None:
-        #     position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)
-        #     position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
-        # else:
-        #     position_ids = torch.arange(seq_length, dtype=torch.long, device=inputs_embeds.device)
-        #     position_ids = position_ids.unsqueeze(0).expand(input_shape)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -186,21 +142,21 @@ class VisualBertEmbeddings(nn.Module):
             visual_token_type_embeddings = self.visual_token_type_embeddings(visual_token_type_ids)
 
             if image_text_alignment is not None:
-
-                # TO-DO: Find a way to handle this in a better way.
                 # image_text_alignment = Batch x image_length x alignment_number.
                 # Each element denotes the position of the word corresponding to the image feature. -1 is the padding value.
+
+                dtype = next(self.parameters()).dtype
                 image_text_alignment_mask = (image_text_alignment != -1).long()
                 # Get rid of the -1.
                 image_text_alignment = image_text_alignment_mask * image_text_alignment
 
                 # Batch x image_length x alignment length x dim
                 visual_position_embeddings = self.position_embeddings(image_text_alignment)
-                visual_position_embeddings *= image_text_alignment_mask.to(dtype=next(self.parameters()).dtype).unsqueeze(-1)
+                visual_position_embeddings *= image_text_alignment_mask.to(dtype=dtype).unsqueeze(-1)
                 visual_position_embeddings = visual_position_embeddings.sum(2)
 
                 # We want to averge along the alignment_number dimension.
-                image_text_alignment_mask = image_text_alignment_mask.to(dtype=next(self.parameters()).dtype).sum(2)
+                image_text_alignment_mask = image_text_alignment_mask.to(dtype=dtype).sum(2)
                 image_text_alignment_mask[image_text_alignment_mask == 0] = 1  # Avoid devide by zero error
                 visual_position_embeddings = visual_position_embeddings / image_text_alignment_mask.unsqueeze(-1)
 
@@ -210,7 +166,11 @@ class VisualBertEmbeddings(nn.Module):
 
                 # When fine-tuning the detector , the image_text_alignment is sometimes padded too long.
                 if visual_position_embeddings.size(1) != visual_embeds.size(1):
-                    assert visual_position_embeddings.size(1) >= visual_embeds.size(1)
+                    if visual_position_embeddings.size(1) < visual_embeds.size(1):
+                        raise ValueError(
+                            f"Visual position embeddings length: {visual_position_embeddings.size(1)}"
+                            f"should be the same as `visual_embeds` length: {visual_embeds.size(1)}"
+                        )
                     visual_position_embeddings = visual_position_embeddings[:, : visual_embeds.size(1), :]
 
                 visual_position_embeddings = visual_position_embeddings + self.visual_position_embeddings(
@@ -236,8 +196,8 @@ class VisualBertSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
             )
 
         self.num_attention_heads = config.num_attention_heads
@@ -250,7 +210,6 @@ class VisualBertSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-        # TO-CHECK: Config doesn't have this, is this needed? Is it in PreTrainedConfig?
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             self.max_position_embeddings = config.max_position_embeddings
@@ -261,13 +220,7 @@ class VisualBertSelfAttention(nn.Module):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=False,
-    ):
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -360,13 +313,7 @@ class VisualBertAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=False,
-    ):
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
         self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions)
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -411,13 +358,7 @@ class VisualBertLayer(nn.Module):
         self.intermediate = VisualBertIntermediate(config)
         self.output = VisualBertOutput(config)
 
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=False,
-    ):
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
@@ -495,15 +436,7 @@ class VisualBertEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    all_hidden_states,
-                    all_self_attentions,
-                ]
-                if v is not None
-            )
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -740,203 +673,6 @@ VISUAL_BERT_INPUTS_DOCSTRING = r"""
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
-VISUAL_BERT_VQA_SAMPLE = r"""
-    Example::
-        >>> # Assumption: `get_visual_embeddings(image)` gets the visual embeddings of the image in the batch.
-        >>> from transformers import {tokenizer_class}, {model_class}
-        >>> import torch
-
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{tokenizer_checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
-
-        >>> text = "Who is eating the apple?"
-        >>> inputs = tokenizer(text, return_tensors='pt')
-        >>> visual_embeds = get_visual_embeddings(image).unsqueeze(0)
-        >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long) #example
-        >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
-
-        >>> inputs.update({{
-            "visual_embeds": visual_embeds,
-            "visual_token_type_ids": visual_token_type_ids,
-            "visual_attention_mask": visual_attention_mask
-        }})
-
-        >>> labels = torch.tensor([[0.0,1.0]]).unsqueeze(0)  # Batch size 1, Num labels 2
-
-        >>> outputs = model(**inputs, labels=labels)
-        >>> loss = outputs.loss
-        >>> scores = outputs.logits
-"""
-
-VISUAL_BERT_NLVR_SAMPLE = r"""
-    Example::
-        >>> # Assumption: `get_visual_embeddings(image)` gets the visual embeddings of the image in the batch.
-        >>> from transformers import {tokenizer_class}, {model_class}
-        >>> import torch
-
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{tokenizer_checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
-
-        >>> text = "Who is eating the apple?"
-        >>> inputs = tokenizer(text, return_tensors='pt')
-        >>> visual_embeds = get_visual_embeddings(image).unsqueeze(0)
-        >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long) #example
-        >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
-
-        >>> inputs.update({{
-            "visual_embeds": visual_embeds,
-            "visual_token_type_ids": visual_token_type_ids,
-            "visual_attention_mask": visual_attention_mask
-        }})
-
-        >>> labels = torch.tensor(1).unsqueeze(0)  # Batch size 1, Num choices 2
-
-        >>> outputs = model(**inputs, labels=labels)
-        >>> loss = outputs.loss
-        >>> scores = outputs.logits
-"""
-
-
-VISUAL_BERT_VQA_ADVANCED_SAMPLE = r"""
-    Example::
-        >>> # Assumption: `get_visual_embeddings(image)` gets the visual embeddings of the image in the batch.
-        >>> from transformers import {tokenizer_class}, {model_class}
-        >>> import torch
-
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{tokenizer_checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
-
-        >>> text = "Who is eating the apple?"
-        >>> inputs = tokenizer(text, return_tensors='pt')
-        >>> visual_embeds = get_visual_embeddings(image).unsqueeze(0)
-        >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
-        >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
-
-        >>> inputs.update({{
-            "visual_embeds": visual_embeds,
-            "visual_token_type_ids": visual_token_type_ids,
-            "visual_attention_mask": visual_attention_mask
-        }})
-
-        >>> labels = torch.ones((1, inputs["input_ids"].shape[-1]+visual_embeds.shape[-2])) # Batch size 1
-
-        >>> outputs = model(**inputs, labels=labels)
-        >>> loss = outputs.loss
-        >>> scores = outputs.logits
-"""
-
-VISUAL_BERT_REGION_TO_PHRASE_SAMPLE = r"""
-    Example::
-        >>> # Assumption: `get_visual_embeddings(image)` gets the visual embeddings of the image in the batch.
-        >>> from transformers import {tokenizer_class}, {model_class}
-        >>> import torch
-
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{tokenizer_checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
-
-        >>> text = "Who is eating the apple?"
-        >>> inputs = tokenizer(text, return_tensors='pt')
-        >>> visual_embeds = get_visual_embeddings(image).unsqueeze(0)
-        >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long) #example
-        >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
-        >>> region_to_phrase_position = torch.ones((1, inputs["input_ids"].shape[-1]+visual_embeds.shape[-2]))
-
-        >>> inputs.update({{
-            "region_to_phrase_position": region_to_phrase_position,
-            "visual_embeds": visual_embeds,
-            "visual_token_type_ids": visual_token_type_ids,
-            "visual_attention_mask": visual_attention_mask
-        }})
-
-        >>> labels = torch.ones((1, inputs["input_ids"].shape[-1]+visual_embeds.shape[-2], visual_embeds.shape[-2])) # Batch size 1
-
-        >>> outputs = model(**inputs, labels=labels)
-        >>> loss = outputs.loss
-        >>> scores = outputs.logits
-"""
-
-VISUAL_BERT_PRE_TRAINING_SAMPLE = r"""
-    Example::
-        >>> # Assumption: `get_visual_embeddings(image)` gets the visual embeddings of the image in the batch.
-        >>> from transformers import {tokenizer_class}, {model_class}
-        >>> import torch
-
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{tokenizer_checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
-
-        >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="pt")
-        >>> visual_embeds = get_visual_embeddings(image).unsqueeze(0)
-        >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long) #example
-        >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
-
-        >>> inputs.update({{
-            "visual_embeds": visual_embeds,
-            "visual_token_type_ids": visual_token_type_ids,
-            "visual_attention_mask": visual_attention_mask
-        }})
-
-        >>> labels = tokenizer("The capital of France is Paris.", return_tensors="pt", padding="max_length", max_length=inputs["input_ids"].shape[-1]+visual_embeds.shape[-2])["input_ids"]
-        >>> sentence_image_labels = torch.tensor(1).unsqueeze(0) # Batch_size
-
-
-        >>> outputs = model(**inputs, labels=labels, sentence_image_labels=sentence_image_labels)
-        >>> loss = outputs.loss
-        >>> prediction_logits = outputs.prediction_logits
-        >>> seq_relationship_logits = outputs.seq_relationship_logits
-"""
-
-VISUAL_BERT_MODEL_SAMPLE = r"""
-    Example::
-        >>> # Assumption: `get_visual_embeddings(image)` gets the visual embeddings of the image.
-        >>> from transformers import {tokenizer_class}, {model_class}
-        >>> import torch
-
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{tokenizer_checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
-
-        >>> inputs = tokenizer("The capital of France is Paris.", return_tensors="pt")
-        >>> visual_embeds = get_visual_embeddings(image).unsqueeze(0)
-        >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long) #example
-        >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
-
-        >>> inputs.update({{
-            "visual_embeds": visual_embeds,
-            "visual_token_type_ids": visual_token_type_ids,
-            "visual_attention_mask": visual_attention_mask
-        }})
-
-        >>> outputs = model(**inputs)
-
-        >>> last_hidden_states = outputs.last_hidden_state
-"""
-
-VISUAL_BERT_MULTIPLE_CHOICE_SAMPLE = r"""
-    Example::
-
-        >>> from transformers import {tokenizer_class}, {model_class}
-        >>> import torch
-
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{tokenizer_checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
-
-        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        >>> choice0 = "It is eaten with a fork and a knife."
-        >>> choice1 = "It is eaten while held in the hand."
-
-        >>> visual_embeds = get_visual_embeddings(image)
-        >>> visual_embeds = visual_embeds.expand(1, 2, *visual_embeds.shape) # (batch_size, num_choices, visual_seq_length, visual_embedding_dim)
-        >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
-        >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
-
-        >>> labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
-
-        >>> encoding = tokenizer([[prompt, prompt], [choice0, choice1]], return_tensors='pt', padding=True)
-        >>> outputs = model(**{{k: v.unsqueeze(0) for k,v in encoding.items()}}, visual_embeds=visual_embeds, visual_attention_mask=visual_attention_mask, visual_token_type_ids=visual_token_type_ids, labels=labels)  # batch size is 1
-
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
-"""
-
 
 @add_start_docstrings(
     "The bare VisualBert Model transformer outputting raw hidden-states without any specific head on top.",
@@ -957,9 +693,7 @@ class VisualBertModel(VisualBertPreTrainedModel):
         self.embeddings = VisualBertEmbeddings(config)
         self.encoder = VisualBertEncoder(config)
 
-        self.pooler = (
-            VisualBertPooler(config) if add_pooling_layer else None
-        )  # TO-DO: Check if pooler is needed necessarily or optionally.
+        self.pooler = VisualBertPooler(config) if add_pooling_layer else None
 
         self.bypass_transformer = config.bypass_transformer
 
@@ -974,7 +708,6 @@ class VisualBertModel(VisualBertPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    # TO-CHECK
     def _prune_heads(self, heads_to_prune):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
@@ -983,16 +716,7 @@ class VisualBertModel(VisualBertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        tokenizer_checkpoint=_TOKENIZER_CHECKPOINT,
-        checkpoint="gchhablani/visualbert-vqa-coco-pre",
-        output_type=BaseModelOutputWithPooling,
-        config_class="gchhablani/visualbert-vqa-coco-pre",
-        code_sample=VISUAL_BERT_MODEL_SAMPLE,
-    )
+    @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def forward(
         self,
         input_ids=None,
@@ -1009,6 +733,30 @@ class VisualBertModel(VisualBertPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+        Example::
+            >>> # Assumption: `get_visual_embeddings(image)` gets the visual embeddings of the image.
+            >>> from transformers import BertTokenizer, VisualBertModel
+            >>> import torch
+
+            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+            >>> model = VisualBertModel.from_pretrained('gchhablani/visualbert-vqa-coco-pre')
+
+            >>> inputs = tokenizer("The capital of France is Paris.", return_tensors="pt")
+            >>> visual_embeds = get_visual_embeddings(image).unsqueeze(0)
+            >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long) #example
+            >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
+
+            >>> inputs.update({{
+                "visual_embeds": visual_embeds,
+                "visual_token_type_ids": visual_token_type_ids,
+                "visual_attention_mask": visual_attention_mask
+            }})
+
+            >>> outputs = model(**inputs)
+
+            >>> last_hidden_states = outputs.last_hidden_state
+        """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1027,9 +775,10 @@ class VisualBertModel(VisualBertPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        assert (
-            visual_embeds is not None
-        ), f"`visual_embeds` can not be of type {type(visual_embeds)} when using a VisualBert Model."
+        if visual_embeds is None:
+            raise ValueError(
+                f"`visual_embeds` can not be of type {type(visual_embeds)} when using a VisualBert Model."
+            )
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
@@ -1048,17 +797,6 @@ class VisualBertModel(VisualBertPreTrainedModel):
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
             combined_attention_mask, [batch_size, input_shape + visual_input_shape], device
         )
-
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        # if self.config.is_decoder and encoder_hidden_states is not None:
-        #     encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-        #     encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-        #     if encoder_attention_mask is None:
-        #         encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-        #     encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        # else:
-        #     encoder_extended_attention_mask = None
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -1144,15 +882,6 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=VisualBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        tokenizer_checkpoint=_TOKENIZER_CHECKPOINT,
-        checkpoint="gchhablani/visualbert-vqa-coco-pre",
-        mask="[MASK]",
-        output_type=VisualBertForPreTrainingOutput,
-        config_class="gchhablani/visualbert-vqa-coco-pre",
-        code_sample=VISUAL_BERT_PRE_TRAINING_SAMPLE,
-    )
     def forward(
         self,
         input_ids=None,
@@ -1172,18 +901,45 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         sentence_image_labels=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape ``(batch_size, total_sequence_length)``, `optional`):
-            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
-            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
-            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
-        sentence_image_labels (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
-            Labels for computing the sentence-image prediction (classification) loss. Input should be a sequence pair
-            (see :obj:`input_ids` docstring) Indices should be in ``[0, 1]``:
+            labels (:obj:`torch.LongTensor` of shape ``(batch_size, total_sequence_length)``, `optional`):
+                Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
+                config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
+                (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
+            sentence_image_labels (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
+                Labels for computing the sentence-image prediction (classification) loss. Input should be a sequence
+                pair (see :obj:`input_ids` docstring) Indices should be in ``[0, 1]``:
 
-            - 0 indicates sequence B is a matching pair of sequence A for the given image,
-            - 1 indicates sequence B is a random sequence w.r.t A for the given image.
+                - 0 indicates sequence B is a matching pair of sequence A for the given image,
+                - 1 indicates sequence B is a random sequence w.r.t A for the given image.
 
-        Returns:
+            Returns:
+
+        Example::
+            >>> # Assumption: `get_visual_embeddings(image)` gets the visual embeddings of the image in the batch.
+            >>> from transformers import BertTokenizer, VisualBertForPreTraining
+
+            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+            >>> model = VisualBertForPreTraining.from_pretrained('gchhablani/visualbert-vqa-coco-pre')
+
+            >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="pt")
+            >>> visual_embeds = get_visual_embeddings(image).unsqueeze(0)
+            >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long) #example
+            >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
+
+            >>> inputs.update({{
+                "visual_embeds": visual_embeds,
+                "visual_token_type_ids": visual_token_type_ids,
+                "visual_attention_mask": visual_attention_mask
+            }})
+
+            >>> labels = tokenizer("The capital of France is Paris.", return_tensors="pt", padding="max_length", max_length=inputs["input_ids"].shape[-1]+visual_embeds.shape[-2])["input_ids"]
+            >>> sentence_image_labels = torch.tensor(1).unsqueeze(0) # Batch_size
+
+
+            >>> outputs = model(**inputs, labels=labels, sentence_image_labels=sentence_image_labels)
+            >>> loss = outputs.loss
+            >>> prediction_logits = outputs.prediction_logits
+            >>> seq_relationship_logits = outputs.seq_relationship_logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1208,9 +964,12 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
 
         total_loss = None
         if labels is not None and sentence_image_labels is not None:
-            assert labels.size(-1) == attention_mask.size(-1) + visual_attention_mask.size(
-                -1
-            ), f"The labels provided should have same sequence length as total attention mask. Found labels with sequence length {labels.size(-1)}, expected {attention_mask.size(-1)+ visual_attention_mask.size(-1)}."
+            total_size = attention_mask.size(-1) + visual_attention_mask.size(-1)
+            if labels.size(-1) != total_size:
+                raise ValueError(
+                    f"The labels provided should have same sequence length as total attention mask."
+                    f"Found labels with sequence length {labels.size(-1)}, expected {total_size}."
+                )
 
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
@@ -1218,9 +977,13 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
             total_loss = masked_lm_loss + sentence_image_loss
 
         if labels is not None and sentence_image_labels is None:
-            assert labels.size(-1) == attention_mask.size(-1) + visual_attention_mask.size(
-                -1
-            ), f"The labels provided should have same sequence length as total attention mask. Found labels with sequence length {labels.size(-1)}, expected {attention_mask.size(-1)+ visual_attention_mask.size(-1)}."
+            total_size = attention_mask.size(-1) + visual_attention_mask.size(-1)
+            if labels.size(-1) != total_size:
+                raise ValueError(
+                    f"The labels provided should have same sequence length as total attention mask."
+                    f"Found labels with sequence length {labels.size(-1)}, expected {total_size}."
+                )
+
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             total_loss = masked_lm_loss
@@ -1271,8 +1034,6 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
         super().__init__(config)
 
         self.visual_bert = VisualBertModel(config)
-        # TO-CHECK
-        # self.sequence_summary = SequenceSummary(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.cls = nn.Linear(config.hidden_size, 1)
 
@@ -1280,14 +1041,6 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(
         VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
-    )
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        tokenizer_checkpoint=_TOKENIZER_CHECKPOINT,
-        checkpoint="gchhablani/visualbert-vcr",
-        output_type=MultipleChoiceModelOutput,
-        config_class="gchhablani/visualbert-vcr",
-        code_sample=VISUAL_BERT_MULTIPLE_CHOICE_SAMPLE,
     )
     def forward(
         self,
@@ -1307,10 +1060,35 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
         labels=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
-            num_choices-1]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
-            :obj:`input_ids` above)
+            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+                Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
+                num_choices-1]`` where :obj:`num_choices` is the size of the second dimension of the input tensors.
+                (See :obj:`input_ids` above)
+
+        Example::
+
+            >>> from transformers import BertTokenizer, VisualBertForMultipleChoice
+            >>> import torch
+
+            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+            >>> model = VisualBertForMultipleChoice.from_pretrained('gchhablani/visualbert-vcr')
+
+            >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+            >>> choice0 = "It is eaten with a fork and a knife."
+            >>> choice1 = "It is eaten while held in the hand."
+
+            >>> visual_embeds = get_visual_embeddings(image)
+            >>> visual_embeds = visual_embeds.expand(1, 2, *visual_embeds.shape) # (batch_size, num_choices, visual_seq_length, visual_embedding_dim)
+            >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
+            >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
+
+            >>> labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
+
+            >>> encoding = tokenizer([[prompt, prompt], [choice0, choice1]], return_tensors='pt', padding=True)
+            >>> outputs = model(**{{k: v.unsqueeze(0) for k,v in encoding.items()}}, visual_embeds=visual_embeds, visual_attention_mask=visual_attention_mask, visual_token_type_ids=visual_token_type_ids, labels=labels)  # batch size is 1
+
+            >>> loss = outputs.loss
+            >>> logits = outputs.logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -1359,7 +1137,6 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
 
         _, pooled_output = outputs[0], outputs[1]
 
-        # pooled_output = self.sequence_summary(sequence_output)
         pooled_output = self.dropout(pooled_output)
         logits = self.cls(pooled_output)
         reshaped_logits = logits.view(-1, num_choices)
@@ -1394,21 +1171,12 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.visual_bert = VisualBertModel(config)
-        # TO-CHECK: Can this be done with a `SequenceSummary` layer?
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.cls = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        tokenizer_checkpoint=_TOKENIZER_CHECKPOINT,
-        checkpoint="gchhablani/visualbert-vqa",
-        output_type=SequenceClassifierOutput,
-        config_class="gchhablani/visualbert-vqa",
-        code_sample=VISUAL_BERT_VQA_SAMPLE,
-    )
     def forward(
         self,
         input_ids=None,
@@ -1427,14 +1195,39 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         labels=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, total_sequence_length)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. A KLDLoss is computed between the labels and the returned logits.
+            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, total_sequence_length)`, `optional`):
+                Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+                config.num_labels - 1]`. A KLDLoss is computed between the labels and the returned logits.
 
+
+        Example::
+            >>> # Assumption: `get_visual_embeddings(image)` gets the visual embeddings of the image in the batch.
+            >>> from transformers import BertTokenizer, VisualBertForQuestionAnswering
+            >>> import torch
+
+            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+            >>> model = VisualBertForQuestionAnswering.from_pretrained('gchhablani/visualbert-vqa')
+
+            >>> text = "Who is eating the apple?"
+            >>> inputs = tokenizer(text, return_tensors='pt')
+            >>> visual_embeds = get_visual_embeddings(image).unsqueeze(0)
+            >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long) #example
+            >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
+
+            >>> inputs.update({{
+                "visual_embeds": visual_embeds,
+                "visual_token_type_ids": visual_token_type_ids,
+                "visual_attention_mask": visual_attention_mask
+            }})
+
+            >>> labels = torch.tensor([[0.0,1.0]]).unsqueeze(0)  # Batch size 1, Num labels 2
+
+            >>> outputs = model(**inputs, labels=labels)
+            >>> loss = outputs.loss
+            >>> scores = outputs.logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # TO-CHECK
         # Get the index of the last text token
         index_to_gather = attention_mask.sum(1) - 2  # as in original code
 
@@ -1457,7 +1250,9 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         sequence_output = outputs[0]
 
         # TO-CHECK: From the original code
-        index_to_gather = index_to_gather.unsqueeze(-1).unsqueeze(-1).expand(index_to_gather.size(0), 1, sequence_output.size(-1))
+        index_to_gather = (
+            index_to_gather.unsqueeze(-1).unsqueeze(-1).expand(index_to_gather.size(0), 1, sequence_output.size(-1))
+        )
         pooled_output = torch.gather(sequence_output, 1, index_to_gather)
 
         pooled_output = self.dropout(pooled_output)
@@ -1484,95 +1279,6 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    VisualBert Model with a MLM head on top for VQA tasks.
-    """,
-    VISUAL_BERT_START_DOCSTRING,
-)
-class VisualBertForQuestionAnsweringAdvanced(VisualBertPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.visual_bert = VisualBertModel(config)
-        self.cls = VisualBertPreTrainingHeads(config)
-
-        self.init_weights()
-
-    @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        tokenizer_checkpoint=_TOKENIZER_CHECKPOINT,
-        checkpoint="gchhablani/visualbert-vqa-pre",
-        output_type=MaskedLMOutput,
-        config_class="gchhablani/visualbert-vqa-pre",
-        code_sample=VISUAL_BERT_VQA_ADVANCED_SAMPLE,
-    )
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        visual_embeds=None,
-        visual_attention_mask=None,
-        visual_token_type_ids=None,
-        image_text_alignment=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-    ):
-        r"""
-        labels (:obj:`torch.LongTensor` of shape ``(batch_size, total_sequence_length)``, `optional`):
-            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
-            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
-            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
-
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.visual_bert(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            visual_embeds=visual_embeds,
-            visual_attention_mask=visual_attention_mask,
-            visual_token_type_ids=visual_token_type_ids,
-            image_text_alignment=image_text_alignment,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-        pooled_output = outputs[1]
-
-        prediction_scores, seq_relationship_score = self.cls(sequence_output, pooled_output)
-        loss = None
-
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-            loss = masked_lm_loss
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
-        return MaskedLMOutput(
-            loss=loss,
-            logits=prediction_scores,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """
     VisualBert Model with a sequence classification head on top (a dropout and a linear layer on top of the pooled
     output) for Visual Reasoning e.g. for NLVR task.
     """,
@@ -1584,22 +1290,12 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.visual_bert = VisualBertModel(config)
-
-        # TO-CHECK: Can this be done with a `SequenceSummary` layer?
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.cls = nn.Linear(config.hidden_size, config.num_labels)  # 2
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        tokenizer_checkpoint=_TOKENIZER_CHECKPOINT,
-        checkpoint="gchhablani/visualbert-nlvr2",
-        output_type=SequenceClassifierOutput,
-        config_class="gchhablani/visualbert-nlvr2",
-        code_sample=VISUAL_BERT_NLVR_SAMPLE,
-    )
+    @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def forward(
         self,
         input_ids=None,
@@ -1618,9 +1314,35 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
         labels=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. A classification loss is computed (Cross-Entropy) against these labels.
+            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+                Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+                config.num_labels - 1]`. A classification loss is computed (Cross-Entropy) against these labels.
+
+        Example::
+            >>> # Assumption: `get_visual_embeddings(image)` gets the visual embeddings of the image in the batch.
+            >>> from transformers import BertTokenizer, VisualBertForVisualReasoning
+            >>> import torch
+
+            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+            >>> model = VisualBertForVisualReasoning.from_pretrained('gchhablani/visualbert-nlvr2')
+
+            >>> text = "Who is eating the apple?"
+            >>> inputs = tokenizer(text, return_tensors='pt')
+            >>> visual_embeds = get_visual_embeddings(image).unsqueeze(0)
+            >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long) #example
+            >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
+
+            >>> inputs.update({{
+                "visual_embeds": visual_embeds,
+                "visual_token_type_ids": visual_token_type_ids,
+                "visual_attention_mask": visual_attention_mask
+            }})
+
+            >>> labels = torch.tensor(1).unsqueeze(0)  # Batch size 1, Num choices 2
+
+            >>> outputs = model(**inputs, labels=labels)
+            >>> loss = outputs.loss
+            >>> scores = outputs.logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1669,8 +1391,8 @@ class RegionToPhraseAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
             )
         self.num_attention_heads = 1  # config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
@@ -1694,14 +1416,10 @@ class RegionToPhraseAttention(nn.Module):
 
         mixed_query_layer = self.query(query)
         mixed_key_layer = self.key(key)
-        # We don't need value layers
-        # mixed_value_layer = self.value(hidden_states)
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
         key_layer = self.transpose_for_scores(mixed_key_layer)
-        # value_layer = self.transpose_for_scores(mixed_value_layer)
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
@@ -1730,15 +1448,7 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        tokenizer_checkpoint=_TOKENIZER_CHECKPOINT,
-        checkpoint="gchhablani/visualbert-vqa-coco-pre",
-        output_type=SequenceClassifierOutput,
-        config_class="gchhablani/visualbert-vqa-coco-pre",
-        code_sample=VISUAL_BERT_REGION_TO_PHRASE_SAMPLE,
-    )
+    @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def forward(
         self,
         input_ids=None,
@@ -1758,17 +1468,43 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         labels=None,
     ):
         r"""
-        region_to_phrase_position (:obj:`torch.LongTensor` of shape ``(batch_size, total_sequence_length)``, `optional`):
-            The positions depicting the position of the image embedding corresponding to the textual tokens.
+            region_to_phrase_position (:obj:`torch.LongTensor` of shape ``(batch_size, total_sequence_length)``, `optional`):
+                The positions depicting the position of the image embedding corresponding to the textual tokens.
 
-        labels (:obj:`torch.LongTensor` of shape ``(batch_size, total_sequence_length, visual_sequence_length)``, `optional`):
-            Labels for computing the masked language modeling loss. KLDLoss is computed against these labels and the
-            outputs from the attention layer.
+            labels (:obj:`torch.LongTensor` of shape ``(batch_size, total_sequence_length, visual_sequence_length)``, `optional`):
+                Labels for computing the masked language modeling loss. KLDLoss is computed against these labels and
+                the outputs from the attention layer.
 
+        Example::
+            >>> # Assumption: `get_visual_embeddings(image)` gets the visual embeddings of the image in the batch.
+            >>> from transformers import BertTokenizer, VisualBertForRegionToPhraseAlignment
+            >>> import torch
+
+            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+            >>> model = VisualBertForRegionToPhraseAlignment.from_pretrained('gchhablani/visualbert-vqa-coco-pre')
+
+            >>> text = "Who is eating the apple?"
+            >>> inputs = tokenizer(text, return_tensors='pt')
+            >>> visual_embeds = get_visual_embeddings(image).unsqueeze(0)
+            >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long) #example
+            >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
+            >>> region_to_phrase_position = torch.ones((1, inputs["input_ids"].shape[-1]+visual_embeds.shape[-2]))
+
+            >>> inputs.update({{
+                "region_to_phrase_position": region_to_phrase_position,
+                "visual_embeds": visual_embeds,
+                "visual_token_type_ids": visual_token_type_ids,
+                "visual_attention_mask": visual_attention_mask
+            }})
+
+            >>> labels = torch.ones((1, inputs["input_ids"].shape[-1]+visual_embeds.shape[-2], visual_embeds.shape[-2])) # Batch size 1
+
+            >>> outputs = model(**inputs, labels=labels)
+            >>> loss = outputs.loss
+            >>> scores = outputs.logits
         """
-        assert (
-            region_to_phrase_position is not None
-        ), "`region_to_phrase_position` should not be None when using Flickr Model."
+        if region_to_phrase_position is None:
+            raise ValueError("`region_to_phrase_position` should not be None when using Flickr Model.")
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1804,7 +1540,12 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         # Visual Features = batch x visual_feature_length x dim
         # This will need separate image and visual masks.
         visual_features = sequence_output[:, attention_mask.size(1) :]
-        assert visual_features.size(1) == visual_attention_mask.size(1)
+
+        if visual_features.size(1) != visual_attention_mask.size(1):
+            raise ValueError(
+                f"Visual features length :{visual_features.size(1)} should be the same"
+                f" as visual attention mask length: {visual_attention_mask.size(1)}."
+            )
 
         logits = self.attention(selected_positions, visual_features, visual_attention_mask)
 

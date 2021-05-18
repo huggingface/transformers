@@ -33,10 +33,10 @@ verbs and image regions corresponding to their arguments.*
 
 Tips:
 
-1. Most of the checkpoints provided work with the :class:`~transformers.VisualBertForPreTraining` configuration. Other checkpoints provided
-   are the fine-tuning checkpoints for down-stream tasks - VQA ('visualbert-vqa'), VCR ('visualbert-vcr'), NLVR2
-   ('visualbert-nlvr2'). Hence, if you are not working on these downstream tasks, it is recommended that you use the
-   pretrained checkpoints.
+1. Most of the checkpoints provided work with the :class:`~transformers.VisualBertForPreTraining` configuration. Other
+   checkpoints provided are the fine-tuning checkpoints for down-stream tasks - VQA ('visualbert-vqa'), VCR
+   ('visualbert-vcr'), NLVR2 ('visualbert-nlvr2'). Hence, if you are not working on these downstream tasks, it is
+   recommended that you use the pretrained checkpoints.
 
 2. For the VCR task, the authors use a fine-tuned detector for generating visual embeddings, for all the checkpoints.
    We do not provide the detector and its weights as a part of the package, but it will be available in the research
@@ -105,13 +105,6 @@ VisualBertForQuestionAnswering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.VisualBertForQuestionAnswering
-    :members: forward
-
-
-VisualBertForQuestionAnsweringAdvanced
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.VisualBertForQuestionAnsweringAdvanced
     :members: forward
 
 

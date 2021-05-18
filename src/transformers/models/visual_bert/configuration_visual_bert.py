@@ -88,18 +88,18 @@ class VisualBertConfig(PretrainedConfig):
             token type and position type embeddings are copied to the respective visual embedding layers.
 
 
-        Example::
+    Example::
 
-            >>> from transformers import VisualBertModel, VisualBertConfig
+        >>> from transformers import VisualBertModel, VisualBertConfig
 
-            >>> # Initializing a VisualBERT visualbert-vqa-coco-pre style configuration
-            >>> configuration = VisualBertConfig.from_pretrained('visualbert-vqa-coco-pre')
+        >>> # Initializing a VisualBERT visualbert-vqa-coco-pre style configuration
+        >>> configuration = VisualBertConfig.from_pretrained('visualbert-vqa-coco-pre')
 
-            >>> # Initializing a model from the visualbert-vqa-coco-pre style configuration
-            >>> model = VisualBertModel(configuration)
+        >>> # Initializing a model from the visualbert-vqa-coco-pre style configuration
+        >>> model = VisualBertModel(configuration)
 
-            >>> # Accessing the model configuration
-            >>> configuration = model.config
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
     """
 
     model_type = "visual_bert"
@@ -108,7 +108,7 @@ class VisualBertConfig(PretrainedConfig):
         self,
         vocab_size=30522,
         hidden_size=768,
-        visual_embedding_dim=512,  # TO-DO: Need to check original visual embedding dim
+        visual_embedding_dim=512,
         num_hidden_layers=12,
         num_attention_heads=12,
         intermediate_size=3072,

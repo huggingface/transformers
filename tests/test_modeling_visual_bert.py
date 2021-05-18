@@ -20,12 +20,10 @@ import unittest
 
 from tests.test_modeling_common import floats_tensor
 from transformers import is_torch_available
-
-# from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor  # , random_attention_mask
+from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():
@@ -36,7 +34,6 @@ if is_torch_available():
         VisualBertForMultipleChoice,
         VisualBertForPreTraining,
         VisualBertForQuestionAnswering,
-        VisualBertForQuestionAnsweringAdvanced,
         VisualBertForRegionToPhraseAlignment,
         VisualBertForVisualReasoning,
         VisualBertModel,
@@ -158,7 +155,8 @@ class VisualBertModelTester:
         if self.use_labels:
             masked_lm_labels = ids_tensor([self.batch_size, self.seq_length + self.visual_seq_length], self.vocab_size)
             sentence_image_labels = ids_tensor(
-                [self.batch_size], self.type_sequence_label_size,
+                [self.batch_size],
+                self.type_sequence_label_size,
             )
 
         config, input_dict = self.prepare_config_and_inputs_for_common()
@@ -222,17 +220,6 @@ class VisualBertModelTester:
         input_dict.update({"labels": vqa_labels})
         return config, input_dict
 
-    def prepare_config_and_inputs_for_vqa_advanced(self):
-        vqa_labels = None
-
-        if self.use_labels:
-            vqa_labels = ids_tensor([self.batch_size, self.seq_length + self.visual_seq_length], self.vocab_size)
-
-        config, input_dict = self.prepare_config_and_inputs_for_common()
-
-        input_dict.update({"labels": vqa_labels})
-        return config, input_dict
-
     def prepare_config_and_inputs_for_nlvr(self):
         nlvr_labels = None
 
@@ -290,15 +277,6 @@ class VisualBertModelTester:
         result = model(**input_dict)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
-    def create_and_check_for_vqa_advanced(self, config, input_dict):
-        model = VisualBertForQuestionAnsweringAdvanced(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(**input_dict)
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.seq_length + self.visual_seq_length, self.vocab_size)
-        )
-
     def create_and_check_for_multiple_choice(self, config, input_dict):
         model = VisualBertForMultipleChoice(config=config)
         model.to(torch_device)
@@ -333,7 +311,6 @@ class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
             VisualBertForVisualReasoning,
             VisualBertForRegionToPhraseAlignment,
             VisualBertForQuestionAnswering,
-            VisualBertForQuestionAnsweringAdvanced,
             VisualBertForPreTraining,
         )
         if is_torch_available()
@@ -361,8 +338,10 @@ class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
                         )
 
         elif model_class == VisualBertForRegionToPhraseAlignment:
+            total_length = self.model_tester.seq_length + self.model_tester.visual_seq_length
+            batch_size = self.model_tester.batch_size
             inputs_dict["region_to_phrase_position"] = torch.zeros(
-                (self.model_tester.batch_size, self.model_tester.seq_length + self.model_tester.visual_seq_length),
+                (batch_size, total_length),
                 dtype=torch.long,
                 device=torch_device,
             )
@@ -373,8 +352,10 @@ class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
             elif model_class == VisualBertForPreTraining:
+                total_length = self.model_tester.seq_length + self.model_tester.visual_seq_length
+                batch_size = self.model_tester.batch_size
                 inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length + self.model_tester.visual_seq_length),
+                    (batch_size, total_length),
                     dtype=torch.long,
                     device=torch_device,
                 )
@@ -384,10 +365,13 @@ class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
 
             # Flickr expects float labels
             elif model_class == VisualBertForRegionToPhraseAlignment:
+                batch_size = self.model_tester.batch_size
+                total_length = self.model_tester.seq_length + self.model_tester.visual_seq_length
+
                 inputs_dict["labels"] = torch.ones(
                     (
-                        self.model_tester.batch_size,
-                        self.model_tester.seq_length + self.model_tester.visual_seq_length,
+                        batch_size,
+                        total_length,
                         self.model_tester.visual_seq_length,
                     ),
                     dtype=torch.float,
@@ -405,13 +389,6 @@ class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
             elif model_class == VisualBertForVisualReasoning:
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size), dtype=torch.long, device=torch_device
-                )
-
-            elif model_class == VisualBertForQuestionAnsweringAdvanced:
-                inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length + self.model_tester.visual_seq_length),
-                    dtype=torch.long,
-                    device=torch_device,
                 )
 
         return inputs_dict
@@ -562,10 +539,6 @@ class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_vqa()
         self.model_tester.create_and_check_for_vqa(*config_and_inputs)
 
-    def test_model_for_vqa_advanced(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_vqa_advanced()
-        self.model_tester.create_and_check_for_vqa_advanced(*config_and_inputs)
-
     def test_model_for_nlvr(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_nlvr()
         self.model_tester.create_and_check_for_nlvr(*config_and_inputs)
@@ -622,196 +595,6 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.seq_relationship_logits.shape, expected_shape_2)
 
         expected_slice_2 = torch.tensor([[0.7393, 0.1754]])
-
-        self.assertTrue(torch.allclose(output.seq_relationship_logits, expected_slice_2, atol=1e-4))
-
-    @slow
-    def test_inference_vqa_pre(self):
-        model = VisualBertForPreTraining.from_pretrained("gchhablani/visualbert-vqa-pre")
-
-        input_ids = torch.tensor([1, 2, 3, 4, 5, 6]).reshape(1, -1)
-        token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1]).reshape(1, -1)
-        visual_embeds = torch.ones(size=(1, 10, 2048), dtype=torch.float32) * 0.5
-        visual_token_type_ids = torch.ones(size=(1, 10), dtype=torch.int32)
-        attention_mask = torch.tensor([1] * 6).reshape(1, -1)
-        visual_attention_mask = torch.tensor([1] * 10).reshape(1, -1)
-
-        output = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            visual_embeds=visual_embeds,
-            visual_attention_mask=visual_attention_mask,
-            visual_token_type_ids=visual_token_type_ids,
-        )
-
-        vocab_size = 30522
-
-        expected_shape = torch.Size((1, 16, vocab_size))
-        self.assertEqual(output.prediction_logits.shape, expected_shape)
-
-        expected_slice = torch.tensor(
-            [[[-6.2381, -6.5230, -6.7078], [-6.7028, -7.0870, -7.2368], [-6.8588, -7.3453, -7.3635]]]
-        )
-
-        self.assertTrue(torch.allclose(output.prediction_logits[:, :3, :3], expected_slice, atol=1e-4))
-
-        expected_shape_2 = torch.Size((1, 2))
-        self.assertEqual(output.seq_relationship_logits.shape, expected_shape_2)
-
-        expected_slice_2 = torch.tensor([[-0.5355, 2.0733]])
-
-        self.assertTrue(torch.allclose(output.seq_relationship_logits, expected_slice_2, atol=1e-4))
-
-    @slow
-    def test_inference_nlvr_coco_pre(self):
-        model = VisualBertForPreTraining.from_pretrained("gchhablani/visualbert-nlvr2-coco-pre")
-
-        input_ids = torch.tensor([1, 2, 3, 4, 5, 6]).reshape(1, -1)
-        token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1]).reshape(1, -1)
-        visual_embeds = torch.ones(size=(1, 10, 1024), dtype=torch.float32) * 0.5
-        visual_token_type_ids = torch.ones(size=(1, 10), dtype=torch.int32)
-        attention_mask = torch.tensor([1] * 6).reshape(1, -1)
-        visual_attention_mask = torch.tensor([1] * 10).reshape(1, -1)
-
-        output = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            visual_embeds=visual_embeds,
-            visual_attention_mask=visual_attention_mask,
-            visual_token_type_ids=visual_token_type_ids,
-        )
-
-        vocab_size = 30522
-
-        expected_shape = torch.Size((1, 16, vocab_size))
-        self.assertEqual(output.prediction_logits.shape, expected_shape)
-
-        expected_slice = torch.tensor(
-            [[[-6.6872, -6.7688, -6.5785], [-7.3175, -7.3025, -7.2098], [-7.1086, -7.0725, -6.9211]]]
-        )
-
-        self.assertTrue(torch.allclose(output.prediction_logits[:, :3, :3], expected_slice, atol=1e-4))
-
-        expected_shape_2 = torch.Size((1, 2))
-        self.assertEqual(output.seq_relationship_logits.shape, expected_shape_2)
-
-        expected_slice_2 = torch.tensor([[0.1609, 0.5207]])
-
-        self.assertTrue(torch.allclose(output.seq_relationship_logits, expected_slice_2, atol=1e-4))
-
-    @slow
-    def test_inference_nlvr_pre(self):
-        model = VisualBertForPreTraining.from_pretrained("gchhablani/visualbert-nlvr2-pre")
-
-        input_ids = torch.tensor([1, 2, 3, 4, 5, 6]).reshape(1, -1)
-        token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1]).reshape(1, -1)
-        visual_embeds = torch.ones(size=(1, 10, 1024), dtype=torch.float32) * 0.5
-        visual_token_type_ids = torch.ones(size=(1, 10), dtype=torch.int32)
-        attention_mask = torch.tensor([1] * 6).reshape(1, -1)
-        visual_attention_mask = torch.tensor([1] * 10).reshape(1, -1)
-
-        output = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            visual_embeds=visual_embeds,
-            visual_attention_mask=visual_attention_mask,
-            visual_token_type_ids=visual_token_type_ids,
-        )
-
-        vocab_size = 30522
-
-        expected_shape = torch.Size((1, 16, vocab_size))
-        self.assertEqual(output.prediction_logits.shape, expected_shape)
-
-        expected_slice = torch.tensor(
-            [[[-11.9891, -11.4899, -11.2978], [-8.6170, -8.4391, -8.3391], [-7.2381, -7.3971, -6.8986]]]
-        )
-
-        self.assertTrue(torch.allclose(output.prediction_logits[:, :3, :3], expected_slice, atol=1e-4))
-
-        expected_shape_2 = torch.Size((1, 2))
-        self.assertEqual(output.seq_relationship_logits.shape, expected_shape_2)
-
-        expected_slice_2 = torch.tensor([[0.5289, -0.0404]])
-
-        self.assertTrue(torch.allclose(output.seq_relationship_logits, expected_slice_2, atol=1e-4))
-
-    @slow
-    def test_inference_vcr_coco_pre(self):
-        model = VisualBertForPreTraining.from_pretrained("gchhablani/visualbert-vcr-coco-pre")
-
-        input_ids = torch.tensor([1, 2, 3, 4, 5, 6]).reshape(1, -1)
-        token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1]).reshape(1, -1)
-        visual_embeds = torch.ones(size=(1, 10, 512), dtype=torch.float32) * 0.5
-        visual_token_type_ids = torch.ones(size=(1, 10), dtype=torch.int32)
-        attention_mask = torch.tensor([1] * 6).reshape(1, -1)
-        visual_attention_mask = torch.tensor([1] * 10).reshape(1, -1)
-
-        output = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            visual_embeds=visual_embeds,
-            visual_attention_mask=visual_attention_mask,
-            visual_token_type_ids=visual_token_type_ids,
-        )
-
-        vocab_size = 30522
-
-        expected_shape = torch.Size((1, 16, vocab_size))
-        self.assertEqual(output.prediction_logits.shape, expected_shape)
-
-        expected_slice = torch.tensor(
-            [[[-8.9958, -10.4880, -9.5806], [-8.2890, -9.6861, -8.9888], [-8.2512, -9.5826, -8.9046]]]
-        )
-
-        self.assertTrue(torch.allclose(output.prediction_logits[:, :3, :3], expected_slice, atol=1e-4))
-
-        expected_shape_2 = torch.Size((1, 2))
-        self.assertEqual(output.seq_relationship_logits.shape, expected_shape_2)
-
-        expected_slice_2 = torch.tensor([[0.7907, 0.1728]])
-
-        self.assertTrue(torch.allclose(output.seq_relationship_logits, expected_slice_2, atol=1e-4))
-
-    @slow
-    def test_inference_vcr_pre(self):
-        model = VisualBertForPreTraining.from_pretrained("gchhablani/visualbert-vcr-pre")
-
-        input_ids = torch.tensor([1, 2, 3, 4, 5, 6]).reshape(1, -1)
-        token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1]).reshape(1, -1)
-        visual_embeds = torch.ones(size=(1, 10, 512), dtype=torch.float32) * 0.5
-        visual_token_type_ids = torch.ones(size=(1, 10), dtype=torch.int32)
-        attention_mask = torch.tensor([1] * 6).reshape(1, -1)
-        visual_attention_mask = torch.tensor([1] * 10).reshape(1, -1)
-
-        output = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            visual_embeds=visual_embeds,
-            visual_attention_mask=visual_attention_mask,
-            visual_token_type_ids=visual_token_type_ids,
-        )
-
-        vocab_size = 30522
-
-        expected_shape = torch.Size((1, 16, vocab_size))
-        self.assertEqual(output.prediction_logits.shape, expected_shape)
-
-        expected_slice = torch.tensor(
-            [[[-7.8357, -8.7081, -9.1610], [-8.3819, -9.0302, -9.0794], [-8.1837, -8.8348, -8.9581]]]
-        )
-
-        self.assertTrue(torch.allclose(output.prediction_logits[:, :3, :3], expected_slice, atol=1e-4))
-
-        expected_shape_2 = torch.Size((1, 2))
-        self.assertEqual(output.seq_relationship_logits.shape, expected_shape_2)
-
-        expected_slice_2 = torch.tensor([[3.4079, -2.7999]])
 
         self.assertTrue(torch.allclose(output.seq_relationship_logits, expected_slice_2, atol=1e-4))
 
