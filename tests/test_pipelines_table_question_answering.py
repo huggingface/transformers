@@ -214,7 +214,7 @@ class TQAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
 
     @slow
     def test_integration_wtq(self):
-        tqa_pipeline = pipeline("table-question-answering")
+        table_querier = pipeline("table-question-answering")
 
         data = {
             "Repository": ["Transformers", "Datasets", "Tokenizers"],
@@ -230,7 +230,7 @@ class TQAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
             "What is the total amount of stars?",
         ]
 
-        results = tqa_pipeline(data, queries)
+        results = table_querier(data, queries)
 
         expected_results = [
             {"answer": "Transformers", "coordinates": [(0, 0)], "cells": ["Transformers"], "aggregator": "NONE"},
@@ -258,7 +258,7 @@ class TQAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
 
     @slow
     def test_integration_sqa(self):
-        tqa_pipeline = pipeline(
+        table_querier = pipeline(
             "table-question-answering",
             model="google/tapas-base-finetuned-sqa",
             tokenizer="google/tapas-base-finetuned-sqa",
@@ -270,7 +270,7 @@ class TQAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
             "Date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
         }
         queries = ["How many movies has George Clooney played in?", "How old is he?", "What's his date of birth?"]
-        results = tqa_pipeline(data, queries, sequential=True)
+        results = table_querier(data, queries, sequential=True)
 
         expected_results = [
             {"answer": "69", "coordinates": [(2, 2)], "cells": ["69"]},

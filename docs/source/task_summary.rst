@@ -69,13 +69,13 @@ This returns a label ("POSITIVE" or "NEGATIVE") alongside a score, as follows:
 
     >>> from transformers import pipeline
 
-    >>> nlp = pipeline("sentiment-analysis")
+    >>> classifier = pipeline("sentiment-analysis")
 
-    >>> result = nlp("I hate you")[0]
+    >>> result = classifier("I hate you")[0]
     >>> print(f"label: {result['label']}, with score: {round(result['score'], 4)}")
     label: NEGATIVE, with score: 0.9991
 
-    >>> result = nlp("I love you")[0]
+    >>> result = classifier("I love you")[0]
     >>> print(f"label: {result['label']}, with score: {round(result['score'], 4)}")
     label: POSITIVE, with score: 0.9999
 
@@ -182,7 +182,7 @@ leverages a fine-tuned model on SQuAD.
 
     >>> from transformers import pipeline
 
-    >>> nlp = pipeline("question-answering")
+    >>> question_answerer = pipeline("question-answering")
 
     >>> context = r"""
     ... Extractive Question Answering is the task of extracting an answer from a text given a question. An example of a
@@ -195,11 +195,11 @@ positions of the extracted answer in the text.
 
 .. code-block::
 
-    >>> result = nlp(question="What is extractive question answering?", context=context)
+    >>> result = question_answerer(question="What is extractive question answering?", context=context)
     >>> print(f"Answer: '{result['answer']}', score: {round(result['score'], 4)}, start: {result['start']}, end: {result['end']}")
     Answer: 'the task of extracting an answer from a text given a question.', score: 0.6226, start: 34, end: 96
 
-    >>> result = nlp(question="What is a good example of a question answering dataset?", context=context)
+    >>> result = question_answerer(question="What is a good example of a question answering dataset?", context=context)
     >>> print(f"Answer: '{result['answer']}', score: {round(result['score'], 4)}, start: {result['start']}, end: {result['end']}")
     Answer: 'SQuAD dataset,', score: 0.5053, start: 147, end: 161
 
@@ -336,14 +336,14 @@ Here is an example of using pipelines to replace a mask from a sequence:
 
     >>> from transformers import pipeline
 
-    >>> nlp = pipeline("fill-mask")
+    >>> unmasker = pipeline("fill-mask")
 
 This outputs the sequences with the mask filled, the confidence score, and the token id in the tokenizer vocabulary:
 
 .. code-block::
 
     >>> from pprint import pprint
-    >>> pprint(nlp(f"HuggingFace is creating a {nlp.tokenizer.mask_token} that the community uses to solve NLP tasks."))
+    >>> pprint(unmasker(f"HuggingFace is creating a {unmasker.tokenizer.mask_token} that the community uses to solve NLP tasks."))
     [{'score': 0.1792745739221573,
       'sequence': '<s>HuggingFace is creating a tool that the community uses to '
                   'solve NLP tasks.</s>',
@@ -627,7 +627,7 @@ It leverages a fine-tuned model on CoNLL-2003, fine-tuned by `@stefan-it <https:
 
     >>> from transformers import pipeline
 
-    >>> nlp = pipeline("ner")
+    >>> ner_pipe = pipeline("ner")
 
     >>> sequence = """Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO, 
     ... therefore very close to the Manhattan Bridge which is visible from the window."""
@@ -638,7 +638,7 @@ Here are the expected results:
 
 .. code-block::
 
-    >>> print(nlp(sequence))
+    >>> print(ner_pipe(sequence))
     [
         {'word': 'Hu', 'score': 0.9995632767677307, 'entity': 'I-ORG'},
         {'word': '##gging', 'score': 0.9915938973426819, 'entity': 'I-ORG'},
