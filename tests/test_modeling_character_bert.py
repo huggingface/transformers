@@ -61,8 +61,8 @@ class CharacterBertModelTester:
             use_input_mask=True,
             use_token_type_ids=True,
             use_labels=True,
-            vocab_size=262,
-            mlm_vocab_size=int(1e5),
+            character_vocab_size=263,
+            mlm_vocab_size=100,
             hidden_size=32,
             num_hidden_layers=5,
             num_attention_heads=4,
@@ -85,7 +85,7 @@ class CharacterBertModelTester:
         self.use_input_mask = use_input_mask
         self.use_token_type_ids = use_token_type_ids
         self.use_labels = use_labels
-        self.vocab_size = vocab_size
+        self.character_vocab_size = character_vocab_size
         self.mlm_vocab_size = mlm_vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -103,7 +103,7 @@ class CharacterBertModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length, 50], self.vocab_size)
+        input_ids = ids_tensor([self.batch_size, self.seq_length, 50], self.character_vocab_size)
 
         input_mask = None
         if self.use_input_mask:
@@ -122,7 +122,6 @@ class CharacterBertModelTester:
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = CharacterBertConfig(
-            vocab_size=self.vocab_size,
             mlm_vocab_size=self.mlm_vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -298,7 +297,7 @@ class CharacterBertModelTester:
         past_key_values = outputs.past_key_values
 
         # create hypothetical multiple next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3, 50), config.vocab_size)
+        next_tokens = ids_tensor((self.batch_size, 3, 50), self.character_vocab_size)
         next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
 
         # append to next input_ids and
