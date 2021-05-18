@@ -41,9 +41,8 @@ procedure.
 ## Supported models
 
 Porting models from PyTorch to JAX/Flax is an ongoing effort. 
-If you are interested in contributing a model in JAX/Flax, please have a look at this 
-[Porting a PyTorch model to Flax (TODO: Patrick)]() guide and feel free to contact the
-🤗 Hugging Face team.
+Feel free to reach out if you are interested in contributing a model in JAX/Flax -- we'll 
+be adding a guide for porting models from PyTorch in the upcoming few weeks.
 
 Currently, the following models are supported in Flax:
 
@@ -52,7 +51,7 @@ Currently, the following models are supported in Flax:
 * [GPT2](../../src/transformers/models/gpt2/modeling_flax_gpt2.py)
 * [ELECTRA](../../src/transformers/models/electra/modeling_flax_electra.py)
 
-For a complete overview of models that are supported in JAX/Flax, please have a look at [this (TODO: Patrick - wait for PR: #11758 to be merged]( ) table.
+For a complete overview of models that are supported in JAX/Flax, please have a look at [this](https://huggingface.co/transformers/master/index.html#supported-frameworks) table.
 
 Over 3000 pretrained checkpoints are supported in JAX/Flax as of May 2021.
 Click [here (TODO: will be enabled in a couple of days](https://huggingface.co/models?filter=jax) to see the full list on the 🤗 hub. 
