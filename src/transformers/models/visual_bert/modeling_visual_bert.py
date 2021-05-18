@@ -748,10 +748,10 @@ class VisualBertModel(VisualBertPreTrainedModel):
             >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
 
             >>> inputs.update({{
-                "visual_embeds": visual_embeds,
-                "visual_token_type_ids": visual_token_type_ids,
-                "visual_attention_mask": visual_attention_mask
-            }})
+            ...     "visual_embeds": visual_embeds,
+            ...     "visual_token_type_ids": visual_token_type_ids,
+            ...     "visual_attention_mask": visual_attention_mask
+            ... }})
 
             >>> outputs = model(**inputs)
 
