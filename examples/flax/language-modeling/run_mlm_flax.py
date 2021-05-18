@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team All rights reserved.
+# Copyright 2021 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -605,12 +605,14 @@ if __name__ == "__main__":
 
             # Model forward
             model_inputs = shard(model_inputs.data)
-            state, metrics, dropout_rngs = p_train_step(state, model_inputs, dropout_rngs)
-            train_metrics.append(metrics)
+            state, train_metric, dropout_rngs = p_train_step(state, model_inputs, dropout_rngs)
+            train_metrics.append(train_metric)
 
         train_time += time.time() - train_start
 
-        epochs.write(f"Loss: {metrics['loss']}")
+        epochs.write(
+            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']})"
+        )
 
         # ======================== Evaluating ==============================
         num_eval_samples = len(tokenized_datasets["validation"])
