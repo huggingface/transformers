@@ -1088,6 +1088,10 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         self.assertIsNotNone(encoder_hidden_states.grad)
         self.assertIsNotNone(encoder_attentions.grad)
 
+    def test_generate_with_head_masking(self):
+        """Generating with head_masking has not been implemented for ProphetNet models yet."""
+        pass
+
 
 @require_torch
 class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
