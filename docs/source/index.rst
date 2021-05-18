@@ -271,10 +271,10 @@ Supported models
     Conneau, Alexei Baevski, Ronan Collobert, Abdelrahman Mohamed, Michael Auli.
 
 
+.. _bigtable:
+
 Supported frameworks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. _bigtable:
 
 The table below represents the current support in the library for each of those models, whether they have a Python
 tokenizer (called "slow"). A "fast" tokenizer backed by the 🤗 Tokenizers library, whether they have support in Jax (via
