@@ -14,11 +14,11 @@
 # limitations under the License.
 
 
-import unittest
 import inspect
 import re
 import shutil
 import tempfile
+import unittest
 from typing import List, Tuple
 
 from transformers import PreTrainedTokenizerFast
@@ -63,9 +63,8 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         toks = list(filter(lambda t: re.match(r"^[ a-zA-Z]+$", t[1]), toks))
         toks = list(filter(
-            lambda t: \
-                (t[1] != ' ') and
-                (t[0] == tokenizer.encode(t[1], add_special_tokens=False)[0][1]),
+            lambda t:
+                (t[1] != ' ') and (t[0] == tokenizer.encode(t[1], add_special_tokens=False)[0][1]),
             toks
         ))
         if max_length is not None and len(toks) > max_length:
@@ -106,7 +105,7 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip("Adding tokens is not supported (character-level model).")
     def test_added_token_serializable(self):
         pass
-    
+
     @unittest.skip("Adding tokens is not supported (character-level model).")
     def test_added_tokens_do_lower_case(self):
         pass
@@ -173,7 +172,7 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         for parameter_name, parameter in signature.parameters.items():
             if (parameter_name != 'mlm_vocab_file') and (parameter.default != inspect.Parameter.empty):
-                    self.assertIn(parameter_name, tokenizer.init_kwargs)
+                self.assertIn(parameter_name, tokenizer.init_kwargs)
 
     def test_maximum_encoding_length_single_input(self):
         tokenizers = self.get_tokenizers(do_lower_case=False, model_max_length=100)
