@@ -616,7 +616,10 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         return encoded_inputs
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        logger.warn("CharacterBERT does not have a token vocabulary. Skipping saving `vocab.txt`.")
+        logger.warning(
+            "CharacterBERT does not have a token vocabulary. "
+            "Skipping saving `vocab.txt`."
+        )
         return ()
 
     def save_mlm_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
