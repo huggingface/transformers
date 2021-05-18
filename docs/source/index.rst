@@ -84,7 +84,10 @@ The documentation is organized in five parts:
     - **INTERNAL HELPERS** for the classes and functions we use internally.
 
 The library currently contains Jax, PyTorch and Tensorflow implementations, pretrained model weights, usage scripts and
-conversion utilities for the following models:
+conversion utilities for the following models.
+
+Supported models
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ..
     This list is updated automatically from the README with `make fix-copies`. Do not update manually!
@@ -267,7 +270,8 @@ conversion utilities for the following models:
     Conneau, Alexei Baevski, Ronan Collobert, Abdelrahman Mohamed, Michael Auli.
 
 
-.. _bigtable:
+Supported frameworks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The table below represents the current support in the library for each of those models, whether they have a Python
 tokenizer (called "slow"). A "fast" tokenizer backed by the 🤗 Tokenizers library, whether they have support in Jax (via
