@@ -54,7 +54,7 @@ Currently, the following models are supported in Flax:
 For a complete overview of models that are supported in JAX/Flax, please have a look at [this](https://huggingface.co/transformers/master/index.html#supported-frameworks) table.
 
 Over 3000 pretrained checkpoints are supported in JAX/Flax as of May 2021.
-Click [here (TODO: will be enabled in a couple of days](https://huggingface.co/models?filter=jax) to see the full list on the 🤗 hub. 
+Click [here](https://huggingface.co/models?filter=jax) to see the full list on the 🤗 hub. 
 
 ## Examples
 
