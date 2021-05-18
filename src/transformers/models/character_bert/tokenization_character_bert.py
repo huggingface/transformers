@@ -197,10 +197,17 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         # NOTE: we overwrite this because CharacterBERT does not have self.vocab_size
         return (
             f"CharacterBertTokenizer(name_or_path='{self.name_or_path}', "
-            f"mlm_vocab_size={self.mlm_vocab_size}" if self.ids_to_tokens else ""
-            f"model_max_len={self.model_max_length}, is_fast={self.is_fast}, "
-            f"padding_side='{self.padding_side}', special_tokens={self.special_tokens_map_extended})"
+            + (f"mlm_vocab_size={self.mlm_vocab_size}, " if self.ids_to_tokens else "")
+            + f"model_max_len={self.model_max_length}, is_fast={self.is_fast}, "
+            + f"padding_side='{self.padding_side}', special_tokens={self.special_tokens_map_extended})"
         )
+
+    def __len__(self):
+        """
+        Size of the full vocabulary with the added tokens.
+        """
+        # return self.vocab_size + len(self.added_tokens_encoder)
+        return 0 + len(self.added_tokens_encoder)
 
     @property
     def do_lower_case(self):
@@ -220,8 +227,19 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
                 "`tokenizer = CharacterBertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`")
         return len(self.ids_to_tokens)
 
+    def add_special_tokens(self, *args, **kwargs):
+        raise NotImplementedError("Adding special tokens is not supported for now.")
+
+    def add_tokens(self, *args, **kwargs):
+        # We don't raise an Exception here to allow for ignoring this step.
+        # Otherwise, many inherited methods would need to be re-implemented...
+        pass
+
     def get_vocab(self):
         raise NotImplementedError("CharacterBERT does not have a token vocabulary.")
+    
+    def get_mlm_vocab(self):
+        return {token: i for i, token in self.ids_to_tokens.items()}
 
     def _tokenize(self, text):
         split_tokens = []
@@ -894,6 +912,12 @@ class CharacterMapper:
         return [c + 1 for c in char_ids]
 
     def convert_char_ids_to_word(self, char_ids: List[int]) -> str:
+        "Converts a sequence of character ids into its corresponding word."
+
+        assert len(char_ids) == self.max_word_length, \
+            "Got character sequence of length %s while `max_word_length=%s`" \
+            % (len(char_ids), self.max_word_length)
+
         char_ids_ = [(i - 1) for i in char_ids]
         if char_ids_ == self.beginning_of_sentence_characters:
             return self.bos_token
@@ -904,14 +928,11 @@ class CharacterMapper:
         elif char_ids_ == self.pad_characters:  # token padding
             return self.pad_token
         else:
-            characters = []
-            for i in char_ids_:
-                if i == self.padding_character:  # character padding
-                    continue
-                if i == self.beginning_of_word_character:
-                    continue
-                elif i == self.end_of_word_character:
-                    continue
-                else:
-                    characters.append(chr(i))
-            return ''.join(characters)
+            utf8_codes = list(filter(
+                lambda x: \
+                    (x != self.padding_character) \
+                    and (x != self.beginning_of_word_character) \
+                    and (x != self.end_of_word_character),
+                char_ids_
+            ))
+            return bytes(utf8_codes).decode("utf-8")
