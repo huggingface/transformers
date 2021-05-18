@@ -66,7 +66,6 @@ Current number of checkpoints: |checkpoints|
 
 .. |checkpoints| image:: https://img.shields.io/endpoint?url=https://huggingface.co/api/shields/models&color=brightgreen
 
-
 Contents
 -----------------------------------------------------------------------------------------------------------------------
 
