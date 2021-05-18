@@ -608,9 +608,6 @@ if __name__ == "__main__":
             state, metrics, dropout_rngs = p_train_step(state, model_inputs, dropout_rngs)
             train_metrics.append(metrics)
 
-            if i % 100 == 0:
-                print(f"{metrics}")
-
         train_time += time.time() - train_start
 
         epochs.write(f"Loss: {metrics['loss']}")
