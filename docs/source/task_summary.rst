@@ -336,14 +336,14 @@ Here is an example of using pipelines to replace a mask from a sequence:
 
     >>> from transformers import pipeline
 
-    >>> unmask = pipeline("fill-mask")
+    >>> unmasker = pipeline("fill-mask")
 
 This outputs the sequences with the mask filled, the confidence score, and the token id in the tokenizer vocabulary:
 
 .. code-block::
 
     >>> from pprint import pprint
-    >>> pprint(unmask(f"HuggingFace is creating a {unmask.tokenizer.mask_token} that the community uses to solve NLP tasks."))
+    >>> pprint(unmasker(f"HuggingFace is creating a {unmasker.tokenizer.mask_token} that the community uses to solve NLP tasks."))
     [{'score': 0.1792745739221573,
       'sequence': '<s>HuggingFace is creating a tool that the community uses to '
                   'solve NLP tasks.</s>',
