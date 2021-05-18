@@ -1409,6 +1409,7 @@ if is_flax_available():
     _import_structure["modeling_flax_utils"] = ["FlaxPreTrainedModel"]
     _import_structure["models.auto"].extend(
         [
+            "FLAX_MODEL_FOR_CAUSAL_LM_MAPPING",
             "FLAX_MODEL_FOR_MASKED_LM_MAPPING",
             "FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
             "FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
@@ -1418,6 +1419,7 @@ if is_flax_available():
             "FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "FLAX_MODEL_MAPPING",
             "FlaxAutoModel",
+            "FlaxAutoModelForCausalLM",
             "FlaxAutoModelForMaskedLM",
             "FlaxAutoModelForMultipleChoice",
             "FlaxAutoModelForNextSentencePrediction",
@@ -1452,6 +1454,7 @@ if is_flax_available():
             "FlaxElectraPreTrainedModel",
         ]
     )
+    _import_structure["models.gpt2"].extend(["FlaxGPT2LMHeadModel", "FlaxGPT2Model"])
     _import_structure["models.roberta"].extend(
         [
             "FlaxRobertaForMaskedLM",
@@ -2634,6 +2637,7 @@ if TYPE_CHECKING:
     if is_flax_available():
         from .modeling_flax_utils import FlaxPreTrainedModel
         from .models.auto import (
+            FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
             FLAX_MODEL_FOR_MASKED_LM_MAPPING,
             FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -2643,6 +2647,7 @@ if TYPE_CHECKING:
             FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             FLAX_MODEL_MAPPING,
             FlaxAutoModel,
+            FlaxAutoModelForCausalLM,
             FlaxAutoModelForMaskedLM,
             FlaxAutoModelForMultipleChoice,
             FlaxAutoModelForNextSentencePrediction,
@@ -2672,6 +2677,7 @@ if TYPE_CHECKING:
             FlaxElectraModel,
             FlaxElectraPreTrainedModel,
         )
+        from .models.gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model
         from .models.roberta import (
             FlaxRobertaForMaskedLM,
             FlaxRobertaForMultipleChoice,
