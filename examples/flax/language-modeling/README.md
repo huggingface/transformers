@@ -121,7 +121,7 @@ TPUv3-8 pod. This should take less than 17 hours.
         --pad_to_max_length \
         --num_train_epochs="18" \
         --adam_beta1="0.9" \
-        --adam_beta2="0.98" \
+        --adam_beta2="0.98"
 ```
 
 For more detail on how masked language modeling works, please see [this TODO: (Patrick)]() google colab.
