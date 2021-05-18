@@ -44,13 +44,6 @@ Porting models from PyTorch to JAX/Flax is an ongoing effort.
 Feel free to reach out if you are interested in contributing a model in JAX/Flax -- we'll 
 be adding a guide for porting models from PyTorch in the upcoming few weeks.
 
-Currently, the following models are supported in Flax:
-
-* [BERT](../../src/transformers/models/bert/modeling_flax_bert.py)
-* [RoBERTa](../../src/transformers/models/roberta/modeling_flax_roberta.py)
-* [GPT2](../../src/transformers/models/gpt2/modeling_flax_gpt2.py)
-* [ELECTRA](../../src/transformers/models/electra/modeling_flax_electra.py)
-
 For a complete overview of models that are supported in JAX/Flax, please have a look at [this](https://huggingface.co/transformers/master/index.html#supported-frameworks) table.
 
 Over 3000 pretrained checkpoints are supported in JAX/Flax as of May 2021.
