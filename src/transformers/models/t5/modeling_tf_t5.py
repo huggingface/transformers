@@ -1464,7 +1464,17 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             encoder_attentions=enc_attns,
         )
 
-    def prepare_inputs_for_generation(self, inputs, past, attention_mask, use_cache, **kwargs):
+    def prepare_inputs_for_generation(
+        self,
+        inputs,
+        past,
+        attention_mask,
+        head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
+        use_cache=None,
+        **kwargs,
+    ):
         assert past is not None, "past has to be defined for encoder_outputs"
 
         # first step
@@ -1483,6 +1493,9 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             "past_key_values": past_key_values,
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
+            "head_mask": head_mask,
+            "decoder_head_mask": decoder_head_mask,
+            "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,
         }
 

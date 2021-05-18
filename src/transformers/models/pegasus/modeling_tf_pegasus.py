@@ -1489,6 +1489,8 @@ class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel, TFCausalLangua
         past,
         attention_mask,
         head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
         use_cache=None,
         **kwargs,
     ) -> Dict:
