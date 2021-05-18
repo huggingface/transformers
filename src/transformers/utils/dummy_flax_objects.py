@@ -11,6 +11,9 @@ class FlaxPreTrainedModel:
         requires_backends(self, ["flax"])
 
 
+FLAX_MODEL_FOR_CAUSAL_LM_MAPPING = None
+
+
 FLAX_MODEL_FOR_MASKED_LM_MAPPING = None
 
 
@@ -36,6 +39,15 @@ FLAX_MODEL_MAPPING = None
 
 
 class FlaxAutoModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxAutoModelForCausalLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
@@ -240,6 +252,24 @@ class FlaxElectraModel:
 
 
 class FlaxElectraPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxGPT2LMHeadModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxGPT2Model:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 

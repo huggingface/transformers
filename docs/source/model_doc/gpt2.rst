@@ -139,3 +139,17 @@ TFSequenceClassifierOutputWithPast
 
 .. autoclass:: transformers.modeling_tf_outputs.TFSequenceClassifierOutputWithPast
     :members:
+
+
+FlaxGPT2Model
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxGPT2Model
+    :members: __call__
+
+
+FlaxGPT2LMHeadModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxGPT2LMHeadModel
+    :members: __call__

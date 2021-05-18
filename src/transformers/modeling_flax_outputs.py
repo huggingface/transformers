@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import jaxlib.xla_extension as jax_xla
 
@@ -42,6 +42,36 @@ class FlaxBaseModelOutput(ModelOutput):
     """
 
     last_hidden_state: jax_xla.DeviceArray = None
+    hidden_states: Optional[Tuple[jax_xla.DeviceArray]] = None
+    attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
+
+
+@dataclass
+class FlaxBaseModelOutputWithPast(ModelOutput):
+    """
+    Base class for model's outputs, with potential hidden states and attentions.
+
+    Args:
+        last_hidden_state (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        past_key_values (:obj:`Dict[str, jax_xla.DeviceArray]`):
+            Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
+            auto-regressive decoding. Pre-computed key and value hidden-states are of shape `[batch_size, max_length]`.
+        hidden_states (:obj:`tuple(jax_xla.DeviceArray)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`jax_xla.DeviceArray` (one for the output of the embeddings + one for the output of each
+            layer) of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(jax_xla.DeviceArray)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`jax_xla.DeviceArray` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    last_hidden_state: jax_xla.DeviceArray = None
+    past_key_values: Optional[Dict[str, jax_xla.DeviceArray]] = None
     hidden_states: Optional[Tuple[jax_xla.DeviceArray]] = None
     attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
 
@@ -101,6 +131,9 @@ class FlaxMaskedLMOutput(ModelOutput):
     logits: jax_xla.DeviceArray = None
     hidden_states: Optional[Tuple[jax_xla.DeviceArray]] = None
     attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
+
+
+FlaxCausalLMOutput = FlaxMaskedLMOutput
 
 
 @dataclass
