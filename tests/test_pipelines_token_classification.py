@@ -33,14 +33,14 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
     ]  # Default model - Models tested without the @slow decorator
     large_models = []  # Models tested with the @slow decorator
 
-    def _test_pipeline(self, nlp: Pipeline):
+    def _test_pipeline(self, token_classifier: Pipeline):
         output_keys = {"entity", "word", "score", "start", "end", "index"}
-        if nlp.aggregation_strategy != AggregationStrategy.NONE:
+        if token_classifier.aggregation_strategy != AggregationStrategy.NONE:
             output_keys = {"entity_group", "word", "score", "start", "end"}
 
-        self.assertIsNotNone(nlp)
+        self.assertIsNotNone(token_classifier)
 
-        mono_result = nlp(VALID_INPUTS[0])
+        mono_result = token_classifier(VALID_INPUTS[0])
         self.assertIsInstance(mono_result, list)
         self.assertIsInstance(mono_result[0], (dict, list))
 
@@ -50,7 +50,7 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
         for key in output_keys:
             self.assertIn(key, mono_result[0])
 
-        multi_result = [nlp(input) for input in VALID_INPUTS]
+        multi_result = [token_classifier(input) for input in VALID_INPUTS]
         self.assertIsInstance(multi_result, list)
         self.assertIsInstance(multi_result[0], (dict, list))
 
@@ -328,7 +328,7 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
 
         model_name = self.small_models[0]
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        nlp = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
+        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
 
         sentence = "Hello there"
 
@@ -346,7 +346,9 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
         # First element in [CLS]
         scores = np.array([[1, 0, 0], [0.1, 0.3, 0.6], [0.8, 0.1, 0.1]])
 
-        pre_entities = nlp.gather_pre_entities(sentence, input_ids, scores, offset_mapping, special_tokens_mask)
+        pre_entities = token_classifier.gather_pre_entities(
+            sentence, input_ids, scores, offset_mapping, special_tokens_mask
+        )
         self.assertEqual(
             nested_simplify(pre_entities),
             [
@@ -366,39 +368,39 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
     def test_tf_only(self):
         model_name = "Narsil/small"  # This model only has a TensorFlow version
         # We test that if we don't specificy framework='tf', it gets detected automatically
-        nlp = pipeline(task="ner", model=model_name)
-        self._test_pipeline(nlp)
+        token_classifier = pipeline(task="ner", model=model_name)
+        self._test_pipeline(token_classifier)
 
     @require_tf
     def test_tf_defaults(self):
         for model_name in self.small_models:
             tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-            nlp = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="tf")
-        self._test_pipeline(nlp)
+            token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="tf")
+        self._test_pipeline(token_classifier)
 
     @require_tf
     def test_tf_small_ignore_subwords_available_for_fast_tokenizers(self):
         for model_name in self.small_models:
             tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-            nlp = pipeline(
+            token_classifier = pipeline(
                 task="ner",
                 model=model_name,
                 tokenizer=tokenizer,
                 framework="tf",
                 aggregation_strategy=AggregationStrategy.FIRST,
             )
-            self._test_pipeline(nlp)
+            self._test_pipeline(token_classifier)
 
         for model_name in self.small_models:
             tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-            nlp = pipeline(
+            token_classifier = pipeline(
                 task="ner",
                 model=model_name,
                 tokenizer=tokenizer,
                 framework="tf",
                 aggregation_strategy=AggregationStrategy.SIMPLE,
             )
-            self._test_pipeline(nlp)
+            self._test_pipeline(token_classifier)
 
     @require_torch
     def test_pt_ignore_subwords_slow_tokenizer_raises(self):
@@ -418,14 +420,14 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
     def test_pt_defaults_slow_tokenizer(self):
         for model_name in self.small_models:
             tokenizer = AutoTokenizer.from_pretrained(model_name)
-            nlp = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
-            self._test_pipeline(nlp)
+            token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
+            self._test_pipeline(token_classifier)
 
     @require_torch
     def test_pt_defaults(self):
         for model_name in self.small_models:
-            nlp = pipeline(task="ner", model=model_name)
-            self._test_pipeline(nlp)
+            token_classifier = pipeline(task="ner", model=model_name)
+            self._test_pipeline(token_classifier)
 
     @slow
     @require_torch
@@ -442,10 +444,10 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
     @slow
     @require_torch
     def test_simple(self):
-        nlp = pipeline(task="ner", model="dslim/bert-base-NER", aggregation_strategy=AggregationStrategy.SIMPLE)
+        token_classifier = pipeline(task="ner", model="dslim/bert-base-NER", grouped_entities=True)
         sentence = "Hello Sarah Jessica Parker who Jessica lives in New York"
         sentence2 = "This is a simple test"
-        output = nlp(sentence)
+        output = token_classifier(sentence)
 
         output_ = nested_simplify(output)
 
@@ -464,7 +466,7 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
             ],
         )
 
-        output = nlp([sentence, sentence2])
+        output = token_classifier([sentence, sentence2])
         output_ = nested_simplify(output)
 
         self.assertEqual(
@@ -483,17 +485,17 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
     def test_pt_small_ignore_subwords_available_for_fast_tokenizers(self):
         for model_name in self.small_models:
             tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-            nlp = pipeline(
-                task="ner", model=model_name, tokenizer=tokenizer, aggregation_strategy=AggregationStrategy.FIRST
+            token_classifier = pipeline(
+                task="ner", model=model_name, tokenizer=tokenizer, grouped_entities=True, ignore_subwords=True
             )
-            self._test_pipeline(nlp)
+            self._test_pipeline(token_classifier)
 
         for model_name in self.small_models:
             tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-            nlp = pipeline(
-                task="ner", model=model_name, tokenizer=tokenizer, aggregation_strategy=AggregationStrategy.SIMPLE
+            token_classifier = pipeline(
+                task="ner", model=model_name, tokenizer=tokenizer, grouped_entities=True, ignore_subwords=False
             )
-            self._test_pipeline(nlp)
+            self._test_pipeline(token_classifier)
 
 
 class TokenClassificationArgumentHandlerTestCase(unittest.TestCase):
