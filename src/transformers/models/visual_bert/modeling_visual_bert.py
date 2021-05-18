@@ -1491,11 +1491,11 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
             >>> region_to_phrase_position = torch.ones((1, inputs["input_ids"].shape[-1]+visual_embeds.shape[-2]))
 
             >>> inputs.update({{
-                "region_to_phrase_position": region_to_phrase_position,
-                "visual_embeds": visual_embeds,
-                "visual_token_type_ids": visual_token_type_ids,
-                "visual_attention_mask": visual_attention_mask
-            }})
+            ...     "region_to_phrase_position": region_to_phrase_position,
+            ...     "visual_embeds": visual_embeds,
+            ...     "visual_token_type_ids": visual_token_type_ids,
+            ...     "visual_attention_mask": visual_attention_mask
+            ... }})
 
             >>> labels = torch.ones((1, inputs["input_ids"].shape[-1]+visual_embeds.shape[-2], visual_embeds.shape[-2])) # Batch size 1
 
