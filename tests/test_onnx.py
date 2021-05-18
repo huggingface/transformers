@@ -138,10 +138,10 @@ class OnnxExportTestCase(unittest.TestCase):
         self._test_infer_dynamic_axis(model, tokenizer, "tf")
 
     def _test_infer_dynamic_axis(self, model, tokenizer, framework):
-        nlp = FeatureExtractionPipeline(model, tokenizer)
+        feature_extractor = FeatureExtractionPipeline(model, tokenizer)
 
         variable_names = ["input_ids", "token_type_ids", "attention_mask", "output_0", "output_1"]
-        input_vars, output_vars, shapes, tokens = infer_shapes(nlp, framework)
+        input_vars, output_vars, shapes, tokens = infer_shapes(feature_extractor, framework)
 
         # Assert all variables are present
         self.assertEqual(len(shapes), len(variable_names))
