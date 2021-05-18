@@ -52,7 +52,7 @@ python run_ner.py \
 
 **Note:** This script only works with models that have a fast tokenizer (backed by the 🤗 Tokenizers library) as it
 uses special features of those tokenizers. You can check if your favorite model has a fast tokenizer in
-[this table](https://huggingface.co/transformers/index.html#bigtable), if it doesn't you can still use the old version
+[this table](https://huggingface.co/transformers/index.html#supported-frameworks), if it doesn't you can still use the old version
 of the script.
 
 ## Old version of the script

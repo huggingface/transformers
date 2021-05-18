@@ -302,7 +302,7 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
     rst_list, start_index, end_index, lines = _find_text_in_file(
         filename=os.path.join(PATH_TO_DOCS, "index.rst"),
         start_prompt="    This list is updated automatically from the README",
-        end_prompt=".. _bigtable:",
+        end_prompt="Supported frameworks",
     )
     md_list = get_model_list()
     converted_list = convert_to_rst(md_list, max_per_line=max_per_line)

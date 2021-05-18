@@ -45,6 +45,7 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = M2M100Tokenizer
     test_rust_tokenizer = False
     test_seq2seq = False
+    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()
