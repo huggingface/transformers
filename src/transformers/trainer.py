@@ -1523,10 +1523,6 @@ class Trainer:
         if self.is_world_process_zero():
             self.state.save_to_json(os.path.join(output_dir, "trainer_state.json"))
 
-        # Maybe delete some older checkpoints.
-        if self.is_world_process_zero():
-            self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
-
         # Save RNG state in non-distributed training
         rng_states = {
             "python": random.getstate(),
@@ -1551,6 +1547,10 @@ class Trainer:
             torch.save(rng_states, os.path.join(output_dir, "rng_state.pth"))
         else:
             torch.save(rng_states, os.path.join(output_dir, f"rng_state_{local_rank}.pth"))
+
+        # Maybe delete some older checkpoints.
+        if self.is_world_process_zero():
+            self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
 
     def _load_optimizer_and_scheduler(self, checkpoint):
         """If optimizer and scheduler states exist, load them."""
@@ -1924,7 +1924,7 @@ class Trainer:
                 ordering_and_checkpoint_path.append((os.path.getmtime(path), path))
             else:
                 regex_match = re.match(f".*{checkpoint_prefix}-([0-9]+)", path)
-                if regex_match and regex_match.groups():
+                if regex_match is not None and regex_match.groups() is not None:
                     ordering_and_checkpoint_path.append((int(regex_match.groups()[0]), path))
 
         checkpoints_sorted = sorted(ordering_and_checkpoint_path)
@@ -1932,10 +1932,8 @@ class Trainer:
         # Make sure we don't delete the best model.
         if self.state.best_model_checkpoint is not None:
             best_model_index = checkpoints_sorted.index(str(Path(self.state.best_model_checkpoint)))
-            checkpoints_sorted[best_model_index], checkpoints_sorted[-1] = (
-                checkpoints_sorted[-1],
-                checkpoints_sorted[best_model_index],
-            )
+            for i in range(best_model_index, len(checkpoints_sorted) - 2):
+                checkpoints_sorted[i], checkpoints_sorted[i + 1] = checkpoints_sorted[i + 1], checkpoints_sorted[i]
         return checkpoints_sorted
 
     def _rotate_checkpoints(self, use_mtime=False, output_dir=None) -> None:
@@ -1947,7 +1945,17 @@ class Trainer:
         if len(checkpoints_sorted) <= self.args.save_total_limit:
             return
 
-        number_of_checkpoints_to_delete = max(0, len(checkpoints_sorted) - self.args.save_total_limit)
+        # If save_total_limit=1 with load_best_mode_at_end=True, we could end up deleting the last checkpoint, which
+        # we don't do to allow resuming.
+        save_total_limit = self.args.save_total_limit
+        if (
+            self.state.best_model_checkpoint is not None
+            and self.args.save_total_limit == 1
+            and checkpoints_sorted[-1] != self.state.best_model_checkpoint
+        ):
+            save_total_limit = 2
+
+        number_of_checkpoints_to_delete = max(0, len(checkpoints_sorted) - save_total_limit)
         checkpoints_to_be_deleted = checkpoints_sorted[:number_of_checkpoints_to_delete]
         for checkpoint in checkpoints_to_be_deleted:
             logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
