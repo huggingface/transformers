@@ -15,9 +15,9 @@ limitations under the License.
 
 # JAX/Flax Examples
 
-This folder contains actively maintained examples of use of 🤗 Transformers using the JAX/Flax backend. Porting models and examples to JAX/Flax is an ongoing effort, and more will be added in the coming months. In particular, these examples are all designed to run fast on Cloud TPUs, and we include step-by-step guides to getting started with Cloud TPU.
+This folder contains actively maintained examples of 🤗 Transformers using the JAX/Flax backend. Porting models and examples to JAX/Flax is an ongoing effort, and more will be added in the coming months. In particular, these examples are all designed to run fast on Cloud TPUs, and we include step-by-step guides to getting started with Cloud TPU.
 
-*NOTE*: There current is no "Trainer" abstraction for JAX/Flax -- all examples contain an explicit training loop.
+*NOTE*: Currently, there is no "Trainer" abstraction for JAX/Flax -- all examples contain an explicit training loop.
 
 ## Intro: JAX and Flax
 
@@ -53,4 +53,3 @@ procedure in question.
 ## Fine-tuning examples
 
 * [GLUE](./text-classification)
-
