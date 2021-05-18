@@ -1333,10 +1333,10 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
             >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
 
             >>> inputs.update({{
-                "visual_embeds": visual_embeds,
-                "visual_token_type_ids": visual_token_type_ids,
-                "visual_attention_mask": visual_attention_mask
-            }})
+            ...     "visual_embeds": visual_embeds,
+            ...     "visual_token_type_ids": visual_token_type_ids,
+            ...     "visual_attention_mask": visual_attention_mask
+            ... }})
 
             >>> labels = torch.tensor(1).unsqueeze(0)  # Batch size 1, Num choices 2
 
