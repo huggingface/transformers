@@ -38,18 +38,32 @@ Cloud TPUs. Here is a guide for running jobs on Google Cloud TPU.
 Each example README contains more details on the specific model and training
 procedure.
 
-## Ported models
+## Supported models
+
+Porting models from PyTorch to JAX/Flax is an ongoing effort. 
+If you are interested in contributing a model in JAX/Flax, please have a look at this 
+[Porting a PyTorch model to Flax (TODO: Patrick)]() guide and feel free to contact the
+🤗 Hugging Face team.
+
+Currently, the following models are supported in Flax:
 
 * [BERT](../../src/transformers/models/bert/modeling_flax_bert.py)
-* [ELECTRA](../../src/transformers/models/electra/modeling_flax_electra.py)
 * [RoBERTa](../../src/transformers/models/roberta/modeling_flax_roberta.py)
+* [GPT2](../../src/transformers/models/gpt2/modeling_flax_gpt2.py)
+* [ELECTRA](../../src/transformers/models/electra/modeling_flax_electra.py)
 
-(See the full list here: https://huggingface.co/transformers/)
+For a complete overview of models that are supported in JAX/Flax, please have a look at [this (TODO: Patrick - wait for PR: #11758 to be merged]( ) table.
 
-## Pre-training examples
+Over 3000 pretrained checkpoints are supported in JAX/Flax as of May 2021.
+Click [here (TODO: will be enabled in a couple of days](https://huggingface.co/models?filter=jax) to see the full list on the 🤗 hub. 
 
-* [Masked Language Modeling](./language-modeling) (TODO: Add README)
+## Examples
 
-## Fine-tuning examples
+The following table lists all of our examples on how to use 🤗 Transformers with the JAX/Flax backend:
+- with information about the model and dataset used,
+- whether or not they leverage the [🤗 Datasets](https://github.com/huggingface/datasets) library,
+- links to **Colab notebooks** to walk through the scripts and run them easily.
 
-* [GLUE](./text-classification)
+| Task | Example model | Example datasets | 🤗 Datasets | Colab
+| [**`masked-language-modeling`**](https://github.com/huggingface/transformers/tree/master/examples/flax/language-modeling) | BERT | OSCAR | ✅ | [![Open In Colab (TODO: Patrick)](https://colab.research.google.com/assets/colab-badge.svg)]()
+| [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/flax/text-classification) | BERT | GLUE | ✅ | [![Open In Colab (TODO: Patrick)](https://colab.research.google.com/assets/colab-badge.svg)]()
