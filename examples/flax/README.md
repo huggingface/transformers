@@ -65,5 +65,6 @@ The following table lists all of our examples on how to use 🤗 Transformers wi
 - links to **Colab notebooks** to walk through the scripts and run them easily.
 
 | Task | Example model | Example datasets | 🤗 Datasets | Colab
+|---|---|---|:---:|:---:|
 | [**`masked-language-modeling`**](https://github.com/huggingface/transformers/tree/master/examples/flax/language-modeling) | BERT | OSCAR | ✅ | [![Open In Colab (TODO: Patrick)](https://colab.research.google.com/assets/colab-badge.svg)]()
 | [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/flax/text-classification) | BERT | GLUE | ✅ | [![Open In Colab (TODO: Patrick)](https://colab.research.google.com/assets/colab-badge.svg)]()
