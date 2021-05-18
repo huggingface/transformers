@@ -506,7 +506,6 @@ if __name__ == "__main__":
     warmup_fn = optax.linear_schedule(
         init_value=0.0, end_value=training_args.learning_rate, transition_steps=training_args.warmup_steps
     )
-
     decay_fn = optax.linear_schedule(
         init_value=training_args.learning_rate,
         end_value=0,
@@ -521,7 +520,7 @@ if __name__ == "__main__":
         learning_rate=linear_decay_lr_schedule_fn,
         b1=training_args.adam_beta1,
         b2=training_args.adam_beta2,
-        eps=1e-6,
+        eps=1e-8,
         weight_decay=training_args.weight_decay,
     )
 
@@ -557,7 +556,7 @@ if __name__ == "__main__":
 
         return new_state, metrics, new_dropout_rng
 
-    # Create parallel version of the training and evaluation steps
+    # Create parallel version of the train step
     p_train_step = jax.pmap(train_step, "batch", donate_argnums=(0,))
 
     # Define eval fn
@@ -595,12 +594,12 @@ if __name__ == "__main__":
         rng, input_rng = jax.random.split(rng)
 
         # Generate an epoch by shuffling sampling indices from the train dataset
-        nb_training_samples = len(tokenized_datasets["train"])
-        training_samples_idx = jax.random.permutation(input_rng, jnp.arange(nb_training_samples))
-        training_batch_idx = generate_batch_splits(training_samples_idx, train_batch_size)
+        num_train_samples = len(tokenized_datasets["train"])
+        train_samples_idx = jax.random.permutation(input_rng, jnp.arange(num_train_samples))
+        train_batch_idx = generate_batch_splits(train_samples_idx, train_batch_size)
 
         # Gather the indexes for creating the batch and do a training step
-        for batch_idx in tqdm(training_batch_idx, desc="Training...", position=1):
+        for i, batch_idx in enumerate(tqdm(train_batch_idx, desc="Training...", position=1)):
             samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
             model_inputs = data_collator(samples, pad_to_multiple_of=16)
 
@@ -609,13 +608,16 @@ if __name__ == "__main__":
             state, metrics, dropout_rngs = p_train_step(state, model_inputs, dropout_rngs)
             train_metrics.append(metrics)
 
+            if i % 100 == 0:
+                print(f"{metrics}")
+
         train_time += time.time() - train_start
 
         epochs.write(f"Loss: {metrics['loss']}")
 
         # ======================== Evaluating ==============================
-        nb_eval_samples = len(tokenized_datasets["validation"])
-        eval_samples_idx = jnp.arange(nb_eval_samples)
+        num_eval_samples = len(tokenized_datasets["validation"])
+        eval_samples_idx = jnp.arange(num_eval_samples)
         eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
 
         eval_metrics = []
