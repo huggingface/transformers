@@ -1324,6 +1324,8 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
         past=None,
         attention_mask=None,
         head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
         **kwargs,
@@ -1339,6 +1341,8 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
+            "decoder_head_mask": decoder_head_mask,
+            "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
