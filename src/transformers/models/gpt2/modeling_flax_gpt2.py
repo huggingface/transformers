@@ -424,6 +424,7 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
             jnp.array(attention_mask, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
             not train,
+            False,
             output_attentions,
             output_hidden_states,
             return_dict,
