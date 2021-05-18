@@ -304,7 +304,7 @@ def main():
     if not isinstance(tokenizer, PreTrainedTokenizerFast):
         raise ValueError(
             "This example script only works for models that have a fast tokenizer. Checkout the big table of models "
-            "at https://huggingface.co/transformers/index.html#bigtable to find the model types that meet this "
+            "at https://huggingface.co/transformers/index.html#supported-frameworks to find the model types that meet this "
             "requirement"
         )
 
