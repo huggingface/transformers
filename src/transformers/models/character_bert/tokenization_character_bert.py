@@ -913,23 +913,24 @@ class CharacterMapper:
         return [c + 1 for c in char_ids]
 
     def convert_char_ids_to_word(self, char_ids: List[int]) -> str:
-        if char_ids == self.beginning_of_sentence_characters:
+        char_ids_ = [(i - 1) for i in char_ids]
+        if char_ids_ == self.beginning_of_sentence_characters:
             return self.bos_token
-        elif char_ids == self.end_of_sentence_characters:
+        elif char_ids_ == self.end_of_sentence_characters:
             return self.eos_token
-        elif char_ids == self.mask_characters:
+        elif char_ids_ == self.mask_characters:
             return self.mask_token
-        elif char_ids == self.pad_characters:  # token padding
+        elif char_ids_ == self.pad_characters:  # token padding
             return self.pad_token
         else:
             characters = []
-            for i in char_ids:
-                if (i - 1) == self.padding_character:  # character padding
+            for i in char_ids_:
+                if i == self.padding_character:  # character padding
                     continue
-                if (i - 1) == self.beginning_of_word_character:
+                if i == self.beginning_of_word_character:
                     continue
-                elif (i - 1) == self.end_of_word_character:
+                elif i == self.end_of_word_character:
                     continue
                 else:
-                    characters.append(chr(i - 1))
+                    characters.append(chr(i))
             return ''.join(characters)
