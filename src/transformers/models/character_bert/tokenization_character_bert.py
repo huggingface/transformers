@@ -237,7 +237,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
 
     def get_vocab(self):
         raise NotImplementedError("CharacterBERT does not have a token vocabulary.")
-    
+
     def get_mlm_vocab(self):
         return {token: i for i, token in self.ids_to_tokens.items()}
 
@@ -929,9 +929,9 @@ class CharacterMapper:
             return self.pad_token
         else:
             utf8_codes = list(filter(
-                lambda x: \
-                    (x != self.padding_character) \
-                    and (x != self.beginning_of_word_character) \
+                lambda x:
+                    (x != self.padding_character)
+                    and (x != self.beginning_of_word_character)
                     and (x != self.end_of_word_character),
                 char_ids_
             ))
