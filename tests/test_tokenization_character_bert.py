@@ -30,7 +30,7 @@ from .test_tokenization_common import filter_non_english
 
 
 @require_tokenizers
-class BertTokenizationTest(unittest.TestCase):
+class CharacterBertTokenizationTest(unittest.TestCase):
 
     tokenizer_class = CharacterBertTokenizer
     rust_tokenizer_class = None
