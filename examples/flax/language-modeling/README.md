@@ -54,7 +54,6 @@ and consequently saved in `${MODEL_DIR}`
 ```python
 from datasets import load_dataset
 from tokenizers import trainers, Tokenizer, normalizers, ByteLevelBPETokenizer
-from transformes import RobertaFastTokenizer
 
 model_dir = "./norwegian-roberta-base"  # ${MODEL_DIR}
 
