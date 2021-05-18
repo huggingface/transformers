@@ -927,10 +927,10 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
             >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
 
             >>> inputs.update({{
-                "visual_embeds": visual_embeds,
-                "visual_token_type_ids": visual_token_type_ids,
-                "visual_attention_mask": visual_attention_mask
-            }})
+            ...     "visual_embeds": visual_embeds,
+            ...     "visual_token_type_ids": visual_token_type_ids,
+            ...     "visual_attention_mask": visual_attention_mask
+            ... }})
 
             >>> labels = tokenizer("The capital of France is Paris.", return_tensors="pt", padding="max_length", max_length=inputs["input_ids"].shape[-1]+visual_embeds.shape[-2])["input_ids"]
             >>> sentence_image_labels = torch.tensor(1).unsqueeze(0) # Batch_size
