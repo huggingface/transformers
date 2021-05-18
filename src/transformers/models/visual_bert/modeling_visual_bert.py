@@ -931,8 +931,8 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
             ...     "visual_token_type_ids": visual_token_type_ids,
             ...     "visual_attention_mask": visual_attention_mask
             ... }})
-
-            >>> labels = tokenizer("The capital of France is Paris.", return_tensors="pt", padding="max_length", max_length=inputs["input_ids"].shape[-1]+visual_embeds.shape[-2])["input_ids"]
+            >>> max_length  = inputs["input_ids"].shape[-1]+visual_embeds.shape[-2]
+            >>> labels = tokenizer("The capital of France is Paris.", return_tensors="pt", padding="max_length", max_length=max_length)["input_ids"]
             >>> sentence_image_labels = torch.tensor(1).unsqueeze(0) # Batch_size
 
 
@@ -1078,14 +1078,23 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
             >>> choice1 = "It is eaten while held in the hand."
 
             >>> visual_embeds = get_visual_embeddings(image)
-            >>> visual_embeds = visual_embeds.expand(1, 2, *visual_embeds.shape) # (batch_size, num_choices, visual_seq_length, visual_embedding_dim)
+            >>> # (batch_size, num_choices, visual_seq_length, visual_embedding_dim)
+            >>> visual_embeds = visual_embeds.expand(1, 2, *visual_embeds.shape)
             >>> visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
             >>> visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
 
             >>> labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
 
             >>> encoding = tokenizer([[prompt, prompt], [choice0, choice1]], return_tensors='pt', padding=True)
-            >>> outputs = model(**{{k: v.unsqueeze(0) for k,v in encoding.items()}}, visual_embeds=visual_embeds, visual_attention_mask=visual_attention_mask, visual_token_type_ids=visual_token_type_ids, labels=labels)  # batch size is 1
+            >>> # batch size is 1
+            >>> inputs_dict = {{k: v.unsqueeze(0) for k,v in encoding.items()}}
+            >>> inputs_dict.update({{
+            ... visual_embeds=visual_embeds,
+            ... visual_attention_mask=visual_attention_mask,
+            ... visual_token_type_ids=visual_token_type_ids,
+            ... labels=labels
+            ... }})
+            >>> outputs = model(**inputs_dict)
 
             >>> loss = outputs.loss
             >>> logits = outputs.logits
