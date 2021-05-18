@@ -172,7 +172,7 @@ class FlaxGPT2Attention(nn.Module):
         hidden_states,
         attention_mask=None,
         deterministic: bool = True,
-        _use_cache: bool = False,
+        use_cache: bool = False,
         output_attentions: bool = False,
     ):
         qkv_out = self.c_attn(hidden_states)
@@ -205,7 +205,7 @@ class FlaxGPT2Attention(nn.Module):
 
         # During fast autoregressive decoding, we feed one position at a time,
         # and cache the keys and values step by step.
-        if _use_cache:
+        if use_cache:
             key, value, attention_mask = self._concatenate_to_cache(key, value, query, attention_mask)
 
         # transform boolean mask into float mask
@@ -276,7 +276,7 @@ class FlaxGPT2Block(nn.Module):
         hidden_states,
         attention_mask=None,
         deterministic: bool = True,
-        _use_cache: bool = False,
+        use_cache: bool = False,
         output_attentions: bool = False,
     ):
         residual = hidden_states
@@ -285,7 +285,7 @@ class FlaxGPT2Block(nn.Module):
             hidden_states,
             attention_mask=attention_mask,
             deterministic=deterministic,
-            _use_cache=_use_cache,
+            use_cache=use_cache,
             output_attentions=output_attentions,
         )
         # residual connection
@@ -354,7 +354,7 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
 
         init_variables = self.module.init(
-            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, _use_cache=True
+            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, use_cache=True
         )
         return init_variables["cache"]
 
@@ -411,14 +411,14 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
 
         inputs = {"params": params or self.params}
 
-        # if past_key_values are passed then cache is already initialized a private flag _use_cache has to be passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be changed by FlaxGPT2Attention module
+        # if past_key_values are passed then cache is already initialized a private flag use_cache has to be passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be changed by FlaxGPT2Attention module
         if past_key_values:
             inputs["cache"] = past_key_values
             mutable = ["cache"]
-            _use_cache = True
+            use_cache = True
         else:
             mutable = False
-            _use_cache = False
+            use_cache = False
 
         outputs = self.module.apply(
             inputs,
@@ -426,7 +426,7 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
             jnp.array(attention_mask, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
             not train,
-            _use_cache,
+            use_cache,
             output_attentions,
             output_hidden_states,
             return_dict,
@@ -460,7 +460,7 @@ class FlaxGPT2BlockCollection(nn.Module):
         hidden_states,
         attention_mask=None,
         deterministic: bool = True,
-        _use_cache: bool = False,
+        use_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -472,7 +472,7 @@ class FlaxGPT2BlockCollection(nn.Module):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            layer_outputs = block(hidden_states, attention_mask, deterministic=deterministic, _use_cache=_use_cache)
+            layer_outputs = block(hidden_states, attention_mask, deterministic=deterministic, use_cache=use_cache)
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -523,7 +523,7 @@ class FlaxGPT2Module(nn.Module):
         attention_mask,
         position_ids,
         deterministic=True,
-        _use_cache: bool = False,
+        use_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -538,7 +538,7 @@ class FlaxGPT2Module(nn.Module):
             hidden_states,
             attention_mask,
             deterministic=deterministic,
-            _use_cache=_use_cache,
+            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -589,7 +589,7 @@ class FlaxGPT2LMHeadModule(nn.Module):
         attention_mask,
         position_ids,
         deterministic: bool = True,
-        _use_cache: bool = False,
+        use_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -599,7 +599,7 @@ class FlaxGPT2LMHeadModule(nn.Module):
             attention_mask,
             position_ids,
             deterministic=deterministic,
-            _use_cache=_use_cache,
+            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
