@@ -103,11 +103,7 @@ class FlaxGPT2ModelTester:
             gradient_checkpointing=gradient_checkpointing,
         )
 
-        return (
-            config,
-            input_ids,
-            input_mask,
-        )
+        return (config, input_ids, input_mask)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()

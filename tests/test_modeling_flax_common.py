@@ -248,11 +248,7 @@ class FlaxModelTesterMixin:
 
                 @jax.jit
                 def model_jitted(input_ids, attention_mask=None, **kwargs):
-                    return model(
-                        input_ids=input_ids,
-                        attention_mask=attention_mask,
-                        **kwargs,
-                    ).to_tuple()
+                    return model(input_ids=input_ids, attention_mask=attention_mask, **kwargs).to_tuple()
 
                 with self.subTest("JIT Enabled"):
                     jitted_outputs = model_jitted(**prepared_inputs_dict)
@@ -266,11 +262,7 @@ class FlaxModelTesterMixin:
                     self.assertEqual(jitted_output.shape, output.shape)
 
                 @jax.jit
-                def model_jitted_return_dict(
-                    input_ids,
-                    attention_mask=None,
-                    **kwargs,
-                ):
+                def model_jitted_return_dict(input_ids, attention_mask=None, **kwargs):
                     return model(
                         input_ids=input_ids,
                         attention_mask=attention_mask,

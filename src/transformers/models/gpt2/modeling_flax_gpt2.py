@@ -159,10 +159,7 @@ class FlaxGPT2Attention(nn.Module):
             cached_value.value = value
             num_updated_cache_vectors = query.shape[1]
             cache_index.value = cache_index.value + num_updated_cache_vectors
-            # causal mask for cached decoder self-attention:
-            # our single query position should only attend to those key
-            # positions that have already been generated and cached,
-            # not the remaining zero elements.
+            # causal mask for cached decoder self-attention: our single query position should only attend to those key positions that have already been generated and cached, not the remaining zero elements.
             pad_mask = jnp.broadcast_to(
                 jnp.arange(max_length) < cur_index + num_updated_cache_vectors,
                 tuple(batch_dims) + (1, num_updated_cache_vectors, max_length),
@@ -325,6 +322,13 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
+    @property
+    def _attn_layer_name(self):
+        attn_layer_key_tuple = ("h", "0", "attn")
+        if self.base_model_prefix in set(self.params.keys()):
+            attn_layer_key_tuple = (self.base_model_prefix,) + attn_layer_key_tuple
+        return attn_layer_key_tuple
+
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
@@ -378,13 +382,8 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
 
         if position_ids is None:
             if past_key_values is not None and input_ids.shape[-1] == 1:
-                # if `past_key_values` are passed and input_ids are
-                # longer than 1, we are in cached auto-regressive
-                # generation. It has to be made sure that position_ids
-                # are set correctly
-                cache_shift = next(
-                    iter(v for k, v in flatten_dict(unfreeze(past_key_values)).items() if k[-1] == "cache_index")
-                )
+                # if `past_key_values` are passed and input_ids are longer than 1, we are in cached auto-regressive generation. It has to be made sure that position_ids are set correctly
+                cache_shift = flatten_dict(unfreeze(past_key_values))[self._attn_layer_name + ("cache_index",)]
                 position_ids = jnp.broadcast_to(
                     jnp.arange(self.config.max_position_embeddings)[None, :],
                     (batch_size, self.config.max_position_embeddings),
@@ -394,20 +393,15 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
                 position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
 
         if attention_mask is None:
-            # if past_key_values are passed we need to create an
-            # attention_mask of the same length as `cache_length`
+            # if past_key_values are passed we need to create an attention_mask of the same length as `cache_length`
             if past_key_values is not None:
-                cache_length = next(
-                    iter(v for k, v in flatten_dict(unfreeze(past_key_values)).items() if k[-1] != "cache_index")
-                ).shape[1]
+                cache_length = flatten_dict(unfreeze(past_key_values))[self._attn_layer_name + ("cached_key",)].shape[
+                    1
+                ]
             else:
                 cache_length = sequence_length
 
-            # Note that usually one would have to put 0's in the
-            # attention_mask for x > input_ids.shape[-1] and x < cache_length.
-            # But since GPT2 uses a causal mask, those positions are masked anyways.
-            # Thus we can create a single static attention_mask here,
-            # which is more efficient for compilation
+            # Note that usually one would have to put 0's in the attention_mask for x > input_ids.shape[-1] and x < cache_length. But since GPT2 uses a causal mask, those positions are masked anyways. Thus we can create a single static attention_mask here, which is more efficient for compilation
             attention_mask = jnp.ones((batch_size, cache_length))
 
         # Handle any PRNG if needed
@@ -417,11 +411,7 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
 
         inputs = {"params": params or self.params}
 
-        # if past_key_values are passed then cache is already initialized
-        # a private flag _use_cache has to be passed down to
-        # ensure cache is used.
-        # It has to be made sure that cache is marked as mutable so that
-        # it can be changed by FlaxGPT2Attention module
+        # if past_key_values are passed then cache is already initialized a private flag _use_cache has to be passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be changed by FlaxGPT2Attention module
         if past_key_values:
             inputs["cache"] = past_key_values
             mutable = ["cache"]
