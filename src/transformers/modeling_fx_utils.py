@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import torch
 from torch.fx import Graph, GraphModule, Node, Proxy, Tracer
+from torch.fx.node import Argument
 
 from . import (
     MODEL_FOR_CAUSAL_LM_MAPPING,
@@ -18,6 +19,7 @@ from . import (
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     PreTrainedModel,
+    GPT2DoubleHeadsModel,
 )
 from .models.auto import get_values
 
@@ -123,7 +125,7 @@ class HFTracer(Tracer):
     def __init__(self, batch_size=1, sequence_length=[128, 128], num_choices=-1):
         super().__init__()
         encoder_sequence_length = sequence_length[0] if isinstance(sequence_length, (list, tuple)) else sequence_length
-        decoder_sequence_length = sequence_length[1] if isinstance(sequence_length, (list, tuple)) else -1
+        decoder_sequence_length = sequence_length[1] if isinstance(sequence_length, (list, tuple)) else encoder_sequence_length
         self.encoder_shape = [batch_size, encoder_sequence_length]
         self.decoder_shape = (
             [batch_size, decoder_sequence_length] if decoder_sequence_length > 0 else list(self.encoder_shape)
@@ -131,6 +133,7 @@ class HFTracer(Tracer):
         self.num_choices = num_choices
         if self.num_choices > 0:
             self.encoder_shape = [batch_size, self.num_choices, encoder_sequence_length]
+            self.decoder_shape = [batch_size, self.num_choices, decoder_sequence_length]
 
         self.prev_module = None
         self.recorded_methods = None
@@ -165,6 +168,7 @@ class HFTracer(Tracer):
                 *get_values(MODEL_FOR_CAUSAL_LM_MAPPING),
                 *get_values(MODEL_FOR_MASKED_LM_MAPPING),
                 *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING),
+                GPT2DoubleHeadsModel,
             ]:
                 inputs_dict["labels"] = torch.zeros(self.decoder_shape, dtype=torch.long, device=device)
             elif model_class in get_values(MODEL_FOR_PRETRAINING_MAPPING):
@@ -278,6 +282,11 @@ class HFTracer(Tracer):
                 raise NameError("module is not installed as a submodule")
             self.prev_module = path
             return path
+
+    def create_arg(self, a: Any) -> Argument:
+        if isinstance(a, range):
+            return super().create_arg(list(a))
+        return super().create_arg(a)
 
 
 def symbolic_trace(
