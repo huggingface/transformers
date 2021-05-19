@@ -114,7 +114,7 @@ class FlaxGenerationTesterMixin:
         config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
 
         # pad attention mask on the left
-        attention_mask[:1, :1] = 0
+        attention_mask = jax.ops.index_update(attention_mask, (0, 0), 0)
 
         config.do_sample = False
         config.max_length = max_length
