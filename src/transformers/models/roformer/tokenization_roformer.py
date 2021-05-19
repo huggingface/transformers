@@ -18,8 +18,9 @@ import collections
 import os
 from typing import List, Optional, Tuple
 
+from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
-from ..bert.tokenization_bert import BasicTokenizer, PreTrainedTokenizer, WordpieceTokenizer, load_vocab
+from ..bert.tokenization_bert import BasicTokenizer, WordpieceTokenizer, load_vocab
 
 
 logger = logging.get_logger(__name__)
@@ -157,6 +158,22 @@ class RoFormerTokenizer(PreTrainedTokenizer):
     @property
     def vocab_size(self):
         return len(self.vocab)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["jieba"] = None
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+        try:
+            import rjieba
+        except ImportError:
+            raise ImportError(
+                "You need to install rjieba to use RoFormerTokenizer."
+                "See https://pypi.org/project/rjieba/ for installation."
+            )
+        self.jieba = rjieba
 
     def get_vocab(self):
         return dict(self.vocab, **self.added_tokens_encoder)

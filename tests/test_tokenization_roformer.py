@@ -14,13 +14,9 @@
 # limitations under the License.
 
 import importlib
-import os
-import pickle
 import unittest
 
-from tokenizers.pre_tokenizers import BertPreTokenizer, PreTokenizer
 from transformers import RoFormerTokenizer, RoFormerTokenizerFast
-from transformers.models.roformer.tokenization_utils import JiebaPreTokenizer
 from transformers.testing_utils import require_tokenizers
 
 from .test_tokenization_common import TokenizerTesterMixin
@@ -86,43 +82,3 @@ class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # due to custom pre_tokenize , char_to_token may be error
     def test_alignement_methods(self):
         pass
-
-    def test_pickle_tokenizer(self):
-        tokenizers = self.get_tokenizers()
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                self.assertIsNotNone(tokenizer)
-
-                text = "永和服装饰品有限公司,今天天气非常好"
-                subwords = tokenizer.tokenize(text)
-
-                filename = os.path.join(self.tmpdirname, "tokenizer.bin")
-
-                # Exception: Error while attempting to pickle Tokenizer: Custom PreTokenizer cannot be serialized
-                if "Fast" in tokenizer.__class__.__name__:
-                    tokenizer.backend_tokenizer.pre_tokenizer = BertPreTokenizer()
-                else:
-                    del tokenizer.jieba
-
-                with open(filename, "wb") as handle:
-                    pickle.dump(tokenizer, handle)
-
-                with open(filename, "rb") as handle:
-                    tokenizer_new = pickle.load(handle)
-
-                if "Fast" in tokenizer.__class__.__name__:
-                    tokenizer_new.backend_tokenizer.pre_tokenizer = PreTokenizer.custom(
-                        JiebaPreTokenizer((tokenizer_new.backend_tokenizer.get_vocab()))
-                    )
-                else:
-                    try:
-                        import rjieba
-                    except ImportError:
-                        raise ImportError(
-                            "You need to install rjieba to use RoFormerTokenizer."
-                            "See https://pypi.org/project/rjieba/ for installation."
-                        )
-                    tokenizer_new.jieba = rjieba
-                subwords_loaded = tokenizer_new.tokenize(text)
-
-                self.assertListEqual(subwords, subwords_loaded)

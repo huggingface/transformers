@@ -17,11 +17,12 @@ import json
 from typing import List, Optional, Tuple
 
 from tokenizers import normalizers
-from tokenizers.pre_tokenizers import BertPreTokenizer
+from tokenizers.pre_tokenizers import BertPreTokenizer, PreTokenizer
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .tokenization_roformer import RoFormerTokenizer
+from .tokenization_utils import JiebaPreTokenizer
 
 
 logger = logging.get_logger(__name__)
@@ -109,6 +110,16 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
             self.backend_tokenizer.normalizer = pre_tok_class(**pre_tok_state)
 
         self.do_lower_case = do_lower_case
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["_tokenizer"].pre_tokenizer = BertPreTokenizer()
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+        vocab = self.__dict__["_tokenizer"].get_vocab()
+        self.__dict__["_tokenizer"].pre_tokenizer = PreTokenizer.custom(JiebaPreTokenizer(vocab))
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """
