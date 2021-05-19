@@ -155,7 +155,7 @@ class FlaxGPT2ModelTester:
 
         # put all generation logic into one function
         def generate(prompt_ids):
-            def first_pass(prompt_ids):
+            def first_pass(prompt_ids, past_key_values):
                 logits, cache = model(prompt_ids, past_key_values=past_key_values)[:2]
                 next_token = jnp.argmax(logits[:, -1:], axis=-1)
                 return next_token, cache
@@ -181,7 +181,7 @@ class FlaxGPT2ModelTester:
             past_key_values = model.init_cache(batch_size, max_length)
 
             # first pass with long prompt
-            next_token, cache = first_pass(prompt_ids)
+            next_token, cache = first_pass(prompt_ids, past_key_values=past_key_values)
 
             # prepare state for generation loop
             init_state = (jnp.array(prompt_length), init_sequences, next_token, cache)

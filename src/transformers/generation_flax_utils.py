@@ -31,6 +31,7 @@ logger = logging.get_logger(__name__)
 class GreedyState:
     cur_len: jnp.DeviceArray
     sequences: jnp.DeviceArray
+    current_token: jnp.DeviceArray
     is_sent_finished: jnp.DeviceArray
     cache: Any = None
 
@@ -49,14 +50,14 @@ class FlaxGenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-        debug=False,
+        trace: bool = True,
     ):
         # set init values
         max_length = max_length if max_length is not None else self.config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
 
-        return self.greedy_search(input_ids, max_length, pad_token_id, eos_token_id, debug=debug)
+        return self.greedy_search(input_ids, max_length, pad_token_id, eos_token_id, trace=trace)
 
     def greedy_search(
         self,
@@ -64,7 +65,7 @@ class FlaxGenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-        debug=False,
+        trace: bool = True,
     ):
         # init values
         max_length = max_length if max_length is not None else self.config.max_length
@@ -78,15 +79,31 @@ class FlaxGenerationMixin:
         cur_len = jnp.array(cur_len)
 
         # per batch-item holding current token in loop.
-        sequences = jnp.full((batch_size, max_length), pad_token_id, dtype=jnp.int32)
-        sequences = lax.dynamic_update_slice(sequences, input_ids, (0, 0))
+        init_sequences = jnp.full((batch_size, max_length), pad_token_id, dtype=jnp.int32)
+        init_sequences = lax.dynamic_update_slice(init_sequences, input_ids, (0, 0))
 
         # per batch-item state bit indicating if sentence has finished.
         is_sent_finished = jnp.zeros((batch_size,), dtype=jnp.bool_)
 
         model = self
 
-        state = GreedyState(cur_len=cur_len, sequences=sequences, is_sent_finished=is_sent_finished)
+        # initializing the cache
+        past_key_values = model.init_cache(batch_size, max_length)
+
+        import ipdb
+
+        ipdb.set_trace()
+        # first step
+        model_outputs = model(input_ids, past_key_values=past_key_values)
+        next_token = jnp.argmax(logits[:, -1:], axis=-1)
+
+        state = GreedyState(
+            cur_len=cur_len,
+            sequences=init_sequences,
+            current_token=next_token,
+            is_sent_finished=is_sent_finished,
+            cache=past_key_values,
+        )
 
         def greedy_search_cond_fn(state):
             """Sampling loop termination condition."""
@@ -97,23 +114,24 @@ class FlaxGenerationMixin:
 
         def greedy_search_body_fn(state):
             """Sampling loop state update."""
-            input_ids = state.sequences
-            generated_token_index = lax.cond(
-                state.cache is not None, lambda _: 1, lambda _: state.cur_len, operand=None
+            is_sent_finished = state.is_sent_finished | (state.current_token == eos_token_id)
+            current_token = state.current_token * ~state.is_sent_finished + pad_token_id * state.is_sent_finished
+
+            next_sequences = lax.dynamic_update_slice(state.sequences, current_token, (0, state.cur_len))
+
+            next_logits, next_cache = model(current_token, past_key_values=state.cache).logits[:, -1]
+            next_token = jnp.argmax(next_logits, axis=-1)
+
+            return GreedyState(
+                cur_len=state.cur_len + 1,
+                sequences=next_sequences,
+                current_token=next_token,
+                is_sent_finished=is_sent_finished,
+                cache=next_cache,
             )
-            next_logits = model(input_ids)[0][:, generated_token_index]
-
-            next_tokens = jnp.argmax(next_logits, axis=-1)
-
-            next_tokens = next_tokens * ~state.is_sent_finished + pad_token_id * state.is_sent_finished
-            next_sequences = lax.dynamic_update_slice(state.sequences, next_tokens[:, None], (0, state.cur_len))
-
-            is_sent_finished = state.is_sent_finished | (next_sequences[:, state.cur_len] == eos_token_id)
-
-            return GreedyState(cur_len=state.cur_len + 1, sequences=next_sequences, is_sent_finished=is_sent_finished)
 
         # Run greedy search and collect final state.
-        if debug:
+        if not trace:
             final_state = self._run_loop_in_debug(greedy_search_cond_fn, greedy_search_body_fn, state)
         else:
             final_state = lax.while_loop(greedy_search_cond_fn, greedy_search_body_fn, state)
