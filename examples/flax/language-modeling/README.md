@@ -47,7 +47,7 @@ ln -s ~/transformers/examples/flax/language-modeling/run_mlm_flax.py run_mlm_fla
 In a first step, we train a tokenizer to efficiently process the text input for the model. Similar to how it is shown in [How to train a new language model from scratch using Transformers and Tokenizers](https://huggingface.co/blog/how-to-train), we use a **`ByteLevelBPETokenizer`**.
 The tokenizer is trained on the complete Norwegian dataset of OSCAR
 and consequently saved in `${MODEL_DIR}`
-This should can take up to 3 hours ☕.
+This should can take up to 10 minutes depending on your computer ☕.
 
 ```python
 from datasets import load_dataset
@@ -95,10 +95,7 @@ config.save_pretrained(model_dir)
 
 ### Train model
 
-Next we can run the example script to pre-train the model.
-Using the following hyper-parameters, training should converge 
-at a loss of *ca.* XXX and accuracy of *ca.* XXX after XXX epochs on a single 
-TPUv3-8 pod. This should take less than 17 hours.
+Next we can run the example script to pretrain the model:
 
 ```bash
 ./run_mlm_flax.py \
@@ -121,7 +118,13 @@ TPUv3-8 pod. This should take less than 17 hours.
         --adam_beta2="0.98"
 ```
 
-For more detail on how masked language modeling works, please see [this TODO: (Patrick)]() google colab.
+Training should converge at a loss and accuracy 
+of 1.78 and 0.64 respectively after 18 epochs on a single TPUv3-8.
+This should take less than 18 hours.
+Training statistics can be accessed on [tfhub.de](https://tensorboard.dev/experiment/GdYmdak2TWeVz0DDRYOrrg).
+
+For a step-by-step walkthrough of how to do masked language modeling in Flax, please have a 
+look at [this TODO: (Patrick)]() google colab.
 
 
 ## TODO(Patrick): Add comparison with PyTorch GPU/TPU
