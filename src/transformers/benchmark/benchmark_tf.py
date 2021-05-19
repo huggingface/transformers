@@ -25,7 +25,7 @@ from typing import Callable, Optional
 
 from ..configuration_utils import PretrainedConfig
 from ..file_utils import is_py3nvml_available, is_tf_available
-from ..models.auto.modeling_tf_auto import TF_MODEL_MAPPING, TF_MODEL_WITH_LM_HEAD_MAPPING
+from ..modeling_tf_auto import TF_MODEL_MAPPING, TF_MODEL_WITH_LM_HEAD_MAPPING
 from ..utils import logging
 from .benchmark_utils import (
     Benchmark,
@@ -227,7 +227,7 @@ class TensorFlowBenchmark(Benchmark):
 
                 return min(runtimes) / 10.0
             except ResourceExhaustedError as e:
-                self.print_fn(f"Doesn't fit on GPU. {e}")
+                self.print_fn("Doesn't fit on GPU. {}".format(e))
 
     def _measure_memory(self, func: Callable[[], None]) -> [Memory, MemorySummary]:
         logger.info(
@@ -290,5 +290,5 @@ class TensorFlowBenchmark(Benchmark):
 
                 return memory, summary
             except ResourceExhaustedError as e:
-                self.print_fn(f"Doesn't fit on GPU. {e}")
+                self.print_fn("Doesn't fit on GPU. {}".format(e))
                 return "N/A", None

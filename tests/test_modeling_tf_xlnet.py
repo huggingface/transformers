@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2018 The Google AI Language Team Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.models.xlnet.modeling_tf_xlnet import (
+    from transformers.modeling_tf_xlnet import (
         TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFXLNetForMultipleChoice,
         TFXLNetForQuestionAnsweringSimple,
@@ -111,6 +111,7 @@ class TFXLNetModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
             eos_token_id=self.eos_token_id,
+            return_dict=True,
         )
 
         return (
@@ -153,7 +154,7 @@ class TFXLNetModelTester:
         inputs = [input_ids_1, input_mask]
         result = model(inputs)
 
-        config.use_mems_eval = False
+        config.mem_len = 0
         model = TFXLNetModel(config)
         no_mems_outputs = model(inputs)
         self.parent.assertEqual(len(no_mems_outputs), 1)
@@ -347,8 +348,6 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (
         (TFXLNetLMHeadModel,) if is_tf_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
-    test_head_masking = False
-    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFXLNetModelTester(self)

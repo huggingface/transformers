@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2018 The Google AI Language Team Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,24 +12,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import copy
 import random
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multigpu, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():
     import torch
 
-    from transformers import TransfoXLConfig, TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
-    from transformers.models.transfo_xl.modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import TransfoXLConfig, TransfoXLLMHeadModel, TransfoXLModel
+    from transformers.modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class TransfoXLModelTester:
@@ -43,7 +41,7 @@ class TransfoXLModelTester:
         self.mem_len = 30
         self.key_length = self.seq_length + self.mem_len
         self.clamp_len = 15
-        self.is_training = False
+        self.is_training = True
         self.use_labels = True
         self.vocab_size = 99
         self.cutoffs = [10, 50, 80]
@@ -57,8 +55,6 @@ class TransfoXLModelTester:
         self.scope = None
         self.seed = 1
         self.eos_token_id = 0
-        self.num_labels = 3
-        self.pad_token_id = self.vocab_size - 1
 
     def prepare_config_and_inputs(self):
         input_ids_1 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -81,7 +77,7 @@ class TransfoXLModelTester:
             div_val=self.div_val,
             n_layer=self.num_hidden_layers,
             eos_token_id=self.eos_token_id,
-            pad_token_id=self.pad_token_id,
+            return_dict=True,
         )
 
         return (config, input_ids_1, input_ids_2, lm_labels)
@@ -152,14 +148,6 @@ class TransfoXLModelTester:
             [(self.mem_len, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
-    def create_and_check_transfo_xl_for_sequence_classification(self, config, input_ids_1, input_ids_2, lm_labels):
-        config.num_labels = self.num_labels
-        model = TransfoXLForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids_1)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (config, input_ids_1, input_ids_2, lm_labels) = config_and_inputs
@@ -168,10 +156,8 @@ class TransfoXLModelTester:
 
 
 @require_torch
-class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (TransfoXLModel, TransfoXLLMHeadModel, TransfoXLForSequenceClassification) if is_torch_available() else ()
-    )
+class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (TransfoXLModel, TransfoXLLMHeadModel) if is_torch_available() else ()
     all_generative_model_classes = (TransfoXLLMHeadModel,) if is_torch_available() else ()
     test_pruning = False
     test_torchscript = False
@@ -218,16 +204,8 @@ class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         output_result = self.model_tester.create_transfo_xl_lm_head(*config_and_inputs)
         self.model_tester.check_transfo_xl_lm_head_output(output_result)
 
-    def test_transfo_xl_sequence_classification_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_transfo_xl_for_sequence_classification(*config_and_inputs)
-
-    def test_retain_grad_hidden_states_attentions(self):
-        # xlnet cannot keep gradients in attentions or hidden states
-        return
-
-    @require_torch_multi_gpu
-    def test_multi_gpu_data_parallel_forward(self):
+    @require_torch_multigpu
+    def test_multigpu_data_parallel_forward(self):
         # Opt-out of this test.
         pass
 
@@ -300,81 +278,7 @@ class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
                 self.assertEqual(model_vocab_size, model.config.vocab_size)
                 self.assertEqual(model_embed.emb_layers[layer].weight.shape[0], cloned_embeddings[layer].shape[0])
 
-    def test_resize_embeddings_untied(self):
-        # transfo-xl requires special resize for lm-head
-        return
 
-    def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
-    ):
-        self.assertIsInstance(attentions, tuple)
-        self.assertListEqual(
-            [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
-        )
-        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
-
-        for idx, iter_attentions in enumerate(attentions):
-            tgt_len = min_length if idx == 0 else (min_length - 2)
-            src_len = (min_length + config.mem_len) if idx == 0 else (min_length + config.mem_len - 2)
-
-            expected_shape = (
-                batch_size * num_beam_groups,
-                config.num_attention_heads,
-                tgt_len,
-                src_len,
-            )
-
-            # check attn size
-            self.assertListEqual(
-                [layer_attention.shape for layer_attention in iter_attentions], [expected_shape] * len(iter_attentions)
-            )
-
-    def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
-    ):
-        self.assertIsInstance(hidden_states, tuple)
-        self.assertListEqual(
-            [isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states],
-            [True] * len(hidden_states),
-        )
-        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
-
-        for idx, iter_hidden_states in enumerate(hidden_states):
-            seq_len = min_length if idx == 0 else min_length - 2
-            expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
-            # check hidden size
-            self.assertListEqual(
-                [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
-                [expected_shape] * len(iter_hidden_states),
-            )
-
-    # overwrite from test_modeling_common
-    def _mock_init_weights(self, module):
-        if hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(3)
-        if hasattr(module, "cluster_weight") and module.cluster_weight is not None:
-            module.cluster_weight.data.fill_(3)
-        if hasattr(module, "bias") and module.bias is not None:
-            module.bias.data.fill_(3)
-        if hasattr(module, "cluster_bias") and module.cluster_bias is not None:
-            module.cluster_bias.data.fill_(3)
-
-        if hasattr(module, "emb_projs"):
-            for i in range(len(module.emb_projs)):
-                if module.emb_projs[i] is not None:
-                    torch.nn.init.constant_(module.emb_projs[i], 0.0003)
-        if hasattr(module, "out_projs"):
-            for i in range(len(module.out_projs)):
-                if module.out_projs[i] is not None:
-                    torch.nn.init.constant_(module.out_projs[i], 0.0003)
-
-        for param in ["r_emb", "r_w_bias", "r_r_bias", "r_bias"]:
-            if hasattr(module, param) and getattr(module, param) is not None:
-                weight = getattr(module, param)
-                weight.data.fill_(3)
-
-
-@require_torch
 class TransfoXLModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_transfo_xl_wt103(self):

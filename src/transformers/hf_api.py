@@ -27,46 +27,71 @@ import requests
 ENDPOINT = "https://huggingface.co"
 
 
-class RepoObj:
+class S3Obj:
     """
-    HuggingFace git-based system, data structure that represents a file belonging to the current user.
+    Data structure that represents a file belonging to the current user.
     """
 
-    def __init__(self, filename: str, lastModified: str, commit: str, size: int, **kwargs):
+    def __init__(self, filename: str, LastModified: str, ETag: str, Size: int, **kwargs):
         self.filename = filename
+        self.LastModified = LastModified
+        self.ETag = ETag
+        self.Size = Size
+
+
+class PresignedUrl:
+    def __init__(self, write: str, access: str, type: str, **kwargs):
+        self.write = write
+        self.access = access
+        self.type = type  # mime-type to send to S3.
+
+
+class S3Object:
+    """
+    Data structure that represents a public file accessible on our S3.
+    """
+
+    def __init__(
+        self,
+        key: str,  # S3 object key
+        etag: str,
+        lastModified: str,
+        size: int,
+        rfilename: str,  # filename relative to config.json
+        **kwargs
+    ):
+        self.key = key
+        self.etag = etag
         self.lastModified = lastModified
-        self.commit = commit
         self.size = size
-
-
-class ModelSibling:
-    """
-    Data structure that represents a public file inside a model, accessible from huggingface.co
-    """
-
-    def __init__(self, rfilename: str, **kwargs):
-        self.rfilename = rfilename  # filename relative to the model root
+        self.rfilename = rfilename
         for k, v in kwargs.items():
             setattr(self, k, v)
 
 
 class ModelInfo:
     """
-    Info about a public model accessible from huggingface.co
+    Info about a public model accessible from our S3.
     """
 
     def __init__(
         self,
-        modelId: Optional[str] = None,  # id of model
+        modelId: str,  # id of model
+        key: str,  # S3 object key of config.json
+        author: Optional[str] = None,
+        downloads: Optional[int] = None,
         tags: List[str] = [],
         pipeline_tag: Optional[str] = None,
         siblings: Optional[List[Dict]] = None,  # list of files that constitute the model
         **kwargs
     ):
         self.modelId = modelId
+        self.key = key
+        self.author = author
+        self.downloads = downloads
         self.tags = tags
         self.pipeline_tag = pipeline_tag
-        self.siblings = [ModelSibling(**x) for x in siblings] if siblings is not None else None
+        self.siblings = [S3Object(**x) for x in siblings] if siblings is not None else None
         for k, v in kwargs.items():
             setattr(self, k, v)
 
@@ -79,11 +104,13 @@ class HfApi:
         """
         Call HF API to sign in a user and get a token if credentials are valid.
 
-        Outputs: token if credentials are valid
+        Outputs:
+            token if credentials are valid
 
-        Throws: requests.exceptions.HTTPError if credentials are invalid
+        Throws:
+            requests.exceptions.HTTPError if credentials are invalid
         """
-        path = f"{self.endpoint}/api/login"
+        path = "{}/api/login".format(self.endpoint)
         r = requests.post(path, json={"username": username, "password": password})
         r.raise_for_status()
         d = r.json()
@@ -93,8 +120,8 @@ class HfApi:
         """
         Call HF API to know "whoami"
         """
-        path = f"{self.endpoint}/api/whoami"
-        r = requests.get(path, headers={"authorization": f"Bearer {token}"})
+        path = "{}/api/whoami".format(self.endpoint)
+        r = requests.get(path, headers={"authorization": "Bearer {}".format(token)})
         r.raise_for_status()
         d = r.json()
         return d["user"], d["orgs"]
@@ -103,92 +130,87 @@ class HfApi:
         """
         Call HF API to log out.
         """
-        path = f"{self.endpoint}/api/logout"
-        r = requests.post(path, headers={"authorization": f"Bearer {token}"})
+        path = "{}/api/logout".format(self.endpoint)
+        r = requests.post(path, headers={"authorization": "Bearer {}".format(token)})
+        r.raise_for_status()
+
+    def presign(self, token: str, filename: str, organization: Optional[str] = None) -> PresignedUrl:
+        """
+        Call HF API to get a presigned url to upload `filename` to S3.
+        """
+        path = "{}/api/presign".format(self.endpoint)
+        r = requests.post(
+            path,
+            headers={"authorization": "Bearer {}".format(token)},
+            json={"filename": filename, "organization": organization},
+        )
+        r.raise_for_status()
+        d = r.json()
+        return PresignedUrl(**d)
+
+    def presign_and_upload(self, token: str, filename: str, filepath: str, organization: Optional[str] = None) -> str:
+        """
+        Get a presigned url, then upload file to S3.
+
+        Outputs:
+            url: Read-only url for the stored file on S3.
+        """
+        urls = self.presign(token, filename=filename, organization=organization)
+        # streaming upload:
+        # https://2.python-requests.org/en/master/user/advanced/#streaming-uploads
+        #
+        # Even though we presign with the correct content-type,
+        # the client still has to specify it when uploading the file.
+        with open(filepath, "rb") as f:
+            pf = TqdmProgressFileReader(f)
+            data = f if pf.total_size > 0 else ""
+
+            r = requests.put(urls.write, data=data, headers={"content-type": urls.type})
+            r.raise_for_status()
+            pf.close()
+        return urls.access
+
+    def list_objs(self, token: str, organization: Optional[str] = None) -> List[S3Obj]:
+        """
+        Call HF API to list all stored files for user (or one of their organizations).
+        """
+        path = "{}/api/listObjs".format(self.endpoint)
+        params = {"organization": organization} if organization is not None else None
+        r = requests.get(path, params=params, headers={"authorization": "Bearer {}".format(token)})
+        r.raise_for_status()
+        d = r.json()
+        return [S3Obj(**x) for x in d]
+
+    def delete_obj(self, token: str, filename: str, organization: Optional[str] = None):
+        """
+        Call HF API to delete a file stored by user
+        """
+        path = "{}/api/deleteObj".format(self.endpoint)
+        r = requests.delete(
+            path,
+            headers={"authorization": "Bearer {}".format(token)},
+            json={"filename": filename, "organization": organization},
+        )
         r.raise_for_status()
 
     def model_list(self) -> List[ModelInfo]:
         """
-        Get the public list of all the models on huggingface.co
+        Get the public list of all the models on huggingface, including the community models
         """
-        path = f"{self.endpoint}/api/models"
+        path = "{}/api/models".format(self.endpoint)
         r = requests.get(path)
         r.raise_for_status()
         d = r.json()
         return [ModelInfo(**x) for x in d]
 
-    def list_repos_objs(self, token: str, organization: Optional[str] = None) -> List[RepoObj]:
-        """
-        HuggingFace git-based system, used for models.
-
-        Call HF API to list all stored files for user (or one of their organizations).
-        """
-        path = f"{self.endpoint}/api/repos/ls"
-        params = {"organization": organization} if organization is not None else None
-        r = requests.get(path, params=params, headers={"authorization": f"Bearer {token}"})
-        r.raise_for_status()
-        d = r.json()
-        return [RepoObj(**x) for x in d]
-
-    def create_repo(
-        self,
-        token: str,
-        name: str,
-        organization: Optional[str] = None,
-        private: Optional[bool] = None,
-        exist_ok=False,
-        lfsmultipartthresh: Optional[int] = None,
-    ) -> str:
-        """
-        HuggingFace git-based system, used for models.
-
-        Call HF API to create a whole repo.
-
-        Params:
-            private: Whether the model repo should be private (requires a paid huggingface.co account)
-
-            exist_ok: Do not raise an error if repo already exists
-
-            lfsmultipartthresh: Optional: internal param for testing purposes.
-        """
-        path = f"{self.endpoint}/api/repos/create"
-        json = {"name": name, "organization": organization, "private": private}
-        if lfsmultipartthresh is not None:
-            json["lfsmultipartthresh"] = lfsmultipartthresh
-        r = requests.post(
-            path,
-            headers={"authorization": f"Bearer {token}"},
-            json=json,
-        )
-        if exist_ok and r.status_code == 409:
-            return ""
-        r.raise_for_status()
-        d = r.json()
-        return d["url"]
-
-    def delete_repo(self, token: str, name: str, organization: Optional[str] = None):
-        """
-        HuggingFace git-based system, used for models.
-
-        Call HF API to delete a whole repo.
-
-        CAUTION(this is irreversible).
-        """
-        path = f"{self.endpoint}/api/repos/delete"
-        r = requests.delete(
-            path,
-            headers={"authorization": f"Bearer {token}"},
-            json={"name": name, "organization": organization},
-        )
-        r.raise_for_status()
-
 
 class TqdmProgressFileReader:
     """
-    Wrap an io.BufferedReader `f` (such as the output of `open(…, "rb")`) and override `f.read()` so as to display a
-    tqdm progress bar.
+    Wrap an io.BufferedReader `f` (such as the output of `open(…, "rb")`)
+    and override `f.read()` so as to display a tqdm progress bar.
 
-    see github.com/huggingface/transformers/pull/2078#discussion_r354739608 for implementation details.
+    see github.com/huggingface/transformers/pull/2078#discussion_r354739608
+    for implementation details.
     """
 
     def __init__(self, f: io.BufferedReader):
@@ -232,7 +254,8 @@ class HfFolder:
     @classmethod
     def delete_token(cls):
         """
-        Delete token. Do not fail if token does not exist.
+        Delete token.
+        Do not fail if token does not exist.
         """
         try:
             os.remove(cls.path_token)

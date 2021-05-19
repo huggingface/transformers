@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2018 The Google AI Language Team Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ if is_torch_available():
 class CamembertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_output_embeds_base_model(self):
-        model = CamembertModel.from_pretrained("camembert-base")
+        model = CamembertModel.from_pretrained("camembert-base", return_dict=True)
         model.to(torch_device)
 
         input_ids = torch.tensor(

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2018 The Google AI Language Team Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ if is_tf_available():
     import numpy
     import tensorflow as tf
 
-    from transformers.models.roberta.modeling_tf_roberta import (
+    from transformers.modeling_tf_roberta import (
         TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFRobertaForMaskedLM,
         TFRobertaForMultipleChoice,
@@ -97,6 +97,7 @@ class TFRobertaModelTester:
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
+            return_dict=True,
         )
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -185,8 +186,6 @@ class TFRobertaModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
-    test_head_masking = False
-    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFRobertaModelTester(self)

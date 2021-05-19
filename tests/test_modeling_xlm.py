@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2018 The Google AI Language Team Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
@@ -37,7 +36,7 @@ if is_torch_available():
         XLMModel,
         XLMWithLMHeadModel,
     )
-    from transformers.models.xlm.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class XLMModelTester:
@@ -116,6 +115,7 @@ class XLMModelTester:
             use_proj=self.use_proj,
             num_labels=self.num_labels,
             bos_token_id=self.bos_token_id,
+            return_dict=True,
         )
 
         return (
@@ -331,7 +331,7 @@ class XLMModelTester:
 
 
 @require_torch
-class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class XLMModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
@@ -349,22 +349,6 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_generative_model_classes = (
         (XLMWithLMHeadModel,) if is_torch_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
-    test_sequence_classification_problem_types = True
-
-    # XLM has 2 QA models -> need to manually set the correct labels for one of them here
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
-
-        if return_labels:
-            if model_class.__name__ == "XLMForQuestionAnswering":
-                inputs_dict["start_positions"] = torch.zeros(
-                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
-                )
-                inputs_dict["end_positions"] = torch.zeros(
-                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
-                )
-
-        return inputs_dict
 
     def setUp(self):
         self.model_tester = XLMModelTester(self)
@@ -400,52 +384,6 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_xlm_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlm_for_multiple_choice(*config_and_inputs)
-
-    def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
-    ):
-        self.assertIsInstance(attentions, tuple)
-        self.assertListEqual(
-            [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
-        )
-        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
-
-        for idx, iter_attentions in enumerate(attentions):
-            # adds PAD dummy token
-            tgt_len = min_length + idx + 1
-            src_len = min_length + idx + 1
-
-            expected_shape = (
-                batch_size * num_beam_groups,
-                config.num_attention_heads,
-                tgt_len,
-                src_len,
-            )
-            # check attn size
-            self.assertListEqual(
-                [layer_attention.shape for layer_attention in iter_attentions], [expected_shape] * len(iter_attentions)
-            )
-
-    def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
-    ):
-        self.assertIsInstance(hidden_states, tuple)
-        self.assertListEqual(
-            [isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states],
-            [True] * len(hidden_states),
-        )
-        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
-
-        for idx, iter_hidden_states in enumerate(hidden_states):
-            # adds PAD dummy token
-            seq_len = min_length + idx + 1
-            expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
-            # check hidden size
-            self.assertListEqual(
-                [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
-                [expected_shape] * len(iter_hidden_states),
-            )
-        pass
 
     @slow
     def test_model_from_pretrained(self):

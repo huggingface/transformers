@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2018 The Google AI Language Team Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import (
+    from transformers.modeling_tf_mobilebert import (
         TFMobileBertForMaskedLM,
         TFMobileBertForMultipleChoice,
         TFMobileBertForNextSentencePrediction,
@@ -55,8 +55,6 @@ class TFMobileBertModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
-    test_head_masking = False
-    test_onnx = False
 
     class TFMobileBertModelTester(object):
         def __init__(
@@ -141,6 +139,7 @@ class TFMobileBertModelTest(TFModelTesterMixin, unittest.TestCase):
                 type_vocab_size=self.type_vocab_size,
                 initializer_range=self.initializer_range,
                 embedding_size=self.embedding_size,
+                return_dict=True,
             )
 
             return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -285,57 +284,9 @@ class TFMobileBertModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mobilebert_for_token_classification(*config_and_inputs)
 
-    def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        list_lm_models = [TFMobileBertForMaskedLM, TFMobileBertForPreTraining]
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-
-            if model_class in list_lm_models:
-                x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_bias()
-                assert isinstance(name, dict)
-                for k, v in name.items():
-                    assert isinstance(v, tf.Variable)
-            else:
-                x = model.get_output_embeddings()
-                assert x is None
-                name = model.get_bias()
-                assert name is None
-
-    def test_saved_model_creation(self):
-        # This test is too long (>30sec) and makes fail the CI
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         # for model_name in TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-        for model_name in ["google/mobilebert-uncased"]:
+        for model_name in ["mobilebert-uncased"]:
             model = TFMobileBertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-
-@require_tf
-class TFMobileBertModelIntegrationTest(unittest.TestCase):
-    @slow
-    def test_inference_masked_lm(self):
-        model = TFMobileBertForPreTraining.from_pretrained("google/mobilebert-uncased")
-        input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
-
-        expected_shape = [1, 6, 30522]
-        self.assertEqual(output.shape, expected_shape)
-
-        expected_slice = tf.constant(
-            [
-                [
-                    [-4.5919547, -9.248295, -9.645256],
-                    [-6.7306175, -6.440284, -6.6052837],
-                    [-7.2743506, -6.7847915, -6.024673],
-                ]
-            ]
-        )
-        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=1e-4)

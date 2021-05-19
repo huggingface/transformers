@@ -1,23 +1,11 @@
-# Copyright 2020 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from argparse import ArgumentParser, Namespace
 from typing import Any, List, Optional
 
-from ..pipelines import SUPPORTED_TASKS, TASK_ALIASES, Pipeline, pipeline
+from transformers import Pipeline
+from transformers.commands import BaseTransformersCLICommand
+from transformers.pipelines import SUPPORTED_TASKS, pipeline
+
 from ..utils import logging
-from . import BaseTransformersCLICommand
 
 
 try:
@@ -43,8 +31,7 @@ logger = logging.get_logger("transformers-cli/serving")
 def serve_command_factory(args: Namespace):
     """
     Factory function used to instantiate serving server from provided command line arguments.
-
-    Returns: ServeCommand
+    :return: ServeCommand
     """
     nlp = pipeline(
         task=args.task,
@@ -94,18 +81,14 @@ class ServeCommand(BaseTransformersCLICommand):
     def register_subcommand(parser: ArgumentParser):
         """
         Register this command to argparse so it's available for the transformer-cli
-
-        Args:
-            parser: Root parser to register command-specific arguments
+        :param parser: Root parser to register command-specific arguments
+        :return:
         """
         serve_parser = parser.add_parser(
             "serve", help="CLI tool to run inference requests through REST and GraphQL endpoints."
         )
         serve_parser.add_argument(
-            "--task",
-            type=str,
-            choices=list(SUPPORTED_TASKS.keys()) + list(TASK_ALIASES.keys()),
-            help="The task to run the pipeline on",
+            "--task", type=str, choices=SUPPORTED_TASKS.keys(), help="The task to run the pipeline on"
         )
         serve_parser.add_argument("--host", type=str, default="localhost", help="Interface the server will listen on.")
         serve_parser.add_argument("--port", type=int, default=8888, help="Port the serving will listen to.")
@@ -136,7 +119,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 "Or install FastAPI and unicorn separately."
             )
         else:
-            logger.info(f"Serving model over {host}:{port}")
+            logger.info("Serving model over {}:{}".format(host, port))
             self._app = FastAPI(
                 routes=[
                     APIRoute(
@@ -179,9 +162,9 @@ class ServeCommand(BaseTransformersCLICommand):
 
     def tokenize(self, text_input: str = Body(None, embed=True), return_ids: bool = Body(False, embed=True)):
         """
-        Tokenize the provided input and eventually returns corresponding tokens id: - **text_input**: String to
-        tokenize - **return_ids**: Boolean flags indicating if the tokens have to be converted to their integer
-        mapping.
+        Tokenize the provided input and eventually returns corresponding tokens id:
+        - **text_input**: String to tokenize
+        - **return_ids**: Boolean flags indicating if the tokens have to be converted to their integer mapping.
         """
         try:
             tokens_txt = self._pipeline.tokenizer.tokenize(text_input)
@@ -202,9 +185,10 @@ class ServeCommand(BaseTransformersCLICommand):
         cleanup_tokenization_spaces: bool = Body(True, embed=True),
     ):
         """
-        Detokenize the provided tokens ids to readable text: - **tokens_ids**: List of tokens ids -
-        **skip_special_tokens**: Flag indicating to not try to decode special tokens - **cleanup_tokenization_spaces**:
-        Flag indicating to remove all leading/trailing spaces and intermediate ones.
+        Detokenize the provided tokens ids to readable text:
+        - **tokens_ids**: List of tokens ids
+        - **skip_special_tokens**: Flag indicating to not try to decode special tokens
+        - **cleanup_tokenization_spaces**: Flag indicating to remove all leading/trailing spaces and intermediate ones.
         """
         try:
             decoded_str = self._pipeline.tokenizer.decode(tokens_ids, skip_special_tokens, cleanup_tokenization_spaces)

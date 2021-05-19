@@ -43,9 +43,8 @@ class TensorFlowBenchmarkArguments(BenchmarkArguments):
     ]
 
     def __init__(self, **kwargs):
-        """
-        This __init__ is there for legacy code. When removing deprecated args completely, the class can simply be
-        deleted
+        """This __init__ is there for legacy code. When removing
+        deprecated args completely, the class can simply be deleted
         """
         for deprecated_arg in self.deprecated_args:
             if deprecated_arg in kwargs:
@@ -96,15 +95,15 @@ class TensorFlowBenchmarkArguments(BenchmarkArguments):
             tf.config.experimental_connect_to_cluster(self._setup_tpu)
             tf.tpu.experimental.initialize_tpu_system(self._setup_tpu)
 
-            strategy = tf.distribute.TPUStrategy(self._setup_tpu)
+            strategy = tf.distribute.experimental.TPUStrategy(self._setup_tpu)
         else:
             # currently no multi gpu is allowed
             if self.is_gpu:
                 # TODO: Currently only single GPU is supported
-                tf.config.set_visible_devices(self.gpu_list[self.device_idx], "GPU")
+                tf.config.experimental.set_visible_devices(self.gpu_list[self.device_idx], "GPU")
                 strategy = tf.distribute.OneDeviceStrategy(device=f"/gpu:{self.device_idx}")
             else:
-                tf.config.set_visible_devices([], "GPU")  # disable GPU
+                tf.config.experimental.set_visible_devices([], "GPU")  # disable GPU
                 strategy = tf.distribute.OneDeviceStrategy(device=f"/cpu:{self.device_idx}")
 
         return strategy

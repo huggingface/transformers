@@ -1,20 +1,6 @@
-# Copyright 2020 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 # This test is meant to be run in on an instance with TPUs like this:
 #
-#   python examples/pytorch/xla_spawn.py --num_cores=8 tests/test_trainer_tpu.py
+#   python examples/xla_spawn.py --num_cores=8 tests/test_trainer_tpu.py
 #
 # Replace 8 with the number of TPU cores you have.
 #
@@ -69,8 +55,10 @@ def main():
     training_args = parser.parse_args_into_dataclasses()[0]
 
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, "
-        f"tpu_num_cores: {training_args.tpu_num_cores}",
+        "Process rank: %s, device: %s, tpu_num_cores: %s",
+        training_args.local_rank,
+        training_args.device,
+        training_args.tpu_num_cores,
     )
 
     # Essentially, what we want to verify in the distributed case is

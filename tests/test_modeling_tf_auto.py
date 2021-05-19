@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2018 The Google AI Language Team Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,8 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
-import tempfile
+
 import unittest
 
 from transformers import is_tf_available
@@ -40,13 +39,11 @@ if is_tf_available():
         TFBertForQuestionAnswering,
         TFBertForSequenceClassification,
         TFBertModel,
-        TFFunnelBaseModel,
-        TFFunnelModel,
         TFGPT2LMHeadModel,
         TFRobertaForMaskedLM,
         TFT5ForConditionalGeneration,
     )
-    from transformers.models.auto.modeling_tf_auto import (
+    from transformers.modeling_tf_auto import (
         TF_MODEL_FOR_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_MASKED_LM_MAPPING,
         TF_MODEL_FOR_PRETRAINING_MAPPING,
@@ -57,9 +54,9 @@ if is_tf_available():
         TF_MODEL_MAPPING,
         TF_MODEL_WITH_LM_HEAD_MAPPING,
     )
-    from transformers.models.bert.modeling_tf_bert import TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.models.gpt2.modeling_tf_gpt2 import TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.models.t5.modeling_tf_t5 import TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.modeling_tf_bert import TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.modeling_tf_gpt2 import TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.modeling_tf_t5 import TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_tf
@@ -170,29 +167,14 @@ class TFAutoModelTest(unittest.TestCase):
     def test_from_pretrained_identifier(self):
         model = TFAutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER)
         self.assertIsInstance(model, TFBertForMaskedLM)
-        self.assertEqual(model.num_parameters(), 14410)
-        self.assertEqual(model.num_parameters(only_trainable=True), 14410)
+        self.assertEqual(model.num_parameters(), 14830)
+        self.assertEqual(model.num_parameters(only_trainable=True), 14830)
 
     def test_from_identifier_from_model_type(self):
         model = TFAutoModelWithLMHead.from_pretrained(DUMMY_UNKWOWN_IDENTIFIER)
         self.assertIsInstance(model, TFRobertaForMaskedLM)
-        self.assertEqual(model.num_parameters(), 14410)
-        self.assertEqual(model.num_parameters(only_trainable=True), 14410)
-
-    def test_from_pretrained_with_tuple_values(self):
-        # For the auto model mapping, FunnelConfig has two models: FunnelModel and FunnelBaseModel
-        model = TFAutoModel.from_pretrained("sgugger/funnel-random-tiny")
-        self.assertIsInstance(model, TFFunnelModel)
-
-        config = copy.deepcopy(model.config)
-        config.architectures = ["FunnelBaseModel"]
-        model = TFAutoModel.from_config(config)
-        self.assertIsInstance(model, TFFunnelBaseModel)
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir)
-            model = TFAutoModel.from_pretrained(tmp_dir)
-            self.assertIsInstance(model, TFFunnelBaseModel)
+        self.assertEqual(model.num_parameters(), 14830)
+        self.assertEqual(model.num_parameters(only_trainable=True), 14830)
 
     def test_parents_and_children_in_mappings(self):
         # Test that the children are placed before the parents in the mappings, as the `instanceof` will be triggered
@@ -213,14 +195,8 @@ class TFAutoModelTest(unittest.TestCase):
             mapping = tuple(mapping.items())
             for index, (child_config, child_model) in enumerate(mapping[1:]):
                 for parent_config, parent_model in mapping[: index + 1]:
-                    with self.subTest(msg=f"Testing if {child_config.__name__} is child of {parent_config.__name__}"):
+                    with self.subTest(
+                        msg="Testing if {} is child of {}".format(child_config.__name__, parent_config.__name__)
+                    ):
                         self.assertFalse(issubclass(child_config, parent_config))
-
-                    # Tuplify child_model and parent_model since some of them could be tuples.
-                    if not isinstance(child_model, (list, tuple)):
-                        child_model = (child_model,)
-                    if not isinstance(parent_model, (list, tuple)):
-                        parent_model = (parent_model,)
-
-                    for child, parent in [(a, b) for a in child_model for b in parent_model]:
-                        assert not issubclass(child, parent), f"{child.__name__} is child of {parent.__name__}"
+                        self.assertFalse(issubclass(child_model, parent_model))

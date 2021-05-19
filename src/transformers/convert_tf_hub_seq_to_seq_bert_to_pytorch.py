@@ -17,7 +17,7 @@
 
 import argparse
 
-from . import (
+from transformers import (
     BertConfig,
     BertGenerationConfig,
     BertGenerationDecoder,
@@ -46,7 +46,7 @@ def convert_tf_checkpoint_to_pytorch(tf_hub_path, pytorch_dump_path, is_encoder_
         model = BertGenerationEncoder(config)
     else:
         model = BertGenerationDecoder(config)
-    print(f"Building PyTorch model from configuration: {config}")
+    print("Building PyTorch model from configuration: {}".format(str(config)))
 
     # Load weights from tf checkpoint
     load_tf_weights_in_bert_generation(
@@ -58,7 +58,7 @@ def convert_tf_checkpoint_to_pytorch(tf_hub_path, pytorch_dump_path, is_encoder_
     )
 
     # Save pytorch-model
-    print(f"Save PyTorch model and config to {pytorch_dump_path}")
+    print("Save PyTorch model and config to {}".format(pytorch_dump_path))
     model.save_pretrained(pytorch_dump_path)
 
 

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2018 The Google AI Language Team Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,18 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
-import tempfile
+
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import (
-    DUMMY_UNKWOWN_IDENTIFIER,
-    SMALL_MODEL_IDENTIFIER,
-    require_scatter,
-    require_torch,
-    slow,
-)
+from transformers.testing_utils import DUMMY_UNKWOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER, require_torch, slow
 
 
 if is_torch_available():
@@ -37,7 +30,6 @@ if is_torch_available():
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
-        AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
         AutoModelWithLMHead,
         BertConfig,
@@ -47,32 +39,26 @@ if is_torch_available():
         BertForSequenceClassification,
         BertForTokenClassification,
         BertModel,
-        FunnelBaseModel,
-        FunnelModel,
         GPT2Config,
         GPT2LMHeadModel,
         RobertaForMaskedLM,
         T5Config,
         T5ForConditionalGeneration,
-        TapasConfig,
-        TapasForQuestionAnswering,
     )
-    from transformers.models.auto.modeling_auto import (
+    from transformers.modeling_auto import (
         MODEL_FOR_CAUSAL_LM_MAPPING,
         MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_PRETRAINING_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         MODEL_MAPPING,
         MODEL_WITH_LM_HEAD_MAPPING,
     )
-    from transformers.models.bert.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.models.gpt2.modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.models.t5.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.models.tapas.modeling_tapas import TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch
@@ -183,21 +169,6 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsInstance(model, BertForQuestionAnswering)
 
     @slow
-    @require_scatter
-    def test_table_question_answering_model_from_pretrained(self):
-        for model_name in TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST[5:6]:
-            config = AutoConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, TapasConfig)
-
-            model = AutoModelForTableQuestionAnswering.from_pretrained(model_name)
-            model, loading_info = AutoModelForTableQuestionAnswering.from_pretrained(
-                model_name, output_loading_info=True
-            )
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, TapasForQuestionAnswering)
-
-    @slow
     def test_token_classification_model_from_pretrained(self):
         for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = AutoConfig.from_pretrained(model_name)
@@ -221,21 +192,6 @@ class AutoModelTest(unittest.TestCase):
         self.assertEqual(model.num_parameters(), 14410)
         self.assertEqual(model.num_parameters(only_trainable=True), 14410)
 
-    def test_from_pretrained_with_tuple_values(self):
-        # For the auto model mapping, FunnelConfig has two models: FunnelModel and FunnelBaseModel
-        model = AutoModel.from_pretrained("sgugger/funnel-random-tiny")
-        self.assertIsInstance(model, FunnelModel)
-
-        config = copy.deepcopy(model.config)
-        config.architectures = ["FunnelBaseModel"]
-        model = AutoModel.from_config(config)
-        self.assertIsInstance(model, FunnelBaseModel)
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir)
-            model = AutoModel.from_pretrained(tmp_dir)
-            self.assertIsInstance(model, FunnelBaseModel)
-
     def test_parents_and_children_in_mappings(self):
         # Test that the children are placed before the parents in the mappings, as the `instanceof` will be triggered
         # by the parents and will return the wrong configuration type when using auto models
@@ -244,7 +200,6 @@ class AutoModelTest(unittest.TestCase):
             MODEL_MAPPING,
             MODEL_FOR_PRETRAINING_MAPPING,
             MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-            MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
@@ -259,13 +214,7 @@ class AutoModelTest(unittest.TestCase):
                 for parent_config, parent_model in mapping[: index + 1]:
                     assert not issubclass(
                         child_config, parent_config
-                    ), f"{child_config.__name__} is child of {parent_config.__name__}"
-
-                    # Tuplify child_model and parent_model since some of them could be tuples.
-                    if not isinstance(child_model, (list, tuple)):
-                        child_model = (child_model,)
-                    if not isinstance(parent_model, (list, tuple)):
-                        parent_model = (parent_model,)
-
-                    for child, parent in [(a, b) for a in child_model for b in parent_model]:
-                        assert not issubclass(child, parent), f"{child.__name__} is child of {parent.__name__}"
+                    ), "{child_config.__name__} is child of {parent_config.__name__}"
+                    assert not issubclass(
+                        child_model, parent_model
+                    ), "{child_config.__name__} is child of {parent_config.__name__}"

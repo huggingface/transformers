@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2018 The Google AI Language Team Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,8 +17,7 @@
 import unittest
 
 from transformers import BertConfig, is_tf_available
-from transformers.models.auto import get_values
-from transformers.testing_utils import require_tf, slow
+from transformers.testing_utils import require_tf
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -27,8 +26,7 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TF_MODEL_FOR_PRETRAINING_MAPPING
-    from transformers.models.bert.modeling_tf_bert import (
+    from transformers.modeling_tf_bert import (
         TFBertForMaskedLM,
         TFBertForMultipleChoice,
         TFBertForNextSentencePrediction,
@@ -121,6 +119,7 @@ class TFBertModelTester:
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
+            return_dict=True,
         )
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -274,19 +273,6 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
-    test_head_masking = False
-    test_onnx = True
-    onnx_min_opset = 10
-
-    # special case for ForPreTraining model
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
-
-        if return_labels:
-            if model_class in get_values(TF_MODEL_FOR_PRETRAINING_MAPPING):
-                inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
-
-        return inputs_dict
 
     def setUp(self):
         self.model_tester = TFBertModelTester(self)
@@ -335,56 +321,10 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFBertModel.from_pretrained("jplu/tiny-tf-bert-random")
         self.assertIsNotNone(model)
 
-    def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        list_lm_models = [TFBertForMaskedLM, TFBertForPreTraining, TFBertLMHeadModel]
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-
-            if model_class in list_lm_models:
-                x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_bias()
-                assert isinstance(name, dict)
-                for k, v in name.items():
-                    assert isinstance(v, tf.Variable)
-            else:
-                x = model.get_output_embeddings()
-                assert x is None
-                name = model.get_bias()
-                assert name is None
-
     def test_custom_load_tf_weights(self):
         model, output_loading_info = TFBertForTokenClassification.from_pretrained(
-            "jplu/tiny-tf-bert-random", output_loading_info=True
+            "jplu/tiny-tf-bert-random", use_cdn=False, output_loading_info=True
         )
-        self.assertEqual(sorted(output_loading_info["unexpected_keys"]), [])
+        self.assertEqual(sorted(output_loading_info["unexpected_keys"]), ["mlm___cls", "nsp___cls"])
         for layer in output_loading_info["missing_keys"]:
             self.assertTrue(layer.split("_")[0] in ["dropout", "classifier"])
-
-
-@require_tf
-class TFBertModelIntegrationTest(unittest.TestCase):
-    @slow
-    def test_inference_masked_lm(self):
-        model = TFBertForPreTraining.from_pretrained("lysandre/tiny-bert-random")
-        input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
-
-        expected_shape = [1, 6, 32000]
-        self.assertEqual(output.shape, expected_shape)
-
-        print(output[:, :3, :3])
-
-        expected_slice = tf.constant(
-            [
-                [
-                    [-0.05243197, -0.04498899, 0.05512108],
-                    [-0.07444685, -0.01064632, 0.04352357],
-                    [-0.05020351, 0.05530146, 0.00700043],
-                ]
-            ]
-        )
-        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=1e-4)

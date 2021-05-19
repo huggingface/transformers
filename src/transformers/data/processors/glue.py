@@ -16,7 +16,6 @@
 """ GLUE processors and helpers """
 
 import os
-import warnings
 from dataclasses import asdict
 from enum import Enum
 from typing import List, Optional, Union
@@ -31,12 +30,6 @@ if is_tf_available():
     import tensorflow as tf
 
 logger = logging.get_logger(__name__)
-
-DEPRECATION_WARNING = (
-    "This {0} will be removed from the library soon, preprocessing should be handled with the 🤗 Datasets "
-    "library. You can have a look at this example script for pointers: "
-    "https://github.com/huggingface/transformers/blob/master/examples/pytorch/text-classification/run_glue.py"
-)
 
 
 def glue_convert_examples_to_features(
@@ -59,12 +52,11 @@ def glue_convert_examples_to_features(
         output_mode: String indicating the output mode. Either ``regression`` or ``classification``
 
     Returns:
-        If the ``examples`` input is a ``tf.data.Dataset``, will return a ``tf.data.Dataset`` containing the
-        task-specific features. If the input is a list of ``InputExamples``, will return a list of task-specific
-        ``InputFeatures`` which can be fed to the model.
+        If the ``examples`` input is a ``tf.data.Dataset``, will return a ``tf.data.Dataset``
+        containing the task-specific features. If the input is a list of ``InputExamples``, will return
+        a list of task-specific ``InputFeatures`` which can be fed to the model.
 
     """
-    warnings.warn(DEPRECATION_WARNING.format("function"), FutureWarning)
     if is_tf_available() and isinstance(examples, tf.data.Dataset):
         if task is None:
             raise ValueError("When calling glue_convert_examples_to_features from TF, the task parameter is required.")
@@ -98,7 +90,7 @@ if is_tf_available():
                 label = d.pop("label")
                 yield (d, label)
 
-        input_names = tokenizer.model_input_names
+        input_names = ["input_ids"] + tokenizer.model_input_names
 
         return tf.data.Dataset.from_generator(
             gen,
@@ -116,16 +108,16 @@ def _glue_convert_examples_to_features(
     output_mode=None,
 ):
     if max_length is None:
-        max_length = tokenizer.model_max_length
+        max_length = tokenizer.max_len
 
     if task is not None:
         processor = glue_processors[task]()
         if label_list is None:
             label_list = processor.get_labels()
-            logger.info(f"Using label list {label_list} for task {task}")
+            logger.info("Using label list %s for task %s" % (label_list, task))
         if output_mode is None:
             output_mode = glue_output_modes[task]
-            logger.info(f"Using output mode {output_mode} for task {task}")
+            logger.info("Using output mode %s for task %s" % (output_mode, task))
 
     label_map = {label: i for i, label in enumerate(label_list)}
 
@@ -156,8 +148,8 @@ def _glue_convert_examples_to_features(
 
     for i, example in enumerate(examples[:5]):
         logger.info("*** Example ***")
-        logger.info(f"guid: {example.guid}")
-        logger.info(f"features: {features[i]}")
+        logger.info("guid: %s" % (example.guid))
+        logger.info("features: %s" % features[i])
 
     return features
 
@@ -170,10 +162,6 @@ class OutputMode(Enum):
 class MrpcProcessor(DataProcessor):
     """Processor for the MRPC data set (GLUE version)."""
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        warnings.warn(DEPRECATION_WARNING.format("processor"), FutureWarning)
-
     def get_example_from_tensor_dict(self, tensor_dict):
         """See base class."""
         return InputExample(
@@ -185,7 +173,7 @@ class MrpcProcessor(DataProcessor):
 
     def get_train_examples(self, data_dir):
         """See base class."""
-        logger.info(f"LOOKING AT {os.path.join(data_dir, 'train.tsv')}")
+        logger.info("LOOKING AT {}".format(os.path.join(data_dir, "train.tsv")))
         return self._create_examples(self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
 
     def get_dev_examples(self, data_dir):
@@ -206,7 +194,7 @@ class MrpcProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             if i == 0:
                 continue
-            guid = f"{set_type}-{i}"
+            guid = "%s-%s" % (set_type, i)
             text_a = line[3]
             text_b = line[4]
             label = None if set_type == "test" else line[0]
@@ -216,10 +204,6 @@ class MrpcProcessor(DataProcessor):
 
 class MnliProcessor(DataProcessor):
     """Processor for the MultiNLI data set (GLUE version)."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        warnings.warn(DEPRECATION_WARNING.format("processor"), FutureWarning)
 
     def get_example_from_tensor_dict(self, tensor_dict):
         """See base class."""
@@ -252,7 +236,7 @@ class MnliProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             if i == 0:
                 continue
-            guid = f"{set_type}-{line[0]}"
+            guid = "%s-%s" % (set_type, line[0])
             text_a = line[8]
             text_b = line[9]
             label = None if set_type.startswith("test") else line[-1]
@@ -262,10 +246,6 @@ class MnliProcessor(DataProcessor):
 
 class MnliMismatchedProcessor(MnliProcessor):
     """Processor for the MultiNLI Mismatched data set (GLUE version)."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        warnings.warn(DEPRECATION_WARNING.format("processor"), FutureWarning)
 
     def get_dev_examples(self, data_dir):
         """See base class."""
@@ -278,10 +258,6 @@ class MnliMismatchedProcessor(MnliProcessor):
 
 class ColaProcessor(DataProcessor):
     """Processor for the CoLA data set (GLUE version)."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        warnings.warn(DEPRECATION_WARNING.format("processor"), FutureWarning)
 
     def get_example_from_tensor_dict(self, tensor_dict):
         """See base class."""
@@ -316,7 +292,7 @@ class ColaProcessor(DataProcessor):
         text_index = 1 if test_mode else 3
         examples = []
         for (i, line) in enumerate(lines):
-            guid = f"{set_type}-{i}"
+            guid = "%s-%s" % (set_type, i)
             text_a = line[text_index]
             label = None if test_mode else line[1]
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
@@ -325,10 +301,6 @@ class ColaProcessor(DataProcessor):
 
 class Sst2Processor(DataProcessor):
     """Processor for the SST-2 data set (GLUE version)."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        warnings.warn(DEPRECATION_WARNING.format("processor"), FutureWarning)
 
     def get_example_from_tensor_dict(self, tensor_dict):
         """See base class."""
@@ -362,7 +334,7 @@ class Sst2Processor(DataProcessor):
         for (i, line) in enumerate(lines):
             if i == 0:
                 continue
-            guid = f"{set_type}-{i}"
+            guid = "%s-%s" % (set_type, i)
             text_a = line[text_index]
             label = None if set_type == "test" else line[1]
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
@@ -371,10 +343,6 @@ class Sst2Processor(DataProcessor):
 
 class StsbProcessor(DataProcessor):
     """Processor for the STS-B data set (GLUE version)."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        warnings.warn(DEPRECATION_WARNING.format("processor"), FutureWarning)
 
     def get_example_from_tensor_dict(self, tensor_dict):
         """See base class."""
@@ -407,7 +375,7 @@ class StsbProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             if i == 0:
                 continue
-            guid = f"{set_type}-{line[0]}"
+            guid = "%s-%s" % (set_type, line[0])
             text_a = line[7]
             text_b = line[8]
             label = None if set_type == "test" else line[-1]
@@ -417,10 +385,6 @@ class StsbProcessor(DataProcessor):
 
 class QqpProcessor(DataProcessor):
     """Processor for the QQP data set (GLUE version)."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        warnings.warn(DEPRECATION_WARNING.format("processor"), FutureWarning)
 
     def get_example_from_tensor_dict(self, tensor_dict):
         """See base class."""
@@ -456,7 +420,7 @@ class QqpProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             if i == 0:
                 continue
-            guid = f"{set_type}-{line[0]}"
+            guid = "%s-%s" % (set_type, line[0])
             try:
                 text_a = line[q1_index]
                 text_b = line[q2_index]
@@ -469,10 +433,6 @@ class QqpProcessor(DataProcessor):
 
 class QnliProcessor(DataProcessor):
     """Processor for the QNLI data set (GLUE version)."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        warnings.warn(DEPRECATION_WARNING.format("processor"), FutureWarning)
 
     def get_example_from_tensor_dict(self, tensor_dict):
         """See base class."""
@@ -505,7 +465,7 @@ class QnliProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             if i == 0:
                 continue
-            guid = f"{set_type}-{line[0]}"
+            guid = "%s-%s" % (set_type, line[0])
             text_a = line[1]
             text_b = line[2]
             label = None if set_type == "test" else line[-1]
@@ -515,10 +475,6 @@ class QnliProcessor(DataProcessor):
 
 class RteProcessor(DataProcessor):
     """Processor for the RTE data set (GLUE version)."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        warnings.warn(DEPRECATION_WARNING.format("processor"), FutureWarning)
 
     def get_example_from_tensor_dict(self, tensor_dict):
         """See base class."""
@@ -551,7 +507,7 @@ class RteProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             if i == 0:
                 continue
-            guid = f"{set_type}-{line[0]}"
+            guid = "%s-%s" % (set_type, line[0])
             text_a = line[1]
             text_b = line[2]
             label = None if set_type == "test" else line[-1]
@@ -561,10 +517,6 @@ class RteProcessor(DataProcessor):
 
 class WnliProcessor(DataProcessor):
     """Processor for the WNLI data set (GLUE version)."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        warnings.warn(DEPRECATION_WARNING.format("processor"), FutureWarning)
 
     def get_example_from_tensor_dict(self, tensor_dict):
         """See base class."""
@@ -597,7 +549,7 @@ class WnliProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             if i == 0:
                 continue
-            guid = f"{set_type}-{line[0]}"
+            guid = "%s-%s" % (set_type, line[0])
             text_a = line[1]
             text_b = line[2]
             label = None if set_type == "test" else line[-1]

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2018 The Google AI Language Team Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -25,10 +24,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 
 
 if is_torch_available():
-    import torch
-
     from transformers import (
-        MODEL_FOR_PRETRAINING_MAPPING,
         ElectraConfig,
         ElectraForMaskedLM,
         ElectraForMultipleChoice,
@@ -38,7 +34,7 @@ if is_torch_available():
         ElectraForTokenClassification,
         ElectraModel,
     )
-    from transformers.models.electra.modeling_electra import ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.modeling_electra import ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class ElectraModelTester:
@@ -102,6 +98,7 @@ class ElectraModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            return_dict=True,
         )
 
         return (
@@ -287,19 +284,6 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    fx_ready_model_classes = all_model_classes
-    test_sequence_classification_problem_types = True
-
-    # special case for ForPreTraining model
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
-
-        if return_labels:
-            if model_class in get_values(MODEL_FOR_PRETRAINING_MAPPING):
-                inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
-                )
-        return inputs_dict
 
     def setUp(self):
         self.model_tester = ElectraModelTester(self)
@@ -311,12 +295,6 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
     def test_electra_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_electra_model(*config_and_inputs)
-
-    def test_electra_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_electra_model(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -347,20 +325,3 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ElectraModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-
-@require_torch
-class ElectraModelIntegrationTest(unittest.TestCase):
-    @slow
-    def test_inference_no_head_absolute_embedding(self):
-        model = ElectraModel.from_pretrained("google/electra-small-discriminator")
-        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
-        attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
-        output = model(input_ids, attention_mask=attention_mask)[0]
-        expected_shape = torch.Size((1, 11, 256))
-        self.assertEqual(output.shape, expected_shape)
-        expected_slice = torch.tensor(
-            [[[0.4471, 0.6821, -0.3265], [0.4627, 0.5255, -0.3668], [0.4532, 0.3313, -0.4344]]]
-        )
-
-        self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))

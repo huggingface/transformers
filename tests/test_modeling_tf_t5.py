@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import unittest
 
 from transformers import T5Config, is_tf_available
@@ -26,7 +27,7 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import T5Tokenizer, TFT5EncoderModel, TFT5ForConditionalGeneration, TFT5Model
+    from transformers import T5Tokenizer, TFT5ForConditionalGeneration, TFT5Model
 
 
 class TFT5ModelTester:
@@ -79,6 +80,7 @@ class TFT5ModelTester:
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.pad_token_id,
+            return_dict=True,
         )
 
         return (config, input_ids, input_mask, token_labels)
@@ -133,6 +135,8 @@ class TFT5ModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
+        output, past_key_values = outputs
+
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
 
@@ -140,7 +144,7 @@ class TFT5ModelTester:
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
 
         output_from_no_past = model(next_input_ids)[0]
-        output_from_past = model(next_tokens, past_key_values=outputs.past_key_values)[0]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)[0]
 
         # select random slice
         random_slice_idx = int(ids_tensor((1,), output_from_past.shape[-1]))
@@ -162,7 +166,7 @@ class TFT5ModelTester:
         attn_mask = tf.concat([attn_mask_begin, attn_mask_end], axis=1)
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=attn_mask, use_cache=True)
+        _, past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True)
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -185,7 +189,7 @@ class TFT5ModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)[0]
-        output_from_past = model(next_tokens, past_key_values=outputs.past_key_values, attention_mask=attn_mask)[0]
+        output_from_past = model(next_tokens, past_key_values=past_key_values, attention_mask=attn_mask)[0]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).numpy().item()
@@ -201,24 +205,21 @@ class TFT5ModelTester:
         model = TFT5Model(config=config).get_decoder()
 
         input_ids = input_ids[:1, :]
-        attention_mask = attention_mask[:1, :]
         self.batch_size = 1
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
+        outputs = model(input_ids, use_cache=True)
+
+        output, past_key_values = outputs
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_attn_mask = ids_tensor((self.batch_size, 3), 2)
 
         # append to next input_ids and
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
-        next_attention_mask = tf.concat([attention_mask, next_attn_mask], axis=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[0]
-        output_from_past = model(
-            next_tokens, attention_mask=next_attention_mask, past_key_values=outputs.past_key_values
-        )[0]
+        output_from_no_past = model(next_input_ids)[0]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)[0]
 
         self.parent.assertEqual(next_tokens.shape[1], output_from_past.shape[1])
 
@@ -237,6 +238,7 @@ class TFT5ModelTester:
             "input_ids": input_ids,
             "decoder_input_ids": input_ids,
             "decoder_attention_mask": input_mask,
+            "use_cache": tf.convert_to_tensor([False]),
         }
         return config, inputs_dict
 
@@ -247,7 +249,6 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     all_model_classes = (TFT5Model, TFT5ForConditionalGeneration) if is_tf_available() else ()
     all_generative_model_classes = (TFT5ForConditionalGeneration,) if is_tf_available() else ()
-    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFT5ModelTester(self)
@@ -259,13 +260,6 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_t5_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_t5_model(*config_and_inputs)
-
-    def test_t5_model_v1_1(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config = config_and_inputs[0]
-        config.tie_word_embeddings = False
-        config.feed_forward_proj = "gated-gelu"
-        self.model_tester.create_and_check_t5_model(config, *config_and_inputs[1:])
 
     def test_with_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -283,156 +277,11 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_t5_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-
-            if model_class in self.all_generative_model_classes:
-                x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_bias()
-                assert name is None
-            else:
-                x = model.get_output_embeddings()
-                assert x is None
-                name = model.get_bias()
-                assert name is None
-
-    def test_saved_model_creation(self):
-        # This test is too long (>30sec) and makes fail the CI
-        pass
-
     @slow
     def test_model_from_pretrained(self):
-        model = TFT5Model.from_pretrained("t5-small")
-        self.assertIsNotNone(model)
-
-
-class TFT5EncoderOnlyModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=99,
-        batch_size=13,
-        encoder_seq_length=7,
-        # For common tests
-        use_attention_mask=True,
-        hidden_size=32,
-        num_hidden_layers=5,
-        num_attention_heads=4,
-        d_ff=37,
-        relative_attention_num_buckets=8,
-        is_training=False,
-        dropout_rate=0.1,
-        initializer_factor=0.002,
-        is_encoder_decoder=False,
-        eos_token_id=1,
-        pad_token_id=0,
-        scope=None,
-    ):
-
-        self.parent = parent
-        self.batch_size = batch_size
-        self.encoder_seq_length = encoder_seq_length
-        # For common tests
-        self.seq_length = self.encoder_seq_length
-        self.use_attention_mask = use_attention_mask
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.d_ff = d_ff
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.dropout_rate = dropout_rate
-        self.initializer_factor = initializer_factor
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.is_encoder_decoder = is_encoder_decoder
-        self.scope = None
-        self.is_training = is_training
-
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
-
-        attention_mask = None
-        if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
-
-        config = T5Config(
-            vocab_size=self.vocab_size,
-            d_model=self.hidden_size,
-            d_ff=self.d_ff,
-            d_kv=self.hidden_size // self.num_attention_heads,
-            num_layers=self.num_hidden_layers,
-            num_heads=self.num_attention_heads,
-            relative_attention_num_buckets=self.relative_attention_num_buckets,
-            dropout_rate=self.dropout_rate,
-            initializer_factor=self.initializer_factor,
-            eos_token_id=self.eos_token_id,
-            bos_token_id=self.pad_token_id,
-            pad_token_id=self.pad_token_id,
-            is_encoder_decoder=self.is_encoder_decoder,
-        )
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
-        )
-
-    def create_and_check_model(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-    ):
-        model = TFT5EncoderModel(config=config)
-        result = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-        )
-        result = model(input_ids=input_ids)
-        encoder_output = result.last_hidden_state
-
-        self.parent.assertEqual(encoder_output.shape, (self.batch_size, self.encoder_seq_length, self.hidden_size))
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            attention_mask,
-        ) = config_and_inputs
-
-        inputs_dict = {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
-        return config, inputs_dict
-
-
-class TFT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
-    is_encoder_decoder = False
-    all_model_classes = (TFT5EncoderModel,) if is_tf_available() else ()
-    test_onnx = False
-
-    def setUp(self):
-        self.model_tester = TFT5EncoderOnlyModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=T5Config, d_model=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    # is not able to be part of a pipeline
-    def test_train_pipeline_custom_model(self):
-        pass
+        for model_name in ["t5-small"]:
+            model = TFT5Model.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
 
 @require_tf
@@ -442,58 +291,6 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
         return TFT5ForConditionalGeneration.from_pretrained("t5-base")
-
-    @slow
-    def test_small_integration_test(self):
-        """
-        For comparision run:
-        >>> import t5  # pip install t5==0.7.1
-        >>> from t5.data.sentencepiece_vocabulary import SentencePieceVocabulary
-
-        >>> path_to_mtf_small_t5_checkpoint = '<fill_in>'
-        >>> path_to_mtf_small_spm_model_path = '<fill_in>'
-        >>> t5_model = t5.models.MtfModel(model_dir=path_to_mtf_small_t5_checkpoint, batch_size=1, tpu=None)
-        >>> vocab = SentencePieceVocabulary(path_to_mtf_small_spm_model_path, extra_ids=100)
-        >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
-        """
-
-        model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
-        tokenizer = T5Tokenizer.from_pretrained("t5-small")
-
-        input_ids = tokenizer("Hello there", return_tensors="tf").input_ids
-        labels = tokenizer("Hi I am", return_tensors="tf").input_ids
-
-        loss = model(input_ids, labels=labels).loss
-        mtf_score = -tf.math.reduce_sum(loss).numpy()
-
-        EXPECTED_SCORE = -19.0845
-        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
-
-    @slow
-    def test_small_v1_1_integration_test(self):
-        """
-        For comparision run:
-        >>> import t5  # pip install t5==0.7.1
-        >>> from t5.data.sentencepiece_vocabulary import SentencePieceVocabulary
-
-        >>> path_to_mtf_small_t5_v1.1_checkpoint = '<fill_in>'
-        >>> path_to_mtf_small_spm_model_path = '<fill_in>'
-        >>> t5_model = t5.models.MtfModel(model_dir=path_to_mtf_small_t5_v1.1_checkpoint, batch_size=1, tpu=None)
-        >>> vocab = SentencePieceVocabulary(path_to_mtf_small_spm_model_path, extra_ids=100)
-        >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
-        """
-
-        model = TFT5ForConditionalGeneration.from_pretrained("google/t5-v1_1-small")
-        tokenizer = T5Tokenizer.from_pretrained("google/t5-v1_1-small")
-
-        input_ids = tokenizer("Hello there", return_tensors="tf").input_ids
-        labels = tokenizer("Hi I am", return_tensors="tf").input_ids
-
-        loss = model(input_ids, labels=labels).loss
-        mtf_score = -tf.math.reduce_sum(loss).numpy()
-
-        EXPECTED_SCORE = -59.0293
-        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
     def test_summarization(self):
@@ -509,8 +306,8 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         ARTICLE_SUBWAY = 'New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York. A year later, she got married again in Westchester County, but to a different man and without divorcing her first husband.  Only 18 days after that marriage, she got hitched yet again. Then, Barrientos declared "I do" five more times, sometimes only within two weeks of each other. In 2010, she married once more, this time in the Bronx. In an application for a marriage license, she stated it was her "first and only" marriage. Barrientos, now 39, is facing two criminal counts of "offering a false instrument for filing in the first degree," referring to her false statements on the 2010 marriage license application, according to court documents. Prosecutors said the marriages were part of an immigration scam. On Friday, she pleaded not guilty at State Supreme Court in the Bronx, according to her attorney, Christopher Wright, who declined to comment further. After leaving court, Barrientos was arrested and charged with theft of service and criminal trespass for allegedly sneaking into the New York subway through an emergency exit, said Detective Annette Markowski, a police spokeswoman. In total, Barrientos has been married 10 times, with nine of her marriages occurring between 1999 and 2002.  All occurred either in Westchester County, Long Island, New Jersey or the Bronx. She is believed to still be married to four men, and at one time, she was married to eight men at once, prosecutors say. Prosecutors said the immigration scam involved some of her husbands, who filed for permanent residence status shortly after the marriages.  Any divorces happened only after such filings were approved. It was unclear whether any of the men will be prosecuted. The case was referred to the Bronx District Attorney\'s Office by Immigration and Customs Enforcement and the Department of Homeland Security\'s Investigation Division. Seven of the men are from so-called "red-flagged" countries, including Egypt, Turkey, Georgia, Pakistan and Mali. Her eighth husband, Rashid Rajput, was deported in 2006 to his native Pakistan after an investigation by the Joint Terrorism Task Force. If convicted, Barrientos faces up to four years in prison.  Her next court appearance is scheduled for May 18.'
 
         expected_summaries = [
-            'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found a cell phone video of the final seconds . "one can hear cries of \'My God\' in several languages," one magazine says .',
-            "the formal accession was marked by a ceremony at The Hague, in the Netherlands . the ICC opened a preliminary examination into the situation in the occupied Palestinian territory . as members of the court, Palestinians may be subject to counter-charges as well .",
+            'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found a cell phone video at the crash site . "one can hear cries of \'My God\' in several languages," one magazine says .',
+            "the Palestinians become the 123rd member of the international criminal court . the accession was marked by a ceremony at the Hague, where the court is based . as members of the court, Palestinians may be subject to counter-charges as well .",
             "the u.s. and its negotiating partners reached a very strong framework agreement with Iran . aaron miller: the debate that has already begun since the announcement of the new framework will likely result in more heat than light . the deal would reduce Iran's low-enriched uranium stockpile, cut centrifuges and implement a rigorous inspection regime .",
             'prosecutors say the marriages were part of an immigration scam . if convicted, barrientos faces two criminal counts of "offering a false instrument for filing in the first degree" she has been married 10 times, with nine of her marriages occurring between 1999 and 2002 .',
         ]

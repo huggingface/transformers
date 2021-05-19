@@ -1,22 +1,22 @@
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# This test is meant to be run in torch.distributed,
+# on a machine with multiple GPUs, in the following way:
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+#   python -m torch.distributed.launch --nproc_per_node 2 ./tests/test_trainer_distributed.py
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# Replace 2 with the number of GPUs you have.
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# You can also run it as a standalone file to test identical behavior in nn.DataParallel:
+#   python ./tests/test_trainer_distributed.py
+# and in single-GPU mode:
+#   CUDA_VISIBLE_DEVICES=0 python ./tests/test_trainer_distributed.py
+# and in CPU mode:
+#   CUDA_VISIBLE_DEVICES=-1 python ./tests/test_trainer_distributed.py
+#
 
 import sys
 from typing import Dict
 
 from transformers import EvalPrediction, HfArgumentParser, TrainingArguments, is_torch_available
-from transformers.testing_utils import TestCasePlus, execute_subprocess_async, require_torch_multi_gpu
 from transformers.utils import logging
 
 
@@ -57,48 +57,28 @@ if is_torch_available():
                 return input_ids
 
 
-class TestTrainerDistributed(TestCasePlus):
-    @require_torch_multi_gpu
-    def test_trainer(self):
-
-        distributed_args = f"""
-            -m torch.distributed.launch
-            --nproc_per_node={torch.cuda.device_count()}
-            {self.test_file_dir}/test_trainer_distributed.py
-        """.split()
-        output_dir = self.get_auto_remove_tmp_dir()
-        args = f"--output_dir {output_dir}".split()
-        cmd = [sys.executable] + distributed_args + args
-        execute_subprocess_async(cmd, env=self.get_env())
-        # successful return here == success - any errors would have caused an error in the sub-call
-
-
 if __name__ == "__main__":
-    # The script below is meant to be run under torch.distributed, on a machine with multiple GPUs:
-    #
-    # PYTHONPATH="src" python -m torch.distributed.launch --nproc_per_node 2 --output_dir output_dir ./tests/test_trainer_distributed.py
-
     parser = HfArgumentParser((TrainingArguments,))
+    sys.argv += ["--output_dir", "./examples"]
     training_args = parser.parse_args_into_dataclasses()[0]
 
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
-        f"distributed training: {training_args.local_rank != -1}"
+        "Process rank: %s, device: %s, n_gpu: %s, distributed training: %s",
+        training_args.local_rank,
+        training_args.device,
+        training_args.n_gpu,
+        training_args.local_rank != -1,
     )
 
-    # Essentially, what we want to verify in the distributed case is that we get all samples back,
-    # in the right order. (this is crucial for prediction for instance)
+    # Essentially, what we want to verify in the distributed case is
+    # that we get all samples back, in the right order.
+    # (this is crucial for prediction for instance)
     for dataset_length in [101, 40, 7]:
         dataset = DummyDataset(dataset_length)
 
         def compute_metrics(p: EvalPrediction) -> Dict:
             sequential = list(range(len(dataset)))
             success = p.predictions.tolist() == sequential and p.label_ids.tolist() == sequential
-            if not success and training_args.local_rank == 0:
-                logger.warning(
-                    "Predictions and/or labels do not match expected results:\n  - predictions: "
-                    f"{p.predictions.tolist()}\n  - labels: {p.label_ids.tolist()}\n  - expected: {sequential}"
-                )
             return {"success": success}
 
         trainer = Trainer(
@@ -116,7 +96,7 @@ if __name__ == "__main__":
 
         p = trainer.predict(dataset)
         logger.info(p.metrics)
-        if p.metrics["test_success"] is not True:
+        if p.metrics["eval_success"] is not True:
             logger.error(p.metrics)
             exit(1)
 
@@ -130,8 +110,10 @@ if __name__ == "__main__":
 
         p = trainer.predict(dataset)
         logger.info(p.metrics)
-        if p.metrics["test_success"] is not True:
+        if p.metrics["eval_success"] is not True:
             logger.error(p.metrics)
             exit(1)
 
         trainer.args.eval_accumulation_steps = None
+
+    logger.info("🔥 All distributed tests successful")

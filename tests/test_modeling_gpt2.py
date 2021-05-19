@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2018 The Google AI Language Team Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,14 +14,12 @@
 # limitations under the License.
 
 
-import datetime
 import unittest
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
@@ -93,9 +91,6 @@ class GPT2ModelTester:
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
 
-    def get_large_model_config(self):
-        return GPT2Config.from_pretrained("gpt2")
-
     def prepare_config_and_inputs(self, gradient_checkpointing=False):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -132,10 +127,10 @@ class GPT2ModelTester:
             n_ctx=self.max_position_embeddings,
             # type_vocab_size=self.type_vocab_size,
             # initializer_range=self.initializer_range,
-            use_cache=not gradient_checkpointing,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
+            return_dict=True,
             gradient_checkpointing=gradient_checkpointing,
         )
 
@@ -218,9 +213,7 @@ class GPT2ModelTester:
         next_token_type_ids = torch.cat([token_type_ids, next_token_types], dim=-1)
 
         output_from_no_past = model(next_input_ids, token_type_ids=next_token_type_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, token_type_ids=next_token_types, past_key_values=past)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, token_type_ids=next_token_types, past=past)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -262,7 +255,7 @@ class GPT2ModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, past=past, attention_mask=attn_mask)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -280,26 +273,20 @@ class GPT2ModelTester:
         model.eval()
 
         # first forward pass
-        outputs = model(input_ids, token_type_ids=token_type_ids, attention_mask=input_mask, use_cache=True)
+        outputs = model(input_ids, token_type_ids=token_type_ids, use_cache=True)
 
         output, past = outputs.to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
         next_token_types = ids_tensor([self.batch_size, 3], self.type_vocab_size)
-        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
 
         # append to next input_ids and token_type_ids
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_token_type_ids = torch.cat([token_type_ids, next_token_types], dim=-1)
-        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
-        output_from_no_past = model(
-            next_input_ids, token_type_ids=next_token_type_ids, attention_mask=next_attention_mask
-        )["last_hidden_state"]
-        output_from_past = model(
-            next_tokens, token_type_ids=next_token_types, attention_mask=next_attention_mask, past_key_values=past
-        )["last_hidden_state"]
+        output_from_no_past = model(next_input_ids, token_type_ids=next_token_type_ids)["last_hidden_state"]
+        output_from_past = model(next_tokens, token_type_ids=next_token_types, past=past)["last_hidden_state"]
         self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
 
         # select random slice
@@ -390,7 +377,7 @@ class GPT2ModelTester:
 
 
 @require_torch
-class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel, GPT2ForSequenceClassification)
@@ -398,32 +385,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
-    all_parallelizable_model_classes = (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
     test_missing_keys = False
-    test_model_parallel = True
-
-    # special case for DoubleHeads model
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
-
-        if return_labels:
-            if model_class.__name__ == "GPT2DoubleHeadsModel":
-                inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.num_choices, self.model_tester.seq_length),
-                    dtype=torch.long,
-                    device=torch_device,
-                )
-                inputs_dict["input_ids"] = inputs_dict["labels"]
-                inputs_dict["token_type_ids"] = inputs_dict["labels"]
-                inputs_dict["mc_token_ids"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.num_choices),
-                    dtype=torch.long,
-                    device=torch_device,
-                )
-                inputs_dict["mc_labels"] = torch.zeros(
-                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
-                )
-        return inputs_dict
 
     def setUp(self):
         self.model_tester = GPT2ModelTester(self)
@@ -483,24 +445,11 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         ]
 
         inputs = tokenizer(sentences, return_tensors="pt", padding=True)
-        input_ids = inputs["input_ids"].to(torch_device)
-        token_type_ids = torch.cat(
-            [
-                input_ids.new_full((input_ids.shape[0], input_ids.shape[1] - 1), 0),
-                input_ids.new_full((input_ids.shape[0], 1), 500),
-            ],
-            dim=-1,
-        )
 
+        torch.manual_seed(0)
         outputs = model.generate(
-            input_ids=input_ids,
+            input_ids=inputs["input_ids"].to(torch_device),
             attention_mask=inputs["attention_mask"].to(torch_device),
-        )
-
-        outputs_tt = model.generate(
-            input_ids=input_ids,
-            attention_mask=inputs["attention_mask"].to(torch_device),
-            token_type_ids=token_type_ids,
         )
 
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
@@ -511,7 +460,6 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
 
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        batch_out_sentence_tt = tokenizer.batch_decode(outputs_tt, skip_special_tokens=True)
         non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
 
@@ -520,67 +468,6 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             "Today, I'm going to be doing a lot of research on this. I",
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
-        self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
-        self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
-
-    @slow
-    def test_batch_generation_2heads(self):
-        model = GPT2DoubleHeadsModel.from_pretrained("gpt2")
-        model.to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-
-        tokenizer.padding_side = "left"
-
-        # This tokenizer has no pad token, so we have to set it in some way
-        # Define PAD Token = EOS Token = 50256
-        tokenizer.pad_token = tokenizer.eos_token
-        model.config.pad_token_id = model.config.eos_token_id
-
-        # use different length sentences to test batching
-        sentences = [
-            "Hello, my dog is a little",
-            "Today, I",
-        ]
-
-        inputs = tokenizer(sentences, return_tensors="pt", padding=True)
-        input_ids = inputs["input_ids"].to(torch_device)
-        token_type_ids = torch.cat(
-            [
-                input_ids.new_full((input_ids.shape[0], input_ids.shape[1] - 1), 0),
-                input_ids.new_full((input_ids.shape[0], 1), 500),
-            ],
-            dim=-1,
-        )
-
-        outputs = model.generate(
-            input_ids=input_ids,
-            attention_mask=inputs["attention_mask"].to(torch_device),
-        )
-
-        outputs_tt = model.generate(
-            input_ids=input_ids,
-            attention_mask=inputs["attention_mask"].to(torch_device),
-            token_type_ids=token_type_ids,
-        )
-
-        inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
-        output_non_padded = model.generate(input_ids=inputs_non_padded)
-
-        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
-        inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
-        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
-
-        batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        batch_out_sentence_tt = tokenizer.batch_decode(outputs_tt, skip_special_tokens=True)
-        non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
-        padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
-
-        expected_output_sentence = [
-            "Hello, my dog is a little bit of a mess. I'm not sure if he's going",
-            "Today, I'm going to be doing a lot of research on this. I",
-        ]
-        self.assertListEqual(expected_output_sentence, batch_out_sentence)
-        self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
         self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
 
     @slow
@@ -624,70 +511,32 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
 
     @slow
-    def test_gpt2_sample(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        model = GPT2LMHeadModel.from_pretrained("gpt2")
+    def test_lm_generate_distilgpt2(self):
+        model = GPT2LMHeadModel.from_pretrained("distilgpt2")
         model.to(torch_device)
+        input_ids = torch.tensor([[464, 1893]], dtype=torch.long, device=torch_device)  # The president
+        expected_output_ids = [
+            464,
+            1893,
+            286,
+            262,
+            1578,
+            1829,
+            11,
+            290,
+            262,
+            1893,
+            286,
+            262,
+            1578,
+            7526,
+            11,
+            423,
+            587,
+            287,
+            262,
+            2635,
+        ]  # The president of the United States, and the president of the United Kingdom, have been in the White
 
-        torch.manual_seed(0)
-        tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
-        input_ids = tokenized.input_ids.to(torch_device)
-        output_ids = model.generate(input_ids, do_sample=True)
-        output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-
-        token_type_ids = tokenized.token_type_ids.to(torch_device)
-        output_seq = model.generate(input_ids=input_ids, do_sample=True, num_return_sequences=5)
-        output_seq_tt = model.generate(
-            input_ids=input_ids, token_type_ids=token_type_ids, do_sample=True, num_return_sequences=5
-        )
-        output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
-        output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
-
-        EXPECTED_OUTPUT_STR = (
-            "Today is a nice day and if you don't know anything about the state of play during your holiday"
-        )
-        self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
-        self.assertTrue(
-            all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
-        )  # token_type_ids should change output
-
-    @slow
-    def test_gpt2_sample_max_time(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        model = GPT2LMHeadModel.from_pretrained("gpt2")
-        model.to(torch_device)
-
-        torch.manual_seed(0)
-        tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
-        input_ids = tokenized.input_ids.to(torch_device)
-
-        MAX_TIME = 0.5
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=True, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, num_beams=2, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=True, num_beams=2, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+        output_ids = model.generate(input_ids, do_sample=False)
+        self.assertListEqual(output_ids[0].tolist(), expected_output_ids)

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2018 The Google AI Language Team Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow
 
 
 if is_torch_available():
@@ -28,11 +28,10 @@ if is_torch_available():
 
 @require_sentencepiece
 @require_tokenizers
-@require_torch
 class XLMRobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_xlm_roberta_base(self):
-        model = XLMRobertaModel.from_pretrained("xlm-roberta-base")
+        model = XLMRobertaModel.from_pretrained("xlm-roberta-base", return_dict=True)
         input_ids = torch.tensor([[0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2]])
         # The dog is cute and lives in the garden house
 
@@ -51,7 +50,7 @@ class XLMRobertaModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_xlm_roberta_large(self):
-        model = XLMRobertaModel.from_pretrained("xlm-roberta-large")
+        model = XLMRobertaModel.from_pretrained("xlm-roberta-large", return_dict=True)
         input_ids = torch.tensor([[0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2]])
         # The dog is cute and lives in the garden house
 

@@ -1,20 +1,5 @@
-# Copyright 2020 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import os
 import time
-import warnings
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional, Union
@@ -38,8 +23,9 @@ class GlueDataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
 
-    Using `HfArgumentParser` we can turn this class into argparse arguments to be able to specify them on the command
-    line.
+    Using `HfArgumentParser` we can turn this class
+    into argparse arguments to be able to specify them on
+    the command line.
     """
 
     task_name: str = field(metadata={"help": "The name of the task to train on: " + ", ".join(glue_processors.keys())})
@@ -69,7 +55,8 @@ class Split(Enum):
 
 class GlueDataset(Dataset):
     """
-    This will be superseded by a framework-agnostic approach soon.
+    This will be superseded by a framework-agnostic approach
+    soon.
     """
 
     args: GlueDataTrainingArguments
@@ -84,12 +71,6 @@ class GlueDataset(Dataset):
         mode: Union[str, Split] = Split.train,
         cache_dir: Optional[str] = None,
     ):
-        warnings.warn(
-            "This dataset will be removed from the library soon, preprocessing should be handled with the 🤗 Datasets "
-            "library. You can have a look at this example script for pointers: "
-            "https://github.com/huggingface/transformers/blob/master/examples/pytorch/text-classification/run_glue.py",
-            FutureWarning,
-        )
         self.args = args
         self.processor = glue_processors[args.task_name]()
         self.output_mode = glue_output_modes[args.task_name]
@@ -101,7 +82,12 @@ class GlueDataset(Dataset):
         # Load data features from cache or dataset file
         cached_features_file = os.path.join(
             cache_dir if cache_dir is not None else args.data_dir,
-            f"cached_{mode.value}_{tokenizer.__class__.__name__}_{args.max_seq_length}_{args.task_name}",
+            "cached_{}_{}_{}_{}".format(
+                mode.value,
+                tokenizer.__class__.__name__,
+                str(args.max_seq_length),
+                args.task_name,
+            ),
         )
         label_list = self.processor.get_labels()
         if args.task_name in ["mnli", "mnli-mm"] and tokenizer.__class__.__name__ in (
@@ -148,7 +134,7 @@ class GlueDataset(Dataset):
                 torch.save(self.features, cached_features_file)
                 # ^ This seems to take a lot of time so I want to investigate why and how we can improve.
                 logger.info(
-                    f"Saving features into cached file {cached_features_file} [took {time.time() - start:.3f} s]"
+                    "Saving features into cached file %s [took %.3f s]", cached_features_file, time.time() - start
                 )
 
     def __len__(self):

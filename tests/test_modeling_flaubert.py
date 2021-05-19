@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2018 The Google AI Language Team Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,8 +24,6 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 
 
 if is_torch_available():
-    import torch
-
     from transformers import (
         FlaubertConfig,
         FlaubertForMultipleChoice,
@@ -36,7 +34,7 @@ if is_torch_available():
         FlaubertModel,
         FlaubertWithLMHeadModel,
     )
-    from transformers.models.flaubert.modeling_flaubert import FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.modeling_flaubert import FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class FlaubertModelTester(object):
@@ -113,6 +111,7 @@ class FlaubertModelTester(object):
             initializer_range=self.initializer_range,
             summary_type=self.summary_type,
             use_proj=self.use_proj,
+            return_dict=True,
         )
 
         return (
@@ -344,21 +343,6 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
 
-    # Flaubert has 2 QA models -> need to manually set the correct labels for one of them here
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
-
-        if return_labels:
-            if model_class.__name__ == "FlaubertForQuestionAnswering":
-                inputs_dict["start_positions"] = torch.zeros(
-                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
-                )
-                inputs_dict["end_positions"] = torch.zeros(
-                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
-                )
-
-        return inputs_dict
-
     def setUp(self):
         self.model_tester = FlaubertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=FlaubertConfig, emb_dim=37)
@@ -399,19 +383,3 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = FlaubertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-
-@require_torch
-class FlaubertModelIntegrationTest(unittest.TestCase):
-    @slow
-    def test_inference_no_head_absolute_embedding(self):
-        model = FlaubertModel.from_pretrained("flaubert/flaubert_base_cased")
-        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
-        output = model(input_ids)[0]
-        expected_shape = torch.Size((1, 11, 768))
-        self.assertEqual(output.shape, expected_shape)
-        expected_slice = torch.tensor(
-            [[[-2.6251, -1.4298, -0.0227], [-2.8510, -1.6387, 0.2258], [-2.8114, -1.1832, -0.3066]]]
-        )
-
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))

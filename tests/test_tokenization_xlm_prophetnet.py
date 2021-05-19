@@ -13,12 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import os
 import unittest
 
 from transformers.file_utils import cached_property
-from transformers.models.xlm_prophetnet.tokenization_xlm_prophetnet import SPIECE_UNDERLINE, XLMProphetNetTokenizer
-from transformers.testing_utils import require_sentencepiece, slow
+from transformers.testing_utils import slow
+from transformers.tokenization_xlm_prophetnet import SPIECE_UNDERLINE, XLMProphetNetTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -26,12 +27,10 @@ from .test_tokenization_common import TokenizerTesterMixin
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
 
 
-@require_sentencepiece
 class XLMProphetNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = XLMProphetNetTokenizer
     test_rust_tokenizer = False
-    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()

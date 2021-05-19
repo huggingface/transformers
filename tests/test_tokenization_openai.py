@@ -19,8 +19,8 @@ import os
 import unittest
 
 from transformers import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
-from transformers.models.openai.tokenization_openai import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers
+from transformers.tokenization_openai import VOCAB_FILES_NAMES
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -31,7 +31,6 @@ class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = OpenAIGPTTokenizer
     rust_tokenizer_class = OpenAIGPTTokenizerFast
     test_rust_tokenizer = True
-    test_seq2seq = False
 
     def setUp(self):
         super().setUp()
@@ -87,7 +86,7 @@ class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_padding(self, max_length=15):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+            with self.subTest("{} ({})".format(tokenizer.__class__.__name__, pretrained_name)):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
                 # Simple input
@@ -128,7 +127,3 @@ class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     max_length=max_length,
                     padding="max_length",
                 )
-
-    # tokenizer has no padding token
-    def test_padding_different_model_input_name(self):
-        pass

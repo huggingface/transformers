@@ -1,20 +1,7 @@
-# This file is adapted from the AllenNLP library at https://github.com/allenai/allennlp
-
-# Copyright 2020 The HuggingFace Team and the AllenNLP authors. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """
 Utilities for working with the local dataset cache.
+This file is adapted from the AllenNLP library at https://github.com/allenai/allennlp
+Copyright by the AllenNLP authors.
 """
 
 import copy
@@ -30,8 +17,9 @@ from multiprocessing import Pipe, Process, Queue
 from multiprocessing.connection import Connection
 from typing import Callable, Iterable, List, NamedTuple, Optional, Union
 
-from .. import AutoConfig, PretrainedConfig
-from .. import __version__ as version
+from transformers import AutoConfig, PretrainedConfig
+from transformers import __version__ as version
+
 from ..file_utils import is_psutil_available, is_py3nvml_available, is_tf_available, is_torch_available
 from ..utils import logging
 from .benchmark_args_utils import BenchmarkArguments
@@ -75,13 +63,15 @@ BenchmarkOutput = namedtuple(
 
 def separate_process_wrapper_fn(func: Callable[[], None], do_multi_processing: bool) -> Callable[[], None]:
     """
-    This function wraps another function into its own separated process. In order to ensure accurate memory
-    measurements it is important that the function is executed in a separate process
+    This function wraps another function into its own separated process.
+    In order to ensure accurate memory measurements it is important that the function
+    is executed in a separate process
 
     Args:
-
-        - `func`: (`callable`): function() -> ... generic function which will be executed in its own separate process
-        - `do_multi_processing`: (`bool`) Whether to run function on separate process or not
+        - `func`: (`callable`): function() -> ...
+            generic function which will be executed in its own separate process
+        - `do_multi_processing`: (`bool`)
+            Whether to run function on separate process or not
     """
 
     def multi_process_func(*args, **kwargs):
@@ -116,14 +106,13 @@ def is_memory_tracing_enabled():
 
 
 class Frame(NamedTuple):
-    """
-    `Frame` is a NamedTuple used to gather the current frame state. `Frame` has the following fields:
-
-        - 'filename' (string): Name of the file currently executed
-        - 'module' (string): Name of the module currently executed
-        - 'line_number' (int): Number of the line currently executed
-        - 'event' (string): Event that triggered the tracing (default will be "line")
-        - 'line_text' (string): Text of the line in the python script
+    """`Frame` is a NamedTuple used to gather the current frame state.
+    `Frame` has the following fields:
+    - 'filename' (string): Name of the file currently executed
+    - 'module' (string): Name of the module currently executed
+    - 'line_number' (int): Number of the line currently executed
+    - 'event' (string): Event that triggered the tracing (default will be "line")
+    - 'line_text' (string): Text of the line in the python script
     """
 
     filename: str
@@ -134,14 +123,10 @@ class Frame(NamedTuple):
 
 
 class UsedMemoryState(NamedTuple):
-    """
-    `UsedMemoryState` are named tuples with the following fields:
-
-        - 'frame': a `Frame` namedtuple (see below) storing information on the current tracing frame (current file,
-          location in current file)
-        - 'cpu_memory': CPU RSS memory state *before* executing the line
-        - 'gpu_memory': GPU used memory *before* executing the line (sum for all GPUs or for only `gpus_to_trace` if
-          provided)
+    """`UsedMemoryState` are named tuples with the following fields:
+    - 'frame': a `Frame` namedtuple (see below) storing information on the current tracing frame (current file, location in current file)
+    - 'cpu_memory': CPU RSS memory state *before* executing the line
+    - 'gpu_memory': GPU used memory *before* executing the line (sum for all GPUs or for only `gpus_to_trace` if provided)
     """
 
     frame: Frame
@@ -150,10 +135,8 @@ class UsedMemoryState(NamedTuple):
 
 
 class Memory(NamedTuple):
-    """
-    `Memory` NamedTuple have a single field `bytes` and you can get a human readable str of the number of mega bytes by
-    calling `__repr__`
-
+    """`Memory` NamedTuple have a single field `bytes` and
+    you can get a human readable str of the number of mega bytes by calling `__repr__`
         - `byte` (integer): number of bytes,
     """
 
@@ -164,13 +147,11 @@ class Memory(NamedTuple):
 
 
 class MemoryState(NamedTuple):
-    """
-    `MemoryState` are namedtuples listing frame + CPU/GPU memory with the following fields:
-
-        - `frame` (`Frame`): the current frame (see above)
-        - `cpu`: CPU memory consumed at during the current frame as a `Memory` named tuple
-        - `gpu`: GPU memory consumed at during the current frame as a `Memory` named tuple
-        - `cpu_gpu`: CPU + GPU memory consumed at during the current frame as a `Memory` named tuple
+    """`MemoryState` are namedtuples listing frame + CPU/GPU memory with the following fields:
+    - `frame` (`Frame`): the current frame (see above)
+    - `cpu`: CPU memory consumed at during the current frame as a `Memory` named tuple
+    - `gpu`: GPU memory consumed at during the current frame as a `Memory` named tuple
+    - `cpu_gpu`: CPU + GPU memory consumed at during the current frame as a `Memory` named tuple
     """
 
     frame: Frame
@@ -180,17 +161,14 @@ class MemoryState(NamedTuple):
 
 
 class MemorySummary(NamedTuple):
-    """
-    `MemorySummary` namedtuple otherwise with the fields:
-
-        - `sequential`: a list of `MemoryState` namedtuple (see below) computed from the provided `memory_trace` by
-          subtracting the memory after executing each line from the memory before executing said line.
-        - `cumulative`: a list of `MemoryState` namedtuple (see below) with cumulative increase in memory for each line
-          obtained by summing repeated memory increase for a line if it's executed several times. The list is sorted
-          from the frame with the largest memory consumption to the frame with the smallest (can be negative if memory
-          is released)
-        - `total`: total memory increase during the full tracing as a `Memory` named tuple (see below). Line with
-          memory release (negative consumption) are ignored if `ignore_released_memory` is `True` (default).
+    """`MemorySummary` namedtuple otherwise with the fields:
+    - `sequential`: a list of `MemoryState` namedtuple (see below) computed from the provided `memory_trace`
+        by substracting the memory after executing each line from the memory before executing said line.
+    - `cumulative`: a list of `MemoryState` namedtuple (see below) with cumulative increase in memory for each line
+        obtained by summing repeated memory increase for a line if it's executed several times.
+        The list is sorted from the frame with the largest memory consumption to the frame with the smallest (can be negative if memory is released)
+    - `total`: total memory increase during the full tracing as a `Memory` named tuple (see below).
+        Line with memory release (negative consumption) are ignored if `ignore_released_memory` is `True` (default).
     """
 
     sequential: List[MemoryState]
@@ -204,23 +182,25 @@ MemoryTrace = List[UsedMemoryState]
 
 def measure_peak_memory_cpu(function: Callable[[], None], interval=0.5, device_idx=None) -> int:
     """
-    measures peak cpu memory consumption of a given `function` running the function for at least interval seconds and
-    at most 20 * interval seconds. This function is heavily inspired by: `memory_usage` of the package
-    `memory_profiler`:
-    https://github.com/pythonprofilers/memory_profiler/blob/895c4ac7a08020d66ae001e24067da6dcea42451/memory_profiler.py#L239
+    measures peak cpu memory consumption of a given `function`
+    running the function for at least interval seconds
+    and at most 20 * interval seconds.
+    This function is heavily inspired by: `memory_usage`
+    of the package `memory_profiler`: https://github.com/pythonprofilers/memory_profiler/blob/895c4ac7a08020d66ae001e24067da6dcea42451/memory_profiler.py#L239
 
     Args:
+        - `function`: (`callable`): function() -> ...
+            function without any arguments to measure for which to measure the peak memory
 
-        - `function`: (`callable`): function() -> ... function without any arguments to measure for which to measure
-          the peak memory
+        - `interval`: (`float`, `optional`, defaults to `0.5`)
+            interval in second for which to measure the memory usage
 
-        - `interval`: (`float`, `optional`, defaults to `0.5`) interval in second for which to measure the memory usage
-
-        - `device_idx`: (`int`, `optional`, defaults to `None`) device id for which to measure gpu usage
+        - `device_idx`: (`int`, `optional`, defaults to `None`)
+            device id for which to measure gpu usage
 
     Returns:
-
-        - `max_memory`: (`int`) consumed memory peak in Bytes
+        - `max_memory`: (`int`)
+            cosumed memory peak in Bytes
     """
 
     def get_cpu_memory(process_id: int) -> int:
@@ -228,12 +208,12 @@ def measure_peak_memory_cpu(function: Callable[[], None], interval=0.5, device_i
         measures current cpu memory usage of a given `process_id`
 
         Args:
-
-            - `process_id`: (`int`) process_id for which to measure memory
+            - `process_id`: (`int`)
+                process_id for which to measure memory
 
         Returns
-
-            - `memory`: (`int`) consumed memory in Bytes
+            - `memory`: (`int`)
+                cosumed memory in Bytes
         """
         process = psutil.Process(process_id)
         try:
@@ -254,8 +234,8 @@ def measure_peak_memory_cpu(function: Callable[[], None], interval=0.5, device_i
         class MemoryMeasureProcess(Process):
 
             """
-            `MemoryMeasureProcess` inherits from `Process` and overwrites its `run()` method. Used to measure the
-            memory usage of a process
+            `MemoryMeasureProcess` inherits from `Process` and overwrites
+            its `run()` method. Used to measure the memory usage of a process
             """
 
             def __init__(self, process_id: int, child_connection: Connection, interval: float):
@@ -329,39 +309,37 @@ def start_memory_tracing(
     events_to_trace: str = "line",
     gpus_to_trace: Optional[List[int]] = None,
 ) -> MemoryTrace:
-    """
-    Setup line-by-line tracing to record rss mem (RAM) at each line of a module or sub-module. See `./benchmark.py` for
-    usage examples. Current memory consumption is returned using psutil and in particular is the RSS memory "Resident
-    Set Size” (the non-swapped physical memory the process is using). See
-    https://psutil.readthedocs.io/en/latest/#psutil.Process.memory_info
+    """Setup line-by-line tracing to record rss mem (RAM) at each line of a module or sub-module.
+    See `./benchmark.py` for usage examples.
+    Current memory consumption is returned using psutil and in particular is the RSS memory
+        "Resident Set Size” (the non-swapped physical memory the process is using).
+        See https://psutil.readthedocs.io/en/latest/#psutil.Process.memory_info
 
     Args:
-
-        - `modules_to_trace`: (None, string, list/tuple of string) if None, all events are recorded if string or list
-          of strings: only events from the listed module/sub-module will be recorded (e.g. 'fairseq' or
-          'transformers.models.gpt2.modeling_gpt2')
-        - `modules_not_to_trace`: (None, string, list/tuple of string) if None, no module is avoided if string or list
-          of strings: events from the listed module/sub-module will not be recorded (e.g. 'torch')
-        - `events_to_trace`: string or list of string of events to be recorded (see official python doc for
-          `sys.settrace` for the list of events) default to line
+        - `modules_to_trace`: (None, string, list/tuple of string)
+            if None, all events are recorded
+            if string or list of strings: only events from the listed module/sub-module will be recorded (e.g. 'fairseq' or 'transformers.modeling_gpt2')
+        - `modules_not_to_trace`: (None, string, list/tuple of string)
+            if None, no module is avoided
+            if string or list of strings: events from the listed module/sub-module will not be recorded (e.g. 'torch')
+        - `events_to_trace`: string or list of string of events to be recorded (see official python doc for `sys.settrace` for the list of events)
+            default to line
         - `gpus_to_trace`: (optional list, default None) list of GPUs to trace. Default to tracing all GPUs
 
     Return:
-
         - `memory_trace` is a list of `UsedMemoryState` for each event (default each line of the traced script).
-
             - `UsedMemoryState` are named tuples with the following fields:
-
-                - 'frame': a `Frame` namedtuple (see below) storing information on the current tracing frame (current
-                  file, location in current file)
+                - 'frame': a `Frame` namedtuple (see below) storing information on the current tracing frame (current file, location in current file)
                 - 'cpu_memory': CPU RSS memory state *before* executing the line
-                - 'gpu_memory': GPU used memory *before* executing the line (sum for all GPUs or for only
-                  `gpus_to_trace` if provided)
+                - 'gpu_memory': GPU used memory *before* executing the line (sum for all GPUs or for only `gpus_to_trace` if provided)
 
-    `Frame` is a namedtuple used by `UsedMemoryState` to list the current frame state. `Frame` has the following
-    fields: - 'filename' (string): Name of the file currently executed - 'module' (string): Name of the module
-    currently executed - 'line_number' (int): Number of the line currently executed - 'event' (string): Event that
-    triggered the tracing (default will be "line") - 'line_text' (string): Text of the line in the python script
+    `Frame` is a namedtuple used by `UsedMemoryState` to list the current frame state.
+        `Frame` has the following fields:
+        - 'filename' (string): Name of the file currently executed
+        - 'module' (string): Name of the module currently executed
+        - 'line_number' (int): Number of the line currently executed
+        - 'event' (string): Event that triggered the tracing (default will be "line")
+        - 'line_text' (string): Text of the line in the python script
 
     """
     if is_psutil_available():
@@ -379,7 +357,7 @@ def start_memory_tracing(
             devices = list(range(nvml.nvmlDeviceGetCount())) if gpus_to_trace is None else gpus_to_trace
             nvml.nvmlShutdown()
         except (OSError, nvml.NVMLError):
-            logger.warning("Error while initializing communication with GPU. " "We won't perform GPU memory tracing.")
+            logger.warning("Error while initializing comunication with GPU. " "We won't perform GPU memory tracing.")
             log_gpu = False
         else:
             log_gpu = is_torch_available() or is_tf_available()
@@ -393,9 +371,8 @@ def start_memory_tracing(
     memory_trace = []
 
     def traceit(frame, event, args):
-        """
-        Tracing method executed before running each line in a module or sub-module Record memory allocated in a list
-        with debugging information
+        """Tracing method executed before running each line in a module or sub-module
+        Record memory allocated in a list with debugging information
         """
         global _is_memory_tracing_enabled
 
@@ -479,37 +456,28 @@ def start_memory_tracing(
 def stop_memory_tracing(
     memory_trace: Optional[MemoryTrace] = None, ignore_released_memory: bool = True
 ) -> Optional[MemorySummary]:
-    """
-    Stop memory tracing cleanly and return a summary of the memory trace if a trace is given.
+    """Stop memory tracing cleanly and return a summary of the memory trace if a trace is given.
 
     Args:
-
-        `memory_trace` (optional output of start_memory_tracing, default: None):
-            memory trace to convert in summary
-        `ignore_released_memory` (boolean, default: None):
-            if True we only sum memory increase to compute total memory
+        - `memory_trace` (optional output of start_memory_tracing, default: None): memory trace to convert in summary
+        - `ignore_released_memory` (boolean, default: None): if True we only sum memory increase to compute total memory
 
     Return:
-
         - None if `memory_trace` is None
         - `MemorySummary` namedtuple otherwise with the fields:
-
-            - `sequential`: a list of `MemoryState` namedtuple (see below) computed from the provided `memory_trace` by
-              subtracting the memory after executing each line from the memory before executing said line.
-            - `cumulative`: a list of `MemoryState` namedtuple (see below) with cumulative increase in memory for each
-              line obtained by summing repeated memory increase for a line if it's executed several times. The list is
-              sorted from the frame with the largest memory consumption to the frame with the smallest (can be negative
-              if memory is released)
-            - `total`: total memory increase during the full tracing as a `Memory` named tuple (see below). Line with
-              memory release (negative consumption) are ignored if `ignore_released_memory` is `True` (default).
+            - `sequential`: a list of `MemoryState` namedtuple (see below) computed from the provided `memory_trace`
+                by substracting the memory after executing each line from the memory before executing said line.
+            - `cumulative`: a list of `MemoryState` namedtuple (see below) with cumulative increase in memory for each line
+                obtained by summing repeated memory increase for a line if it's executed several times.
+                The list is sorted from the frame with the largest memory consumption to the frame with the smallest (can be negative if memory is released)
+            - `total`: total memory increase during the full tracing as a `Memory` named tuple (see below).
+                Line with memory release (negative consumption) are ignored if `ignore_released_memory` is `True` (default).
 
     `Memory` named tuple have fields
-
         - `byte` (integer): number of bytes,
         - `string` (string): same as human readable string (ex: "3.5MB")
 
     `Frame` are namedtuple used to list the current frame state and have the following fields:
-
         - 'filename' (string): Name of the file currently executed
         - 'module' (string): Name of the module currently executed
         - 'line_number' (int): Number of the line currently executed
@@ -517,7 +485,6 @@ def stop_memory_tracing(
         - 'line_text' (string): Text of the line in the python script
 
     `MemoryState` are namedtuples listing frame + CPU/GPU memory with the following fields:
-
         - `frame` (`Frame`): the current frame (see above)
         - `cpu`: CPU memory consumed at during the current frame as a `Memory` named tuple
         - `gpu`: GPU memory consumed at during the current frame as a `Memory` named tuple
@@ -600,8 +567,8 @@ def bytes_to_mega_bytes(memory_amount: int) -> int:
 
 class Benchmark(ABC):
     """
-    Benchmarks is a simple but feature-complete benchmarking script to compare memory and time performance of models in
-    Transformers.
+    Benchmarks is a simple but feature-complete benchmarking script
+    to compare memory and time performance of models in Transformers.
     """
 
     args: BenchmarkArguments
@@ -758,7 +725,9 @@ class Benchmark(ABC):
 
         if self.args.env_print:
             self.print_fn("\n" + 20 * "=" + ("ENVIRONMENT INFORMATION").center(40) + 20 * "=")
-            self.print_fn("\n".join([f"- {prop}: {val}" for prop, val in self.environment_info.items()]) + "\n")
+            self.print_fn(
+                "\n".join(["- {}: {}".format(prop, val) for prop, val in self.environment_info.items()]) + "\n"
+            )
 
         if self.args.save_to_csv:
             with open(self.args.env_info_csv_file, mode="w", newline="") as csv_file:
@@ -886,7 +855,9 @@ class Benchmark(ABC):
         self.print_fn("Saving results to csv.")
         with open(filename, mode="w") as csv_file:
 
-            assert len(self.args.model_names) > 0, f"At least 1 model should be defined, but got {self.model_names}"
+            assert len(self.args.model_names) > 0, "At least 1 model should be defined, but got {}".format(
+                self.model_names
+            )
 
             fieldnames = ["model", "batch_size", "sequence_length"]
             writer = csv.DictWriter(csv_file, fieldnames=fieldnames + ["result"])

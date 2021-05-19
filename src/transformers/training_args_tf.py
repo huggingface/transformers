@@ -1,17 +1,3 @@
-# Copyright 2020 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import warnings
 from dataclasses import dataclass, field
 from typing import Tuple
@@ -30,12 +16,11 @@ if is_tf_available():
 @dataclass
 class TFTrainingArguments(TrainingArguments):
     """
-    TrainingArguments is the subset of the arguments we use in our example scripts **which relate to the training loop
-    itself**.
+    TrainingArguments is the subset of the arguments we use in our example scripts
+    **which relate to the training loop itself**.
 
-    Using :class:`~transformers.HfArgumentParser` we can turn this class into `argparse
-    <https://docs.python.org/3/library/argparse.html#module-argparse>`__ arguments that can be specified on the command
-    line.
+    Using :class:`~transformers.HfArgumentParser` we can turn this class
+    into argparse arguments to be able to specify them on the command line.
 
     Parameters:
         output_dir (:obj:`str`):
@@ -44,27 +29,13 @@ class TFTrainingArguments(TrainingArguments):
             If :obj:`True`, overwrite the content of the output directory. Use this to continue training if
             :obj:`output_dir` points to a checkpoint directory.
         do_train (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to run training or not. This argument is not directly used by :class:`~transformers.Trainer`, it's
-            intended to be used by your training/evaluation scripts instead. See the `example scripts
-            <https://github.com/huggingface/transformers/tree/master/examples>`__ for more details.
-        do_eval (:obj:`bool`, `optional`):
-            Whether to run evaluation on the validation set or not. Will be set to :obj:`True` if
-            :obj:`evaluation_strategy` is different from :obj:`"no"`. This argument is not directly used by
-            :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
-            the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
-            details.
+            Whether to run training or not.
+        do_eval (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to run evaluation on the dev set or not.
         do_predict (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to run predictions on the test set or not. This argument is not directly used by
-            :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
-            the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
-            details.
-        evaluation_strategy (:obj:`str` or :class:`~transformers.trainer_utils.IntervalStrategy`, `optional`, defaults to :obj:`"no"`):
-            The evaluation strategy to adopt during training. Possible values are:
-
-                * :obj:`"no"`: No evaluation is done during training.
-                * :obj:`"steps"`: Evaluation is done (and logged) every :obj:`eval_steps`.
-                * :obj:`"epoch"`: Evaluation is done at the end of each epoch.
-
+            Whether to run predictions on the test set or not.
+        evaluate_during_training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to run evaluation during training at each logging step or not.
         per_device_train_batch_size (:obj:`int`, `optional`, defaults to 8):
             The batch size per GPU/TPU core/CPU for training.
         per_device_eval_batch_size (:obj:`int`, `optional`, defaults to 8):
@@ -81,12 +52,8 @@ class TFTrainingArguments(TrainingArguments):
             The initial learning rate for Adam.
         weight_decay (:obj:`float`, `optional`, defaults to 0):
             The weight decay to apply (if not zero).
-        adam_beta1 (:obj:`float`, `optional`, defaults to 0.9):
-            The beta1 hyperparameter for the Adam optimizer.
-        adam_beta2 (:obj:`float`, `optional`, defaults to 0.999):
-            The beta2 hyperparameter for the Adam optimizer.
         adam_epsilon (:obj:`float`, `optional`, defaults to 1e-8):
-            The epsilon hyperparameter for the Adam optimizer.
+            Epsilon for the Adam optimizer.
         max_grad_norm (:obj:`float`, `optional`, defaults to 1.0):
             Maximum gradient norm (for gradient clipping).
         num_train_epochs(:obj:`float`, `optional`, defaults to 3.0):
@@ -94,46 +61,28 @@ class TFTrainingArguments(TrainingArguments):
         max_steps (:obj:`int`, `optional`, defaults to -1):
             If set to a positive number, the total number of training steps to perform. Overrides
             :obj:`num_train_epochs`.
-        warmup_ratio (:obj:`float`, `optional`, defaults to 0.0):
-            Ratio of total training steps used for a linear warmup from 0 to :obj:`learning_rate`.
         warmup_steps (:obj:`int`, `optional`, defaults to 0):
-            Number of steps used for a linear warmup from 0 to :obj:`learning_rate`. Overrides any effect of
-            :obj:`warmup_ratio`.
+            Number of steps used for a linear warmup from 0 to :obj:`learning_rate`.
         logging_dir (:obj:`str`, `optional`):
-            `TensorBoard <https://www.tensorflow.org/tensorboard>`__ log directory. Will default to
-            `runs/**CURRENT_DATETIME_HOSTNAME**`.
-        logging_strategy (:obj:`str` or :class:`~transformers.trainer_utils.IntervalStrategy`, `optional`, defaults to :obj:`"steps"`):
-            The logging strategy to adopt during training. Possible values are:
-
-                * :obj:`"no"`: No logging is done during training.
-                * :obj:`"epoch"`: Logging is done at the end of each epoch.
-                * :obj:`"steps"`: Logging is done every :obj:`logging_steps`.
-
+            Tensorboard log directory. Will default to `runs/**CURRENT_DATETIME_HOSTNAME**`.
         logging_first_step (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to log and evaluate the first :obj:`global_step` or not.
         logging_steps (:obj:`int`, `optional`, defaults to 500):
-            Number of update steps between two logs if :obj:`logging_strategy="steps"`.
-        save_strategy (:obj:`str` or :class:`~transformers.trainer_utils.IntervalStrategy`, `optional`, defaults to :obj:`"steps"`):
-            The checkpoint save strategy to adopt during training. Possible values are:
-
-                * :obj:`"no"`: No save is done during training.
-                * :obj:`"epoch"`: Save is done at the end of each epoch.
-                * :obj:`"steps"`: Save is done every :obj:`save_steps`.
-
+            Number of update steps between two logs.
         save_steps (:obj:`int`, `optional`, defaults to 500):
-            Number of updates steps before two checkpoint saves if :obj:`save_strategy="steps"`.
+            Number of updates steps before two checkpoint saves.
         save_total_limit (:obj:`int`, `optional`):
             If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in
             :obj:`output_dir`.
         no_cuda (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to not use CUDA even when it is available or not.
         seed (:obj:`int`, `optional`, defaults to 42):
-            Random seed that will be set at the beginning of training.
+            Random seed for initialization.
         fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to use 16-bit (mixed) precision training (through NVIDIA Apex) instead of 32-bit training.
+            Whether to use 16-bit (mixed) precision training (through NVIDIA apex) instead of 32-bit training.
         fp16_opt_level (:obj:`str`, `optional`, defaults to 'O1'):
-            For :obj:`fp16` training, Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details
-            on the `Apex documentation <https://nvidia.github.io/apex/amp.html>`__.
+            For :obj:`fp16` training, apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details
+            on the `apex documentation <https://nvidia.github.io/apex/amp.html>`__.
         local_rank (:obj:`int`, `optional`, defaults to -1):
             During distributed training, the rank of the process.
         tpu_num_cores (:obj:`int`, `optional`):
@@ -152,12 +101,6 @@ class TFTrainingArguments(TrainingArguments):
             at the next training step under the keyword argument ``mems``.
         tpu_name (:obj:`str`, `optional`):
             The name of the TPU the process is running on.
-        tpu_zone (:obj:`str`, `optional`):
-            The zone of the TPU the process is running on. If not specified, we will attempt to automatically detect
-            from metadata.
-        gcp_project (:obj:`str`, `optional`):
-            Google Cloud Project name for the Cloud TPU-enabled project. If not specified, we will attempt to
-            automatically detect from metadata.
         run_name (:obj:`str`, `optional`):
             A descriptor for the run. Notably used for wandb logging.
         xla (:obj:`bool`, `optional`):
@@ -167,16 +110,6 @@ class TFTrainingArguments(TrainingArguments):
     tpu_name: str = field(
         default=None,
         metadata={"help": "Name of TPU"},
-    )
-
-    tpu_zone: str = field(
-        default=None,
-        metadata={"help": "Zone of TPU"},
-    )
-
-    gcp_project: str = field(
-        default=None,
-        metadata={"help": "Name of Cloud TPU-enabled project"},
     )
 
     poly_power: float = field(
@@ -206,16 +139,11 @@ class TFTrainingArguments(TrainingArguments):
         else:
             try:
                 if self.tpu_name:
-                    tpu = tf.distribute.cluster_resolver.TPUClusterResolver(
-                        self.tpu_name, zone=self.tpu_zone, project=self.gcp_project
-                    )
+                    tpu = tf.distribute.cluster_resolver.TPUClusterResolver(self.tpu_name)
                 else:
                     tpu = tf.distribute.cluster_resolver.TPUClusterResolver()
             except ValueError:
-                if self.tpu_name:
-                    raise RuntimeError(f"Couldn't connect to TPU {self.tpu_name}!")
-                else:
-                    tpu = None
+                tpu = None
 
             if tpu:
                 # Set to bfloat16 in case of TPU
@@ -226,7 +154,7 @@ class TFTrainingArguments(TrainingArguments):
                 tf.config.experimental_connect_to_cluster(tpu)
                 tf.tpu.experimental.initialize_tpu_system(tpu)
 
-                strategy = tf.distribute.TPUStrategy(tpu)
+                strategy = tf.distribute.experimental.TPUStrategy(tpu)
 
             elif len(gpus) == 0:
                 strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
@@ -236,7 +164,7 @@ class TFTrainingArguments(TrainingArguments):
                 # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
                 strategy = tf.distribute.MirroredStrategy()
             else:
-                raise ValueError("Cannot find the proper strategy, please check your environment properties.")
+                raise ValueError("Cannot find the proper strategy please check your environment properties.")
 
         return strategy
 

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2018 XXX Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,8 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-import os
 import tempfile
 import unittest
 
@@ -27,7 +25,7 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.models.lxmert.modeling_tf_lxmert import TFLxmertForPreTraining, TFLxmertModel
+    from transformers.modeling_tf_lxmert import TFLxmertForPreTraining, TFLxmertModel
 
 
 class TFLxmertModelTester(object):
@@ -299,6 +297,7 @@ class TFLxmertModelTester(object):
             matched_label=matched_label,
             ans=ans,
             output_attentions=output_attentions,
+            return_dict=True,
         )
         result = model(
             input_ids,
@@ -353,6 +352,7 @@ class TFLxmertModelTester(object):
             matched_label=matched_label,
             ans=ans,
             output_attentions=not output_attentions,
+            return_dict=True,
         )
 
         self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
@@ -362,8 +362,6 @@ class TFLxmertModelTester(object):
 class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (TFLxmertModel, TFLxmertForPreTraining) if is_tf_available() else ()
-    test_head_masking = False
-    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFLxmertModelTester(self)
@@ -499,7 +497,7 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
                 return_obj_labels="PreTraining" in model_class.__name__
             )
 
-            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beginning
+            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beggining
             pt_model_class = getattr(transformers, pt_model_class_name)
 
             config.output_hidden_states = True
@@ -680,91 +678,3 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
             # Compile extended model
             extended_model = tf.keras.Model(inputs=[input_ids, visual_feats, visual_pos], outputs=[outputs])
             extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
-
-    def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        list_lm_models = [TFLxmertForPreTraining]
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-
-            if model_class in list_lm_models:
-                x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_bias()
-                assert isinstance(name, dict)
-                for k, v in name.items():
-                    assert isinstance(v, tf.Variable)
-            else:
-                x = model.get_output_embeddings()
-                assert x is None
-                name = model.get_bias()
-                assert name is None
-
-    def test_saved_model_creation(self):
-        # This test is too long (>30sec) and makes fail the CI
-        pass
-
-    @slow
-    def test_saved_model_creation_extended(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = True
-        config.output_attentions = True
-
-        if hasattr(config, "use_cache"):
-            config.use_cache = True
-
-        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
-
-        for model_class in self.all_model_classes:
-            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config)
-            num_out = len(model(class_inputs_dict))
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname, saved_model=True)
-                saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
-                model = tf.keras.models.load_model(saved_model_dir)
-                outputs = model(class_inputs_dict)
-                language_hidden_states = outputs["language_hidden_states"]
-                vision_hidden_states = outputs["vision_hidden_states"]
-                language_attentions = outputs["language_attentions"]
-                vision_attentions = outputs["vision_attentions"]
-                cross_encoder_attentions = outputs["cross_encoder_attentions"]
-
-                self.assertEqual(len(outputs), num_out)
-
-                self.assertEqual(len(language_hidden_states), self.model_tester.num_hidden_layers["language"] + 1)
-                self.assertEqual(len(vision_hidden_states), self.model_tester.num_hidden_layers["vision"] + 1)
-
-                seq_length = self.model_tester.seq_length
-                num_visual_features = self.model_tester.num_visual_features
-
-                self.assertListEqual(
-                    list(language_hidden_states[0].shape[-2:]),
-                    [seq_length, self.model_tester.hidden_size],
-                )
-                self.assertListEqual(
-                    list(vision_hidden_states[0].shape[-2:]),
-                    [num_visual_features, self.model_tester.hidden_size],
-                )
-
-                self.assertEqual(len(language_attentions), self.model_tester.num_hidden_layers["language"])
-                self.assertEqual(len(vision_attentions), self.model_tester.num_hidden_layers["vision"])
-                self.assertEqual(len(cross_encoder_attentions), self.model_tester.num_hidden_layers["cross_encoder"])
-
-                attentions = [language_attentions, vision_attentions, cross_encoder_attentions]
-                attention_shapes = [
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                    [
-                        self.model_tester.num_attention_heads,
-                        self.model_tester.num_visual_features,
-                        self.model_tester.num_visual_features,
-                    ],
-                    [self.model_tester.num_attention_heads, encoder_key_length, self.model_tester.num_visual_features],
-                ]
-
-                for attention, attention_shape in zip(attentions, attention_shapes):
-                    self.assertListEqual(list(attention[0].shape[-3:]), attention_shape)

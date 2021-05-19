@@ -1,17 +1,3 @@
-# Copyright 2020 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import json
 import os
 import pickle
@@ -23,15 +9,11 @@ from unittest.mock import patch
 import numpy as np
 from datasets import Dataset
 
-from transformers import is_faiss_available
-from transformers.models.bart.configuration_bart import BartConfig
-from transformers.models.bart.tokenization_bart import BartTokenizer
-from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
-from transformers.models.dpr.configuration_dpr import DPRConfig
-from transformers.models.dpr.tokenization_dpr import DPRQuestionEncoderTokenizer
-from transformers.models.rag.configuration_rag import RagConfig
-from transformers.models.rag.retrieval_rag import CustomHFIndex, RagRetriever
-from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
+import faiss
+from transformers.configuration_bart import BartConfig
+from transformers.configuration_dpr import DPRConfig
+from transformers.configuration_rag import RagConfig
+from transformers.retrieval_rag import CustomHFIndex, RagRetriever
 from transformers.testing_utils import (
     require_datasets,
     require_faiss,
@@ -39,10 +21,10 @@ from transformers.testing_utils import (
     require_tokenizers,
     require_torch,
 )
-
-
-if is_faiss_available():
-    import faiss
+from transformers.tokenization_bart import BartTokenizer
+from transformers.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
+from transformers.tokenization_dpr import DPRQuestionEncoderTokenizer
+from transformers.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 
 
 @require_faiss
@@ -140,7 +122,7 @@ class RagRetrieverTest(TestCase):
             question_encoder=DPRConfig().to_dict(),
             generator=BartConfig().to_dict(),
         )
-        with patch("transformers.models.rag.retrieval_rag.load_dataset") as mock_load_dataset:
+        with patch("transformers.retrieval_rag.load_dataset") as mock_load_dataset:
             mock_load_dataset.return_value = dataset
             retriever = RagRetriever(
                 config,
@@ -227,7 +209,7 @@ class RagRetrieverTest(TestCase):
     def test_canonical_hf_index_retriever_save_and_from_pretrained(self):
         retriever = self.get_dummy_canonical_hf_index_retriever()
         with tempfile.TemporaryDirectory() as tmp_dirname:
-            with patch("transformers.models.rag.retrieval_rag.load_dataset") as mock_load_dataset:
+            with patch("transformers.retrieval_rag.load_dataset") as mock_load_dataset:
                 mock_load_dataset.return_value = self.get_dummy_dataset()
                 retriever.save_pretrained(tmp_dirname)
                 retriever = RagRetriever.from_pretrained(tmp_dirname)

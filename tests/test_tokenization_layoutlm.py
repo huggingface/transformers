@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Microsoft Research Asia LayoutLM Team Authors, The Hugging Face Team.
+# Copyright 2018 The Microsoft Research Asia LayoutLM Team Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@ import os
 import unittest
 
 from transformers import LayoutLMTokenizer, LayoutLMTokenizerFast
-from transformers.models.layoutlm.tokenization_layoutlm import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers
+from transformers.tokenization_layoutlm import VOCAB_FILES_NAMES
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -70,5 +70,5 @@ class LayoutLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
 
     def test_special_tokens_as_you_expect(self):
-        """If you are training a seq2seq model that expects a decoder_prefix token make sure it is prepended to decoder_input_ids"""
+        """If you are training a seq2seq model that expects a decoder_prefix token make sure it is prepended to decoder_input_ids """
         pass

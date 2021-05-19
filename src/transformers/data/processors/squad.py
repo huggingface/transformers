@@ -1,17 +1,3 @@
-# Copyright 2020 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import json
 import os
 from functools import partial
@@ -21,14 +7,17 @@ import numpy as np
 from tqdm import tqdm
 
 from ...file_utils import is_tf_available, is_torch_available
-from ...models.bert.tokenization_bert import whitespace_tokenize
-from ...tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase, TruncationStrategy
+from ...tokenization_bart import BartTokenizer
+from ...tokenization_bert import whitespace_tokenize
+from ...tokenization_longformer import LongformerTokenizer
+from ...tokenization_roberta import RobertaTokenizer
+from ...tokenization_utils_base import TruncationStrategy
 from ...utils import logging
 from .utils import DataProcessor
 
 
 # Store the tokenizers which insert 2 separators tokens
-MULTI_SEP_TOKENS_TOKENIZERS_SET = {"roberta", "camembert", "bart", "mpnet"}
+MULTI_SEP_TOKENS_TOKENIZERS_SET = {"roberta", "camembert", "bart"}
 
 
 if is_torch_available():
@@ -115,7 +104,7 @@ def squad_convert_example_to_features(
         actual_text = " ".join(example.doc_tokens[start_position : (end_position + 1)])
         cleaned_answer_text = " ".join(whitespace_tokenize(example.answer_text))
         if actual_text.find(cleaned_answer_text) == -1:
-            logger.warning(f"Could not find answer: '{actual_text}' vs. '{cleaned_answer_text}'")
+            logger.warning("Could not find answer: '%s' vs. '%s'", actual_text, cleaned_answer_text)
             return []
 
     tok_to_orig_index = []
@@ -123,14 +112,7 @@ def squad_convert_example_to_features(
     all_doc_tokens = []
     for (i, token) in enumerate(example.doc_tokens):
         orig_to_tok_index.append(len(all_doc_tokens))
-        if tokenizer.__class__.__name__ in [
-            "RobertaTokenizer",
-            "LongformerTokenizer",
-            "BartTokenizer",
-            "RobertaTokenizerFast",
-            "LongformerTokenizerFast",
-            "BartTokenizerFast",
-        ]:
+        if isinstance(tokenizer, (RobertaTokenizer, LongformerTokenizer, BartTokenizer)):
             sub_tokens = tokenizer.tokenize(token, add_prefix_space=True)
         else:
             sub_tokens = tokenizer.tokenize(token)
@@ -159,11 +141,11 @@ def squad_convert_example_to_features(
     # in the way they compute mask of added tokens.
     tokenizer_type = type(tokenizer).__name__.replace("Tokenizer", "").lower()
     sequence_added_tokens = (
-        tokenizer.model_max_length - tokenizer.max_len_single_sentence + 1
+        tokenizer.max_len - tokenizer.max_len_single_sentence + 1
         if tokenizer_type in MULTI_SEP_TOKENS_TOKENIZERS_SET
-        else tokenizer.model_max_length - tokenizer.max_len_single_sentence
+        else tokenizer.max_len - tokenizer.max_len_single_sentence
     )
-    sequence_pair_added_tokens = tokenizer.model_max_length - tokenizer.max_len_sentences_pair
+    sequence_pair_added_tokens = tokenizer.max_len - tokenizer.max_len_sentences_pair
 
     span_doc_tokens = all_doc_tokens
     while len(spans) * doc_stride < len(all_doc_tokens):
@@ -244,7 +226,7 @@ def squad_convert_example_to_features(
         cls_index = span["input_ids"].index(tokenizer.cls_token_id)
 
         # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
-        # Original TF implementation also keep the classification token (set to 0)
+        # Original TF implem also keep the classification token (set to 0)
         p_mask = np.ones_like(span["token_type_ids"])
         if tokenizer.padding_side == "right":
             p_mask[len(truncated_query) + sequence_added_tokens :] = 0
@@ -310,7 +292,7 @@ def squad_convert_example_to_features(
     return features
 
 
-def squad_convert_example_to_features_init(tokenizer_for_convert: PreTrainedTokenizerBase):
+def squad_convert_example_to_features_init(tokenizer_for_convert):
     global tokenizer
     tokenizer = tokenizer_for_convert
 
@@ -328,8 +310,8 @@ def squad_convert_examples_to_features(
     tqdm_enabled=True,
 ):
     """
-    Converts a list of examples into a list of features that can be directly given as input to a model. It is
-    model-dependant and takes advantage of many of the tokenizer's features to create the model's inputs.
+    Converts a list of examples into a list of features that can be directly given as input to a model.
+    It is model-dependant and takes advantage of many of the tokenizer's features to create the model's inputs.
 
     Args:
         examples: list of :class:`~transformers.data.processors.squad.SquadExample`
@@ -340,8 +322,9 @@ def squad_convert_examples_to_features(
         is_training: whether to create features for model evaluation or model training.
         padding_strategy: Default to "max_length". Which padding strategy to use
         return_dataset: Default False. Either 'pt' or 'tf'.
-            if 'pt': returns a torch.data.TensorDataset, if 'tf': returns a tf.data.Dataset
-        threads: multiple processing threads.
+            if 'pt': returns a torch.data.TensorDataset,
+            if 'tf': returns a tf.data.Dataset
+        threads: multiple processing threadsa-smi
 
 
     Returns:
@@ -361,9 +344,9 @@ def squad_convert_examples_to_features(
             is_training=not evaluate,
         )
     """
+
     # Defining helper methods
     features = []
-
     threads = min(threads, cpu_count())
     with Pool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
         annotate_ = partial(
@@ -382,7 +365,6 @@ def squad_convert_examples_to_features(
                 disable=not tqdm_enabled,
             )
         )
-
     new_features = []
     unique_id = 1000000000
     example_index = 0
@@ -541,8 +523,8 @@ def squad_convert_examples_to_features(
 
 class SquadProcessor(DataProcessor):
     """
-    Processor for the SQuAD data set. overridden by SquadV1Processor and SquadV2Processor, used by the version 1.1 and
-    version 2.0 of SQuAD, respectively.
+    Processor for the SQuAD data set.
+    Overriden by SquadV1Processor and SquadV2Processor, used by the version 1.1 and version 2.0 of SQuAD, respectively.
     """
 
     train_file = None
@@ -758,9 +740,9 @@ class SquadExample:
 
 class SquadFeatures:
     """
-    Single squad example features to be fed to a model. Those features are model-specific and can be crafted from
-    :class:`~transformers.data.processors.squad.SquadExample` using the
-    :method:`~transformers.data.processors.squad.squad_convert_examples_to_features` method.
+    Single squad example features to be fed to a model.
+    Those features are model-specific and can be crafted from :class:`~transformers.data.processors.squad.SquadExample`
+    using the :method:`~transformers.data.processors.squad.squad_convert_examples_to_features` method.
 
     Args:
         input_ids: Indices of input sequence tokens in the vocabulary.
@@ -779,7 +761,6 @@ class SquadFeatures:
         token_to_orig_map: mapping between the tokens and the original text, needed in order to identify the answer.
         start_position: start of the answer token index
         end_position: end of the answer token index
-        encoding: optionally store the BatchEncoding with the fast-tokenizer alignment methods.
     """
 
     def __init__(
@@ -799,7 +780,6 @@ class SquadFeatures:
         end_position,
         is_impossible,
         qas_id: str = None,
-        encoding: BatchEncoding = None,
     ):
         self.input_ids = input_ids
         self.attention_mask = attention_mask
@@ -818,8 +798,6 @@ class SquadFeatures:
         self.end_position = end_position
         self.is_impossible = is_impossible
         self.qas_id = qas_id
-
-        self.encoding = encoding
 
 
 class SquadResult:

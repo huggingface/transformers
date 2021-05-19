@@ -27,7 +27,6 @@ from transformers.testing_utils import require_tf, require_torch, slow
 logger = logging.getLogger()
 
 
-@unittest.skip("Temporarily disable the doc tests.")
 @require_torch
 @require_tf
 @slow
@@ -36,8 +35,8 @@ class TestCodeExamples(unittest.TestCase):
         self,
         directory: Path,
         identifier: Union[str, None] = None,
-        ignore_files: Union[List[str], None] = None,
-        n_identifier: Union[str, List[str], None] = None,
+        ignore_files: Union[List[str], None] = [],
+        n_identifier: Union[str, None] = None,
         only_modules: bool = True,
     ):
         """
@@ -45,7 +44,7 @@ class TestCodeExamples(unittest.TestCase):
         the doctests in those files
 
         Args:
-            directory (:obj:`Path`): Directory containing the files
+            directory (:obj:`str`): Directory containing the files
             identifier (:obj:`str`): Will parse files containing this
             ignore_files (:obj:`List[str]`): List of files to skip
             n_identifier (:obj:`str` or :obj:`List[str]`): Will not parse files containing this/these identifiers.
@@ -63,7 +62,6 @@ class TestCodeExamples(unittest.TestCase):
             else:
                 files = [file for file in files if n_identifier not in file]
 
-        ignore_files = ignore_files or []
         ignore_files.append("__init__.py")
         files = [file for file in files if file not in ignore_files]
 
@@ -72,8 +70,8 @@ class TestCodeExamples(unittest.TestCase):
             print("Testing", file)
 
             if only_modules:
-                module_identifier = file.split(".")[0]
                 try:
+                    module_identifier = file.split(".")[0]
                     module_identifier = getattr(transformers, module_identifier)
                     suite = doctest.DocTestSuite(module_identifier)
                     result = unittest.TextTestRunner().run(suite)
@@ -85,7 +83,7 @@ class TestCodeExamples(unittest.TestCase):
                 self.assertIs(result.failed, 0)
 
     def test_modeling_examples(self):
-        transformers_directory = Path("src/transformers")
+        transformers_directory = "src/transformers"
         files = "modeling"
         ignore_files = [
             "modeling_ctrl.py",

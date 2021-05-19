@@ -1,21 +1,7 @@
-# Copyright 2020 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import os
 import unittest
 
-import transformers.models.bart.tokenization_bart
+import transformers.tokenization_bart
 from transformers import logging
 from transformers.testing_utils import CaptureLogger, mockenv
 
@@ -45,13 +31,13 @@ class HfArgumentParserTest(unittest.TestCase):
     def test_integration(self):
         level_origin = logging.get_verbosity()
 
-        logger = logging.get_logger("transformers.models.bart.tokenization_bart")
+        logger = logging.get_logger("transformers.tokenization_bart")
         msg = "Testing 1, 2, 3"
 
-        # should be able to log warnings (if default settings weren't overridden by `pytest --log-level-all`)
+        # should be able to log warnings (if default settings weren't overriden by `pytest --log-level-all`)
         if level_origin <= logging.WARNING:
             with CaptureLogger(logger) as cl:
-                logger.warning(msg)
+                logger.warn(msg)
             self.assertEqual(cl.out, msg + "\n")
 
         # this is setting the level for all of `transformers.*` loggers
@@ -59,7 +45,7 @@ class HfArgumentParserTest(unittest.TestCase):
 
         # should not be able to log warnings
         with CaptureLogger(logger) as cl:
-            logger.warning(msg)
+            logger.warn(msg)
         self.assertEqual(cl.out, "")
 
         # should be able to log warnings again
@@ -76,7 +62,7 @@ class HfArgumentParserTest(unittest.TestCase):
         # reset for the env var to take effect, next time some logger call is made
         transformers.utils.logging._reset_library_root_logger()
         # this action activates the env var
-        _ = logging.get_logger("transformers.models.bart.tokenization_bart")
+        _ = logging.get_logger("transformers.tokenization_bart")
 
         env_level_str = os.getenv("TRANSFORMERS_VERBOSITY", None)
         env_level = logging.log_levels[env_level_str]
@@ -99,7 +85,7 @@ class HfArgumentParserTest(unittest.TestCase):
         logger = logging.logging.getLogger()
         with CaptureLogger(logger) as cl:
             # this action activates the env var
-            logging.get_logger("transformers.models.bart.tokenization_bart")
+            logging.get_logger("transformers.tokenization_bart")
         self.assertIn("Unknown option TRANSFORMERS_VERBOSITY=super-error", cl.out)
 
         # no need to restore as nothing was changed

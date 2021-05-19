@@ -23,15 +23,14 @@ from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():
     import torch
 
-    from transformers import T5Config, T5EncoderModel, T5ForConditionalGeneration, T5Model, T5Tokenizer
-    from transformers.models.t5.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import T5Config, T5ForConditionalGeneration, T5Model, T5Tokenizer
+    from transformers.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class T5ModelTester:
@@ -39,6 +38,7 @@ class T5ModelTester:
         self,
         parent,
         vocab_size=99,
+        n_positions=14,
         batch_size=13,
         encoder_seq_length=7,
         decoder_seq_length=9,
@@ -70,6 +70,7 @@ class T5ModelTester:
         self.use_attention_mask = use_attention_mask
         self.use_labels = use_labels
         self.vocab_size = vocab_size
+        self.n_positions = n_positions
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -82,9 +83,6 @@ class T5ModelTester:
         self.decoder_start_token_id = decoder_start_token_id
         self.scope = None
         self.decoder_layers = decoder_layers
-
-    def get_large_model_config(self):
-        return T5Config.from_pretrained("t5-base")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -102,6 +100,7 @@ class T5ModelTester:
 
         config = T5Config(
             vocab_size=self.vocab_size,
+            n_positions=self.n_positions,
             d_model=self.hidden_size,
             d_ff=self.d_ff,
             d_kv=self.hidden_size // self.num_attention_heads,
@@ -115,6 +114,7 @@ class T5ModelTester:
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.decoder_start_token_id,
+            return_dict=True,
         )
 
         return (
@@ -314,22 +314,18 @@ class T5ModelTester:
     ):
         model = T5Model(config=config).get_decoder().to(torch_device).eval()
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
+        outputs = model(input_ids, use_cache=True)
 
         output, past_key_values = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
 
         # append to next input_ids and
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        next_attention_mask = torch.cat([attention_mask, next_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-            "last_hidden_state"
-        ]
+        output_from_no_past = model(next_input_ids)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -448,20 +444,6 @@ class T5ModelTester:
                     )
                 )
 
-    def check_resize_embeddings_t5_v1_1(
-        self,
-        config,
-    ):
-        prev_vocab_size = config.vocab_size
-
-        config.tie_word_embeddings = False
-        model = T5ForConditionalGeneration(config=config).to(torch_device).eval()
-        model.resize_token_embeddings(prev_vocab_size - 10)
-
-        self.parent.assertEqual(model.get_input_embeddings().weight.shape[0], prev_vocab_size - 10)
-        self.parent.assertEqual(model.get_output_embeddings().weight.shape[0], prev_vocab_size - 10)
-        self.parent.assertEqual(model.config.vocab_size, prev_vocab_size - 10)
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -484,16 +466,13 @@ class T5ModelTester:
 
 
 @require_torch
-class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class T5ModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (T5ForConditionalGeneration,) if is_torch_available() else ()
-    fx_ready_model_classes = all_model_classes
-    all_parallelizable_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
     test_pruning = False
     test_torchscript = True
-    test_resize_embeddings = True
-    test_model_parallel = True
+    test_resize_embeddings = False
     is_encoder_decoder = True
 
     def setUp(self):
@@ -511,14 +490,6 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_model_v1_1(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        # check that gated gelu feed forward and different word embeddings work
-        config = config_and_inputs[0]
-        config.tie_word_embeddings = False
-        config.feed_forward_proj = "gated-gelu"
-        self.model_tester.create_and_check_model(config, *config_and_inputs[1:])
-
     def test_with_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_lm_head(*config_and_inputs)
@@ -530,34 +501,6 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_decoder_model_past_with_attn_mask(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
-
-    def test_decoder_model_past_with_3d_attn_mask(self):
-        (
-            config,
-            input_ids,
-            decoder_input_ids,
-            attention_mask,
-            decoder_attention_mask,
-            lm_labels,
-        ) = self.model_tester.prepare_config_and_inputs()
-
-        attention_mask = ids_tensor(
-            [self.model_tester.batch_size, self.model_tester.encoder_seq_length, self.model_tester.encoder_seq_length],
-            vocab_size=2,
-        )
-        decoder_attention_mask = ids_tensor(
-            [self.model_tester.batch_size, self.model_tester.decoder_seq_length, self.model_tester.decoder_seq_length],
-            vocab_size=2,
-        )
-
-        self.model_tester.create_and_check_decoder_model_attention_mask_past(
-            config,
-            input_ids,
-            decoder_input_ids,
-            attention_mask,
-            decoder_attention_mask,
-            lm_labels,
-        )
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -576,17 +519,12 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
 
-    def test_v1_1_resize_embeddings(self):
-        config = self.model_tester.prepare_config_and_inputs()[0]
-        self.model_tester.check_resize_embeddings_t5_v1_1(config)
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in T5_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = T5Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    @unittest.skip("Test has a segmentation fault on torch 1.8.0")
     def test_export_to_onnx(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         model = T5Model(config_and_inputs[0]).to(torch_device)
@@ -599,183 +537,6 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 opset_version=9,
                 input_names=["input_ids", "decoder_input_ids"],
             )
-
-    def test_generate_with_head_masking(self):
-        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config = config_and_inputs[0]
-        max_length = config_and_inputs[1].shape[-1] + 3
-        model = T5ForConditionalGeneration(config).eval()
-        model.to(torch_device)
-
-        head_masking = {
-            "head_mask": torch.zeros(config.num_layers, config.num_heads, device=torch_device),
-            "decoder_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-            "cross_attn_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-        }
-
-        for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
-            head_masks = {name: mask}
-            # Explicitly pass decoder_head_mask as it is required from T5 model when head_mask specified
-            if name == "head_mask":
-                head_masks["decoder_head_mask"] = torch.ones(
-                    config.num_decoder_layers, config.num_heads, device=torch_device
-                )
-
-            out = model.generate(
-                config_and_inputs[1],
-                num_beams=1,
-                max_length=max_length,
-                output_attentions=True,
-                return_dict_in_generate=True,
-                **head_masks,
-            )
-            # We check the state of decoder_attentions and cross_attentions just from the last step
-            attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
-            self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
-
-
-class T5EncoderOnlyModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=99,
-        batch_size=13,
-        encoder_seq_length=7,
-        # For common tests
-        use_attention_mask=True,
-        hidden_size=32,
-        num_hidden_layers=5,
-        num_attention_heads=4,
-        d_ff=37,
-        relative_attention_num_buckets=8,
-        is_training=False,
-        dropout_rate=0.1,
-        initializer_factor=0.002,
-        is_encoder_decoder=False,
-        eos_token_id=1,
-        pad_token_id=0,
-        scope=None,
-    ):
-
-        self.parent = parent
-        self.batch_size = batch_size
-        self.encoder_seq_length = encoder_seq_length
-        # For common tests
-        self.seq_length = self.encoder_seq_length
-        self.use_attention_mask = use_attention_mask
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.d_ff = d_ff
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.dropout_rate = dropout_rate
-        self.initializer_factor = initializer_factor
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.is_encoder_decoder = is_encoder_decoder
-        self.scope = None
-        self.is_training = is_training
-
-    def get_large_model_config(self):
-        return T5Config.from_pretrained("t5-base")
-
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
-
-        attention_mask = None
-        if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
-
-        config = T5Config(
-            vocab_size=self.vocab_size,
-            d_model=self.hidden_size,
-            d_ff=self.d_ff,
-            d_kv=self.hidden_size // self.num_attention_heads,
-            num_layers=self.num_hidden_layers,
-            num_heads=self.num_attention_heads,
-            relative_attention_num_buckets=self.relative_attention_num_buckets,
-            dropout_rate=self.dropout_rate,
-            initializer_factor=self.initializer_factor,
-            eos_token_id=self.eos_token_id,
-            bos_token_id=self.pad_token_id,
-            pad_token_id=self.pad_token_id,
-            is_encoder_decoder=self.is_encoder_decoder,
-        )
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
-        )
-
-    def create_and_check_model(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-    ):
-        model = T5EncoderModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-        )
-        result = model(input_ids=input_ids)
-        encoder_output = result.last_hidden_state
-
-        self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
-
-    def create_and_check_model_fp16_forward(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-    ):
-        model = T5EncoderModel(config=config).to(torch_device).half().eval()
-        output = model(input_ids, attention_mask=attention_mask)["last_hidden_state"]
-        self.parent.assertFalse(torch.isnan(output).any().item())
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            attention_mask,
-        ) = config_and_inputs
-
-        inputs_dict = {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
-        return config, inputs_dict
-
-
-class T5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (T5EncoderModel,) if is_torch_available() else ()
-    test_pruning = False
-    test_torchscript = True
-    test_resize_embeddings = False
-    test_model_parallel = True
-    all_parallelizable_model_classes = (T5EncoderModel,) if is_torch_available() else ()
-
-    def setUp(self):
-        self.model_tester = T5EncoderOnlyModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=T5Config, d_model=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
-    def test_model_fp16_forward(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
 
 
 def use_task_specific_params(model, task):
@@ -795,58 +556,6 @@ class T5ModelIntegrationTests(unittest.TestCase):
         return T5Tokenizer.from_pretrained("t5-base")
 
     @slow
-    def test_small_integration_test(self):
-        """
-        For comparision run:
-        >>> import t5  # pip install t5==0.7.1
-        >>> from t5.data.sentencepiece_vocabulary import SentencePieceVocabulary
-
-        >>> path_to_mtf_small_t5_checkpoint = '<fill_in>'
-        >>> path_to_mtf_small_spm_model_path = '<fill_in>'
-        >>> t5_model = t5.models.MtfModel(model_dir=path_to_mtf_small_t5_checkpoint, batch_size=1, tpu=None)
-        >>> vocab = SentencePieceVocabulary(path_to_mtf_small_spm_model_path, extra_ids=100)
-        >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
-        """
-
-        model = T5ForConditionalGeneration.from_pretrained("t5-small").to(torch_device)
-        tokenizer = T5Tokenizer.from_pretrained("t5-small")
-
-        input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
-        labels = tokenizer("Hi I am", return_tensors="pt").input_ids
-
-        loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
-        mtf_score = -(labels.shape[-1] * loss.item())
-
-        EXPECTED_SCORE = -19.0845
-        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
-
-    @slow
-    def test_small_v1_1_integration_test(self):
-        """
-        For comparision run:
-        >>> import t5  # pip install t5==0.7.1
-        >>> from t5.data.sentencepiece_vocabulary import SentencePieceVocabulary
-
-        >>> path_to_mtf_small_t5_v1_1_checkpoint = '<fill_in>'
-        >>> path_to_mtf_small_spm_model_path = '<fill_in>'
-        >>> t5_model = t5.models.MtfModel(model_dir=path_to_mtf_small_t5_v1_1_checkpoint, batch_size=1, tpu=None)
-        >>> vocab = SentencePieceVocabulary(path_to_mtf_small_spm_model_path, extra_ids=100)
-        >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
-        """
-
-        model = T5ForConditionalGeneration.from_pretrained("google/t5-v1_1-small").to(torch_device)
-        tokenizer = T5Tokenizer.from_pretrained("google/t5-v1_1-small")
-
-        input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
-        labels = tokenizer("Hi I am", return_tensors="pt").input_ids
-
-        loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
-        mtf_score = -(labels.shape[-1] * loss.item())
-
-        EXPECTED_SCORE = -59.0293
-        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
-
-    @slow
     def test_summarization(self):
         model = self.model
         tok = self.tokenizer
@@ -857,8 +566,8 @@ class T5ModelIntegrationTests(unittest.TestCase):
         ARTICLE_SUBWAY = 'New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York. A year later, she got married again in Westchester County, but to a different man and without divorcing her first husband.  Only 18 days after that marriage, she got hitched yet again. Then, Barrientos declared "I do" five more times, sometimes only within two weeks of each other. In 2010, she married once more, this time in the Bronx. In an application for a marriage license, she stated it was her "first and only" marriage. Barrientos, now 39, is facing two criminal counts of "offering a false instrument for filing in the first degree," referring to her false statements on the 2010 marriage license application, according to court documents. Prosecutors said the marriages were part of an immigration scam. On Friday, she pleaded not guilty at State Supreme Court in the Bronx, according to her attorney, Christopher Wright, who declined to comment further. After leaving court, Barrientos was arrested and charged with theft of service and criminal trespass for allegedly sneaking into the New York subway through an emergency exit, said Detective Annette Markowski, a police spokeswoman. In total, Barrientos has been married 10 times, with nine of her marriages occurring between 1999 and 2002.  All occurred either in Westchester County, Long Island, New Jersey or the Bronx. She is believed to still be married to four men, and at one time, she was married to eight men at once, prosecutors say. Prosecutors said the immigration scam involved some of her husbands, who filed for permanent residence status shortly after the marriages.  Any divorces happened only after such filings were approved. It was unclear whether any of the men will be prosecuted. The case was referred to the Bronx District Attorney\'s Office by Immigration and Customs Enforcement and the Department of Homeland Security\'s Investigation Division. Seven of the men are from so-called "red-flagged" countries, including Egypt, Turkey, Georgia, Pakistan and Mali. Her eighth husband, Rashid Rajput, was deported in 2006 to his native Pakistan after an investigation by the Joint Terrorism Task Force. If convicted, Barrientos faces up to four years in prison.  Her next court appearance is scheduled for May 18.'
 
         expected_summaries = [
-            'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found a cell phone video of the final seconds . "one can hear cries of \'My God\' in several languages," one magazine says .',
-            "the formal accession was marked by a ceremony at The Hague, in the Netherlands . the ICC opened a preliminary examination into the situation in the occupied Palestinian territory . as members of the court, Palestinians may be subject to counter-charges as well .",
+            'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found a cell phone video at the crash site . "one can hear cries of \'My God\' in several languages," one magazine says .',
+            "the Palestinians become the 123rd member of the international criminal court . the accession was marked by a ceremony at the Hague, where the court is based . as members of the court, Palestinians may be subject to counter-charges as well .",
             "the u.s. and its negotiating partners reached a very strong framework agreement with Iran . aaron miller: the debate that has already begun since the announcement of the new framework will likely result in more heat than light . the deal would reduce Iran's low-enriched uranium stockpile, cut centrifuges and implement a rigorous inspection regime .",
             'prosecutors say the marriages were part of an immigration scam . if convicted, barrientos faces two criminal counts of "offering a false instrument for filing in the first degree" she has been married 10 times, with nine of her marriages occurring between 1999 and 2002 .',
         ]
@@ -883,7 +592,6 @@ class T5ModelIntegrationTests(unittest.TestCase):
             do_sample=False,
             early_stopping=True,
         )
-
         decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         self.assertListEqual(
             expected_summaries,

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2018 The Google AI Language Team Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.models.electra.modeling_tf_electra import (
+    from transformers.modeling_tf_electra import (
         TFElectraForMaskedLM,
         TFElectraForMultipleChoice,
         TFElectraForPreTraining,
@@ -97,6 +97,7 @@ class TFElectraModelTester:
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
+            return_dict=True,
         )
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -205,8 +206,6 @@ class TFElectraModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
-    test_head_masking = False
-    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFElectraModelTester(self)
@@ -249,20 +248,3 @@ class TFElectraModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_name in ["google/electra-small-discriminator"]:
             model = TFElectraModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-
-@require_tf
-class TFElectraModelIntegrationTest(unittest.TestCase):
-    @slow
-    def test_inference_masked_lm(self):
-        model = TFElectraForPreTraining.from_pretrained("lysandre/tiny-electra-random")
-        input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
-
-        expected_shape = [1, 6]
-        self.assertEqual(output.shape, expected_shape)
-
-        print(output[:, :3])
-
-        expected_slice = tf.constant([[-0.24651965, 0.8835437, 1.823782]])
-        tf.debugging.assert_near(output[:, :3], expected_slice, atol=1e-4)

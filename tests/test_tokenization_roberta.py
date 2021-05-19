@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2018 The Google AI Language Team Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ import os
 import unittest
 
 from transformers import AddedToken, RobertaTokenizer, RobertaTokenizerFast
-from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers, slow
+from transformers.tokenization_roberta import VOCAB_FILES_NAMES
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -167,7 +167,7 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_embeded_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+            with self.subTest("{} ({})".format(tokenizer.__class__.__name__, pretrained_name)):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                 tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                 sentence = "A, <mask> AllenNLP sentence."

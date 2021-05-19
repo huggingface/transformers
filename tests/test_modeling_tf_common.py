@@ -16,7 +16,6 @@
 
 import copy
 import inspect
-import json
 import os
 import random
 import tempfile
@@ -24,22 +23,8 @@ import unittest
 from importlib import import_module
 from typing import List, Tuple
 
-from huggingface_hub import HfApi
-from requests.exceptions import HTTPError
-from transformers import is_tf_available
-from transformers.models.auto import get_values
-from transformers.testing_utils import (
-    ENDPOINT_STAGING,
-    PASS,
-    USER,
-    _tf_gpu_memory_limit,
-    is_pt_tf_cross_test,
-    is_staging_test,
-    require_onnx,
-    require_tf,
-    slow,
-    tooslow,
-)
+from transformers import is_tf_available, is_torch_available
+from transformers.testing_utils import _tf_gpu_memory_limit, require_tf, slow
 
 
 if is_tf_available():
@@ -50,14 +35,11 @@ if is_tf_available():
         TF_MODEL_FOR_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_MASKED_LM_MAPPING,
         TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
-        TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
-        TF_MODEL_FOR_PRETRAINING_MAPPING,
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-        BertConfig,
-        TFBertModel,
+        TFAdaptiveEmbedding,
         TFSharedEmbeddings,
         tf_top_k_top_p_filtering,
     )
@@ -67,10 +49,10 @@ if is_tf_available():
         for gpu in gpus:
             # Restrict TensorFlow to only allocate x GB of memory on the GPUs
             try:
-                tf.config.set_logical_device_configuration(
-                    gpu, [tf.config.LogicalDeviceConfiguration(memory_limit=_tf_gpu_memory_limit)]
+                tf.config.experimental.set_virtual_device_configuration(
+                    gpu, [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=_tf_gpu_memory_limit)]
                 )
-                logical_gpus = tf.config.list_logical_devices("GPU")
+                logical_gpus = tf.config.experimental.list_logical_devices("GPU")
                 print("Logical GPUs", logical_gpus)
             except RuntimeError as e:
                 # Virtual devices must be set before GPUs have been initialized
@@ -92,13 +74,12 @@ class TFModelTesterMixin:
     all_model_classes = ()
     all_generative_model_classes = ()
     test_resize_embeddings = True
-    test_head_masking = True
     is_encoder_decoder = False
 
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False) -> dict:
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
 
-        if model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
+        if model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
             inputs_dict = {
                 k: tf.tile(tf.expand_dims(v, 1), (1, self.model_tester.num_choices) + (1,) * (v.ndim - 1))
                 if isinstance(v, tf.Tensor) and v.ndim > 0
@@ -107,21 +88,18 @@ class TFModelTesterMixin:
             }
 
         if return_labels:
-            if model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
+            if model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
                 inputs_dict["labels"] = tf.ones(self.model_tester.batch_size, dtype=tf.int32)
-            elif model_class in get_values(TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING):
+            elif model_class in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
                 inputs_dict["start_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
                 inputs_dict["end_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
-            elif model_class in get_values(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
+            elif model_class in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values():
                 inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
-            elif model_class in get_values(TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING):
-                inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
             elif model_class in [
-                *get_values(TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING),
-                *get_values(TF_MODEL_FOR_CAUSAL_LM_MAPPING),
-                *get_values(TF_MODEL_FOR_MASKED_LM_MAPPING),
-                *get_values(TF_MODEL_FOR_PRETRAINING_MAPPING),
-                *get_values(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING),
+                *TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.values(),
+                *TF_MODEL_FOR_CAUSAL_LM_MAPPING.values(),
+                *TF_MODEL_FOR_MASKED_LM_MAPPING.values(),
+                *TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.values(),
             ]:
                 inputs_dict["labels"] = tf.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
@@ -139,13 +117,12 @@ class TFModelTesterMixin:
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
 
             with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname, saved_model=False)
+                model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(tmpdirname)
                 after_outputs = model(self._prepare_for_class(inputs_dict, model_class))
 
                 self.assert_outputs_same(after_outputs, outputs)
 
-    @tooslow
     def test_graph_mode(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
@@ -153,20 +130,6 @@ class TFModelTesterMixin:
             model = model_class(config)
 
             @tf.function
-            def run_in_graph_mode():
-                return model(inputs)
-
-            outputs = run_in_graph_mode()
-            self.assertIsNotNone(outputs)
-
-    @tooslow
-    def test_xla_mode(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config)
-
-            @tf.function(experimental_compile=True)
             def run_in_graph_mode():
                 return model(inputs)
 
@@ -184,170 +147,85 @@ class TFModelTesterMixin:
 
             if model.config.is_encoder_decoder:
                 expected_arg_names = [
-                    "input_ids",
+                    "inputs",
                     "attention_mask",
                     "decoder_input_ids",
                     "decoder_attention_mask",
+                    "encoder_outputs",
                 ]
-                expected_arg_names.extend(
-                    ["head_mask", "decoder_head_mask"] if "head_mask" and "decoder_head_mask" in arg_names else []
-                )
-                # Necessary to handle BART with newly added cross_attn_head_mask
-                expected_arg_names.extend(
-                    ["cross_attn_head_mask", "encoder_outputs"]
-                    if "cross_attn_head_mask" in arg_names
-                    else ["encoder_outputs"]
-                )
-                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+                self.assertListEqual(arg_names[:5], expected_arg_names)
 
             else:
-                expected_arg_names = ["input_ids"]
+                expected_arg_names = ["inputs"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    @tooslow
-    def test_saved_model_creation(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = False
-        config.output_attentions = False
-
-        if hasattr(config, "use_cache"):
-            config.use_cache = False
-
-        model_class = self.all_model_classes[0]
-
-        class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-        model = model_class(config)
-
-        model(class_inputs_dict)
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            model.save_pretrained(tmpdirname, saved_model=True)
-            saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
-            self.assertTrue(os.path.exists(saved_model_dir))
-
-    @tooslow
-    def test_saved_model_creation_extended(self):
+    @slow
+    def test_saved_model_with_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
-        config.output_attentions = True
-
-        if hasattr(config, "use_cache"):
-            config.use_cache = True
-
-        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
         for model_class in self.all_model_classes:
-            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config)
-            num_out = len(model(class_inputs_dict))
+            num_out = len(model(inputs_dict))
+            model._saved_model_inputs_spec = None
+            model._set_save_spec(inputs_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname, saved_model=True)
-                saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
-                model = tf.keras.models.load_model(saved_model_dir)
-                outputs = model(class_inputs_dict)
+                tf.saved_model.save(model, tmpdirname)
+                model = tf.keras.models.load_model(tmpdirname)
+                outputs = model(inputs_dict)
 
                 if self.is_encoder_decoder:
-                    output_hidden_states = outputs["encoder_hidden_states"]
-                    output_attentions = outputs["encoder_attentions"]
+                    output = outputs["encoder_hidden_states"] if isinstance(outputs, dict) else outputs[-1]
                 else:
-                    output_hidden_states = outputs["hidden_states"]
-                    output_attentions = outputs["attentions"]
+                    output = outputs["hidden_states"] if isinstance(outputs, dict) else outputs[-1]
 
+                hidden_states = [t.numpy() for t in output]
                 self.assertEqual(len(outputs), num_out)
-
-                expected_num_layers = getattr(
-                    self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-                )
-
-                self.assertEqual(len(output_hidden_states), expected_num_layers)
+                self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
                 self.assertListEqual(
-                    list(output_hidden_states[0].shape[-2:]),
+                    list(hidden_states[0].shape[-2:]),
                     [self.model_tester.seq_length, self.model_tester.hidden_size],
                 )
 
-                self.assertEqual(len(output_attentions), self.model_tester.num_hidden_layers)
+    @slow
+    def test_saved_model_with_attentions_output(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_attentions = True
+        encoder_seq_length = (
+            self.model_tester.encoder_seq_length
+            if hasattr(self.model_tester, "encoder_seq_length")
+            else self.model_tester.seq_length
+        )
+        encoder_key_length = (
+            self.model_tester.key_length if hasattr(self.model_tester, "key_length") else encoder_seq_length
+        )
+
+        for model_class in self.all_model_classes:
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config)
+            num_out = len(model(inputs_dict))
+            model._saved_model_inputs_spec = None
+            model._set_save_spec(inputs_dict)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                tf.saved_model.save(model, tmpdirname)
+                model = tf.keras.models.load_model(tmpdirname)
+                outputs = model(inputs_dict)
+
+                if self.is_encoder_decoder:
+                    output = outputs["encoder_attentions"] if isinstance(outputs, dict) else outputs[-1]
+                else:
+                    output = outputs["attentions"] if isinstance(outputs, dict) else outputs[-1]
+
+                attentions = [t.numpy() for t in output]
+                self.assertEqual(len(outputs), num_out)
+                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
-                    list(output_attentions[0].shape[-3:]),
+                    list(attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
-
-    def test_onnx_compliancy(self):
-        if not self.test_onnx:
-            return
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        INTERNAL_OPS = [
-            "Assert",
-            "AssignVariableOp",
-            "EmptyTensorList",
-            "ReadVariableOp",
-            "ResourceGather",
-            "TruncatedNormal",
-            "VarHandleOp",
-            "VarIsInitializedOp",
-        ]
-        onnx_ops = []
-
-        with open(os.path.join(".", "utils", "tf_ops", "onnx.json")) as f:
-            onnx_opsets = json.load(f)["opsets"]
-
-        for i in range(1, self.onnx_min_opset + 1):
-            onnx_ops.extend(onnx_opsets[str(i)])
-
-        for model_class in self.all_model_classes:
-            model_op_names = set()
-
-            with tf.Graph().as_default() as g:
-                model = model_class(config)
-                model(model.dummy_inputs)
-
-                for op in g.get_operations():
-                    model_op_names.add(op.node_def.op)
-
-            model_op_names = sorted(model_op_names)
-            incompatible_ops = []
-
-            for op in model_op_names:
-                if op not in onnx_ops and op not in INTERNAL_OPS:
-                    incompatible_ops.append(op)
-
-            self.assertEqual(len(incompatible_ops), 0, incompatible_ops)
-
-    @require_onnx
-    @slow
-    def test_onnx_runtime_optimize(self):
-        if not self.test_onnx:
-            return
-
-        import keras2onnx
-        import onnxruntime
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model(model.dummy_inputs)
-
-            onnx_model = keras2onnx.convert_keras(model, model.name, target_opset=self.onnx_min_opset)
-
-            onnxruntime.InferenceSession(onnx_model.SerializeToString())
-
-    @tooslow
-    def test_mixed_precision(self):
-        tf.keras.mixed_precision.experimental.set_policy("mixed_float16")
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config)
-            outputs = model(class_inputs_dict)
-
-            self.assertIsNotNone(outputs)
-
-        tf.keras.mixed_precision.experimental.set_policy("float32")
 
     def test_keras_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -368,11 +246,10 @@ class TFModelTesterMixin:
             if "T5" in main_layer_class.__name__:
                 # Take the same values than in TFT5ModelTester for this shared layer
                 shared = TFSharedEmbeddings(99, 32, name="shared")
-                config.use_cache = inputs_dict.pop("use_cache", None)
+                config.use_cache = False
                 main_layer = main_layer_class(config, embed_tokens=shared)
             else:
                 main_layer = main_layer_class(config)
-
             symbolic_inputs = {
                 name: tf.keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
             }
@@ -404,7 +281,7 @@ class TFModelTesterMixin:
         if isinstance(after_outputs, tf.Tensor):
             out_1 = after_outputs.numpy()
         elif isinstance(after_outputs, dict):
-            out_1 = after_outputs[list(after_outputs.keys())[0]].numpy()
+            out_1 = after_outputs[list(after_outputs.keys())[0]]
         else:
             out_1 = after_outputs[0].numpy()
         out_2 = outputs[0].numpy()
@@ -414,8 +291,9 @@ class TFModelTesterMixin:
         max_diff = np.amax(np.abs(out_1 - out_2))
         self.assertLessEqual(max_diff, 1e-5)
 
-    @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):
+        if not is_torch_available():
+            return
 
         import torch
 
@@ -424,7 +302,7 @@ class TFModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beginning
+            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beggining
             pt_model_class = getattr(transformers, pt_model_class_name)
 
             config.output_hidden_states = True
@@ -441,13 +319,10 @@ class TFModelTesterMixin:
 
             # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
             pt_model.eval()
-            pt_inputs_dict = {}
-            for name, key in self._prepare_for_class(inputs_dict, model_class).items():
-                if type(key) == bool:
-                    pt_inputs_dict[name] = key
-                else:
-                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
-
+            pt_inputs_dict = dict(
+                (name, torch.from_numpy(key.numpy()).to(torch.long))
+                for name, key in self._prepare_for_class(inputs_dict, model_class).items()
+            )
             # need to rename encoder-decoder "inputs" for PyTorch
             if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
                 pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
@@ -467,6 +342,13 @@ class TFModelTesterMixin:
             tf_hidden_states[pt_nans] = 0
 
             max_diff = np.amax(np.abs(tf_hidden_states - pt_hidden_states))
+            # Debug info (remove when fixed)
+            if max_diff >= 4e-2:
+                print("===")
+                print(model_class)
+                print(config)
+                print(inputs_dict)
+                print(pt_inputs_dict)
             self.assertLessEqual(max_diff, 4e-2)
 
             # Check we can load pt model in tf and vice-versa with checkpoint => model functions
@@ -481,13 +363,10 @@ class TFModelTesterMixin:
 
             # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
             pt_model.eval()
-            pt_inputs_dict = {}
-            for name, key in self._prepare_for_class(inputs_dict, model_class).items():
-                if type(key) == bool:
-                    key = np.array(key, dtype=bool)
-                    pt_inputs_dict[name] = torch.from_numpy(key).to(torch.long)
-                else:
-                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
+            pt_inputs_dict = dict(
+                (name, torch.from_numpy(key.numpy()).to(torch.long))
+                for name, key in self._prepare_for_class(inputs_dict, model_class).items()
+            )
             # need to rename encoder-decoder "inputs" for PyTorch
             if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
                 pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
@@ -508,16 +387,8 @@ class TFModelTesterMixin:
             max_diff = np.amax(np.abs(tfo - pto))
             self.assertLessEqual(max_diff, 4e-2)
 
-    @tooslow
     def test_train_pipeline_custom_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        # head_mask and decoder_head_mask has different shapes than other input args
-        if "head_mask" in inputs_dict:
-            del inputs_dict["head_mask"]
-        if "decoder_head_mask" in inputs_dict:
-            del inputs_dict["decoder_head_mask"]
-        if "cross_attn_head_mask" in inputs_dict:
-            del inputs_dict["cross_attn_head_mask"]
         tf_main_layer_classes = set(
             module_member
             for model_class in self.all_model_classes
@@ -537,6 +408,7 @@ class TFModelTesterMixin:
                 shared = TFSharedEmbeddings(self.model_tester.vocab_size, self.model_tester.hidden_size, name="shared")
                 config.use_cache = False
                 main_layer = main_layer_class(config, embed_tokens=shared)
+                del inputs_dict["use_cache"]
             else:
                 main_layer = main_layer_class(config)
 
@@ -550,14 +422,14 @@ class TFModelTesterMixin:
                 num_labels = 2
 
             X = tf.data.Dataset.from_tensor_slices(
-                (inputs_dict, np.ones((self.model_tester.batch_size, self.model_tester.seq_length, num_labels, 1)))
+                (inputs_dict, np.random.randint(0, num_labels, (self.model_tester.batch_size, 1)))
             ).batch(1)
 
             hidden_states = main_layer(symbolic_inputs)[0]
             outputs = tf.keras.layers.Dense(num_labels, activation="softmax", name="outputs")(hidden_states)
             model = tf.keras.models.Model(inputs=symbolic_inputs, outputs=[outputs])
 
-            model.compile(loss="binary_crossentropy", optimizer="adam", metrics=["binary_accuracy"])
+            model.compile(loss="binary_crossentropy", optimizer="adam", metrics=["acc"])
             model.fit(X, epochs=1)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -580,7 +452,7 @@ class TFModelTesterMixin:
 
     def test_compile_tf_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        max_input = getattr(self.model_tester, "max_position_embeddings", 512)
+
         optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
         loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
@@ -589,23 +461,22 @@ class TFModelTesterMixin:
             if self.is_encoder_decoder:
                 input_ids = {
                     "decoder_input_ids": tf.keras.Input(
-                        batch_shape=(2, max_input),
-                        name="decoder_input_ids",
-                        dtype="int32",
+                        batch_shape=(2, 2000), name="decoder_input_ids", dtype="int32"
                     ),
-                    "input_ids": tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32"),
+                    "input_ids": tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32"),
                 }
-            elif model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
-                input_ids = tf.keras.Input(batch_shape=(4, 2, max_input), name="input_ids", dtype="int32")
+            elif model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
+                input_ids = tf.keras.Input(batch_shape=(4, 2, 2000), name="input_ids", dtype="int32")
             else:
-                input_ids = tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32")
+                input_ids = tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32")
 
             # Prepare our model
             model = model_class(config)
-            model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
+
             # Let's load it from the disk to be sure we can use pretrained weights
             with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname, saved_model=False)
+                outputs = model(self._prepare_for_class(inputs_dict, model_class))  # build the model
+                model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(tmpdirname)
 
             outputs_dict = model(input_ids)
@@ -623,9 +494,7 @@ class TFModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            outputs_dict = model(inputs)
+            outputs_dict = model(self._prepare_for_class(inputs_dict, model_class))
 
             inputs_keywords = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
             input_ids = inputs_keywords.pop("input_ids", None)
@@ -637,138 +506,75 @@ class TFModelTesterMixin:
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", self.model_tester.seq_length)
-        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
-        decoder_key_length = getattr(self.model_tester, "key_length", decoder_seq_length)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
-        def check_decoder_attentions_output(outputs):
-            out_len = len(outputs)
-            self.assertEqual(min(out_len % 2, out_len % 5), 0)  # differentiation due to newly added cross_attentions
-            decoder_attentions = outputs.decoder_attentions
-            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(decoder_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
-            )
+        decoder_seq_length = (
+            self.model_tester.decoder_seq_length
+            if hasattr(self.model_tester, "decoder_seq_length")
+            else self.model_tester.seq_length
+        )
+        encoder_seq_length = (
+            self.model_tester.encoder_seq_length
+            if hasattr(self.model_tester, "encoder_seq_length")
+            else self.model_tester.seq_length
+        )
+        decoder_key_length = (
+            self.model_tester.key_length if hasattr(self.model_tester, "key_length") else decoder_seq_length
+        )
+        encoder_key_length = (
+            self.model_tester.key_length if hasattr(self.model_tester, "key_length") else encoder_seq_length
+        )
 
-        def check_encoder_attentions_output(outputs):
-            attentions = [
-                t.numpy() for t in (outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions)
-            ]
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            config.output_hidden_states = False
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+            attentions = [t.numpy() for t in outputs[-1]]
+            self.assertEqual(model.config.output_hidden_states, False)
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["use_cache"] = False
-            config.output_hidden_states = False
-            model = model_class(config)
-            outputs = model(self._prepare_for_class(inputs_dict, model_class))
             out_len = len(outputs)
-            self.assertEqual(config.output_hidden_states, False)
-            check_encoder_attentions_output(outputs)
 
             if self.is_encoder_decoder:
-                model = model_class(config)
-                outputs = model(self._prepare_for_class(inputs_dict, model_class))
-                self.assertEqual(config.output_hidden_states, False)
-                check_decoder_attentions_output(outputs)
+                self.assertEqual(out_len % 2, 0)
+                decoder_attentions = outputs[(out_len // 2) - 1]
+                self.assertEqual(model.config.output_hidden_states, False)
+                self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(decoder_attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                )
 
             # Check that output attentions can also be changed via the config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
-            self.assertEqual(config.output_hidden_states, False)
-            check_encoder_attentions_output(outputs)
+            attentions = [t.numpy() for t in outputs[-1]]
+            self.assertEqual(model.config.output_hidden_states, False)
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+            )
 
             # Check attention is always last and order is fine
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = True
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
-
             self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
             self.assertEqual(model.config.output_hidden_states, True)
-            check_encoder_attentions_output(outputs)
 
-    def test_headmasking(self):
-        if not self.test_head_masking:
-            return
-
-        random.Random().seed(42)
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        random.Random().seed()
-
-        inputs_dict["output_attentions"] = True
-        config.output_hidden_states = True
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-
-            # Prepare head_mask
-            def prepare_layer_head_mask(i, attention_heads, num_hidden_layers):
-                if i == 0:
-                    return tf.concat(
-                        (tf.zeros(1, dtype=tf.float32), tf.ones(attention_heads - 1, dtype=tf.float32)), 0
-                    )
-                elif i == num_hidden_layers - 1:
-                    return tf.concat(
-                        (tf.zeros(attention_heads - 1, dtype=tf.float32), tf.ones(1, dtype=tf.float32)), 0
-                    )
-                else:
-                    return tf.ones(attention_heads, dtype=tf.float32)
-
-            head_mask = tf.stack(
-                [
-                    prepare_layer_head_mask(i, config.num_attention_heads, config.num_hidden_layers)
-                    for i in range(config.num_hidden_layers)
-                ],
-                0,
+            attentions = [t.numpy() for t in outputs[-1]]
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
-
-            inputs = self._prepare_for_class(inputs_dict, model_class).copy()
-            inputs["head_mask"] = head_mask
-            if model.config.is_encoder_decoder:
-                signature = inspect.signature(model.call)
-                arg_names = [*signature.parameters.keys()]
-                if "decoder_head_mask" in arg_names:  # necessary diferentiation because of T5 model
-                    inputs["decoder_head_mask"] = head_mask
-                if "cross_attn_head_mask" in arg_names:
-                    inputs["cross_attn_head_mask"] = head_mask
-
-            outputs = model(**inputs, return_dict=True)
-
-            def check_attentions_validity(attentions):
-                # Remove Nan
-                for t in attentions:
-                    self.assertLess(
-                        (tf.math.reduce_sum(tf.cast(tf.math.is_nan(t), tf.float32))).numpy(), (tf.size(t) / 4).numpy()
-                    )  # Check we don't have more than 25% nans (arbitrary)
-
-                attentions = [
-                    tf.where(tf.math.is_nan(t), 0.0, t) for t in attentions
-                ]  # remove them (the test is less complete)
-
-                self.assertAlmostEqual(tf.math.reduce_sum(attentions[0][..., 0, :, :]).numpy(), 0.0)
-                self.assertNotEqual(tf.math.reduce_sum(attentions[0][..., -1, :, :]).numpy(), 0.0)
-                if len(attentions) > 2:  # encoder-decodere models have only 2 layers in each modules
-                    self.assertNotEqual(tf.math.reduce_sum(attentions[1][..., 0, :, :]).numpy(), 0.0)
-                self.assertAlmostEqual(tf.math.reduce_sum(attentions[-1][..., -2, :, :]).numpy(), 0.0)
-                self.assertNotEqual(tf.math.reduce_sum(attentions[-1][..., -1, :, :]).numpy(), 0.0)
-
-            if model.config.is_encoder_decoder:
-                check_attentions_validity(outputs.encoder_attentions)
-                check_attentions_validity(outputs.decoder_attentions)
-                if "cross_attn_head_mask" in arg_names:
-                    check_attentions_validity(outputs.cross_attentions)
-            else:
-                check_attentions_validity(outputs.attentions)
 
     def test_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -776,33 +582,15 @@ class TFModelTesterMixin:
         def check_hidden_states_output(config, inputs_dict, model_class):
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
+            hidden_states = [t.numpy() for t in outputs[-1]]
             expected_num_layers = getattr(
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
             )
-
-            if model.config.is_encoder_decoder:
-                encoder_hidden_states = outputs.encoder_hidden_states
-                decoder_hidden_states = outputs.decoder_hidden_states
-
-                self.assertEqual(config.output_attentions, False)
-                self.assertEqual(len(encoder_hidden_states), expected_num_layers)
-                self.assertListEqual(
-                    list(encoder_hidden_states[0].shape[-2:]),
-                    [self.model_tester.seq_length, self.model_tester.hidden_size],
-                )
-                self.assertEqual(len(decoder_hidden_states), expected_num_layers)
-                self.assertListEqual(
-                    list(decoder_hidden_states[0].shape[-2:]),
-                    [self.model_tester.seq_length, self.model_tester.hidden_size],
-                )
-            else:
-                hidden_states = outputs.hidden_states
-                self.assertEqual(config.output_attentions, False)
-                self.assertEqual(len(hidden_states), expected_num_layers)
-                self.assertListEqual(
-                    list(hidden_states[0].shape[-2:]),
-                    [self.model_tester.seq_length, self.model_tester.hidden_size],
-                )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [self.model_tester.seq_length, self.model_tester.hidden_size],
+            )
 
         for model_class in self.all_model_classes:
             inputs_dict["output_hidden_states"] = True
@@ -814,28 +602,12 @@ class TFModelTesterMixin:
 
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        list_lm_models = (
-            get_values(TF_MODEL_FOR_CAUSAL_LM_MAPPING)
-            + get_values(TF_MODEL_FOR_MASKED_LM_MAPPING)
-            + get_values(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING)
-        )
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-
-            if model_class in list_lm_models:
-                x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_bias()
-                assert isinstance(name, dict)
-                for k, v in name.items():
-                    assert isinstance(v, tf.Variable)
-            else:
-                x = model.get_output_embeddings()
-                assert x is None
-                name = model.get_bias()
-                assert name is None
+            assert isinstance(model.get_input_embeddings(), (tf.keras.layers.Layer, TFAdaptiveEmbedding))
+            x = model.get_output_embeddings()
+            assert x is None or isinstance(x, tf.keras.layers.Layer)
 
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -908,14 +680,38 @@ class TFModelTesterMixin:
                 model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
             )
 
+    def _get_embeds(self, wte, input_ids):
+        # ^^ In our TF models, the input_embeddings can take slightly different forms,
+        # so we try a few of them.
+        # We used to fall back to just synthetically creating a dummy tensor of ones:
+        try:
+            x = wte(input_ids, mode="embedding")
+        except Exception:
+            try:
+                x = wte([input_ids], mode="embedding")
+            except Exception:
+                try:
+                    x = wte([input_ids, None, None, None], mode="embedding")
+                except Exception:
+                    if hasattr(self.model_tester, "embedding_size"):
+                        x = tf.ones(
+                            input_ids.shape + [self.model_tester.embedding_size],
+                            dtype=tf.dtypes.float32,
+                        )
+                    else:
+                        x = tf.ones(
+                            input_ids.shape + [self.model_tester.hidden_size],
+                            dtype=tf.dtypes.float32,
+                        )
+        return x
+
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
 
-            inputs = copy.deepcopy(inputs_dict)
-
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
             if not self.is_encoder_decoder:
                 input_ids = inputs["input_ids"]
                 del inputs["input_ids"]
@@ -925,143 +721,42 @@ class TFModelTesterMixin:
                 del inputs["input_ids"]
                 inputs.pop("decoder_input_ids", None)
 
+            wte = model.get_input_embeddings()
             if not self.is_encoder_decoder:
-                inputs["inputs_embeds"] = model.get_input_embeddings()(input_ids)
+                inputs["inputs_embeds"] = self._get_embeds(wte, input_ids)
             else:
-                inputs["inputs_embeds"] = model.get_input_embeddings()(encoder_input_ids)
-                inputs["decoder_inputs_embeds"] = model.get_input_embeddings()(decoder_input_ids)
-
-            inputs = self._prepare_for_class(inputs, model_class)
+                inputs["inputs_embeds"] = self._get_embeds(wte, encoder_input_ids)
+                inputs["decoder_inputs_embeds"] = self._get_embeds(wte, decoder_input_ids)
 
             model(inputs)
-
-    @tooslow
-    def test_graph_mode_with_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-
-            inputs = copy.deepcopy(inputs_dict)
-
-            if not self.is_encoder_decoder:
-                input_ids = inputs["input_ids"]
-                del inputs["input_ids"]
-            else:
-                encoder_input_ids = inputs["input_ids"]
-                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
-                del inputs["input_ids"]
-                inputs.pop("decoder_input_ids", None)
-
-            if not self.is_encoder_decoder:
-                inputs["inputs_embeds"] = model.get_input_embeddings()(input_ids)
-            else:
-                inputs["inputs_embeds"] = model.get_input_embeddings()(encoder_input_ids)
-                inputs["decoder_inputs_embeds"] = model.get_input_embeddings()(decoder_input_ids)
-
-            inputs = self._prepare_for_class(inputs, model_class)
-
-            @tf.function
-            def run_in_graph_mode():
-                return model(inputs)
-
-            outputs = run_in_graph_mode()
-            self.assertIsNotNone(outputs)
-
-    def test_numpy_arrays_inputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        def prepare_numpy_arrays(inputs_dict):
-            inputs_np_dict = {}
-            for k, v in inputs_dict.items():
-                if tf.is_tensor(v):
-                    inputs_np_dict[k] = v.numpy()
-                else:
-                    inputs_np_dict[k] = np.array(k)
-
-            return inputs_np_dict
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            inputs_np = prepare_numpy_arrays(inputs)
-
-            model(inputs_np)
 
     def test_resize_token_embeddings(self):
         if not self.test_resize_embeddings:
             return
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        def _get_word_embedding_weight(model, embedding_layer):
-            embeds = getattr(embedding_layer, "weight", None)
-            if embeds is not None:
-                return embeds
-
-            embeds = getattr(embedding_layer, "decoder", None)
-            if embeds is not None:
-                return embeds
-
-            model(model.dummy_inputs)
-
-            embeds = getattr(embedding_layer, "weight", None)
-            if embeds is not None:
-                return embeds
-
-            embeds = getattr(embedding_layer, "decoder", None)
-            if embeds is not None:
-                return embeds
-
-            return None
-
+        INPUT_SHAPE = [1, 10, config.hidden_size]
         for model_class in self.all_model_classes:
             for size in [config.vocab_size - 10, config.vocab_size + 10, None]:
                 # build the embeddings
                 model = model_class(config=config)
-                old_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
-                old_bias = model.get_bias()
-                old_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
+                emb_old = model.get_input_embeddings()
+                emb_old.build(INPUT_SHAPE)
                 # reshape the embeddings
-                model.resize_token_embeddings(size)
-                new_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
-                new_bias = model.get_bias()
-                new_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
-
-                # check that the resized embeddings size matches the desired size.
+                new_embeddings = model._get_resized_embeddings(emb_old, size)
+                # # check that the resized embeddings size matches the desired size.
                 assert_size = size if size is not None else config.vocab_size
-                self.assertEqual(new_input_embeddings.shape[0], assert_size)
-
+                self.assertEqual(new_embeddings.shape[0], assert_size)
                 # check that weights remain the same after resizing
+                emd_old_weights = model._get_word_embeddings(emb_old)
                 models_equal = True
-                for p1, p2 in zip(old_input_embeddings.value(), new_input_embeddings.value()):
-                    if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                for p1, p2 in zip(emd_old_weights.numpy(), new_embeddings.numpy()):
+                    if np.sum(abs(p1 - p2)) > 0:
                         models_equal = False
                 self.assertTrue(models_equal)
 
-                if old_bias is not None and new_bias is not None:
-                    for old_weight, new_weight in zip(old_bias.values(), new_bias.values()):
-                        self.assertEqual(new_weight.shape[0], assert_size)
-
-                        models_equal = True
-                        for p1, p2 in zip(old_weight.value(), new_weight.value()):
-                            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
-                                models_equal = False
-                        self.assertTrue(models_equal)
-
-                if old_output_embeddings is not None and new_output_embeddings is not None:
-                    self.assertEqual(new_output_embeddings.shape[0], assert_size)
-                    self.assertEqual(new_output_embeddings.shape[1], old_output_embeddings.shape[1])
-
-                    models_equal = True
-                    for p1, p2 in zip(old_output_embeddings.value(), new_output_embeddings.value()):
-                        if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
-                            models_equal = False
-                    self.assertTrue(models_equal)
-
     def test_lm_head_model_random_no_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict["input_ids"]
+        input_ids = inputs_dict["input_ids"] if "input_ids" in inputs_dict else inputs_dict["inputs"]
 
         # iterate over all generative models
         for model_class in self.all_generative_model_classes:
@@ -1097,7 +792,7 @@ class TFModelTesterMixin:
 
     def test_lm_head_model_random_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict["input_ids"]
+        input_ids = inputs_dict["input_ids"] if "input_ids" in inputs_dict else inputs_dict["inputs"]
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
@@ -1142,12 +837,10 @@ class TFModelTesterMixin:
             if getattr(model, "compute_loss", None):
                 # The number of elements in the loss should be the same as the number of elements in the label
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
-                added_label = prepared_for_class[
-                    sorted(list(prepared_for_class.keys() - inputs_dict.keys()), reverse=True)[0]
-                ]
+                added_label = prepared_for_class[list(prepared_for_class.keys() - inputs_dict.keys())[0]]
                 loss_size = tf.size(added_label)
 
-                if model.__class__ in get_values(TF_MODEL_FOR_CAUSAL_LM_MAPPING):
+                if model.__class__ in TF_MODEL_FOR_CAUSAL_LM_MAPPING.values():
                     # if loss is causal lm loss, labels are shift, so that one label per batch
                     # is cut
                     loss_size = loss_size - self.model_tester.batch_size
@@ -1169,30 +862,23 @@ class TFModelTesterMixin:
 
                 # Get keys that were added with the _prepare_for_class function
                 label_keys = prepared_for_class.keys() - inputs_dict.keys()
-                signature = inspect.signature(model.call).parameters
-                signature_names = list(signature.keys())
+                signature = inspect.getfullargspec(model.call)[0]
 
                 # Create a dictionary holding the location of the tensors in the tuple
-                tuple_index_mapping = {0: "input_ids"}
+                tuple_index_mapping = {1: "input_ids"}
                 for label_key in label_keys:
-                    label_key_index = signature_names.index(label_key)
+                    label_key_index = signature.index(label_key)
                     tuple_index_mapping[label_key_index] = label_key
                 sorted_tuple_index_mapping = sorted(tuple_index_mapping.items())
-                # Initialize a list with their default values, update the values and convert to a tuple
-                list_input = []
 
-                for name in signature_names:
-                    if name != "kwargs":
-                        list_input.append(signature[name].default)
-
+                # Initialize a list with None, update the values and convert to a tuple
+                list_input = [None] * sorted_tuple_index_mapping[-1][0]
                 for index, value in sorted_tuple_index_mapping:
-                    list_input[index] = prepared_for_class[value]
-
+                    list_input[index - 1] = prepared_for_class[value]
                 tuple_input = tuple(list_input)
 
                 # Send to model
-                loss = model(tuple_input[:-1])[0]
-
+                loss = model(tuple_input)[0]
                 self.assertEqual(loss.shape, [loss_size])
 
     def _generate_random_bad_tokens(self, num_bad_tokens, model):
@@ -1344,62 +1030,3 @@ class UtilsFunctionsTest(unittest.TestCase):
 
         tf.debugging.assert_near(non_inf_output, non_inf_expected_output, rtol=1e-12)
         tf.debugging.assert_equal(non_inf_idx, non_inf_expected_idx)
-
-
-@require_tf
-@is_staging_test
-class TFModelPushToHubTester(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
-        cls._token = cls._api.login(username=USER, password=PASS)
-
-    @classmethod
-    def tearDownClass(cls):
-        try:
-            cls._api.delete_repo(token=cls._token, name="test-model-tf")
-        except HTTPError:
-            pass
-
-        try:
-            cls._api.delete_repo(token=cls._token, name="test-model-tf-org", organization="valid_org")
-        except HTTPError:
-            pass
-
-    def test_push_to_hub(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        model = TFBertModel(config)
-        # Make sure model is properly initialized
-        _ = model(model.dummy_inputs)
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, push_to_hub=True, repo_name="test-model-tf", use_auth_token=self._token)
-
-            new_model = TFBertModel.from_pretrained(f"{USER}/test-model-tf")
-            models_equal = True
-            for p1, p2 in zip(model.weights, new_model.weights):
-                if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
-                    models_equal = False
-            self.assertTrue(models_equal)
-
-    def test_push_to_hub_in_organization(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        model = TFBertModel(config)
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(
-                tmp_dir,
-                push_to_hub=True,
-                repo_name="test-model-tf-org",
-                use_auth_token=self._token,
-                organization="valid_org",
-            )
-
-            new_model = TFBertModel.from_pretrained("valid_org/test-model-tf-org")
-            models_equal = True
-            for p1, p2 in zip(model.weights, new_model.weights):
-                if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
-                    models_equal = False
-            self.assertTrue(models_equal)
