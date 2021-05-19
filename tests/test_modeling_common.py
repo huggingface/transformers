@@ -62,7 +62,6 @@ if is_torch_available():
         PretrainedConfig,
         PreTrainedModel,
         T5ForConditionalGeneration,
-        GPT2DoubleHeadsModel,
     )
 
 if is_torch_fx_available():
@@ -615,7 +614,7 @@ class ModelTesterMixin:
                         sequence_length=[encoder_sequence_length, decoder_sequence_length],
                     )
 
-                    traced_output = traced_model(**prepared_inputs)
+                    traced_output = traced_model(**filtered_inputs)
 
                 else:
                     input_names = ["input_ids", "attention_mask", "token_type_ids"]
@@ -643,7 +642,9 @@ class ModelTesterMixin:
                     elif rank == 3:
                         batch_size, num_choices, sequence_length = input_ids.shape
                     else:
-                        raise NotImplementedError(f"symbolic_trace automatic parameters inference not implemented for input of rank {rank}.")
+                        raise NotImplementedError(
+                            f"symbolic_trace automatic parameters inference not implemented for input of rank {rank}."
+                        )
 
                     traced_model = symbolic_trace(
                         model,
@@ -662,8 +663,10 @@ class ModelTesterMixin:
             def flatten_output(output):
                 flatten = []
                 for x in output:
-                    if isinstance(x, tuple):
+                    if isinstance(x, (tuple, list)):
                         flatten += flatten_output(x)
+                    elif not isinstance(x, torch.Tensor):
+                        continue
                     else:
                         flatten.append(x)
                 return flatten

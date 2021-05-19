@@ -18,8 +18,8 @@ from . import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-    PreTrainedModel,
     GPT2DoubleHeadsModel,
+    PreTrainedModel,
 )
 from .models.auto import get_values
 
@@ -49,6 +49,7 @@ class HFProxy(Proxy):
 
 
 def _wrap_method_for_model_recording(model, method_name, cache_name):
+    """Helper function that wraps a torch.Tensor method to record its outputs during forward pass."""
     method = getattr(torch.Tensor, method_name)
 
     @functools.wraps(method)
@@ -64,6 +65,11 @@ def _wrap_method_for_model_recording(model, method_name, cache_name):
 
 
 def _create_recorded_proxy_method(proxy, method_name, cache_name):
+    """
+    Helper function that sets a recorded torch.Tensor method as a HFProxy method that will use the recorded values
+    during symbolic tracing.
+    """
+
     def method(self, *args, **kwargs):
         cache = getattr(self.tracer.root, cache_name)
         res = cache.pop(0)
@@ -75,6 +81,10 @@ def _create_recorded_proxy_method(proxy, method_name, cache_name):
 
 
 def _wrap_method_for_model_tracing(model, method_name, cache_name):
+    """
+    Helper function that sets a recorded torch.Tensor method as a torch.Tensor method that will use the recorded values
+    during symbolic tracing.
+    """
 
     original_method = getattr(torch.Tensor, method_name)
 
@@ -91,6 +101,10 @@ def _wrap_method_for_model_tracing(model, method_name, cache_name):
 
 
 def _monkey_patch_tensor_methods_for_model_recording(model, method_names):
+    """
+    Helper function that patchs torch.Tensor methods (specified by the method_names list) to record model inference
+    before symbolic tracing.
+    """
     cache_names = dict()
     original_methods = dict()
     for method_name in method_names:
@@ -110,6 +124,7 @@ def _monkey_patch_tensor_methods_for_model_recording(model, method_names):
 
 
 def _reset_tensor_methods(original_methods):
+    """Helper function that resets the monkey patched torch.Tensor method to their original values."""
     for name, method in original_methods.items():
         setattr(torch.Tensor, name, method)
 
@@ -125,7 +140,9 @@ class HFTracer(Tracer):
     def __init__(self, batch_size=1, sequence_length=[128, 128], num_choices=-1):
         super().__init__()
         encoder_sequence_length = sequence_length[0] if isinstance(sequence_length, (list, tuple)) else sequence_length
-        decoder_sequence_length = sequence_length[1] if isinstance(sequence_length, (list, tuple)) else encoder_sequence_length
+        decoder_sequence_length = (
+            sequence_length[1] if isinstance(sequence_length, (list, tuple)) else encoder_sequence_length
+        )
         self.encoder_shape = [batch_size, encoder_sequence_length]
         self.decoder_shape = (
             [batch_size, decoder_sequence_length] if decoder_sequence_length > 0 else list(self.encoder_shape)
@@ -146,6 +163,7 @@ class HFTracer(Tracer):
         return p
 
     def _generate_dummy_input(self, model, input_name):
+        """Generates dummy input for model inference recording."""
         model_class = model.__class__
         device = model.device
         inputs_dict = dict()
@@ -187,6 +205,10 @@ class HFTracer(Tracer):
         return inputs_dict
 
     def record(self, model, input_names, method_names=None):
+        """
+        Records torch.Tensor method outputs (specified by the method_names list) that will then be used during symbolic
+        tracing.
+        """
         if method_names is None:
             method_names = self.default_methods_to_record
 
@@ -336,13 +358,7 @@ def symbolic_trace(
 
     tracer = HFTracer(batch_size=batch_size, sequence_length=sequence_length, num_choices=num_choices)
 
-    # original_model_device = model.device
-    # model = model.to("cpu")
-
     traced_graph = tracer.trace(model, concrete_args=concrete_args)
     traced = torch.fx.GraphModule(model, traced_graph)
-
-    # model = model.to(original_model_device)
-    # traced = traced.to(original_model_device)
 
     return traced
