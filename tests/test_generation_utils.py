@@ -1084,9 +1084,13 @@ class GenerationTesterMixin:
                 continue
 
             head_masking = {
-                "head_mask": torch.zeros(config.encoder_layers, config.encoder_attention_heads),
-                "decoder_head_mask": torch.zeros(config.decoder_layers, config.decoder_attention_heads),
-                "cross_attn_head_mask": torch.zeros(config.decoder_layers, config.decoder_attention_heads),
+                "head_mask": torch.zeros(config.encoder_layers, config.encoder_attention_heads, device=torch_device),
+                "decoder_head_mask": torch.zeros(
+                    config.decoder_layers, config.decoder_attention_heads, device=torch_device
+                ),
+                "cross_attn_head_mask": torch.zeros(
+                    config.decoder_layers, config.decoder_attention_heads, device=torch_device
+                ),
             }
 
             signature = inspect.signature(model.forward)
