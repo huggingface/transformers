@@ -19,8 +19,7 @@ limitations under the License.
 The following example showcases how to train a language model from scratch 
 using the JAX/Flax backend.
 
-JAX/Flax allows you to trace pure functions and 
-to compile them into efficient, fused accelerator code on both GPU and TPU.
+JAX/Flax allows you to trace pure functions and compile them into efficient, fused accelerator code on both GPU and TPU.
 Models written in JAX/Flax are **immutable** and updated in a purely functional
 way which enables simple and efficient model parallelism.
 
@@ -34,7 +33,7 @@ in Norwegian on a single TPUv3-8 pod.
 
 The example script uses the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
 
-Let's start by creating a folder to save the trained model and link to the `run_mlm_flax.py` script.
+Let's start by creating a folder to save the trained model and a symbolic link to the `run_mlm_flax.py` script.
 
 ```bash
 export MODEL_DIR="./norwegian-roberta-base"
@@ -44,10 +43,10 @@ ln -s ~/transformers/examples/flax/language-modeling/run_mlm_flax.py run_mlm_fla
 
 ### Train tokenizer
 
-In a first step, we train a tokenizer to efficiently process the text input for the model. Similar to how it is shown in [How to train a new language model from scratch using Transformers and Tokenizers](https://huggingface.co/blog/how-to-train), we use a **`ByteLevelBPETokenizer`**.
+In the first step, we train a tokenizer to efficiently process the text input for the model. Similar to how it is shown in [How to train a new language model from scratch using Transformers and Tokenizers](https://huggingface.co/blog/how-to-train), we use a **`ByteLevelBPETokenizer`**.
 The tokenizer is trained on the complete Norwegian dataset of OSCAR
 and consequently saved in `${MODEL_DIR}`
-This should can take up to 10 minutes depending on your computer ☕.
+This can take up to 10 minutes depending on your hardware ☕.
 
 ```python
 from datasets import load_dataset
@@ -80,7 +79,7 @@ tokenizer.save(f"{model_dir}/tokenizer.json")
 
 ### Create configuration
 
-Next we create the model's configuration file. This is as simple 
+Next, we create the model's configuration file. This is as simple 
 as loading and storing [`**roberta-base**`](https://huggingface.co/roberta-base)
 in the local model folder:
 
