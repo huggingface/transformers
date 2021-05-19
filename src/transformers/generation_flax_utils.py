@@ -79,8 +79,8 @@ class FlaxGenerationMixin:
         cur_len = jnp.array(cur_len)
 
         # per batch-item holding current token in loop.
-        init_sequences = jnp.full((batch_size, max_length), pad_token_id, dtype=jnp.int32)
-        init_sequences = lax.dynamic_update_slice(init_sequences, input_ids, (0, 0))
+        sequences = jnp.full((batch_size, max_length), pad_token_id, dtype=jnp.int32)
+        sequences = lax.dynamic_update_slice(sequences, input_ids, (0, 0))
 
         # per batch-item state bit indicating if sentence has finished.
         is_sent_finished = jnp.zeros((batch_size,), dtype=jnp.bool_)
@@ -90,52 +90,51 @@ class FlaxGenerationMixin:
         # initializing the cache
         past_key_values = model.init_cache(batch_size, max_length)
 
-        import ipdb
-
-        ipdb.set_trace()
-        # first step
-        model_outputs = model(input_ids, past_key_values=past_key_values)
-        next_token = jnp.argmax(logits[:, -1:], axis=-1)
-
+        # initialize state
         state = GreedyState(
             cur_len=cur_len,
-            sequences=init_sequences,
-            current_token=next_token,
+            sequences=sequences,
+            current_token=input_ids,
             is_sent_finished=is_sent_finished,
             cache=past_key_values,
         )
 
         def greedy_search_cond_fn(state):
-            """Sampling loop termination condition."""
+            """state termination condition fn."""
             has_reached_max_length = state.cur_len == max_length
             all_sequence_finished = jnp.all(state.is_sent_finished)
             finish_generation = jnp.logical_or(has_reached_max_length, all_sequence_finished)
             return ~finish_generation
 
         def greedy_search_body_fn(state):
-            """Sampling loop state update."""
-            is_sent_finished = state.is_sent_finished | (state.current_token == eos_token_id)
-            current_token = state.current_token * ~state.is_sent_finished + pad_token_id * state.is_sent_finished
+            """state update fn."""
+            model_outputs = model(state.current_token, past_key_values=state.cache)
+            next_token = jnp.argmax(model_outputs.logits[:, -1], axis=-1)
 
-            next_sequences = lax.dynamic_update_slice(state.sequences, current_token, (0, state.cur_len))
+            next_is_sent_finished = state.is_sent_finished | (next_token == eos_token_id)
+            next_token = next_token * ~next_is_sent_finished + pad_token_id * next_is_sent_finished
+            next_token = next_token[:, None]
 
-            next_logits, next_cache = model(current_token, past_key_values=state.cache).logits[:, -1]
-            next_token = jnp.argmax(next_logits, axis=-1)
+            next_sequences = lax.dynamic_update_slice(state.sequences, next_token, (0, state.cur_len))
 
             return GreedyState(
                 cur_len=state.cur_len + 1,
                 sequences=next_sequences,
                 current_token=next_token,
-                is_sent_finished=is_sent_finished,
-                cache=next_cache,
+                is_sent_finished=next_is_sent_finished,
+                cache=model_outputs.past_key_values,
             )
 
-        # Run greedy search and collect final state.
+        # The very first prompt often has sequence length > 1, so run outside of `lax.while_loop` to comply with TPU
+        state = greedy_search_body_fn(state)
+
+        # First generated tokens might be EOS so check if need to finish generation already at this stage
+        if not greedy_search_cond_fn(state):
+            return state.sequences
+
         if not trace:
-            final_state = self._run_loop_in_debug(greedy_search_cond_fn, greedy_search_body_fn, state)
+            state = self._run_loop_in_debug(greedy_search_cond_fn, greedy_search_body_fn, state)
         else:
-            final_state = lax.while_loop(greedy_search_cond_fn, greedy_search_body_fn, state)
+            state = lax.while_loop(greedy_search_cond_fn, greedy_search_body_fn, state)
 
-        sequences = final_state.sequences
-
-        return sequences
+        return state.sequences
