@@ -287,12 +287,8 @@ class FlaxModelTesterMixin:
                 else:
 
                     @jax.jit
-                    def model_jitted(input_ids, attention_mask=None, token_type_ids=None):
-                        return model(
-                            input_ids=input_ids,
-                            attention_mask=attention_mask,
-                            token_type_ids=token_type_ids,
-                        ).to_tuple()
+                    def model_jitted(input_ids, attention_mask=None, **kwargs):
+                        return model(input_ids=input_ids, attention_mask=attention_mask, **kwargs).to_tuple()
 
                 # Necessary implementation due to encoder-decoder past_key_values which are nested tuples
                 def assertEqual_nested(jitted_output, output):
@@ -338,11 +334,11 @@ class FlaxModelTesterMixin:
                 else:
 
                     @jax.jit
-                    def model_jitted_return_dict(input_ids, attention_mask=None, token_type_ids=None):
+                    def model_jitted_return_dict(input_ids, attention_mask=None, **kwargs):
                         return model(
                             input_ids=input_ids,
                             attention_mask=attention_mask,
-                            token_type_ids=token_type_ids,
+                            **kwargs,
                         )
 
                 # jitted function cannot return OrderedDict
