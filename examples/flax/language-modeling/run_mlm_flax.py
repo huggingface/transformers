@@ -39,7 +39,7 @@ import jax.numpy as jnp
 import optax
 from flax import jax_utils
 from flax.training import train_state
-from flax.training.common_utils import get_metrics, onehot, shard
+from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
 from transformers import (
     CONFIG_MAPPING,
     MODEL_FOR_MASKED_LM_MAPPING,
@@ -491,7 +491,6 @@ if __name__ == "__main__":
 
     # Initialize our training
     rng = jax.random.PRNGKey(training_args.seed)
-    dropout_rngs = jax.random.split(rng, jax.local_device_count())
 
     model = FlaxAutoModelForMaskedLM.from_config(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
 
@@ -529,8 +528,6 @@ if __name__ == "__main__":
 
     # Define gradient update step fn
     def train_step(state, batch, dropout_rng):
-        dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
-
         def loss_fn(params):
             labels = batch.pop("labels")
 
@@ -554,7 +551,7 @@ if __name__ == "__main__":
             {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}, axis_name="batch"
         )
 
-        return new_state, metrics, new_dropout_rng
+        return new_state, metrics
 
     # Create parallel version of the train step
     p_train_step = jax.pmap(train_step, "batch", donate_argnums=(0,))
@@ -600,12 +597,14 @@ if __name__ == "__main__":
 
         # Gather the indexes for creating the batch and do a training step
         for i, batch_idx in enumerate(tqdm(train_batch_idx, desc="Training...", position=1)):
+            rng, dropout_rng = jax.random.split(rng)
+            dropout_rngs = shard_prng_key(dropout_rng)
             samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
             model_inputs = data_collator(samples, pad_to_multiple_of=16)
 
             # Model forward
             model_inputs = shard(model_inputs.data)
-            state, train_metric, dropout_rngs = p_train_step(state, model_inputs, dropout_rngs)
+            state, train_metric = p_train_step(state, model_inputs, dropout_rngs)
             train_metrics.append(train_metric)
 
         train_time += time.time() - train_start
