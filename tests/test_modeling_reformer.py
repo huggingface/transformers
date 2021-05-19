@@ -587,7 +587,6 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         else ()
     )
     all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
-    fx_ready_model_classes = all_model_classes
     test_pruning = False
     test_headmasking = False
     test_torchscript = False

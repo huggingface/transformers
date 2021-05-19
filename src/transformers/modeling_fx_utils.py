@@ -131,8 +131,8 @@ def _reset_tensor_methods(original_methods):
 
 class HFTracer(Tracer):
     """
-    Tracer that is able to symbolically trace models from the library (currently BERT, ELECTRA and T5). To do that, it
-    uses the HFProxy instead of the regular PyTorch torch.fx.Proxy.
+    Tracer that is able to symbolically trace models from the library. To do that, it uses the HFProxy instead of the
+    regular PyTorch torch.fx.Proxy.
     """
 
     default_methods_to_record = {"__bool__", "size", "dim"}
