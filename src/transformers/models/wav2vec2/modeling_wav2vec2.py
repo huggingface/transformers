@@ -115,6 +115,49 @@ def _compute_mask_indices(
     return mask
 
 
+def _compute_mask_indices(
+    shape: Tuple[int, int],
+    mask_prob: float,
+    mask_length: int,
+    attention_mask: Optional[torch.Tensor] = None,
+    min_masks: int = 0,
+    device="cpu",
+) -> torch.tensor:
+
+    batch_size, sequence_length = shape
+    spec_aug_mask = torch.zeros((batch_size, sequence_length), device=device)
+    uniform_dist = torch.ones((batch_size, sequence_length), device=device)
+
+    num_masked_spans = int(mask_prob * sequence_length / mask_length + torch.rand((1,)).item())
+    num_masked_spans = max(num_masked_spans, min_masks)
+
+    spec_aug_mask_idxs = torch.multinomial(uniform_dist, num_masked_spans)
+
+    # apply offset
+
+    #    for i in range(bsz):
+    #        sz = all_sz
+    #        num_mask = all_num_mask
+    #
+    #        lengths = np.full(num_mask, mask_length)
+    #
+    #        min_len = min(lengths)
+    #        if sz - min_len <= num_mask:
+    #            min_len = sz - num_mask - 1
+    #
+    #        mask_idc = np.random.choice(sz - min_len, num_mask, replace=False)
+    #        mask_idc = np.asarray([mask_idc[j] + offset for j in range(len(mask_idc)) for offset in range(lengths[j])])
+    #        mask_idcs.append(np.unique(mask_idc[mask_idc < sz]))
+    #
+    #    min_len = min([len(m) for m in mask_idcs])
+    #    for i, mask_idc in enumerate(mask_idcs):
+    #        if len(mask_idc) > min_len:
+    #            mask_idc = np.random.choice(mask_idc, min_len, replace=False)
+    #        mask[i, mask_idc] = True
+
+    return spec_aug_mask
+
+
 class Wav2Vec2NoLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
