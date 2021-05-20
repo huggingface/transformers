@@ -116,8 +116,17 @@ class FlaxGPT2ModelTester:
         model = model_class_name(config)
 
         past_key_values = model.init_cache(input_ids.shape[0], max_decoder_length)
-        outputs_cache = model(input_ids[:, :-1], past_key_values=past_key_values)
-        outputs_cache_next = model(input_ids[:, -1:], past_key_values=outputs_cache.past_key_values)
+        attention_mask = jnp.ones((input_ids.shape[0], max_decoder_length), dtype="i4")
+
+        outputs_cache = model(input_ids[:, :-1], attention_mask=attention_mask, past_key_values=past_key_values)
+
+        position_ids = jnp.array(input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4")
+        outputs_cache_next = model(
+            input_ids[:, -1:],
+            attention_mask=attention_mask,
+            past_key_values=outputs_cache.past_key_values,
+            position_ids=position_ids,
+        )
 
         outputs = model(input_ids)
 
@@ -136,8 +145,12 @@ class FlaxGPT2ModelTester:
         past_key_values = model.init_cache(input_ids.shape[0], max_decoder_length)
 
         outputs_cache = model(input_ids[:, :-1], attention_mask=attention_mask_cache, past_key_values=past_key_values)
+        position_ids = jnp.array(input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4")
         outputs_cache_next = model(
-            input_ids[:, -1:], past_key_values=outputs_cache.past_key_values, attention_mask=attention_mask_cache
+            input_ids[:, -1:],
+            past_key_values=outputs_cache.past_key_values,
+            attention_mask=attention_mask_cache,
+            position_ids=position_ids,
         )
 
         outputs = model(input_ids, attention_mask=attention_mask)
