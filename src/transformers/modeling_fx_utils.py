@@ -1,6 +1,7 @@
 import copy
 import functools
 import inspect
+import logging
 from typing import Any, Dict, List, Optional, Union
 
 import torch
@@ -22,6 +23,9 @@ from . import (
     PreTrainedModel,
 )
 from .models.auto import get_values
+
+
+logger = logging.get_logger(__name__)
 
 
 class HFProxy(Proxy):
@@ -102,7 +106,7 @@ def _wrap_method_for_model_tracing(model, method_name, cache_name):
 
 def _monkey_patch_tensor_methods_for_model_recording(model, method_names):
     """
-    Helper function that patchs torch.Tensor methods (specified by the method_names list) to record model inference
+    Helper function that patches torch.Tensor methods (specified by the method_names list) to record model inference
     before symbolic tracing.
     """
     cache_names = dict()
@@ -111,7 +115,7 @@ def _monkey_patch_tensor_methods_for_model_recording(model, method_names):
         cache_name = f"cache_{method_name}"
         cache_names[method_name] = cache_name
         if not hasattr(torch.Tensor, method_name):
-            print(f"torch.Tensor has no method called {method_name}, skipping patching.")
+            logger.info(f"torch.Tensor has no method called {method_name}, skipping patching.")
             continue
         original_methods[method_name] = getattr(torch.Tensor, method_name)
         setattr(torch.Tensor, method_name, _wrap_method_for_model_recording(model, method_name, cache_name))
@@ -124,7 +128,7 @@ def _monkey_patch_tensor_methods_for_model_recording(model, method_names):
 
 
 def _reset_tensor_methods(original_methods):
-    """Helper function that resets the monkey patched torch.Tensor method to their original values."""
+    """Helper function that resets the monkey patched torch.Tensor methods to their original values."""
     for name, method in original_methods.items():
         setattr(torch.Tensor, name, method)
 

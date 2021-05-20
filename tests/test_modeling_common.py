@@ -658,8 +658,6 @@ class ModelTesterMixin:
             except RuntimeError:
                 self.fail("Couldn't trace module.")
 
-            num_outputs = len(model_output)
-
             def flatten_output(output):
                 flatten = []
                 for x in output:
@@ -673,9 +671,13 @@ class ModelTesterMixin:
 
             model_output = flatten_output(model_output)
             traced_output = flatten_output(traced_output)
-            outputs_are_close = all(torch.allclose(model_output[i], traced_output[i]) for i in range(num_outputs))
+            num_outputs = len(model_output)
 
-            self.assertTrue(outputs_are_close)
+            for i in range(num_outputs):
+                self.assertTrue(
+                    torch.allclose(model_output[i], traced_output[i]),
+                    f"traced {i}th output doesn't match model {i}th output for {model_class}"
+                )
 
     def test_headmasking(self):
         if not self.test_head_masking:
