@@ -51,6 +51,7 @@ from ..prophetnet.tokenization_prophetnet import ProphetNetTokenizer
 from ..rag.tokenization_rag import RagTokenizer
 from ..retribert.tokenization_retribert import RetriBertTokenizer
 from ..roberta.tokenization_roberta import RobertaTokenizer
+from ..roformer.tokenization_roformer import RoFormerTokenizer
 from ..squeezebert.tokenization_squeezebert import SqueezeBertTokenizer
 from ..tapas.tokenization_tapas import TapasTokenizer
 from ..transfo_xl.tokenization_transfo_xl import TransfoXLTokenizer
@@ -98,6 +99,7 @@ from .configuration_auto import (
     ReformerConfig,
     RetriBertConfig,
     RobertaConfig,
+    RoFormerConfig,
     Speech2TextConfig,
     SqueezeBertConfig,
     T5Config,
@@ -228,6 +230,7 @@ logger = logging.get_logger(__name__)
 TOKENIZER_MAPPING = OrderedDict(
     [
         (RetriBertConfig, (RetriBertTokenizer, RetriBertTokenizerFast)),
+        (RoFormerConfig, (RoFormerTokenizer, None)),
         (T5Config, (T5Tokenizer, T5TokenizerFast)),
         (MT5Config, (MT5Tokenizer, MT5TokenizerFast)),
         (MobileBertConfig, (MobileBertTokenizer, MobileBertTokenizerFast)),
