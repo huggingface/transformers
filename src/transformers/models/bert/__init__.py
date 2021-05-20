@@ -28,7 +28,7 @@ from ...file_utils import (
 
 
 _import_structure = {
-    "configuration_bert": ["BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BertConfig"],
+    "configuration_bert": ["BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BERT_ONNX_CONFIG", "BertConfig"],
     "tokenization_bert": ["BasicTokenizer", "BertTokenizer", "WordpieceTokenizer"],
 }
 
@@ -83,7 +83,7 @@ if is_flax_available():
     ]
 
 if TYPE_CHECKING:
-    from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
+    from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BERT_ONNX_CONFIG, BertConfig
     from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer
 
     if is_tokenizers_available():

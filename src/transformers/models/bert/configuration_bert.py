@@ -15,7 +15,7 @@
 # limitations under the License.
 """ BERT model configuration """
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, OnnxConfig, OnnxVariable
 from ...utils import logging
 
 
@@ -154,3 +154,21 @@ class BertConfig(PretrainedConfig):
         self.gradient_checkpointing = gradient_checkpointing
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
+
+
+BERT_ONNX_CONFIG = OnnxConfig(
+    inputs=[
+        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("token_type_ids", {0: "batch", 1: "sequence"}, repeated=1),
+    ],
+    outputs=[
+        OnnxVariable("last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("pooler_output", {0: "batch"}, repeated=1),
+    ],
+    runtime_config_overrides=None,
+    use_external_data_format=False,
+    minimum_required_onnx_opset=11,
+    optimizer=None,
+    optimizer_features=None
+)
