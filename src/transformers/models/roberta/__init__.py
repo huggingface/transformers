@@ -28,7 +28,7 @@ from ...file_utils import (
 
 
 _import_structure = {
-    "configuration_roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig"],
+    "configuration_roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ROBERTA_ONNX_CONFIG", "RobertaConfig"],
     "tokenization_roberta": ["RobertaTokenizer"],
 }
 
@@ -73,7 +73,7 @@ if is_flax_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
+    from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, ROBERTA_ONNX_CONFIG, RobertaConfig
     from .tokenization_roberta import RobertaTokenizer
 
     if is_tokenizers_available():

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ RoBERTa configuration """
-
+from ... import OnnxConfig, OnnxVariable
 from ...utils import logging
 from ..bert.configuration_bert import BertConfig
 
@@ -62,3 +62,33 @@ class RobertaConfig(BertConfig):
     def __init__(self, pad_token_id=1, bos_token_id=0, eos_token_id=2, **kwargs):
         """Constructs RobertaConfig."""
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+
+
+ROBERTA_ONNX_CONFIG = OnnxConfig(
+    inputs=[
+        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1),
+    ],
+    outputs=[
+        OnnxVariable("last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("pooler_output", {0: "batch"}, repeated=1),
+    ],
+    runtime_config_overrides=None,
+    use_external_data_format=False,
+    minimum_required_onnx_opset=11,
+    optimizer="bert",
+    optimizer_features={
+        "enable_gelu": True,
+        "enable_layer_norm": True,
+        "enable_attention": True,
+        "enable_skip_layer_norm": True,
+        "enable_embed_layer_norm": True,
+        "enable_bias_skip_layer_norm": True,
+        "enable_bias_gelu": True,
+        "enable_gelu_approximation": False,
+    },
+    optimizer_additional_args={
+        "num_heads": "$config.num_attention_heads",
+        "hidden_size": "$config.hidden_size"
+    }
+)

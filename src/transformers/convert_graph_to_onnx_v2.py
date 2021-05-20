@@ -17,6 +17,7 @@ from transformers.configuration_utils import OnnxConfig, OnnxVariable
 from transformers.models.bart import BART_ONNX_CONFIG, BART_ONNX_CONFIG_WITH_PAST
 from transformers.models.bert import BERT_ONNX_CONFIG
 from transformers.models.gpt2 import GPT2_ONNX_CONFIG, GPT2_ONNX_CONFIG_WITH_PAST
+from transformers.models.roberta import ROBERTA_ONNX_CONFIG
 from onnxruntime import GraphOptimizationLevel
 
 
@@ -56,6 +57,12 @@ SUPPORTED_MODEL_KIND = {
     "TFGPT2Model": {
         "default": GPT2_ONNX_CONFIG,
         "with_past": GPT2_ONNX_CONFIG_WITH_PAST
+    },
+    "RobertaModel": {
+        "default": ROBERTA_ONNX_CONFIG,
+    },
+    "TFRobertaModel": {
+        "default": ROBERTA_ONNX_CONFIG
     }
 }
 
