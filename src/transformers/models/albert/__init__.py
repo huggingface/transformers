@@ -28,7 +28,7 @@ from ...file_utils import (
 
 
 _import_structure = {
-    "configuration_albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
+    "configuration_albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ALBERT_ONNX_CONFIG", "AlbertConfig"],
 }
 
 if is_sentencepiece_available():
@@ -67,7 +67,7 @@ if is_tf_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ALBERT_ONNX_CONFIG, AlbertConfig
 
     if is_sentencepiece_available():
         from .tokenization_albert import AlbertTokenizer

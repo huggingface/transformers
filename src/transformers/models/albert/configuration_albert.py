@@ -15,8 +15,7 @@
 # limitations under the License.
 """ ALBERT model configuration """
 
-from ...configuration_utils import PretrainedConfig
-
+from ...configuration_utils import PretrainedConfig, OnnxConfig, OnnxVariable
 
 ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "albert-base-v1": "https://huggingface.co/albert-base-v1/resolve/main/config.json",
@@ -151,3 +150,34 @@ class AlbertConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.classifier_dropout_prob = classifier_dropout_prob
         self.position_embedding_type = position_embedding_type
+
+
+ALBERT_ONNX_CONFIG = OnnxConfig(
+    inputs=[
+        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("token_type_ids", {0: "batch", 1: "sequence"}, repeated=1),
+    ],
+    outputs=[
+        OnnxVariable("last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("pooler_output", {0: "batch"}, repeated=1),
+    ],
+    runtime_config_overrides=None,
+    use_external_data_format=False,
+    minimum_required_onnx_opset=11,
+    optimizer="bert",
+    optimizer_features={
+        "enable_gelu": True,
+        "enable_layer_norm": True,
+        "enable_attention": True,
+        "enable_skip_layer_norm": True,
+        "enable_embed_layer_norm": True,
+        "enable_bias_skip_layer_norm": True,
+        "enable_bias_gelu": True,
+        "enable_gelu_approximation": False,
+    },
+    optimizer_additional_args={
+        "num_heads": "$config.num_attention_heads",
+        "hidden_size": "$config.hidden_size"
+    }
+)

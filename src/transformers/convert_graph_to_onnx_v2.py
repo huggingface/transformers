@@ -14,6 +14,7 @@ from packaging.version import parse, Version
 from transformers import AutoModel, TFAutoModel, PreTrainedModel, is_torch_available, TFPreTrainedModel, AutoTokenizer, \
     PreTrainedTokenizer, TensorType
 from transformers.configuration_utils import OnnxConfig, OnnxVariable
+from transformers.models.albert import ALBERT_ONNX_CONFIG
 from transformers.models.bart import BART_ONNX_CONFIG, BART_ONNX_CONFIG_WITH_PAST
 from transformers.models.bert import BERT_ONNX_CONFIG
 from transformers.models.gpt2 import GPT2_ONNX_CONFIG, GPT2_ONNX_CONFIG_WITH_PAST
@@ -36,6 +37,12 @@ FRAMEWORK_CHOICES = {FRAMEWORK_NAME_PT, FRAMEWORK_NAME_PT}
 
 # Set of model topologies we support
 SUPPORTED_MODEL_KIND = {
+    "AlbertModel": {
+        "default": ALBERT_ONNX_CONFIG
+    },
+    "TFAlbertModel": {
+        "default": ALBERT_ONNX_CONFIG
+    },
     "BartModel": {
         "default": BART_ONNX_CONFIG,
         "with_past": BART_ONNX_CONFIG_WITH_PAST
