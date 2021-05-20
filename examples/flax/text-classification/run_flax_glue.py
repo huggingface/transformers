@@ -469,7 +469,6 @@ def main():
 
         # train
         for batch in glue_train_data_collator(input_rng, train_dataset, train_batch_size):
-            rng, dropout_rng = jax.random.split(rng)
             state, metrics, dropout_rngs = p_train_step(state, batch, dropout_rngs)
             train_metrics.append(metrics)
         train_time += time.time() - train_start
