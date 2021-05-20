@@ -1,7 +1,6 @@
 import copy
 import functools
 import inspect
-import logging
 from typing import Any, Dict, List, Optional, Union
 
 import torch
@@ -21,6 +20,7 @@ from . import (
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     GPT2DoubleHeadsModel,
     PreTrainedModel,
+    logging,
 )
 from .models.auto import get_values
 
