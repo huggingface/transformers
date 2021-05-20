@@ -188,7 +188,7 @@ class BartConfig(PretrainedConfig):
         return self.d_model
 
 
-BartOnnxConfig = OnnxConfig(
+BART_ONNX_CONFIG = OnnxConfig(
     inputs=[
         OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1),
         OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1),
@@ -206,7 +206,7 @@ BartOnnxConfig = OnnxConfig(
     optimizer_features=None
 )
 
-BartOnnxConfigWithPast = OnnxConfig(
+BART_ONNX_CONFIG_WITH_PAST = OnnxConfig(
     inputs=[
         OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1),
         OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1),
