@@ -321,6 +321,7 @@ if __name__ == '__main__':
 
     # Retrieve CLI arguments
     args = parser.parse_args()
+    args.output = args.output if args.output.is_file() else args.output.joinpath("model.onnx")
 
     print(f"About to export model: {args.model} using framework: {args.framework}")
 
@@ -343,11 +344,10 @@ if __name__ == '__main__':
         )
 
     if args.framework == FRAMEWORK_NAME_PT:
-        convert_pytorch(model, onnx_config, args.opset, args.output.joinpath("model.onnx"))
+        convert_pytorch(model, onnx_config, args.opset, args.output)
     else:
         raise NotImplementedError()
 
-    # TODO: store output path correctly
-    validate_model_outputs(model, args.output.joinpath("model.onnx"), onnx_config.outputs, args.atol)
+    validate_model_outputs(model, args.output, onnx_config.outputs, args.atol)
     print()
 
