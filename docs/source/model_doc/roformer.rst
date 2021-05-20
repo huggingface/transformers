@@ -34,7 +34,7 @@ experiment for English benchmark will soon be updated.*
 
 Tips:
 
-- RoFormer is a model with rotary position embeddings.
+- RoFormer is a BERT-like autoencoding model with rotary position embeddings. Rotary position embeddings have shown improved performance on classification tasks with long texts.
 
 
 This model was contributed by `junnyu <https://huggingface.co/junnyu>`__. The original code can be found `here
