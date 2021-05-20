@@ -218,10 +218,6 @@ def convert_pytorch(model: PreTrainedModel, config: OnnxConfig, opset: int, outp
     torch.set_grad_enabled(False)
     model.config.return_dict = True
 
-    # Not currently possible to export nested tuples for past_keys
-    if hasattr(model.config, "use_cache"):
-        model.config.use_cache = False
-
     onnx_inputs = expand_repeated_onnx_variables(model, config.inputs)
     onnx_outputs = expand_repeated_onnx_variables(model, config.outputs)
 
@@ -307,7 +303,14 @@ if __name__ == '__main__':
 
     # Allocate the model
     model = (AutoModel if args.framework == FRAMEWORK_NAME_PT else TFAutoModel).from_pretrained(args.model)
-    model_kind, onnx_config = check_supported_model_or_raise(model)
+    model_kind, onnx_config = check_supported_model_or_raise(model, features=args.features)
+
+    # Override model's config if needed
+    if onnx_config.runtime_config_overrides is not None:
+        print("Overriding model's config values:")
+        for config_key, config_value in onnx_config.runtime_config_overrides.items():
+            print(f"\t- {config_key} => {config_value}")
+            setattr(model.config, config_key, config_value)
 
     # Ensure the requested opset is sufficient
     if args.opset < onnx_config.minimum_required_onnx_opset:
