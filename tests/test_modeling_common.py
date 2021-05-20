@@ -20,6 +20,7 @@ import os.path
 import random
 import tempfile
 import unittest
+import warnings
 from typing import List, Tuple
 
 from huggingface_hub import HfApi
@@ -1462,7 +1463,14 @@ class ModelTesterMixin:
 
                     inputs["labels"] = inputs["labels"].to(problem_type["dtype"])
 
-                    loss = model(**inputs).loss
+                    # This tests that we do not trigger the warning form PyTorch "Using a target size that is different
+                    # to the input size. This will likely lead to incorrect results due to broadcasting. Please ensure
+                    # they have the same size." which is a symptom something in wrong for the regression problem.
+                    # See https://github.com/huggingface/transformers/issues/11780
+                    with warnings.catch_warnings(record=True) as warning_list:
+                        loss = model(**inputs).loss
+                    self.assertListEqual(warning_list, [])
+
                     loss.backward()
 
 
