@@ -24,6 +24,13 @@ from jax import lax
 
 from .utils import logging
 
+from .generation_flax_logits_process import (
+    FlaxLogitsProcessorList,
+    FlaxTemperatureLogitsWarper,
+    FlaxTopKLogitsWarper,
+    FlaxTopPLogitsWarper,
+)
+
 
 logger = logging.get_logger(__name__)
 
@@ -58,12 +65,14 @@ class FlaxGenerationMixin:
     def generate(
         self,
         input_ids: None,
-        #        attention_mask: Optional[jnp.DeviceArray] = None,
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
         do_sample: Optional[bool] = None,
         prng_key: Optional[jnp.DeviceArray] = None,
+        top_k: Optional[int] = None,
+        top_p: Optional[float] = None,
+        temperature: Optional[float] = None,
         trace: bool = True,
         **model_kwargs,
     ):
@@ -77,13 +86,38 @@ class FlaxGenerationMixin:
 
         #        model_kwargs["attention_mask"] = attention_mask
         if do_sample:
+            logits_warper = self._get_logits_warper(top_k=top_k, top_p=top_p, temperature=temperature)
             return self._sample(
-                input_ids, max_length, pad_token_id, eos_token_id, prng_key, trace=trace, model_kwargs=model_kwargs
+                input_ids, max_length, pad_token_id, eos_token_id, prng_key, logits_warper=logits_warper, model_kwargs=model_kwargs, trace=trace
             )
         else:
             return self._greedy_search(
                 input_ids, max_length, pad_token_id, eos_token_id, trace=trace, model_kwargs=model_kwargs
             )
+
+    def _get_logits_warper(self, top_k: int = None, top_p: float = None, temperature: float = None) -> FlaxLogitsProcessorList:
+        """
+        This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
+        :obj:`~transformers.LogitsWarper` instances used for multinomial sampling.
+        """
+
+        # init warp parameters
+        top_k = top_k if top_k is not None else self.config.top_k
+        top_p = top_p if top_p is not None else self.config.top_p
+        temperature = temperature if temperature is not None else self.config.temperature
+        # instantiate warpers list
+        warpers = FlaxLogitsProcessorList()
+
+        # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
+        # all samplers can be found in `generation_utils_samplers.py`
+        if temperature is not None and temperature != 1.0:
+            warpers.append(FlaxTemperatureLogitsWarper(temperature))
+        if top_k is not None and top_k != 0:
+            warpers.append(FlaxTopKLogitsWarper(top_k=top_k, min_tokens_to_keep=1))
+        if top_p is not None and top_p < 1.0:
+            warpers.append(FlaxTopPLogitsWarper(top_p=top_p, min_tokens_to_keep=1))
+
+        return warpers
 
     def _greedy_search(
         self,
@@ -170,8 +204,9 @@ class FlaxGenerationMixin:
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
         prng_key: jnp.DeviceArray = jax.random.PRNGKey(0),
-        trace: bool = True,
         model_kwargs: Optional[Dict[str, jnp.DeviceArray]] = None,
+        logits_warper: Optional[FlaxLogitsProcessorList] = None,
+        trace: bool = True,
     ):
         # init values
         max_length = max_length if max_length is not None else self.config.max_length
@@ -217,6 +252,12 @@ class FlaxGenerationMixin:
             """state update fn."""
             prng_key, prng_key_next = jax.random.split(state.prng_key)
             model_outputs = model(state.current_token, **state.model_kwargs)
+
+            logits = model_outputs.logits[:, -1]
+
+            # apply top_k, top_k, temperature
+            logits = logits_warper(state.sequences, logits)
+
             next_token = jax.random.categorical(prng_key, model_outputs.logits[:, -1], axis=-1)
 
             next_is_sent_finished = state.is_sent_finished | (next_token == eos_token_id)
