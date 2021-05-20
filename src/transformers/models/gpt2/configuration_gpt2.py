@@ -15,7 +15,7 @@
 # limitations under the License.
 """ OpenAI GPT-2 configuration """
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, OnnxConfig, OnnxVariable
 from ...utils import logging
 
 
@@ -195,3 +195,47 @@ class GPT2Config(PretrainedConfig):
     @property
     def num_hidden_layers(self):
         return self.n_layer
+
+
+GPT2_ONNX_CONFIG = OnnxConfig(
+    inputs=[
+        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1),
+    ],
+    outputs=[
+        OnnxVariable("last_hidden_state", {0: "sequence", 1: "batch"}, repeated=1),
+    ],
+    runtime_config_overrides={
+        "use_cache": False
+    },
+    use_external_data_format=False,
+    minimum_required_onnx_opset=11,
+    optimizer="gpt2",
+    optimizer_features=None,
+    optimizer_additional_args={
+        "num_heads": "$config.num_attention_heads",
+        "hidden_size": "$config.hidden_size"
+    }
+)
+
+GPT2_ONNX_CONFIG_WITH_PAST = OnnxConfig(
+    inputs=[
+        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1),
+    ],
+    outputs=[
+        OnnxVariable("last_hidden_state", {0: "sequence", 1: "batch"}, repeated=1),
+        OnnxVariable("past_key_values", {0: "batch", 2: "sequence"}, repeated="$config.n_layer * 2"),
+    ],
+    runtime_config_overrides={
+        "use_cache": True
+    },
+    use_external_data_format=False,
+    minimum_required_onnx_opset=11,
+    optimizer="gpt2",
+    optimizer_features=None,
+    optimizer_additional_args={
+        "num_heads": "$config.num_attention_heads",
+        "hidden_size": "$config.hidden_size"
+    }
+)
