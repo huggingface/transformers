@@ -98,7 +98,7 @@ SUPPORTED_OPERATORS = {
 
 # ONNX Runtime optimization levels for humans
 ONNX_OPTIMIZATION_LEVELS = {
-    "disable": GraphOptimizationLevel.ORT_DISABLE_ALL,
+    "disabled": GraphOptimizationLevel.ORT_DISABLE_ALL,
     "default": GraphOptimizationLevel.ORT_ENABLE_BASIC,
     "extended": GraphOptimizationLevel.ORT_ENABLE_EXTENDED,
     "all": GraphOptimizationLevel.ORT_ENABLE_ALL
@@ -459,7 +459,7 @@ if __name__ == '__main__':
     parser.add_argument("--opset", type=int, default=12, help="ONNX opset version to export the model with (default 12).")
     parser.add_argument("--optimize", action="store_true", help="Flag indicating if we should try to optimize the model.")
     parser.add_argument("--use-gpu", action="store_true", help="Flag indicating if we should try to optimize the model for GPU inference.")
-    parser.add_argument("--optimization-level", choices=ONNX_OPTIMIZATION_LEVELS.keys(), default="default", help="Flag indicating if we should try to optimize the model.")
+    parser.add_argument("--optimization-level", choices=ONNX_OPTIMIZATION_LEVELS.keys(), default="disabled", help="Flag indicating if we should try to optimize the model.")
     parser.add_argument("--atol", type=float, default=1e-4, help="Absolute difference tolerence when validating the model,")
     parser.add_argument("output", type=Path, help="Path indicating where to store generated ONNX model.")
 
@@ -499,7 +499,7 @@ if __name__ == '__main__':
     validate_model_outputs(tokenizer, model, args.output, onnx_outputs, args.atol)
     print(f"All good, model saved at: {args.output.as_posix()}")
 
-    if args.optimize:
+    if args.optimize and args.optimization_level != "disabled":
         print(f"About to optimize model with optimization_level: {args.optimization_level}")
 
         args.opt_model_output = generate_identified_filename(args.output, f"_optimized_{args.optimization_level}")
