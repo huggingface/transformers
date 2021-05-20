@@ -97,7 +97,27 @@ def expand_repeated_onnx_variables(model: Union[PreTrainedModel, TFPreTrainedMod
             return getattr(_obj, _attr)
         return functools.reduce(_getattr, [obj] + attr.split('.'))
 
+    def evaluate_expr_to_int(expression: str) -> int:
+        """
+        From an expression like 4 * 5 - 1, evaluate
+        :param expression:
+        :return:
+        """
 
+        def _reval(node):
+            if isinstance(node, ast.Num):
+                return node.n
+            elif isinstance(node, ast.BinOp):
+                return SUPPORTED_OPERATORS[type(node.op)](_reval(node.left), _reval(node.right))
+            elif isinstance(node, ast.UnaryOp):
+                return SUPPORTED_OPERATORS[type(node.op)](_reval(node.operand))
+            else:
+                raise TypeError(node)
+
+        # Compute the abstract syntax tree and evaluate
+        return int(_reval(ast.parse(expression, mode="eval").body))
+
+    interpolation_re = regex.compile(r"\$([^\s]+)")
     onnx_variables = []
 
     # Iterate over all the variables
@@ -106,17 +126,34 @@ def expand_repeated_onnx_variables(model: Union[PreTrainedModel, TFPreTrainedMod
         # If the repeated is a string, we need to process to get an int
         if isinstance(variable.repeated, str):
 
-            # Backtrack the reference to a model property if we start with $
-            if variable.repeated.startswith("$"):
-                repeated = rgetattr(model, variable.repeated[1:])
+            # We need to interpolate some variables, iteratively until there is no more interpolation key
+            if "$" in variable.repeated:
 
-                if not isinstance(repeated, int):
-                    raise ValueError(
-                        f"Value referenced by {variable.repeated} should be of type int, "
-                        f"got ({repeated} ({type(repeated)})"
+                # Look for the first interpolation key
+                interpolation_key = interpolation_re.search(variable.repeated)
+                while interpolation_key is not None:
+
+                    # Get the interpolation key's value
+                    interpolation_value = rgetattr(model, interpolation_key.group(1))
+
+                    # Regenerate the variable with the interpolated value
+                    variable = OnnxVariable(
+                        variable.name,
+                        variable.axes,
+                        variable.repeated.replace(f"${interpolation_key.group(1)}", str(interpolation_value))
                     )
+
+                    # Check if anything remains (another key)
+                    interpolation_key = interpolation_re.search(variable.repeated)
+
+            # str values purpose is to refer to dynamic values from within the model, evaluated at runtime
+            # better to use just an int otherwise if the field is constant
             else:
                 raise ValueError(f"Invalid value {variable.repeated} not starting with $")
+
+            # Evaluate the expression to an int
+            repeated = evaluate_expr_to_int(variable.repeated)
+
 
         # We accept only string and int, so else branch should always be int
         elif isinstance(variable.repeated, int):
