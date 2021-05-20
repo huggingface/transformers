@@ -70,7 +70,7 @@ class CopyCheckTester(unittest.TestCase):
             expected = comment + f"\nclass {class_name}(nn.Module):\n" + overwrite_result
         code = black.format_str(code, mode=black.FileMode([black.TargetVersion.PY35], line_length=119))
         fname = os.path.join(self.transformer_dir, "new_code.py")
-        with open(fname, "w") as f:
+        with open(fname, "w", newline="\n") as f:
             f.write(code)
         if overwrite_result is None:
             self.assertTrue(len(check_copies.is_copy_consistent(fname)) == 0)
