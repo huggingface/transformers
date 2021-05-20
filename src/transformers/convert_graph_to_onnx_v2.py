@@ -2,7 +2,7 @@ from argparse import ArgumentParser
 from itertools import chain
 from pathlib import Path
 
-from typing import Tuple, List, Iterable, Union
+from typing import Tuple, List, Iterable, Union, Any, Dict
 
 import ast
 import functools
@@ -131,7 +131,8 @@ def check_supported_model_or_raise(model: Union[PreTrainedModel, TFPreTrainedMod
     model_features = SUPPORTED_MODEL_KIND[model_kind]
     if features not in model_features:
         raise ValueError(
-            f"{model_kind} doesn't support features {features}."
+            f"{model_kind} doesn't support features {features}. "
+            f"Supported values are: {list(model_features.keys())}"
         )
 
     return model_kind, SUPPORTED_MODEL_KIND[model_kind][features]
@@ -241,6 +242,14 @@ def expand_repeated_onnx_variables(model: Union[PreTrainedModel, TFPreTrainedMod
     return onnx_variables
 
 
+def flatten_output_collection_property(name: str, field: Iterable[Any]) -> Dict[str, Any]:
+    from itertools import chain
+    return {
+        f"{name}.{idx}": item
+        for idx, item in enumerate(chain.from_iterable(field))
+    }
+
+
 def ensure_model_and_config_inputs_match(model_inputs: Iterable[str], config_inputs: Iterable[OnnxVariable]) -> Tuple[bool, List[OnnxVariable]]:
     """
 
@@ -259,7 +268,7 @@ def ensure_model_and_config_inputs_match(model_inputs: Iterable[str], config_inp
     return is_ok, ordered_matching_inputs
 
 
-def convert_pytorch(tokenizer: PreTrainedTokenizer, model: PreTrainedModel, config: OnnxConfig, opset: int, output: Path):
+def convert_pytorch(tokenizer: PreTrainedTokenizer, model: PreTrainedModel, config: OnnxConfig, opset: int, output: Path) -> Tuple[List[OnnxVariable], List[OnnxVariable]]:
     """
     Export a PyTorch backed pipeline to ONNX Intermediate Representation (IR
 
@@ -309,6 +318,8 @@ def convert_pytorch(tokenizer: PreTrainedTokenizer, model: PreTrainedModel, conf
         enable_onnx_checker=True,
         opset_version=opset,
     )
+
+    return onnx_inputs, onnx_outputs
 
 
 def optimize(onnx_model_path: Path, model: Union[PreTrainedModel, TFPreTrainedModel], onnx_config: OnnxConfig, optimization_level: GraphOptimizationLevel, use_gpu: bool, output: Path):
@@ -371,6 +382,15 @@ def validate_model_outputs(tokenizer: PreTrainedTokenizer, reference_model: Unio
 
     # Compute outputs from the reference model
     ref_outputs = reference_model(**reference_model_inputs)
+    ref_outputs_dict = {}
+
+    # We flatten potential collection of outputs (i.e. past_keys) to a flat structure
+    for name, value in ref_outputs.items():
+        if isinstance(value, (list, tuple)):
+            value = flatten_output_collection_property(name, value)
+            ref_outputs_dict.update(value)
+        else:
+            ref_outputs_dict[name] = value
 
     # Compute outputs from the ONNX model
     onnx_outputs_name = [var.name for var in onnx_named_outputs]
@@ -378,7 +398,7 @@ def validate_model_outputs(tokenizer: PreTrainedTokenizer, reference_model: Unio
 
     # Check we have a subset of the keys into onnx_outputs against ref_outputs
     onnx_named_outputs = zip(onnx_outputs_name, onnx_outputs)
-    ref_outputs_set, onnx_outputs_set = set(ref_outputs.keys()), set(onnx_outputs_name)
+    ref_outputs_set, onnx_outputs_set = set(ref_outputs_dict.keys()), set(onnx_outputs_name)
     if not onnx_outputs_set.issubset(ref_outputs_set):
         raise ValueError(
             "Outputs doesn't match between reference model and ONNX exported model: "
@@ -387,7 +407,7 @@ def validate_model_outputs(tokenizer: PreTrainedTokenizer, reference_model: Unio
 
     # Check the shape and values match
     for name, ort_value in onnx_named_outputs:
-        ref_value = ref_outputs[name].numpy()
+        ref_value = ref_outputs_dict[name].numpy()
 
         # Shape
         if not ref_value.shape == ort_value.shape:
@@ -408,7 +428,7 @@ if __name__ == '__main__':
     parser = ArgumentParser("Hugging Face ONNX Exporter tool")
     parser.add_argument("-m", "--model", type=str, required=True, help="Model's name of path on disk to load.")
     parser.add_argument("-f", "--framework", choices=FRAMEWORK_CHOICES, required=True, help=f"Framework to use when exporting. Possible values are: {FRAMEWORK_CHOICES}")
-    parser.add_argument("--features", choices=["default", "with-past"], default="default", help="Export the model with some additional features.")
+    parser.add_argument("--features", choices=["default", "with_past"], default="default", help="Export the model with some additional features.")
     parser.add_argument("--opset", type=int, default=12, help="ONNX opset version to export the model with (default 12).")
     parser.add_argument("--optimize", action="store_true", help="Flag indicating if we should try to optimize the model.")
     parser.add_argument("--use-gpu", action="store_true", help="Flag indicating if we should try to optimize the model for GPU inference.")
@@ -445,11 +465,11 @@ if __name__ == '__main__':
         )
 
     if args.framework == FRAMEWORK_NAME_PT:
-        convert_pytorch(tokenizer, model, onnx_config, args.opset, args.output)
+        onnx_inputs, onnx_outputs = convert_pytorch(tokenizer, model, onnx_config, args.opset, args.output)
     else:
         raise NotImplementedError()
 
-    validate_model_outputs(tokenizer, model, args.output, onnx_config.outputs, args.atol)
+    validate_model_outputs(tokenizer, model, args.output, onnx_outputs, args.atol)
     print(f"All good, model saved at: {args.output.as_posix()}")
 
     if args.optimize:
@@ -460,7 +480,7 @@ if __name__ == '__main__':
         optimize(args.output, model, onnx_config, args.optimization_level, args.use_gpu, args.opt_model_output)
 
         if not args.use_gpu:
-            validate_model_outputs(tokenizer, model, args.opt_model_output, onnx_config.outputs, args.atol)
+            validate_model_outputs(tokenizer, model, args.opt_model_output, onnx_outputs, args.atol)
         else:
             print(
                 "Validating model targeting GPU is not supported yet. "
