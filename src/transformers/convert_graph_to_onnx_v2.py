@@ -17,6 +17,7 @@ from transformers.configuration_utils import OnnxConfig, OnnxVariable
 from transformers.models.albert import ALBERT_ONNX_CONFIG
 from transformers.models.bart import BART_ONNX_CONFIG, BART_ONNX_CONFIG_WITH_PAST
 from transformers.models.bert import BERT_ONNX_CONFIG
+from transformers.models.distilbert import DISTILBERT_ONNX_CONFIG
 from transformers.models.gpt2 import GPT2_ONNX_CONFIG, GPT2_ONNX_CONFIG_WITH_PAST
 from transformers.models.roberta import ROBERTA_ONNX_CONFIG
 from transformers.models.xlm_roberta import XLM_ROBERTA_ONNX_CONFIG
@@ -58,6 +59,12 @@ SUPPORTED_MODEL_KIND = {
     },
     "TFBertModel": {
         "default": BERT_ONNX_CONFIG
+    },
+    "DistilBertModel": {
+        "default": DISTILBERT_ONNX_CONFIG
+    },
+    "TFDistilBertModel": {
+        "default": DISTILBERT_ONNX_CONFIG
     },
     "GPT2Model": {
         "default": GPT2_ONNX_CONFIG,
