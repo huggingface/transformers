@@ -752,6 +752,9 @@ class OnnxConfig:
     # We use a list because the ordering of the items is VERY important
     outputs: List[OnnxVariable]
 
+    # Define all the configuration keys we need to override before forwarding through the model
+    runtime_config_overrides: Optional[Dict[str, Any]]
+
     # Does the model requires using external data format (i.e. model size > 2Gb)
     use_external_data_format: bool
 
