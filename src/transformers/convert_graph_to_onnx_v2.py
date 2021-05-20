@@ -19,6 +19,8 @@ from transformers.models.bart import BART_ONNX_CONFIG, BART_ONNX_CONFIG_WITH_PAS
 from transformers.models.bert import BERT_ONNX_CONFIG
 from transformers.models.gpt2 import GPT2_ONNX_CONFIG, GPT2_ONNX_CONFIG_WITH_PAST
 from transformers.models.roberta import ROBERTA_ONNX_CONFIG
+from transformers.models.xlm_roberta import XLM_ROBERTA_ONNX_CONFIG
+
 from onnxruntime import GraphOptimizationLevel
 
 
@@ -70,6 +72,12 @@ SUPPORTED_MODEL_KIND = {
     },
     "TFRobertaModel": {
         "default": ROBERTA_ONNX_CONFIG
+    },
+    "XLMRobertaModel": {
+        "default": XLM_ROBERTA_ONNX_CONFIG
+    },
+    "TFXLMRobertaModel": {
+        "default": XLM_ROBERTA_ONNX_CONFIG
     }
 }
 
@@ -376,8 +384,6 @@ def optimize(onnx_model_path: Path, model: Union[PreTrainedModel, TFPreTrainedMo
         from os import replace
         temp_output_path = Path(optimize_by_onnxruntime(onnx_model_path.as_posix()))
         replace(temp_output_path, output)
-
-    print(f"Optimized model saved at: {output.as_posix()}")
 
 
 def validate_model_outputs(tokenizer: PreTrainedTokenizer, reference_model: Union[PreTrainedModel, TFPreTrainedModel], onnx_model: Path, onnx_named_outputs: List[OnnxVariable], atol: float):
