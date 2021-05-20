@@ -13,7 +13,7 @@ from packaging.version import parse, Version
 
 from transformers import AutoModel, TFAutoModel, PreTrainedModel, is_torch_available, TFPreTrainedModel
 from transformers.configuration_utils import OnnxConfig, OnnxVariable
-from transformers.models.bart.configuration_bart import BartOnnxConfig, BartOnnxConfigWithPast
+from transformers.models.bart import BART_ONNX_CONFIG, BART_ONNX_CONFIG_WITH_PAST
 
 # This is the minimal required version to
 # support some ONNX Runtime features
@@ -27,13 +27,13 @@ FRAMEWORK_CHOICES = {FRAMEWORK_NAME_PT, FRAMEWORK_NAME_PT}
 # Set of model topologies we support
 SUPPORTED_MODEL_KIND = {
     "BartModel": {
-        "default": BartOnnxConfig,
-        "with_past": BartOnnxConfigWithPast
+        "default": BART_ONNX_CONFIG,
+        "with_past": BART_ONNX_CONFIG_WITH_PAST
     },
     "TFBartModel": {
-        "default": BartOnnxConfig,
-        "with_past": BartOnnxConfigWithPast
-    }
+        "default": BART_ONNX_CONFIG,
+        "with_past": BART_ONNX_CONFIG_WITH_PAST
+    },
 }
 
 # Supported operators when parsing OnnxVariable repeated field (supports +, -, *, //)
