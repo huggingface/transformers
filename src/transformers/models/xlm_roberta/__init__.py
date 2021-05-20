@@ -28,7 +28,7 @@ from ...file_utils import (
 
 
 _import_structure = {
-    "configuration_xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
+    "configuration_xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLM_ROBERTA_ONNX_CONFIG", "XLMRobertaConfig"],
 }
 
 if is_sentencepiece_available():
@@ -62,7 +62,7 @@ if is_tf_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
+    from .configuration_xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLM_ROBERTA_ONNX_CONFIG, XLMRobertaConfig
 
     if is_sentencepiece_available():
         from .tokenization_xlm_roberta import XLMRobertaTokenizer
