@@ -197,6 +197,28 @@ BartOnnxConfig = OnnxConfig(
         OnnxVariable("last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1),
         OnnxVariable("encoder_last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1),
     ],
+    runtime_config_overrides={
+        "use_cache": False
+    },
+    use_external_data_format=False,
+    minimum_required_onnx_opset=11,
+    optimizer=None,
+    optimizer_features=None
+)
+
+BartOnnxConfigWithPast = OnnxConfig(
+    inputs=[
+        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1),
+    ],
+    outputs=[
+        OnnxVariable("last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("past_keys", {0: "batch", 2: "sequence"}, repeated="$config.decoder_layers * 4"),
+        OnnxVariable("encoder_last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1),
+    ],
+    runtime_config_overrides={
+        "use_cache": True
+    },
     use_external_data_format=False,
     minimum_required_onnx_opset=11,
     optimizer=None,
