@@ -15,7 +15,7 @@
 """ BART model configuration """
 import warnings
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, OnnxConfig, OnnxVariable
 from ...utils import logging
 
 
@@ -186,3 +186,19 @@ class BartConfig(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
+
+
+BartOnnxConfig = OnnxConfig(
+    inputs=[
+        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1),
+    ],
+    outputs=[
+        OnnxVariable("last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("encoder_last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1),
+    ],
+    use_external_data_format=False,
+    minimum_required_onnx_opset=11,
+    optimizer=None,
+    optimizer_features=None
+)
