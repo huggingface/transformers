@@ -19,7 +19,8 @@
 import copy
 import json
 import os
-from typing import Any, Dict, Tuple, Union
+from dataclasses import dataclass
+from typing import Any, Dict, Tuple, Union, Optional, Set, List, NamedTuple
 
 from . import __version__
 from .file_utils import CONFIG_NAME, PushToHubMixin, cached_path, hf_bucket_url, is_offline_mode, is_remote_url
@@ -729,3 +730,37 @@ class PretrainedConfig(PushToHubMixin):
                 )
 
             setattr(self, k, v)
+
+
+OnnxVariable = NamedTuple("OnnxVariable", [("name", str), ("axes", Dict[int, str]), ("repeated", Union[int, str])])
+
+
+@dataclass
+class OnnxConfig:
+    """
+    Base class for ONNX exportable model describing metadata on how to export the model
+    through the ONNX format.
+    """
+
+    # Input mapping of the form "input_name": {axis_id: "axis_name"}
+    # example: {"input_ids": {0: "batch", 1: "sequence"}}
+    # We use a list because the ordering of the items is VERY important
+    inputs: List[OnnxVariable]
+
+    # Output mapping of the form "output_name": {axis_id: "axis_name"}
+    # example: {"last_hidden_layer": {0: "batch", 1: "sequence"}}
+    # We use a list because the ordering of the items is VERY important
+    outputs: List[OnnxVariable]
+
+    # Does the model requires using external data format (i.e. model size > 2Gb)
+    use_external_data_format: bool
+
+    # Minimum required ONNX opset
+    minimum_required_onnx_opset: int
+
+    # ONNXRuntime provides model specific optimizer for some topologies
+    # This one indicate which provider (if any) to use
+    optimizer: Optional[str]
+
+    # If optimizer is present, this set indicates which features to enable when optimizing
+    optimizer_features: Optional[Set[str]]
