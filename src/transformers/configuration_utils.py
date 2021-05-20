@@ -765,5 +765,8 @@ class OnnxConfig:
     # This one indicate which provider (if any) to use
     optimizer: Optional[str]
 
-    # If optimizer is present, this set indicates which features to enable when optimizing
-    optimizer_features: Optional[Set[str]]
+    # If optimizer is present, this set indicates which features to enable/disable when optimizing
+    optimizer_features: Optional[Dict[str, bool]]
+
+    # Optimizer parameters which can only be known at runtime
+    optimizer_additional_args: Optional[Dict[str, Union[int, str]]]

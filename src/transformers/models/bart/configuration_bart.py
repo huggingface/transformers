@@ -202,8 +202,12 @@ BART_ONNX_CONFIG = OnnxConfig(
     },
     use_external_data_format=False,
     minimum_required_onnx_opset=11,
-    optimizer=None,
-    optimizer_features=None
+    optimizer="bert",
+    optimizer_features=None,
+    optimizer_additional_args={
+        "num_heads": "$config.decoder_attention_heads",
+        "hidden_size": "$config.d_model"
+    }
 )
 
 BART_ONNX_CONFIG_WITH_PAST = OnnxConfig(
@@ -221,6 +225,10 @@ BART_ONNX_CONFIG_WITH_PAST = OnnxConfig(
     },
     use_external_data_format=False,
     minimum_required_onnx_opset=11,
-    optimizer=None,
-    optimizer_features=None
+    optimizer="bert",
+    optimizer_features=None,
+    optimizer_additional_args={
+        "num_heads": "$config.decoder_attention_heads",
+        "hidden_size": "$config.d_model"
+    }
 )

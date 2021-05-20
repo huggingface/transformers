@@ -169,6 +169,19 @@ BERT_ONNX_CONFIG = OnnxConfig(
     runtime_config_overrides=None,
     use_external_data_format=False,
     minimum_required_onnx_opset=11,
-    optimizer=None,
-    optimizer_features=None
+    optimizer="bert",
+    optimizer_features={
+        "enable_gelu": True,
+        "enable_layer_norm": True,
+        "enable_attention": True,
+        "enable_skip_layer_norm": True,
+        "enable_embed_layer_norm": True,
+        "enable_bias_skip_layer_norm": True,
+        "enable_bias_gelu": True,
+        "enable_gelu_approximation": False,
+    },
+    optimizer_additional_args={
+        "num_heads": "$config.num_attention_heads",
+        "hidden_size": "$config.hidden_size"
+    }
 )

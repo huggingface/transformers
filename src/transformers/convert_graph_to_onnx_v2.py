@@ -16,6 +16,12 @@ from transformers import AutoModel, TFAutoModel, PreTrainedModel, is_torch_avail
 from transformers.configuration_utils import OnnxConfig, OnnxVariable
 from transformers.models.bert import BERT_ONNX_CONFIG
 from transformers.models.bart import BART_ONNX_CONFIG, BART_ONNX_CONFIG_WITH_PAST
+from onnxruntime import GraphOptimizationLevel
+
+
+# Regular expression used to match interpolation keys
+INTERPOLATION_RE = regex.compile(r"\$([^\s]+)")
+
 
 # This is the minimal required version to
 # support some ONNX Runtime features
@@ -50,6 +56,14 @@ SUPPORTED_OPERATORS = {
     ast.Sub: op.sub,
     ast.Mult: op.mul,
     ast.Div: op.truediv,
+}
+
+# ONNX Runtime optimization levels for humans
+ONNX_OPTIMIZATION_LEVELS = {
+    "disable": GraphOptimizationLevel.ORT_DISABLE_ALL,
+    "default": GraphOptimizationLevel.ORT_ENABLE_BASIC,
+    "extended": GraphOptimizationLevel.ORT_ENABLE_EXTENDED,
+    "all": GraphOptimizationLevel.ORT_ENABLE_ALL
 }
 
 
@@ -114,7 +128,28 @@ def check_supported_model_or_raise(model: Union[PreTrainedModel, TFPreTrainedMod
     return model_kind, SUPPORTED_MODEL_KIND[model_kind][features]
 
 
-def expand_repeated_onnx_variables(model: Union[PreTrainedModel, TFPreTrainedModel], variables: List[OnnxVariable]) -> List[OnnxVariable]:
+def evaluate_expr_to_int(expression: str) -> int:
+    """
+    From an expression like 4 * 5 - 1, evaluate
+    :param expression:
+    :return:
+    """
+
+    def _reval(node):
+        if isinstance(node, ast.Num):
+            return node.n
+        elif isinstance(node, ast.BinOp):
+            return SUPPORTED_OPERATORS[type(node.op)](_reval(node.left), _reval(node.right))
+        elif isinstance(node, ast.UnaryOp):
+            return SUPPORTED_OPERATORS[type(node.op)](_reval(node.operand))
+        else:
+            raise TypeError(node)
+
+    # Compute the abstract syntax tree and evaluate
+    return int(_reval(ast.parse(expression, mode="eval").body))
+
+
+def interpolate_expression(expression: str, model: Union[PreTrainedModel, TFPreTrainedModel]) -> str:
     def rgetattr(obj, attr):
         """
         Get an attribute recursively (i.e. multiple nested object obj.property_x.propert_y)
@@ -126,27 +161,29 @@ def expand_repeated_onnx_variables(model: Union[PreTrainedModel, TFPreTrainedMod
             return getattr(_obj, _attr)
         return functools.reduce(_getattr, [obj] + attr.split('.'))
 
-    def evaluate_expr_to_int(expression: str) -> int:
-        """
-        From an expression like 4 * 5 - 1, evaluate
-        :param expression:
-        :return:
-        """
+    # Copy the expression string to operate on it
+    interpolated_expr = expression
 
-        def _reval(node):
-            if isinstance(node, ast.Num):
-                return node.n
-            elif isinstance(node, ast.BinOp):
-                return SUPPORTED_OPERATORS[type(node.op)](_reval(node.left), _reval(node.right))
-            elif isinstance(node, ast.UnaryOp):
-                return SUPPORTED_OPERATORS[type(node.op)](_reval(node.operand))
-            else:
-                raise TypeError(node)
+    # Look for the first interpolation key
+    interpolation_key = INTERPOLATION_RE.search(expression)
+    while interpolation_key is not None:
 
-        # Compute the abstract syntax tree and evaluate
-        return int(_reval(ast.parse(expression, mode="eval").body))
+        # Get the interpolation key's value
+        interpolation_value = rgetattr(model, interpolation_key.group(1))
 
-    interpolation_re = regex.compile(r"\$([^\s]+)")
+        # Regenerate the expression with the interpolated value
+        interpolated_expr = interpolated_expr.replace(
+            f"${interpolation_key.group(1)}",
+            str(interpolation_value)
+        )
+
+        # Check if anything remains (another key)
+        interpolation_key = INTERPOLATION_RE.search(interpolated_expr)
+
+    return interpolated_expr
+
+
+def expand_repeated_onnx_variables(model: Union[PreTrainedModel, TFPreTrainedModel], variables: List[OnnxVariable]) -> List[OnnxVariable]:
     onnx_variables = []
 
     # Iterate over all the variables
@@ -157,23 +194,11 @@ def expand_repeated_onnx_variables(model: Union[PreTrainedModel, TFPreTrainedMod
 
             # We need to interpolate some variables, iteratively until there is no more interpolation key
             if "$" in variable.repeated:
-
-                # Look for the first interpolation key
-                interpolation_key = interpolation_re.search(variable.repeated)
-                while interpolation_key is not None:
-
-                    # Get the interpolation key's value
-                    interpolation_value = rgetattr(model, interpolation_key.group(1))
-
-                    # Regenerate the variable with the interpolated value
-                    variable = OnnxVariable(
-                        variable.name,
-                        variable.axes,
-                        variable.repeated.replace(f"${interpolation_key.group(1)}", str(interpolation_value))
-                    )
-
-                    # Check if anything remains (another key)
-                    interpolation_key = interpolation_re.search(variable.repeated)
+                variable = OnnxVariable(
+                    variable.name,
+                    variable.axes,
+                    interpolate_expression(variable.repeated, model)  # Interpolate from model instance
+                )
 
             # str values purpose is to refer to dynamic values from within the model, evaluated at runtime
             # better to use just an int otherwise if the field is constant
@@ -182,7 +207,6 @@ def expand_repeated_onnx_variables(model: Union[PreTrainedModel, TFPreTrainedMod
 
             # Evaluate the expression to an int
             repeated = evaluate_expr_to_int(variable.repeated)
-
 
         # We accept only string and int, so else branch should always be int
         elif isinstance(variable.repeated, int):
@@ -278,6 +302,50 @@ def convert_pytorch(tokenizer: PreTrainedTokenizer, model: PreTrainedModel, conf
     )
 
 
+def optimize(onnx_model_path: Path, model: Union[PreTrainedModel, TFPreTrainedModel], onnx_config: OnnxConfig, optimization_level: GraphOptimizationLevel, use_gpu: bool, output: Path):
+    from onnxruntime.transformers.optimizer import optimize_model, optimize_by_onnxruntime
+    from onnxruntime.transformers.onnx_model_bert import BertOptimizationOptions
+
+    # If we have an optimizer in the config, let's optimize offline
+    if onnx_config.optimizer is not None:
+        print(f"Optimizing model through dedicated '{onnx_config.optimizer}' tool (the tool's name might not match):")
+
+        # Interpolate addition_args if needed
+        if onnx_config.optimizer_additional_args is not None:
+            additional_args = {
+                arg_name: evaluate_expr_to_int(interpolate_expression(arg_value, model))
+                for arg_name, arg_value in onnx_config.optimizer_additional_args.items()
+            }
+        else:
+            additional_args = {}
+
+        optimizer_options = BertOptimizationOptions(onnx_config.optimizer)
+        if onnx_config.optimizer_features is not None:
+            for feature_name, feature_value in onnx_config.optimizer_features.items():
+                print(f"\t- {feature_name} = {feature_value}")
+
+        # Optimize
+        optimizer = optimize_model(
+            input=onnx_model_path.as_posix(),
+            model_type=onnx_config.optimizer,
+            optimization_options=optimizer_options,
+            opt_level=int(optimization_level),
+            use_gpu=use_gpu,
+            **additional_args
+        )
+
+        print(f"Optimization statistics: {optimizer.get_fused_operator_statistics()}")
+        optimizer.save_model_to_file(output.as_posix())
+
+    # Else use online ONNX Runtime optimization
+    else:
+        from os import replace
+        temp_output_path = Path(optimize_by_onnxruntime(onnx_model_path.as_posix()))
+        replace(temp_output_path, output)
+
+    print(f"Optimized model saved at: {output.as_posix()}")
+
+
 def validate_model_outputs(tokenizer: PreTrainedTokenizer, reference_model: Union[PreTrainedModel, TFPreTrainedModel], onnx_model: Path, onnx_named_outputs: List[OnnxVariable], atol: float):
     from onnxruntime import InferenceSession, SessionOptions
 
@@ -333,12 +401,18 @@ if __name__ == '__main__':
     parser.add_argument("-f", "--framework", choices=FRAMEWORK_CHOICES, required=True, help=f"Framework to use when exporting. Possible values are: {FRAMEWORK_CHOICES}")
     parser.add_argument("--features", choices=["default", "with-past"], default="default", help="Export the model with some additional features.")
     parser.add_argument("--opset", type=int, default=12, help="ONNX opset version to export the model with (default 12).")
+    parser.add_argument("--optimize", action="store_true", help="Flag indicating if we should try to optimize the model.")
+    parser.add_argument("--use-gpu", action="store_true", help="Flag indicating if we should try to optimize the model for GPU inference.")
+    parser.add_argument("--optimization-level", choices=ONNX_OPTIMIZATION_LEVELS.keys(), default="default", help="Flag indicating if we should try to optimize the model.")
     parser.add_argument("--atol", type=float, default=1e-4, help="Absolute difference tolerence when validating the model,")
     parser.add_argument("output", type=Path, help="Path indicating where to store generated ONNX model.")
 
     # Retrieve CLI arguments
     args = parser.parse_args()
     args.output = args.output if args.output.is_file() else args.output.joinpath("model.onnx")
+
+    if not args.output.parent.exists():
+        args.output.parent.mkdir(parents=True)
 
     print(f"About to export model: {args.model} using framework: {args.framework}")
 
@@ -369,3 +443,19 @@ if __name__ == '__main__':
     validate_model_outputs(tokenizer, model, args.output, onnx_config.outputs, args.atol)
     print(f"All good, model saved at: {args.output.as_posix()}")
 
+    if args.optimize:
+        print(f"About to optimize model with optimization_level: {args.optimization_level}")
+
+        args.opt_model_output = generate_identified_filename(args.output, f"_optimized_{args.optimization_level}")
+        args.optimization_level = ONNX_OPTIMIZATION_LEVELS[args.optimization_level]
+        optimize(args.output, model, onnx_config, args.optimization_level, args.use_gpu, args.opt_model_output)
+
+        if not args.use_gpu:
+            validate_model_outputs(tokenizer, model, args.opt_model_output, onnx_config.outputs, args.atol)
+        else:
+            print(
+                "Validating model targeting GPU is not supported yet. "
+                "Please, fill an issue or submit a PR if it's something you need."
+            )
+
+        print(f"Optimized model saved at: {args.opt_model_output.as_posix()}")
