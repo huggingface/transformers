@@ -68,6 +68,7 @@ from . import (
     reformer,
     retribert,
     roberta,
+    roformer,
     speech_to_text,
     squeezebert,
     t5,

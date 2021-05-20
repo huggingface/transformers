@@ -281,6 +281,15 @@ class RobertaTokenizerFast:
         requires_backends(self, ["tokenizers"])
 
 
+class RoFormerTokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
 class SqueezeBertTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tokenizers"])

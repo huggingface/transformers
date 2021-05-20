@@ -218,6 +218,7 @@ _import_structure = {
     "models.reformer": ["REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ReformerConfig"],
     "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
     "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
+    "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
     "models.speech_to_text": [
         "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Speech2TextConfig",
@@ -322,6 +323,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
@@ -927,6 +929,21 @@ if is_torch_available():
             "RobertaModel",
         ]
     )
+    _import_structure["models.roformer"].extend(
+        [
+            "ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RoFormerForCausalLM",
+            "RoFormerForMaskedLM",
+            "RoFormerForMultipleChoice",
+            "RoFormerForQuestionAnswering",
+            "RoFormerForSequenceClassification",
+            "RoFormerForTokenClassification",
+            "RoFormerLayer",
+            "RoFormerModel",
+            "RoFormerPreTrainedModel",
+            "load_tf_weights_in_roformer",
+        ]
+    )
     _import_structure["models.speech_to_text"].extend(
         [
             "SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1339,6 +1356,20 @@ if is_tf_available():
             "TFRobertaPreTrainedModel",
         ]
     )
+    _import_structure["models.roformer"].extend(
+        [
+            "TF_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFRoFormerForCausalLM",
+            "TFRoFormerForMaskedLM",
+            "TFRoFormerForMultipleChoice",
+            "TFRoFormerForQuestionAnswering",
+            "TFRoFormerForSequenceClassification",
+            "TFRoFormerForTokenClassification",
+            "TFRoFormerLayer",
+            "TFRoFormerModel",
+            "TFRoFormerPreTrainedModel",
+        ]
+    )
     _import_structure["models.t5"].extend(
         [
             "TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1641,6 +1672,7 @@ if TYPE_CHECKING:
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
+    from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
     from .models.speech_to_text import SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Speech2TextConfig
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
@@ -1767,6 +1799,7 @@ if TYPE_CHECKING:
         from .models.reformer import ReformerTokenizerFast
         from .models.retribert import RetriBertTokenizerFast
         from .models.roberta import RobertaTokenizerFast
+        from .models.roformer import RoFormerTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
@@ -2232,6 +2265,19 @@ if TYPE_CHECKING:
             RobertaForTokenClassification,
             RobertaModel,
         )
+        from .models.roformer import (
+            ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RoFormerForCausalLM,
+            RoFormerForMaskedLM,
+            RoFormerForMultipleChoice,
+            RoFormerForQuestionAnswering,
+            RoFormerForSequenceClassification,
+            RoFormerForTokenClassification,
+            RoFormerLayer,
+            RoFormerModel,
+            RoFormerPreTrainedModel,
+            load_tf_weights_in_roformer,
+        )
         from .models.speech_to_text import (
             SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
             Speech2TextForConditionalGeneration,
@@ -2574,6 +2620,18 @@ if TYPE_CHECKING:
             TFRobertaMainLayer,
             TFRobertaModel,
             TFRobertaPreTrainedModel,
+        )
+        from .models.roformer import (
+            TF_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFRoFormerForCausalLM,
+            TFRoFormerForMaskedLM,
+            TFRoFormerForMultipleChoice,
+            TFRoFormerForQuestionAnswering,
+            TFRoFormerForSequenceClassification,
+            TFRoFormerForTokenClassification,
+            TFRoFormerLayer,
+            TFRoFormerModel,
+            TFRoFormerPreTrainedModel,
         )
         from .models.t5 import (
             TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
