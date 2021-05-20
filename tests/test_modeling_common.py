@@ -676,7 +676,7 @@ class ModelTesterMixin:
             for i in range(num_outputs):
                 self.assertTrue(
                     torch.allclose(model_output[i], traced_output[i]),
-                    f"traced {i}th output doesn't match model {i}th output for {model_class}"
+                    f"traced {i}th output doesn't match model {i}th output for {model_class}",
                 )
 
     def test_headmasking(self):
