@@ -276,6 +276,7 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     all_model_classes = (GPTNeoModel, GPTNeoForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (GPTNeoForCausalLM,) if is_torch_available() else ()
+    fx_ready_model_classes = all_model_classes
     test_missing_keys = False
     test_pruning = False
     test_model_parallel = False
