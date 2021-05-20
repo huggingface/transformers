@@ -484,6 +484,17 @@ class GenerationMixin:
                 0, expanded_return_idx.to(encoder_outputs.last_hidden_state.device)
             )
             model_kwargs["encoder_outputs"] = encoder_outputs
+
+            past = model_kwargs.get("past")
+            if past is not None:
+                model_kwargs["past"] = tuple(
+                    (
+                        layer[0].index_select(0, expanded_return_idx).to(layer[0].device),
+                        layer[1].index_select(0, expanded_return_idx).to(layer[1].device),
+                    )
+                    for layer in past
+                )
+
         return input_ids, model_kwargs
 
     @staticmethod
