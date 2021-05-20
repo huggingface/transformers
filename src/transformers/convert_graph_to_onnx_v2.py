@@ -11,7 +11,8 @@ import operator as op
 import regex
 from packaging.version import parse, Version
 
-from transformers import AutoModel, TFAutoModel, PreTrainedModel, is_torch_available, TFPreTrainedModel
+from transformers import AutoModel, TFAutoModel, PreTrainedModel, is_torch_available, TFPreTrainedModel, AutoTokenizer, \
+    PreTrainedTokenizer, TensorType
 from transformers.configuration_utils import OnnxConfig, OnnxVariable
 from transformers.models.bert import BERT_ONNX_CONFIG
 from transformers.models.bart import BART_ONNX_CONFIG, BART_ONNX_CONFIG_WITH_PAST
@@ -216,8 +217,8 @@ def ensure_model_and_config_inputs_match(model_inputs: Iterable[str], config_inp
     """
     model_inputs_set, config_inputs_set = set(model_inputs), set(map(lambda var: var.name, config_inputs))
 
-    # We are fine if config_inputs has less keys than model_inputs
-    is_ok = config_inputs_set.issubset(model_inputs_set)
+    # We are fine if config_inputs has more keys than model_inputs
+    is_ok = model_inputs_set.issubset(config_inputs_set)
 
     # Make sure the input order match
     matching_inputs = config_inputs_set.intersection(model_inputs_set)
@@ -225,11 +226,12 @@ def ensure_model_and_config_inputs_match(model_inputs: Iterable[str], config_inp
     return is_ok, ordered_matching_inputs
 
 
-def convert_pytorch(model: PreTrainedModel, config: OnnxConfig, opset: int, output: Path):
+def convert_pytorch(tokenizer: PreTrainedTokenizer, model: PreTrainedModel, config: OnnxConfig, opset: int, output: Path):
     """
     Export a PyTorch backed pipeline to ONNX Intermediate Representation (IR
 
     Args:
+        tokenizer:
         model:
         config:
         opset:
@@ -251,8 +253,10 @@ def convert_pytorch(model: PreTrainedModel, config: OnnxConfig, opset: int, outp
     onnx_outputs = expand_repeated_onnx_variables(model, config.outputs)
 
     # Ensure inputs match
+    # TODO: Sequence length = 4 hard coded, provide this value through CLI would be better
+    model_inputs = tokenizer([tokenizer.unk_token] * 4, return_tensors=TensorType.PYTORCH)
     inputs_match, ordered_onnx_inputs = ensure_model_and_config_inputs_match(
-        model.dummy_inputs.keys(),
+        model_inputs.keys(),
         onnx_inputs
     )
 
@@ -262,7 +266,7 @@ def convert_pytorch(model: PreTrainedModel, config: OnnxConfig, opset: int, outp
     # export can works with named args but the dict containing named args as to be last element of the args tuple
     export(
         model,
-        (model.dummy_inputs, ),
+        (dict(model_inputs), ),
         f=output.as_posix(),
         input_names=[var.name for var in ordered_onnx_inputs],
         output_names=[var.name for var in onnx_outputs],
@@ -274,23 +278,28 @@ def convert_pytorch(model: PreTrainedModel, config: OnnxConfig, opset: int, outp
     )
 
 
-def validate_model_outputs(reference_model: Union[PreTrainedModel, TFPreTrainedModel], onnx_model: Path, onnx_outputs: List[OnnxVariable], atol: float):
+def validate_model_outputs(tokenizer: PreTrainedTokenizer, reference_model: Union[PreTrainedModel, TFPreTrainedModel], onnx_model: Path, onnx_named_outputs: List[OnnxVariable], atol: float):
     from onnxruntime import InferenceSession, SessionOptions
 
     print("Validating ONNX model...")
 
+    reference_tensor_type = TensorType.PYTORCH if isinstance(reference_model, PreTrainedModel) else TensorType.TENSORFLOW
+    reference_model_inputs = tokenizer([tokenizer.unk_token] * 4, return_tensors=reference_tensor_type)
+    onnx_inputs = tokenizer([tokenizer.unk_token] * 4, return_tensors=TensorType.NUMPY)
+
+    # Create ONNX Runtime session
     options = SessionOptions()
     session = InferenceSession(onnx_model.as_posix(), options)
 
     # Compute outputs from the reference model
-    ref_outputs = reference_model(**reference_model.dummy_inputs)
+    ref_outputs = reference_model(**reference_model_inputs)
 
     # Compute outputs from the ONNX model
-    onnx_inputs = {name: tensor.numpy() for name, tensor in reference_model.dummy_inputs.items()}
-    onnx_outputs_name = [var.name for var in onnx_outputs]
-    onnx_outputs = zip(onnx_outputs_name, session.run(onnx_outputs_name, onnx_inputs))
+    onnx_outputs_name = [var.name for var in onnx_named_outputs]
+    onnx_outputs = session.run(onnx_outputs_name, dict(onnx_inputs))
 
     # Check we have a subset of the keys into onnx_outputs against ref_outputs
+    onnx_named_outputs = zip(onnx_outputs_name, onnx_outputs)
     ref_outputs_set, onnx_outputs_set = set(ref_outputs.keys()), set(onnx_outputs_name)
     if not onnx_outputs_set.issubset(ref_outputs_set):
         raise ValueError(
@@ -299,7 +308,7 @@ def validate_model_outputs(reference_model: Union[PreTrainedModel, TFPreTrainedM
         )
 
     # Check the shape and values match
-    for name, ort_value in onnx_outputs:
+    for name, ort_value in onnx_named_outputs:
         ref_value = ref_outputs[name].numpy()
 
         # Shape
@@ -323,7 +332,7 @@ if __name__ == '__main__':
     parser.add_argument("-f", "--framework", choices=FRAMEWORK_CHOICES, required=True, help=f"Framework to use when exporting. Possible values are: {FRAMEWORK_CHOICES}")
     parser.add_argument("--features", choices=["default", "with-past"], default="default", help="Export the model with some additional features.")
     parser.add_argument("--opset", type=int, default=12, help="ONNX opset version to export the model with (default 12).")
-    parser.add_argument("--atol", type=float, default=1e-5, help="Absolute difference tolerence when validating the model,")
+    parser.add_argument("--atol", type=float, default=1e-4, help="Absolute difference tolerence when validating the model,")
     parser.add_argument("output", type=Path, help="Path indicating where to store generated ONNX model.")
 
     # Retrieve CLI arguments
@@ -333,6 +342,7 @@ if __name__ == '__main__':
     print(f"About to export model: {args.model} using framework: {args.framework}")
 
     # Allocate the model
+    tokenizer = AutoTokenizer.from_pretrained(args.model)
     model = (AutoModel if args.framework == FRAMEWORK_NAME_PT else TFAutoModel).from_pretrained(args.model)
     model_kind, onnx_config = check_supported_model_or_raise(model, features=args.features)
 
@@ -351,10 +361,10 @@ if __name__ == '__main__':
         )
 
     if args.framework == FRAMEWORK_NAME_PT:
-        convert_pytorch(model, onnx_config, args.opset, args.output)
+        convert_pytorch(tokenizer, model, onnx_config, args.opset, args.output)
     else:
         raise NotImplementedError()
 
-    validate_model_outputs(model, args.output, onnx_config.outputs, args.atol)
-    print()
+    validate_model_outputs(tokenizer, model, args.output, onnx_config.outputs, args.atol)
+    print(f"All good, model saved at: {args.output.as_posix()}")
 
