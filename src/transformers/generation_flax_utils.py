@@ -22,14 +22,13 @@ import jax
 import jax.numpy as jnp
 from jax import lax
 
-from .utils import logging
-
 from .generation_flax_logits_process import (
     FlaxLogitsProcessorList,
     FlaxTemperatureLogitsWarper,
     FlaxTopKLogitsWarper,
     FlaxTopPLogitsWarper,
 )
+from .utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -88,14 +87,23 @@ class FlaxGenerationMixin:
         if do_sample:
             logits_warper = self._get_logits_warper(top_k=top_k, top_p=top_p, temperature=temperature)
             return self._sample(
-                input_ids, max_length, pad_token_id, eos_token_id, prng_key, logits_warper=logits_warper, model_kwargs=model_kwargs, trace=trace
+                input_ids,
+                max_length,
+                pad_token_id,
+                eos_token_id,
+                prng_key,
+                logits_warper=logits_warper,
+                model_kwargs=model_kwargs,
+                trace=trace,
             )
         else:
             return self._greedy_search(
                 input_ids, max_length, pad_token_id, eos_token_id, trace=trace, model_kwargs=model_kwargs
             )
 
-    def _get_logits_warper(self, top_k: int = None, top_p: float = None, temperature: float = None) -> FlaxLogitsProcessorList:
+    def _get_logits_warper(
+        self, top_k: int = None, top_p: float = None, temperature: float = None
+    ) -> FlaxLogitsProcessorList:
         """
         This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
         :obj:`~transformers.LogitsWarper` instances used for multinomial sampling.

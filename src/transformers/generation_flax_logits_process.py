@@ -16,10 +16,10 @@
 import inspect
 from abc import ABC
 
-import jaxlib.xla_extension as jax_xla
-import jax.numpy as jnp
-import jax.lax as lax
 import jax
+import jax.lax as lax
+import jax.numpy as jnp
+import jaxlib.xla_extension as jax_xla
 
 from .file_utils import add_start_docstrings
 from .utils.logging import get_logger
@@ -75,8 +75,8 @@ class FlaxLogitsWarper(ABC):
 class FlaxLogitsProcessorList(list):
     """
     This class can be used to create a list of :class:`~transformers.FlaxLogitsProcessor` or
-    :class:`~transformers.FlaxLogitsWarper` to subsequently process a :obj:`scores` input tensor. This class inherits from
-    list and adds a specific `__call__` method to apply each :class:`~transformers.FlaxLogitsProcessor` or
+    :class:`~transformers.FlaxLogitsWarper` to subsequently process a :obj:`scores` input tensor. This class inherits
+    from list and adds a specific `__call__` method to apply each :class:`~transformers.FlaxLogitsProcessor` or
     :class:`~transformers.FlaxLogitsWarper` to the inputs.
     """
 
@@ -142,9 +142,16 @@ class FlaxTopPLogitsWarper(FlaxLogitsWarper):
 
         mask_scores = jnp.full_like(scores, self.filter_value)
         cumulative_probs = jax.nn.softmax(topk_scores, axis=-1).cumsum(axis=-1)
-        sorted_cumulative_probs = jax.lax.sort_key_val(topk_indices, cumulative_probs)[-1]
+        score_mask = cumulative_probs < self.top_p
 
-        next_scores = jnp.where(sorted_cumulative_probs < self.top_p, scores, mask_scores)
+        # include the token that is higher than top_p as well
+        score_mask |= jax.ops.index_update(jnp.roll(score_mask, 1), jax.ops.index[:, 0], True)
+
+        # min tokens to keep
+        score_mask = jax.ops.index_update(score_mask, jax.ops.index[:, : self.min_tokens_to_keep], True)
+
+        topk_next_scores = jnp.where(score_mask, topk_scores, mask_scores)
+        next_scores = jax.lax.sort_key_val(topk_indices, topk_next_scores)[-1]
 
         return next_scores
 
