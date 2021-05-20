@@ -13,6 +13,7 @@ from packaging.version import parse, Version
 
 from transformers import AutoModel, TFAutoModel, PreTrainedModel, is_torch_available, TFPreTrainedModel
 from transformers.configuration_utils import OnnxConfig, OnnxVariable
+from transformers.models.bert import BERT_ONNX_CONFIG
 from transformers.models.bart import BART_ONNX_CONFIG, BART_ONNX_CONFIG_WITH_PAST
 
 # This is the minimal required version to
@@ -34,6 +35,12 @@ SUPPORTED_MODEL_KIND = {
         "default": BART_ONNX_CONFIG,
         "with_past": BART_ONNX_CONFIG_WITH_PAST
     },
+    "BertModel": {
+        "default": BERT_ONNX_CONFIG
+    },
+    "TFBertModel": {
+        "default": BERT_ONNX_CONFIG
+    }
 }
 
 # Supported operators when parsing OnnxVariable repeated field (supports +, -, *, //)
