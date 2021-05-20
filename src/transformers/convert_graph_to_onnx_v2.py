@@ -2,21 +2,21 @@ from argparse import ArgumentParser
 from itertools import chain
 from pathlib import Path
 
-from logging import getLogger, basicConfig
-from typing import Set, Tuple, List, Iterable, Union
+from typing import Tuple, List, Iterable, Union
 
+import ast
 import functools
 import numpy as np
+import operator as op
+import regex
 from packaging.version import parse, Version
-
-# This is the minimal required version to
-# support some ONNX Runtime features
-from torch.nn import Module
 
 from transformers import AutoModel, TFAutoModel, PreTrainedModel, is_torch_available, TFPreTrainedModel
 from transformers.configuration_utils import OnnxConfig, OnnxVariable
-from transformers.models.bart.configuration_bart import BartOnnxConfig
+from transformers.models.bart.configuration_bart import BartOnnxConfig, BartOnnxConfigWithPast
 
+# This is the minimal required version to
+# support some ONNX Runtime features
 ORT_QUANTIZE_MINIMUM_VERSION = parse("1.4.0")
 
 # Set of frameworks we can export from
@@ -26,8 +26,22 @@ FRAMEWORK_CHOICES = {FRAMEWORK_NAME_PT, FRAMEWORK_NAME_PT}
 
 # Set of model topologies we support
 SUPPORTED_MODEL_KIND = {
-    "BartModel": BartOnnxConfig,
-    "TFBartModel": BartOnnxConfig
+    "BartModel": {
+        "default": BartOnnxConfig,
+        "with_past": BartOnnxConfigWithPast
+    },
+    "TFBartModel": {
+        "default": BartOnnxConfig,
+        "with_past": BartOnnxConfigWithPast
+    }
+}
+
+# Supported operators when parsing OnnxVariable repeated field (supports +, -, *, //)
+SUPPORTED_OPERATORS = {
+    ast.Add: op.add,
+    ast.Sub: op.sub,
+    ast.Mult: op.mul,
+    ast.Div: op.truediv,
 }
 
 
@@ -73,7 +87,7 @@ def check_onnxruntime_requirements(minimum_version: Version):
         )
 
 
-def check_supported_model_or_raise(model: Union[PreTrainedModel, TFPreTrainedModel]) -> Tuple[str, OnnxConfig]:
+def check_supported_model_or_raise(model: Union[PreTrainedModel, TFPreTrainedModel], features: str = "default") -> Tuple[str, OnnxConfig]:
     model_kind = type(model).__name__
     if model_kind not in SUPPORTED_MODEL_KIND:
         raise KeyError(
@@ -82,7 +96,14 @@ def check_supported_model_or_raise(model: Union[PreTrainedModel, TFPreTrainedMod
             f"If you want to support ({model_kind}) please propose a PR or open up an issue."
         )
 
-    return model_kind, SUPPORTED_MODEL_KIND[model_kind]
+    # Look for the features
+    model_features = SUPPORTED_MODEL_KIND[model_kind]
+    if features not in model_features:
+        raise ValueError(
+            f"{model_kind} doesn't support features {features}."
+        )
+
+    return model_kind, SUPPORTED_MODEL_KIND[model_kind][features]
 
 
 def expand_repeated_onnx_variables(model: Union[PreTrainedModel, TFPreTrainedModel], variables: List[OnnxVariable]) -> List[OnnxVariable]:
@@ -196,6 +217,7 @@ def ensure_model_and_config_inputs_match(model_inputs: Iterable[str], config_inp
     ordered_matching_inputs = [input for input in config_inputs if input.name in matching_inputs]
     return is_ok, ordered_matching_inputs
 
+
 def convert_pytorch(model: PreTrainedModel, config: OnnxConfig, opset: int, output: Path):
     """
     Export a PyTorch backed pipeline to ONNX Intermediate Representation (IR
@@ -237,7 +259,7 @@ def convert_pytorch(model: PreTrainedModel, config: OnnxConfig, opset: int, outp
         f=output.as_posix(),
         input_names=[var.name for var in ordered_onnx_inputs],
         output_names=[var.name for var in onnx_outputs],
-        dynamic_axes={var.name: var.axes for var in chain(config.inputs, config.outputs)},
+        dynamic_axes={var.name: var.axes for var in chain(config.inputs, onnx_outputs)},
         do_constant_folding=True,
         use_external_data_format=config.use_external_data_format,
         enable_onnx_checker=True,
@@ -292,6 +314,7 @@ if __name__ == '__main__':
     parser = ArgumentParser("Hugging Face ONNX Exporter tool")
     parser.add_argument("-m", "--model", type=str, required=True, help="Model's name of path on disk to load.")
     parser.add_argument("-f", "--framework", choices=FRAMEWORK_CHOICES, required=True, help=f"Framework to use when exporting. Possible values are: {FRAMEWORK_CHOICES}")
+    parser.add_argument("--features", choices=["default", "with-past"], default="default", help="Export the model with some additional features.")
     parser.add_argument("--opset", type=int, default=12, help="ONNX opset version to export the model with (default 12).")
     parser.add_argument("--atol", type=float, default=1e-5, help="Absolute difference tolerence when validating the model,")
     parser.add_argument("output", type=Path, help="Path indicating where to store generated ONNX model.")
