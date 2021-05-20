@@ -75,6 +75,10 @@ class ModelArguments:
         default=None,
         metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
     )
+    config_overrides: Optional[str] = field(
+        default=None,
+        metadata={"help": "override the default configs if any, format: key1=val1,key2=val2"},
+    )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
@@ -100,6 +104,13 @@ class ModelArguments:
             "with private models)."
         },
     )
+
+    def __post_init__(self):
+        # convert "key1=val1,key2=val2" into a kwargs dict
+        if self.config_overrides is not None:
+            d = dict(x.split("=") for x in self.config_overrides.split(","))
+            # XXX: need more intelligent code to handle various types of numbers - currently just int
+            self.config_overrides = {k: int(v) for k, v in d.items()}
 
 
 @dataclass
@@ -279,6 +290,9 @@ def main():
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
+        if model_args.config_overrides is not None:
+            print("Overriding config:", model_args.config_overrides)
+            config.update(model_args.config_overrides)
 
     tokenizer_kwargs = {
         "cache_dir": model_args.cache_dir,
@@ -306,8 +320,9 @@ def main():
             use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
-        logger.info("Training new model from scratch")
         model = AutoModelForCausalLM.from_config(config)
+        n_params = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
+        logger.info(f"Training new model from scratch - number of params={n_params>>20}M")
 
     model.resize_token_embeddings(len(tokenizer))
 
