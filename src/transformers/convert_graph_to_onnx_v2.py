@@ -283,6 +283,7 @@ def validate_model_outputs(tokenizer: PreTrainedTokenizer, reference_model: Unio
 
     print("Validating ONNX model...")
 
+    # TODO: Sequence length = 4 hard coded, provide this value through CLI would be better
     reference_tensor_type = TensorType.PYTORCH if isinstance(reference_model, PreTrainedModel) else TensorType.TENSORFLOW
     reference_model_inputs = tokenizer([tokenizer.unk_token] * 4, return_tensors=reference_tensor_type)
     onnx_inputs = tokenizer([tokenizer.unk_token] * 4, return_tensors=TensorType.NUMPY)
