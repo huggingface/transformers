@@ -168,7 +168,7 @@ BERT_ONNX_CONFIG = OnnxConfig(
     ],
     runtime_config_overrides=None,
     use_external_data_format=False,
-    minimum_required_onnx_opset=11,
+    minimum_required_onnx_opset=12,
     optimizer="bert",
     optimizer_features={
         "enable_gelu": True,
