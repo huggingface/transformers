@@ -267,6 +267,7 @@ class MobileBertModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    fx_ready_model_classes = all_model_classes
     test_sequence_classification_problem_types = True
 
     # special case for ForPreTraining model
