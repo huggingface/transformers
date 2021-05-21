@@ -59,4 +59,4 @@ The following table lists all of our examples on how to use 🤗 Transformers wi
 | Task | Example model | Example dataset | 🤗 Datasets | Colab
 |---|---|---|:---:|:---:|
 | [**`masked-language-modeling`**](https://github.com/huggingface/transformers/tree/master/examples/flax/language-modeling) | BERT | OSCAR | ✅ | [![Open In Colab (TODO: Patrick)](https://colab.research.google.com/assets/colab-badge.svg)]()
-| [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/flax/text-classification) | BERT | GLUE | ✅ | [![Open In Colab (TODO: Patrick)](https://colab.research.google.com/assets/colab-badge.svg)]()
+| [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/flax/text-classification) | BERT | GLUE | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification_flax.ipynb)
