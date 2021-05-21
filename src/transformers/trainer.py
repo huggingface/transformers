@@ -1782,6 +1782,8 @@ class Trainer:
         Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on several
         machines) main process.
         """
+        if not self.args.log_on_each_node:
+            return self.is_world_process_zero()
         if is_torch_tpu_available():
             return xm.is_master_ordinal(local=True)
         elif is_sagemaker_mp_enabled():

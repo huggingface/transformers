@@ -315,6 +315,8 @@ class TrainingArguments:
             :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
             the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
             details.
+        log_on_each_node (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            In multinode distributed training, whether to log once per node, or only on the main node.
     """
 
     output_dir: str = field(
@@ -557,6 +559,12 @@ class TrainingArguments:
     resume_from_checkpoint: Optional[str] = field(
         default=None,
         metadata={"help": "The path to a folder with a valid checkpoint for your model."},
+    )
+    log_on_each_node: bool = field(
+        default=True,
+        metadata={
+            "help": "When doing a multinode distributed training, whether to log once per node or just once on the main node."
+        },
     )
     _n_gpu: int = field(init=False, repr=False, default=-1)
     mp_parameters: str = field(
