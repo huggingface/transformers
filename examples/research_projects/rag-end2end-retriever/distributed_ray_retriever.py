@@ -7,17 +7,13 @@ from transformers.file_utils import is_datasets_available as requires_datasets
 from transformers.file_utils import is_faiss_available as requires_faiss
 from transformers.models.rag.retrieval_rag import CustomHFIndex
 
-from transformers import (
-    DPRContextEncoderTokenizerFast)
-
-
 logger = logging.getLogger(__name__)
 
 class RayRetriever:
     def __init__(self):
         self.initialized = False
 
-    def create_rag_retriever(self, config, question_encoder_tokenizer, ctx_encoder_tokenizer,generator_tokenizer, index):
+    def create_rag_retriever(self, config, question_encoder_tokenizer, generator_tokenizer, index):
         if not self.initialized:
             self.retriever = RagRetriever(
                 config,
@@ -26,7 +22,6 @@ class RayRetriever:
                 index=index,
                 init_retrieval=False,
             )
-            self.retriever.set_ctx_encoder_tokenizer(ctx_encoder_tokenizer)
             self.initialized = True
 
     def init_retrieval(self):
@@ -72,7 +67,7 @@ class RagRayDistributedRetriever(RagRetriever):
             If specified, use this index instead of the one built using the configuration
     """
 
-    def __init__(self, config, question_encoder_tokenizer,ctx_encoder_tokenizer,generator_tokenizer, retrieval_workers, index=None):
+    def __init__(self, config, question_encoder_tokenizer,generator_tokenizer, retrieval_workers, index=None):
         if index is not None and index.is_initialized() and len(retrieval_workers) > 0:
             raise ValueError(
                 "When using Ray for distributed fine-tuning, "
@@ -80,25 +75,27 @@ class RagRayDistributedRetriever(RagRetriever):
                 "as the dataset and the index are loaded "
                 "separately. More info in examples/rag/use_own_knowledge_dataset.py "
             )
+    
         super().__init__(
             config,
             question_encoder_tokenizer=question_encoder_tokenizer,
-            ctx_encoder_tokenizer=ctx_encoder_tokenizer,
             generator_tokenizer=generator_tokenizer,
             index=index,
             init_retrieval=False,
         )
+       
+
         self.retrieval_workers = retrieval_workers
         self.question_encoder_tokenizer=question_encoder_tokenizer
-        self.ctx_encoder_tokenizer=ctx_encoder_tokenizer
         self.generator_tokenizer=generator_tokenizer
         if len(self.retrieval_workers) > 0:
             ray.get(
                 [
-                    worker.create_rag_retriever.remote(config, question_encoder_tokenizer,ctx_encoder_tokenizer, generator_tokenizer, index)
+                    worker.create_rag_retriever.remote(config, question_encoder_tokenizer, generator_tokenizer, index)
                     for worker in self.retrieval_workers
                 ]
             )
+    
 
     def init_retrieval(self):
         """
@@ -154,7 +151,6 @@ class RagRayDistributedRetriever(RagRetriever):
         rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path, config=config)
         question_encoder_tokenizer = rag_tokenizer.question_encoder
         generator_tokenizer = rag_tokenizer.generator
-        ctx_encoder_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained('facebook/dpr-ctx_encoder-multiset-base')
        
         if indexed_dataset is not None:
             config.index_name = "custom"
@@ -165,7 +161,6 @@ class RagRayDistributedRetriever(RagRetriever):
         return cls(
             config,
             question_encoder_tokenizer=question_encoder_tokenizer,
-            ctx_encoder_tokenizer = ctx_encoder_tokenizer,
             generator_tokenizer=generator_tokenizer,
             retrieval_workers=actor_handles,
             index=index,
@@ -182,7 +177,7 @@ class RagRayDistributedRetriever(RagRetriever):
         index =self._build_index(self.config) 
 
         ray.get([
-                    worker.create_rag_retriever.remote(self.config, self.question_encoder_tokenizer,self.ctx_encoder_tokenizer, self.generator_tokenizer, index)
+                    worker.create_rag_retriever.remote(self.config, self.question_encoder_tokenizer,self.generator_tokenizer, index)
                     for worker in self.retrieval_workers
                 ]
             )

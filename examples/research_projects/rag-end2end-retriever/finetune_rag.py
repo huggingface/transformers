@@ -45,13 +45,13 @@ if is_ray_available():
     from distributed_ray_retriever import RagRayDistributedRetriever, RayRetriever
 
 
+
 from callbacks_rag import (  # noqa: E402 # isort:skipq
     get_checkpoint_callback,
     get_early_stopping_callback,
     Seq2SeqLoggingCallback,
 )
 
-from distributed_pytorch_retriever import RagPyTorchDistributedRetriever  # noqa: E402 # isort:skip
 from utils_rag import (  # noqa: E402 # isort:skip
     calculate_exact_match,
     flatten_list,
@@ -122,7 +122,6 @@ class GenerativeQAModule(BaseTransformer):
         config.index_path = hparams.index_path or config.index_path
         config.use_dummy_dataset = hparams.use_dummy_dataset
 
-     
         # set extra_model_params for generator configs and load_model
         extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "attention_dropout", "dropout")
         if self.is_rag_model:
@@ -130,18 +129,22 @@ class GenerativeQAModule(BaseTransformer):
                 config.generator.prefix = hparams.prefix
             config.label_smoothing = hparams.label_smoothing
             hparams, config.generator = set_extra_model_params(extra_model_params, hparams, config.generator)
-            if hparams.distributed_retriever == "pytorch":
-                retriever = RagPyTorchDistributedRetriever.from_pretrained(hparams.model_name_or_path, config=config)
-            elif hparams.distributed_retriever == "ray":
+            if hparams.distributed_retriever == "ray":
                 # The Ray retriever needs the handles to the retriever actors.
                 retriever = RagRayDistributedRetriever.from_pretrained(
                     hparams.model_name_or_path, hparams.actor_handles, config=config
                 )
 
-            
+                if hparams.end2end:
+                    ctx_encoder_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained('facebook/dpr-ctx_encoder-multiset-base')
+                    retriever.set_ctx_encoder_tokenizer(ctx_encoder_tokenizer)
+            else:
+                logger.info("please use RAY as the distributed retrieval method")
+                
             model = self.model_class.from_pretrained(hparams.model_name_or_path, config=config, retriever=retriever)
-            ctx_encoder=DPRContextEncoder.from_pretrained(hparams.context_encoder_name)
-            model.set_context_encoder_for_training(ctx_encoder)
+            if hparams.end2end:
+                ctx_encoder=DPRContextEncoder.from_pretrained(hparams.context_encoder_name)
+                model.set_context_encoder_for_training(ctx_encoder)
             prefix = config.question_encoder.prefix
         else:
             if hparams.prefix is not None:
@@ -156,7 +159,6 @@ class GenerativeQAModule(BaseTransformer):
             else AutoTokenizer.from_pretrained(hparams.model_name_or_path)
         )
 
- 
         self.config_dpr=DPRConfig.from_pretrained(hparams.context_encoder_name)#used in the re-encode process
         self.custom_config=hparams
         self.context_tokenizer=DPRContextEncoderTokenizerFast.from_pretrained(hparams.context_encoder_name)
@@ -201,8 +203,8 @@ class GenerativeQAModule(BaseTransformer):
         if hparams.gpus <= 1:
             if hparams.distributed_retriever == "ray":
                 self.model.retriever.init_retrieval()
-            elif hparams.distributed_retriever == "pytorch":
-                self.model.retriever.init_retrieval(self.distributed_port)
+            else:
+                logger.info("please use RAY as the distributed retrieval method")
 
         self.distributed_retriever = hparams.distributed_retriever
      
@@ -270,7 +272,7 @@ class GenerativeQAModule(BaseTransformer):
         global threadHandle_index #use to keep thread in embedding indexing processes
 
 
-        if (self.trainer.global_rank==0):
+        if ((self.trainer.global_rank==0) and (self.custom_config.end2end)):
 
             if (not batch_idx==0) and (batch_idx%self.custom_config.indexing_freq==0):
                 free_gpu_list=[]
@@ -323,7 +325,7 @@ class GenerativeQAModule(BaseTransformer):
                     for rank in range(num_processes):
                         logger.info("Iniitializing  embedding calculation process rank{}".format(rank))
                         device=cuda_devices[rank]#'cuda:'+str(2+rank)
-                        p = multiprocessing.Process(target=embed_update, args=(model_copy,self.context_tokenizer,device,rank,kb_list[rank],self.custom_config.shard_dir,self.custom_config.data_cache_dir))
+                        p = multiprocessing.Process(target=embed_update, args=(model_copy,self.context_tokenizer,device,rank,kb_list[rank],self.custom_config.shard_dir,self.custom_config.cache_dir))
                         processes.append(p)
  
                     for p in processes:
@@ -416,10 +418,10 @@ class GenerativeQAModule(BaseTransformer):
         metrics["step_count"] = self.step_count
         self.save_metrics(metrics, prefix)  # writes to self.metrics_save_path
         preds = flatten_list([x["preds"] for x in outputs])
-
-        self.log('val_loss', loss) #do we need average loss here?
-        self.log_dict(metrics)
-        #return {"log": metrics, "preds": preds, f"{prefix}_loss": loss, f"{prefix}_{self.val_metric}": metrics_tensor} #acording to the new pytorch-lightning property
+  
+        log_dict={'val_avg_em': metrics['val_avg_em'], 'step_count':metrics['step_count'],'val_avg_loss':metrics['val_avg_loss'],'val_loss':loss,'val_em':metrics_tensor }
+        self.log_dict(log_dict)
+ 
 
     def save_metrics(self, latest_metrics, type_path) -> None:
         self.metrics[type_path].append(latest_metrics)
@@ -442,6 +444,7 @@ class GenerativeQAModule(BaseTransformer):
         gen_time = (time.time() - start_time) / batch["input_ids"].shape[0]
         preds: List[str] = self.ids_to_clean_text(generated_ids)
         target: List[str] = self.ids_to_clean_text(batch["decoder_input_ids"])
+        # print(preds,target)
         loss_tensors = self._step(batch)
         base_metrics = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
         gen_metrics: Dict = self.calc_generative_metrics(preds, target)
@@ -497,16 +500,17 @@ class GenerativeQAModule(BaseTransformer):
         self.model.save_pretrained(save_path)
         self.tokenizer.save_pretrained(save_path)
 
-        ##### we also can save only the RAG checkpoint####################################
-        # modified_state_dict= model.state_dict()
-        # for key in model.state_dict().keys():
-        #     if key.split('.')[1]=='ctx_encoder':
-        #         del modified_state_dict[key]
-        # model.save_pretrained(save_directory='./my-test-check',state_dict=modified_state_dict)  
+        if self.custom_config.end2end:
 
-        save_path_dpr = os.path.join(self.dpr_ctx_check_dir,"checkpoint{}".format(self.step_count))
-        self.model.rag.ctx_encoder.save_pretrained(save_path_dpr)
-        self.context_tokenizer.save_pretrained(save_path_dpr)
+            ##### we also can save only the RAG checkpoint####################################
+            # modified_state_dict= model.state_dict()
+            # for key in model.state_dict().keys():
+            #     if key.split('.')[1]=='ctx_encoder':
+            #         del modified_state_dict[key]
+            # model.save_pretrained(save_directory='./my-test-check',state_dict=modified_state_dict)  
+            save_path_dpr = os.path.join(self.dpr_ctx_check_dir,"checkpoint{}".format(self.step_count))
+            self.model.rag.ctx_encoder.save_pretrained(save_path_dpr)
+            self.context_tokenizer.save_pretrained(save_path_dpr)
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
@@ -569,18 +573,20 @@ class GenerativeQAModule(BaseTransformer):
         )
         parser.add_argument(
             "--context_encoder_name",
+            default='facebook/dpr-ctx_encoder-multiset-base',
             type=str,
             help="Name of the pre-trained context encoder checkpoint from the DPR",
         )
         parser.add_argument(
             "--csv_path",
+            default = str(Path(__file__).parent / "test_run" /"dummy-kb" /"my_knowledge_dataset.csv"),
             type=str,
             help="path of the raw KB csv",
         )
         parser.add_argument(
-            '--ivf_index', 
+            '--end2end', 
             action='store_true',        
-            help='foo the bars before frobbling'
+            help='whether to train the system end2end or not'
         ) 
         parser.add_argument(
             '--index_gpus', 
@@ -589,20 +595,15 @@ class GenerativeQAModule(BaseTransformer):
         )  
         parser.add_argument(
             '--shard_dir', 
-            type=str,     
+            type=str, 
+            default=str(Path(__file__).parent /"test_run"/ "kb-shards"),    
             help='directory used to keep temporary shards during the re-encode process'
         )  
 
         parser.add_argument(
             '--gpu_order', 
             type=str,     
-            help='order of the GPU used to finding free GPUs during the re-encode process'
-        )  
-
-        parser.add_argument(
-            '--data_cache_dir', 
-            type=str,     
-            help='order of the GPU used to finding free GPUs during the re-encode process'
+            help='order of the GPU used during the fine-tuning.  Used to finding free GPUs during the re-encode process. I do not have many GPUs :)'
         )  
 
         parser.add_argument(
@@ -623,20 +624,20 @@ class GenerativeQAModule(BaseTransformer):
         parser.add_argument(
             "--passages_path",
             type=str,
-            default=None,
+            default=str(Path(__file__).parent /  "test_run" /"dummy-kb"/ "my_knowledge_dataset"),
             help="Path to the dataset of passages for custom index. More info about custom indexes in the RagRetriever documentation as well as in `examples/rag/use_own_knowledge_dataset.py`",
         )
         parser.add_argument(
             "--index_path",
             type=str,
-            default=None,
+            default=str(Path(__file__).parent  / "test_run" /"dummy-kb" / "my_knowledge_dataset_hnsw_index.faiss"),
             help="Path to the faiss index for custom index. More info about custom indexes in the RagRetriever documentation as well as in `examples/rag/use_own_knowledge_dataset.py`",
         )
         parser.add_argument(
             "--distributed_retriever",
             choices=["ray", "pytorch"],
             type=str,
-            default="pytorch",
+            default="ray",
             help="What implementation to use for distributed retriever? If "
             "pytorch is selected, the index is loaded on training "
             "worker 0, and torch.distributed is used to handle "
@@ -684,9 +685,17 @@ def main(args=None, model=None) -> GenerativeQAModule:
     parser = GenerativeQAModule.add_retriever_specific_args(parser)
     args = args or parser.parse_args()
 
-  
+
     Path(args.output_dir).mkdir(exist_ok=True)
     Path(args.output_dir+'/dpr_ctx_checkpoint').mkdir(exist_ok=True) #save dpr_context encoder seprately for the prior use
+
+    if os.path.exists(args.shard_dir): #we do not need previous kb shards
+        shutil.rmtree(args.shard_dir)
+    Path(args.shard_dir).mkdir(exist_ok=True)
+
+    if os.path.exists(args.cache_dir): #we do not need previous cache files used in dataset re-conding and re-indexing
+        shutil.rmtree(args.cache_dir)
+    Path(args.cache_dir).mkdir(exist_ok=True)
 
     named_actors = []
     if args.distributed_retriever == "ray" and args.gpus > 1:
@@ -756,6 +765,7 @@ def main(args=None, model=None) -> GenerativeQAModule:
         else False
     )
 
+   
     trainer: pl.Trainer = generic_train(
         model,
         args,
@@ -766,6 +776,7 @@ def main(args=None, model=None) -> GenerativeQAModule:
         #accelerator=CustomAccel() if args.gpus > 1 else None,
         profiler=pl.profiler.AdvancedProfiler() if args.profile else None,
     )
+
     pickle_save(model.hparams, model.output_dir / "hparams.pkl")
     if not args.do_predict:
         return model
@@ -776,13 +787,13 @@ def main(args=None, model=None) -> GenerativeQAModule:
 
 
 if __name__ == "__main__":
+
     multiprocessing.set_start_method('spawn')
     parser = argparse.ArgumentParser()
     parser = pl.Trainer.add_argparse_args(parser)
     parser = GenerativeQAModule.add_model_specific_args(parser, os.getcwd())
     parser = GenerativeQAModule.add_retriever_specific_args(parser)
     parser = GenerativeQAModule.add_ray_specific_args(parser)
-
 
     # Pytorch Lightning Profiler
     parser.add_argument(

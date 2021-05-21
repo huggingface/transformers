@@ -89,6 +89,7 @@ if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VA
             "tf-nightly-gpu",
             "intel-tensorflow",
             "tensorflow-rocm",
+            "tensorflow-macos",
         )
         _tf_version = None
         # For the metadata, we have to look for both tensorflow and tensorflow-cpu
@@ -262,6 +263,15 @@ def is_torch_cuda_available():
         return torch.cuda.is_available()
     else:
         return False
+
+
+_torch_fx_available = False
+if _torch_available:
+    _torch_fx_available = version.parse(_torch_version) >= version.parse("1.8")
+
+
+def is_torch_fx_available():
+    return _torch_fx_available
 
 
 def is_tf_available():
@@ -1535,6 +1545,11 @@ def get_from_cache(
         logger.info(f"storing {url} in cache at {cache_path}")
         os.replace(temp_file.name, cache_path)
 
+        # NamedTemporaryFile creates a file with hardwired 0600 perms (ignoring umask), so fixing it.
+        umask = os.umask(0o666)
+        os.umask(umask)
+        os.chmod(cache_path, 0o666 & ~umask)
+
         logger.info(f"creating metadata file for {cache_path}")
         meta = {"url": url, "etag": etag}
         meta_path = cache_path + ".json"
@@ -1591,11 +1606,21 @@ def tf_required(func):
     return wrapper
 
 
+def is_torch_fx_proxy(x):
+    if is_torch_fx_available():
+        import torch.fx
+
+        return isinstance(x, torch.fx.Proxy)
+    return False
+
+
 def is_tensor(x):
     """
     Tests if ``x`` is a :obj:`torch.Tensor`, :obj:`tf.Tensor`, obj:`jaxlib.xla_extension.DeviceArray` or
     :obj:`np.ndarray`.
     """
+    if is_torch_fx_proxy(x):
+        return True
     if is_torch_available():
         import torch
 

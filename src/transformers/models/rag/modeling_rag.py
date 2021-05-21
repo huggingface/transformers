@@ -27,7 +27,6 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_rag import RagConfig
 from .retrieval_rag import RagRetriever
-from transformers import (DPRContextEncoder,DPRContextEncoderTokenizerFast)
 
 
 logger = logging.get_logger(__name__)
@@ -232,6 +231,13 @@ class RagPreTrainedModel(PreTrainedModel):
     config_class = RagConfig
     base_model_prefix = "rag"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        # At the moment fast initialization is not supported
+        # for composite models
+        kwargs["_fast_init"] = False
+        return super().from_pretrained(*args, **kwargs)
 
     @classmethod
     def from_pretrained_question_encoder_generator(
@@ -585,8 +591,6 @@ class RagModel(RagPreTrainedModel):
                     n_docs=n_docs,
                     return_tensors="pt",
                 )
-             
-  
                 if self.context_encoder_training:
 
                     context_input_ids, context_attention_mask, retrieved_doc_embeds,\
@@ -609,12 +613,12 @@ class RagModel(RagPreTrainedModel):
                     retrieved_doc_embeds=self.ctx_encoder(retrived_doc_input_ids,attention_mask=retrived_doc_attention_mask,return_dict=True).pooler_output
                     retrieved_doc_embeds=retrieved_doc_embeds.view(-1,n_docs,question_encoder_last_hidden_state.shape[1]) #reshaping
 
-                    #compute doc_scores with differentiable ctx_encoder 
+                    #compute doc_scores involving ctx_encoder 
                     doc_scores = torch.bmm(
                         question_encoder_last_hidden_state.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)
                     ).squeeze(1)
 
-
+    
                 else:
                     context_input_ids, context_attention_mask, retrieved_doc_embeds, retrieved_doc_ids = (
                         retriever_outputs["context_input_ids"],
@@ -739,7 +743,6 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         self.rag.retriever = retriever
 
     def set_context_encoder_for_training(self, ctx_encoder: PreTrainedModel):
-        #used in end2end retriever training
         self.rag.context_encoder_training=True
         self.rag.ctx_encoder = ctx_encoder
 
@@ -1124,7 +1127,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
 
         # instantiate model
         self.rag = RagModel(config=config, question_encoder=question_encoder, generator=generator, retriever=retriever)
- 
 
     def set_retriever(self, retriever: RagRetriever):
         self.rag.retriever = retriever
@@ -1132,9 +1134,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
     def set_context_encoder_for_training(self, ctx_encoder: PreTrainedModel):
         self.rag.context_encoder_training=True
         self.rag.ctx_encoder = ctx_encoder
-
-    def get_context_trained_encoder(self):
-        return self.rag.ctx_encoder 
 
     def prepare_inputs_for_generation(
         self,
@@ -1279,6 +1278,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             if decoder_input_ids is None:
                 decoder_input_ids = labels
             use_cache = False
+
         outputs = self.rag(
             input_ids=input_ids,
             attention_mask=attention_mask,

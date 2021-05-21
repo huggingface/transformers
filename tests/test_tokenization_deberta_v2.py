@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import os
 import unittest
 
@@ -33,6 +32,8 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = DebertaV2Tokenizer
     rust_tokenizer_class = None
     test_rust_tokenizer = False
+    test_sentencepiece = True
+    test_sentencepiece_ignore_case = True
 
     def setUp(self):
         super().setUp()

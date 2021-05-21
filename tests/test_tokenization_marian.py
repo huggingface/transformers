@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import os
 import tempfile
 import unittest
@@ -50,6 +49,7 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = MarianTokenizer
     test_rust_tokenizer = False
+    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()

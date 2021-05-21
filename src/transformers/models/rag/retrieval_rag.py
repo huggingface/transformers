@@ -26,6 +26,7 @@ from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
 from .configuration_rag import RagConfig
 from .tokenization_rag import RagTokenizer
+from ...tokenization_utils import PreTrainedTokenizer
 
 
 if is_datasets_available():
@@ -547,7 +548,7 @@ class RagRetriever:
         doc_ids, retrieved_doc_embeds = self._main_retrieve(question_hidden_states, n_docs)
         return retrieved_doc_embeds, doc_ids, self.index.get_doc_dicts(doc_ids)
 
-
+    
     def set_ctx_encoder_tokenizer(self, ctx_encoder_tokenizer: PreTrainedTokenizer):
         #used in end2end retriever training
         self.ctx_encoder_tokenizer=ctx_encoder_tokenizer
@@ -604,6 +605,7 @@ class RagRetriever:
             docs, input_strings, prefix, n_docs, return_tensors=return_tensors
         )
 
+
         if self.return_tokenized_docs:
             retrived_doc_text=[]
             retrived_doc_title=[]
@@ -613,7 +615,7 @@ class RagRetriever:
                         retrived_doc_text.append(docs[b_idx]['text'][doc_idx])
                         retrived_doc_title.append(docs[b_idx]['title'][doc_idx])
 
-            #used in end2end retriever training 
+
             tokenized_docs=self.ctx_encoder_tokenizer(retrived_doc_title, retrived_doc_text, 
                 truncation=True, padding="longest", return_tensors="pt"
             )

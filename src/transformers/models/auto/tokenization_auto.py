@@ -63,6 +63,7 @@ from .configuration_auto import (
     BertConfig,
     BertGenerationConfig,
     BigBirdConfig,
+    BigBirdPegasusConfig,
     BlenderbotConfig,
     BlenderbotSmallConfig,
     CamembertConfig,
@@ -157,6 +158,7 @@ if is_tokenizers_available():
     from ..bart.tokenization_bart_fast import BartTokenizerFast
     from ..barthez.tokenization_barthez_fast import BarthezTokenizerFast
     from ..bert.tokenization_bert_fast import BertTokenizerFast
+    from ..big_bird.tokenization_big_bird_fast import BigBirdTokenizerFast
     from ..camembert.tokenization_camembert_fast import CamembertTokenizerFast
     from ..convbert.tokenization_convbert_fast import ConvBertTokenizerFast
     from ..deberta.tokenization_deberta_fast import DebertaTokenizerFast
@@ -190,6 +192,7 @@ else:
     BartTokenizerFast = None
     BarthezTokenizerFast = None
     BertTokenizerFast = None
+    BigBirdTokenizerFast = None
     CamembertTokenizerFast = None
     ConvBertTokenizerFast = None
     DebertaTokenizerFast = None
@@ -268,11 +271,12 @@ TOKENIZER_MAPPING = OrderedDict(
         (TapasConfig, (TapasTokenizer, None)),
         (LEDConfig, (LEDTokenizer, LEDTokenizerFast)),
         (ConvBertConfig, (ConvBertTokenizer, ConvBertTokenizerFast)),
-        (BigBirdConfig, (BigBirdTokenizer, None)),
+        (BigBirdConfig, (BigBirdTokenizer, BigBirdTokenizerFast)),
         (IBertConfig, (RobertaTokenizer, RobertaTokenizerFast)),
         (Wav2Vec2Config, (Wav2Vec2CTCTokenizer, None)),
         (GPTNeoConfig, (GPT2Tokenizer, GPT2TokenizerFast)),
         (LukeConfig, (LukeTokenizer, None)),
+        (BigBirdPegasusConfig, (PegasusTokenizer, PegasusTokenizerFast)),
     ]
 )
 

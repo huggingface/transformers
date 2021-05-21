@@ -74,6 +74,7 @@ from .file_utils import (
     is_torch_tpu_available,
     is_training_run_on_sagemaker,
 )
+from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, unwrap_model
 from .optimization import Adafactor, AdamW, get_scheduler
 from .tokenization_utils_base import PreTrainedTokenizerBase
@@ -1058,7 +1059,7 @@ class Trainer:
                 # We load the model state dict on the CPU to avoid an OOM error.
                 state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
                 # If the model is on the GPU, it still works!
-                self.model.load_state_dict(state_dict)
+                self._load_state_dict_in_model(state_dict)
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
         if model_reloaded:
@@ -1351,7 +1352,7 @@ class Trainer:
             # We load the model state dict on the CPU to avoid an OOM error.
             state_dict = torch.load(os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME), map_location="cpu")
             # If the model is on the GPU, it still works!
-            self.model.load_state_dict(state_dict)
+            self._load_state_dict_in_model(state_dict)
 
             if self.deepspeed:
                 self.deepspeed.load_checkpoint(
@@ -1372,6 +1373,17 @@ class Trainer:
         self._memory_tracker.stop_and_update_metrics(metrics)
 
         return TrainOutput(self.state.global_step, self._total_loss_scalar / self.state.global_step, metrics)
+
+    def _load_state_dict_in_model(self, state_dict):
+        load_result = self.model.load_state_dict(state_dict, strict=False)
+
+        if len(load_result.missing_keys) != 0:
+            if set(load_result.missing_keys) == set(self.model._keys_to_ignore_on_save):
+                self.model.tie_weights()
+            else:
+                logger.warn(f"There were missing keys in the checkpoint model loaded: {load_result.missing_keys}.")
+        if len(load_result.unexpected_keys) != 0:
+            logger.warn(f"There were unexpected keys in the checkpoint model loaded: {load_result.unexpected_keys}.")
 
     def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch):
         if self.control.should_log:
@@ -1480,12 +1492,16 @@ class Trainer:
                     with warnings.catch_warnings(record=True) as caught_warnings:
                         torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
                     reissue_pt_warnings(caught_warnings)
+                    if self.use_amp:
+                        torch.save(self.scaler.state_dict(), os.path.join(output_dir, "scaler.pt"))
         elif self.is_world_process_zero() and not self.deepspeed:
             # deepspeed.save_checkpoint above saves model/optim/sched
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
             with warnings.catch_warnings(record=True) as caught_warnings:
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
             reissue_pt_warnings(caught_warnings)
+            if self.use_amp:
+                torch.save(self.scaler.state_dict(), os.path.join(output_dir, "scaler.pt"))
 
         # Determine the new best metric / best model checkpoint
         if metrics is not None and self.args.metric_for_best_model is not None:
@@ -1569,6 +1585,8 @@ class Trainer:
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, "scheduler.pt")))
                 reissue_pt_warnings(caught_warnings)
+                if self.use_amp and os.path.isfile(os.path.join(checkpoint, "scaler.pt")):
+                    self.scaler.load_state_dict(torch.load(os.path.join(checkpoint, "scaler.pt")))
 
     def hyperparameter_search(
         self,
@@ -2375,25 +2393,49 @@ class Trainer:
         else:
             return 0
 
+    def create_model_card(
+        self,
+        language: Optional[str] = None,
+        license: Optional[str] = None,
+        tags: Optional[str] = None,
+        model_name: Optional[str] = None,
+        finetuned_from: Optional[str] = None,
+        dataset_tags: Optional[Union[str, List[str]]] = None,
+        dataset: Optional[Union[str, List[str]]] = None,
+        dataset_args: Optional[Union[str, List[str]]] = None,
+    ):
+        training_summary = TrainingSummary.from_trainer(
+            self,
+            language=language,
+            license=license,
+            tags=tags,
+            model_name=model_name,
+            finetuned_from=finetuned_from,
+            dataset_tags=dataset_tags,
+            dataset=dataset,
+            dataset_args=dataset_args,
+        )
+        model_card = training_summary.to_model_card()
+        with open(os.path.join(self.args.output_dir, "README.md"), "w") as f:
+            f.write(model_card)
+
     def push_to_hub(
         self,
-        save_directory: Optional[str] = None,
         repo_name: Optional[str] = None,
         repo_url: Optional[str] = None,
         commit_message: Optional[str] = "add model",
         organization: Optional[str] = None,
         private: bool = None,
         use_auth_token: Optional[Union[bool, str]] = None,
+        **kwargs,
     ):
         """
         Upload `self.model` to the 🤗 model hub.
 
         Parameters:
-            save_directory (:obj:`str` or :obj:`os.PathLike`):
-                Folder containing the model weights and config. Will default to :obj:`self.args.output_dir`.
             repo_name (:obj:`str`, `optional`):
-                Repository name for your model or tokenizer in the hub. If not specified, the repository name will be
-                the stem of :obj:`save_directory`.
+                Repository name for your model or tokenizer in the hub. If not specified and :obj:`repo_url` is not
+                specified either, will default to the stem of :obj:`self.args.output_dir`.
             repo_url (:obj:`str`, `optional`):
                 Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
                 repository will be created in your namespace (unless you specify an :obj:`organization`) with
@@ -2409,6 +2451,8 @@ class Trainer:
                 The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
                 generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`). Will default to
                 :obj:`True` if :obj:`repo_url` is not specified.
+            kwargs:
+                Additional keyword arguments passed along to :meth:`~transformers.Trainer.create_model_card`.
 
         Returns:
             The url of the commit of your model in the given repository.
@@ -2420,15 +2464,23 @@ class Trainer:
             raise ValueError(
                 "The `upload_model_to_hub` method only works for models that inherit from `PushToHubMixin` models."
             )
-        if save_directory is None:
-            save_directory = self.args.output_dir
 
-        # To avoid pushing all checkpoints, we just copy all the files in save_directory in a tmp dir.
+        if repo_url is None and repo_name is None:
+            repo_name = Path(self.args.output_dir).name
+
+        if repo_name is not None:
+            model_name = repo_name
+        elif repo_url is not None:
+            model_name = repo_url.split("/")[-1]
+        else:
+            model_name = None
+        self.create_model_card(model_name=model_name, **kwargs)
+
         with tempfile.TemporaryDirectory() as tmp_dir:
-            for f in os.listdir(save_directory):
-                fname = os.path.join(save_directory, f)
-                if os.path.isfile(fname):
-                    shutil.copy(fname, os.path.join(tmp_dir, f))
+            shutil.copy(os.path.join(self.args.output_dir, "README.md"), os.path.join(tmp_dir, "README.md"))
+            unwrap_model(self.model).save_pretrained(tmp_dir)
+            if self.tokenizer is not None:
+                self.tokenizer.save_pretrained(tmp_dir)
 
             return unwrap_model(self.model)._push_to_hub(
                 save_directory=tmp_dir,

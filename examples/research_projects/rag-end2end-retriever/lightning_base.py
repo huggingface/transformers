@@ -168,8 +168,8 @@ class BaseTransformer(pl.LightningModule):
         effective_batch_size = self.hparams.train_batch_size * self.hparams.accumulate_grad_batches * num_devices
         return (self.dataset_size / effective_batch_size) * self.hparams.max_epochs
 
-    def setup(self, mode):
-        if mode == "test":
+    def setup(self, stage):
+        if stage == "test":
             self.dataset_size = len(self.test_dataloader().dataset)
         else:
             self.train_loader = self.get_dataloader("train", self.hparams.train_batch_size, shuffle=True)
@@ -224,7 +224,7 @@ class BaseTransformer(pl.LightningModule):
         )
         parser.add_argument(
             "--cache_dir",
-            default="",
+            default=str(Path(__file__).parent / "test_run" /"cache"),
             type=str,
             help="Where do you want to store the pre-trained models downloaded from huggingface.co",
         )
@@ -269,10 +269,19 @@ class BaseTransformer(pl.LightningModule):
 class InitCallback(pl.Callback):
  
     def on_sanity_check_start(self,trainer,pl_module):
-
         if trainer.is_global_zero and trainer.global_rank==0: #we initialize the retriever only on master worker with RAY. In new pytorch-lightning accelorators are removed. 
             pl_module.model.rag.retriever.init_retrieval()    #better to use hook functions.
 
+        
+
+class CheckParamCallback(pl.Callback):
+    #check whether new added model paramters are differentiable
+    def on_after_backward(self,trainer, pl_module):
+        #print(pl_module.model.rag)
+        for name, param in pl_module.model.rag.named_parameters():
+            if param.grad is None:
+                print(name)
+       
 
 class LoggingCallback(pl.Callback):
     def on_batch_end(self, trainer, pl_module):
@@ -305,9 +314,8 @@ def add_generic_args(parser, root_dir) -> None:
     #  parser = pl.Trainer.add_argparse_args(parser)
     parser.add_argument(
         "--output_dir",
-        default=None,
+        default=str(Path(__file__).parent /"test_run"/ "model_checkpoints"),
         type=str,
-        required=True,
         help="The output directory where the model predictions and checkpoints will be written.",
     )
     parser.add_argument(
@@ -337,9 +345,8 @@ def add_generic_args(parser, root_dir) -> None:
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
     parser.add_argument(
         "--data_dir",
-        default=None,
+        default=str(Path(__file__).parent /"test_run"/ "dummy-train-data"),
         type=str,
-        required=True,
         help="The input data dir. Should contain the training files for the CoNLL-2003 NER task.",
     )
 
@@ -378,24 +385,29 @@ def generic_train(
         train_params["amp_level"] = args.fp16_opt_level
 
     if args.gpus > 1:
-        train_params["distributed_backend"] = "ddp"
+        train_params["accelerator"] = "ddp"
 
     train_params["accumulate_grad_batches"] = args.accumulate_grad_batches
     #train_params["accelerator"] = extra_train_kwargs.get("accelerator", None)
     train_params["profiler"] = None#extra_train_kwargs.get("profiler", None)
-    
+
+ 
     trainer = pl.Trainer.from_argparse_args(
         args,
         weights_summary=None,
-        callbacks=[logging_callback] + extra_callbacks+[InitCallback()],
+        callbacks=[logging_callback] + extra_callbacks+[InitCallback()]+[checkpoint_callback],
         logger=logger,
-        plugins=[DDPPlugin(find_unused_parameters=True)], #this is needed in new pytorch-lightning new version
-        val_check_interval=1.0,
-        checkpoint_callback=checkpoint_callback,
+        plugins=[DDPPlugin(find_unused_parameters=True)],  #this is needed in new pytorch-lightning new version
+        val_check_interval=0.5,
+        #checkpoint_callback=checkpoint_callback, #deprivated in PL 1.3.1
+        num_sanity_val_steps=2,
         **train_params,
     )
+
 
     if args.do_train:
         trainer.fit(model)
 
+    # else:
+    #     print("RAG modeling tests with new set functions successfuly executed!")
     return trainer
