@@ -25,7 +25,6 @@ from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, 
 from tokenizers.models import BPE, Unigram, WordPiece
 
 from .file_utils import requires_backends
-from .models.roformer.tokenization_utils import JiebaPreTokenizer
 
 
 class SentencePieceExtractor:
@@ -299,6 +298,8 @@ class RobertaConverter(Converter):
 
 class RoFormerConverter(Converter):
     def converted(self) -> Tokenizer:
+        from .models.roformer.tokenization_utils import JiebaPreTokenizer
+
         vocab = self.original_tokenizer.vocab
         tokenizer = Tokenizer(WordPiece(vocab, unk_token=str(self.original_tokenizer.unk_token)))
 
