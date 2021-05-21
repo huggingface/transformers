@@ -12,7 +12,7 @@ import regex
 from packaging.version import parse, Version
 
 from transformers import AutoModel, TFAutoModel, PreTrainedModel, is_torch_available, TFPreTrainedModel, AutoTokenizer, \
-    PreTrainedTokenizer, TensorType
+    PreTrainedTokenizer, TensorType, BatchEncoding
 from transformers.configuration_utils import OnnxConfig, OnnxVariable
 from transformers.models.albert import ALBERT_ONNX_CONFIG
 from transformers.models.bart import BART_ONNX_CONFIG, BART_ONNX_CONFIG_WITH_PAST
@@ -236,7 +236,8 @@ def expand_repeated_onnx_variables(model: Union[PreTrainedModel, TFPreTrainedMod
                 variable = OnnxVariable(
                     variable.name,
                     variable.axes,
-                    interpolate_expression(variable.repeated, model)  # Interpolate from model instance
+                    interpolate_expression(variable.repeated, model),  # Interpolate from model instance
+                    variable.value
                 )
 
             # str values purpose is to refer to dynamic values from within the model, evaluated at runtime
@@ -297,6 +298,18 @@ def ensure_model_and_config_inputs_match(model_inputs: Iterable[str], config_inp
     return is_ok, ordered_matching_inputs
 
 
+def insert_additional_onnx_value_within_inputs(inputs: Union[BatchEncoding, Dict[str, Any]], onnx_variables: List[OnnxVariable], tensor_type: TensorType) -> Dict[str, Any]:
+    for onnx_var in onnx_variables:
+        if onnx_var.name not in inputs and onnx_var.value is not None:
+            encoding = BatchEncoding(
+                {onnx_var.name: onnx_var.value}
+            ).convert_to_tensors(tensor_type=tensor_type, prepend_batch_axis=True)
+
+            inputs[onnx_var.name] = encoding[onnx_var.name]
+
+    return inputs
+
+
 def convert_pytorch(tokenizer: PreTrainedTokenizer, model: PreTrainedModel, config: OnnxConfig, opset: int, output: Path) -> Tuple[List[OnnxVariable], List[OnnxVariable]]:
     """
     Export a PyTorch backed pipeline to ONNX Intermediate Representation (IR
@@ -325,7 +338,9 @@ def convert_pytorch(tokenizer: PreTrainedTokenizer, model: PreTrainedModel, conf
 
     # Ensure inputs match
     # TODO: Sequence length = 4 hard coded, provide this value through CLI would be better
-    model_inputs = tokenizer([tokenizer.unk_token] * 4, return_tensors=TensorType.PYTORCH)
+    model_inputs = tokenizer([tokenizer.unk_token] * 4, is_split_into_words=True, return_tensors=TensorType.PYTORCH)
+    model_inputs = insert_additional_onnx_value_within_inputs(model_inputs, onnx_inputs, TensorType.PYTORCH)
+
     inputs_match, ordered_onnx_inputs = ensure_model_and_config_inputs_match(
         model_inputs.keys(),
         onnx_inputs
@@ -394,15 +409,19 @@ def optimize(onnx_model_path: Path, model: Union[PreTrainedModel, TFPreTrainedMo
         replace(temp_output_path, output)
 
 
-def validate_model_outputs(tokenizer: PreTrainedTokenizer, reference_model: Union[PreTrainedModel, TFPreTrainedModel], onnx_model: Path, onnx_named_outputs: List[OnnxVariable], atol: float):
+def validate_model_outputs(tokenizer: PreTrainedTokenizer, reference_model: Union[PreTrainedModel, TFPreTrainedModel], onnx_model: Path, onnx_inputs: List[OnnxVariable], onnx_named_outputs: List[OnnxVariable], atol: float):
     from onnxruntime import InferenceSession, SessionOptions
 
     print("Validating ONNX model...")
 
     # TODO: Sequence length = 4 hard coded, provide this value through CLI would be better
     reference_tensor_type = TensorType.PYTORCH if isinstance(reference_model, PreTrainedModel) else TensorType.TENSORFLOW
-    reference_model_inputs = tokenizer([tokenizer.unk_token] * 4, return_tensors=reference_tensor_type)
-    onnx_inputs = tokenizer([tokenizer.unk_token] * 4, return_tensors=TensorType.NUMPY)
+    reference_model_inputs = tokenizer([tokenizer.unk_token] * 4, is_split_into_words=True, return_tensors=reference_tensor_type)
+    onnx_model_inputs = tokenizer([tokenizer.unk_token] * 4, is_split_into_words=True, return_tensors=TensorType.NUMPY)
+
+    # Check if we need to introduce some more variables
+    reference_model_inputs = insert_additional_onnx_value_within_inputs(reference_model_inputs, onnx_inputs, TensorType.PYTORCH)
+    onnx_model_inputs = insert_additional_onnx_value_within_inputs(onnx_model_inputs, onnx_inputs, TensorType.NUMPY)
 
     # Create ONNX Runtime session
     options = SessionOptions()
@@ -422,7 +441,7 @@ def validate_model_outputs(tokenizer: PreTrainedTokenizer, reference_model: Unio
 
     # Compute outputs from the ONNX model
     onnx_outputs_name = [var.name for var in onnx_named_outputs]
-    onnx_outputs = session.run(onnx_outputs_name, dict(onnx_inputs))
+    onnx_outputs = session.run(onnx_outputs_name, dict(onnx_model_inputs))
 
     # Check we have a subset of the keys into onnx_outputs against ref_outputs
     onnx_named_outputs = zip(onnx_outputs_name, onnx_outputs)
@@ -497,7 +516,7 @@ if __name__ == '__main__':
     else:
         raise NotImplementedError()
 
-    validate_model_outputs(tokenizer, model, args.output, onnx_outputs, args.atol)
+    validate_model_outputs(tokenizer, model, args.output, onnx_inputs, onnx_outputs, args.atol)
     print(f"All good, model saved at: {args.output.as_posix()}")
 
     if args.optimize and args.optimization_level != "disabled":
@@ -508,7 +527,7 @@ if __name__ == '__main__':
         optimize(args.output, model, onnx_config, args.optimization_level, args.use_gpu, args.opt_model_output)
 
         if not args.use_gpu:
-            validate_model_outputs(tokenizer, model, args.opt_model_output, onnx_outputs, args.atol)
+            validate_model_outputs(tokenizer, model, args.opt_model_output, onnx_inputs, onnx_outputs, args.atol)
         else:
             print(
                 "Validating model targeting GPU is not supported yet. "

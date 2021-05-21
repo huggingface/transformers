@@ -199,11 +199,11 @@ class GPT2Config(PretrainedConfig):
 
 GPT2_ONNX_CONFIG = OnnxConfig(
     inputs=[
-        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1),
-        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1, value=None),
+        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1, value=None),
     ],
     outputs=[
-        OnnxVariable("last_hidden_state", {0: "sequence", 1: "batch"}, repeated=1),
+        OnnxVariable("last_hidden_state", {0: "sequence", 1: "batch"}, repeated=1, value=None),
     ],
     runtime_config_overrides={
         "use_cache": False
@@ -220,12 +220,12 @@ GPT2_ONNX_CONFIG = OnnxConfig(
 
 GPT2_ONNX_CONFIG_WITH_PAST = OnnxConfig(
     inputs=[
-        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1),
-        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1, value=None),
+        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1, value=None),
     ],
     outputs=[
-        OnnxVariable("last_hidden_state", {0: "sequence", 1: "batch"}, repeated=1),
-        OnnxVariable("past_key_values", {0: "batch", 2: "sequence"}, repeated="$config.n_layer * 2"),
+        OnnxVariable("last_hidden_state", {0: "sequence", 1: "batch"}, repeated=1, value=None),
+        OnnxVariable("past_key_values", {0: "batch", 2: "sequence"}, repeated="$config.n_layer * 2", value=None),
     ],
     runtime_config_overrides={
         "use_cache": True

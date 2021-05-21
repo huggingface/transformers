@@ -674,7 +674,12 @@ class PretrainedConfig(PushToHubMixin):
             setattr(self, key, value)
 
 
-OnnxVariable = NamedTuple("OnnxVariable", [("name", str), ("axes", Dict[int, str]), ("repeated", Union[int, str])])
+OnnxVariable = NamedTuple("OnnxVariable", [
+    ("name", str),
+    ("axes", Dict[int, str]),
+    ("repeated", Union[int, str]),
+    ("value", Optional[List[int]])
+])
 
 
 @dataclass

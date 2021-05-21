@@ -139,11 +139,11 @@ class DistilBertConfig(PretrainedConfig):
 
 DISTILBERT_ONNX_CONFIG = OnnxConfig(
     inputs=[
-        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1),
-        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1, value=None),
+        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1, value=None),
     ],
     outputs=[
-        OnnxVariable("last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1, value=None),
     ],
     runtime_config_overrides=None,
     use_external_data_format=False,
