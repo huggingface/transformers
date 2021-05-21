@@ -34,7 +34,7 @@ from flax import struct, traverse_util
 from flax.jax_utils import replicate, unreplicate
 from flax.metrics import tensorboard
 from flax.training import train_state
-from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
+from flax.training.common_utils import get_metrics, onehot, shard
 from transformers import AutoConfig, AutoTokenizer, FlaxAutoModelForSequenceClassification, PretrainedConfig
 
 
@@ -407,6 +407,7 @@ def main():
 
     num_epochs = int(args.num_train_epochs)
     rng = jax.random.PRNGKey(args.seed)
+    dropout_rngs = jax.random.split(rng, jax.local_device_count())
 
     train_batch_size = args.per_device_train_batch_size * jax.local_device_count()
     eval_batch_size = args.per_device_eval_batch_size * jax.local_device_count()
@@ -424,6 +425,7 @@ def main():
         state: train_state.TrainState, batch: Dict[str, Array], dropout_rng: PRNGKey
     ) -> Tuple[train_state.TrainState, float]:
         """Trains model with an optimizer (both in `state`) on `batch`, returning a pair `(new_state, loss)`."""
+        dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
         targets = batch.pop("labels")
 
         def loss_fn(params):
@@ -436,7 +438,7 @@ def main():
         grad = jax.lax.pmean(grad, "batch")
         new_state = state.apply_gradients(grads=grad)
         metrics = jax.lax.pmean({"loss": loss, "learning_rate": learning_rate_fn(state.step)}, axis_name="batch")
-        return new_state, metrics
+        return new_state, metrics, new_dropout_rng
 
     p_train_step = jax.pmap(train_step, axis_name="batch", donate_argnums=(0,))
 
@@ -467,9 +469,7 @@ def main():
 
         # train
         for batch in glue_train_data_collator(input_rng, train_dataset, train_batch_size):
-            rng, dropout_rng = jax.random.split(rng)
-            dropout_rngs = shard_prng_key(dropout_rng)
-            state, metrics = p_train_step(state, batch, dropout_rngs)
+            state, metrics, dropout_rngs = p_train_step(state, batch, dropout_rngs)
             train_metrics.append(metrics)
         train_time += time.time() - train_start
         logger.info(f"    Done! Training metrics: {unreplicate(metrics)}")
