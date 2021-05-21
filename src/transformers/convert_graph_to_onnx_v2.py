@@ -80,6 +80,12 @@ SUPPORTED_MODEL_KIND = {
     "TFRobertaModel": {
         "default": ROBERTA_ONNX_CONFIG
     },
+    "T5Model": {
+        "default": T5_ONNX_CONFIG,
+    },
+    "TFT5Model": {
+        "default": T5_ONNX_CONFIG,
+    },
     "XLMRobertaModel": {
         "default": XLM_ROBERTA_ONNX_CONFIG
     },

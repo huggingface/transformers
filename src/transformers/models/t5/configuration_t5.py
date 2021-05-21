@@ -14,7 +14,7 @@
 # limitations under the License.
 """ T5 model configuration """
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, OnnxConfig, OnnxVariable
 from ...utils import logging
 
 
@@ -132,3 +132,53 @@ class T5Config(PretrainedConfig):
     @property
     def num_hidden_layers(self):
         return self.num_layers
+
+
+T5_ONNX_CONFIG = OnnxConfig(
+    inputs=[
+        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1, value=None),
+        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1, value=None),
+        OnnxVariable("decoder_input_ids", {0: "batch", 1: "decoder_sequence"}, repeated=1, value=[1]),
+        OnnxVariable("decoder_attention_mask", {0: "batch", 1: "decoder_sequence"}, repeated=1, value=[1]),
+    ],
+    outputs=[
+        OnnxVariable("last_hidden_state", {0: "batch", 1: "decoder_sequence"}, repeated=1, value=None),
+        OnnxVariable("encoder_last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1, value=None),
+    ],
+    runtime_config_overrides={
+        "use_cache": False
+    },
+    use_external_data_format=False,
+    minimum_required_onnx_opset=11,
+    optimizer="bert",
+    optimizer_features=None,
+    optimizer_additional_args={
+        "num_heads": "$config.num_attention_heads",
+        "hidden_size": "$config.hidden_size"
+    }
+)
+
+# TODO: Enable this? past_keys shape are interleaved (decoder_sequence, decoder_sequence, sequence, sequence)
+# T5_ONNX_CONFIG_WITH_PAST = OnnxConfig(
+#     inputs=[
+#         OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1, value=None),
+#         OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1, value=None),
+#         OnnxVariable("decoder_input_ids", {0: "batch", 1: "decoder_sequence"}, repeated=1, value=[1]),
+#         OnnxVariable("decoder_attention_mask", {0: "batch", 1: "decoder_sequence"}, repeated=1, value=[1]),
+#     ],
+#     outputs=[
+#         OnnxVariable("last_hidden_state", {0: "sequence", 1: "batch"}, repeated=1, value=[1]),
+#         OnnxVariable("past_key_values", {0: "batch", 2: "sequence"}, repeated="$config.num_decoder_layers * 4", value=[1]),
+#     ],
+#     runtime_config_overrides={
+#         "use_cache": True
+#     },
+#     use_external_data_format=False,
+#     minimum_required_onnx_opset=11,
+#     optimizer="bert",
+#     optimizer_features=None,
+#     optimizer_additional_args={
+#         "num_heads": "$config.num_attention_heads",
+#         "hidden_size": "$config.hidden_size"
+#     }
+# )
