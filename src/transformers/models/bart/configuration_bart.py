@@ -190,12 +190,12 @@ class BartConfig(PretrainedConfig):
 
 BART_ONNX_CONFIG = OnnxConfig(
     inputs=[
-        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1),
-        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1, value=None),
+        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1, value=None),
     ],
     outputs=[
-        OnnxVariable("last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1),
-        OnnxVariable("encoder_last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1, value=None),
+        OnnxVariable("encoder_last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1, value=None),
     ],
     runtime_config_overrides={
         "use_cache": False
@@ -212,13 +212,13 @@ BART_ONNX_CONFIG = OnnxConfig(
 
 BART_ONNX_CONFIG_WITH_PAST = OnnxConfig(
     inputs=[
-        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1),
-        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1, value=None),
+        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1, value=None),
     ],
     outputs=[
-        OnnxVariable("last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1),
-        OnnxVariable("past_keys", {0: "batch", 2: "sequence"}, repeated="$config.decoder_layers * 4"),
-        OnnxVariable("encoder_last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1),
+        OnnxVariable("last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1, value=None),
+        OnnxVariable("past_keys", {0: "batch", 2: "sequence"}, repeated="$config.decoder_layers * 4", value=None),
+        OnnxVariable("encoder_last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1, value=None),
     ],
     runtime_config_overrides={
         "use_cache": True
