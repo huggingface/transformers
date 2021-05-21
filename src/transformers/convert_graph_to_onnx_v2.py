@@ -40,56 +40,33 @@ FRAMEWORK_CHOICES = {FRAMEWORK_NAME_PT, FRAMEWORK_NAME_PT}
 
 # Set of model topologies we support
 SUPPORTED_MODEL_KIND = {
-    "AlbertModel": {
+    "albert": {
         "default": ALBERT_ONNX_CONFIG
     },
-    "TFAlbertModel": {
-        "default": ALBERT_ONNX_CONFIG
-    },
-    "BartModel": {
+    "bart": {
         "default": BART_ONNX_CONFIG,
         "with_past": BART_ONNX_CONFIG_WITH_PAST
     },
-    "TFBartModel": {
-        "default": BART_ONNX_CONFIG,
-        "with_past": BART_ONNX_CONFIG_WITH_PAST
-    },
-    "BertModel": {
+    "bert": {
         "default": BERT_ONNX_CONFIG
     },
-    "TFBertModel": {
-        "default": BERT_ONNX_CONFIG
+    "distilbert": {
+        "default": DISTILBERT_ONNX_CONFIG,
     },
-    "DistilBertModel": {
-        "default": DISTILBERT_ONNX_CONFIG
-    },
-    "TFDistilBertModel": {
-        "default": DISTILBERT_ONNX_CONFIG
-    },
-    "GPT2Model": {
+    "gpt2": {
         "default": GPT2_ONNX_CONFIG,
         "with_past": GPT2_ONNX_CONFIG_WITH_PAST
     },
-    "TFGPT2Model": {
-        "default": GPT2_ONNX_CONFIG,
-        "with_past": GPT2_ONNX_CONFIG_WITH_PAST
+    "longformer": {
+        "default": LONGFORMER_ONNX_CONFIG,
     },
-    "RobertaModel": {
+    "roberta": {
         "default": ROBERTA_ONNX_CONFIG,
     },
-    "TFRobertaModel": {
-        "default": ROBERTA_ONNX_CONFIG
-    },
-    "T5Model": {
+    "t5": {
         "default": T5_ONNX_CONFIG,
     },
-    "TFT5Model": {
-        "default": T5_ONNX_CONFIG,
-    },
-    "XLMRobertaModel": {
-        "default": XLM_ROBERTA_ONNX_CONFIG
-    },
-    "TFXLMRobertaModel": {
+    "xlm-roberta": {
         "default": XLM_ROBERTA_ONNX_CONFIG
     }
 }
