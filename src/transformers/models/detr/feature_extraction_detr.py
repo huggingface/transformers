@@ -688,8 +688,12 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         """
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
-        assert len(out_logits) == len(target_sizes)
-        assert target_sizes.shape[1] == 2
+        assert len(out_logits) == len(
+            target_sizes
+        ), "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+        assert (
+            target_sizes.shape[1] == 2
+        ), "Each element of target_sizes must contain the size (h, w) of each image of the batch"
 
         prob = F.softmax(out_logits, -1)
         scores, labels = prob[..., :-1].max(-1)
@@ -731,7 +735,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             for an image in the batch as predicted by the model.
         """
 
-        assert len(orig_target_sizes) == len(max_target_sizes)
+        assert len(orig_target_sizes) == len(
+            max_target_sizes
+        ), "Make sure to pass in as many orig_target_sizes as max_target_sizes"
         max_h, max_w = max_target_sizes.max(0)[0].tolist()
         outputs_masks = outputs.pred_masks.squeeze(2)
         outputs_masks = F.interpolate(outputs_masks, size=(max_h, max_w), mode="bilinear", align_corners=False)
@@ -773,14 +779,18 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         """
         if target_sizes is None:
             target_sizes = processed_sizes
-        assert len(processed_sizes) == len(target_sizes)
+        assert len(processed_sizes) == len(
+            target_sizes
+        ), "Make sure to pass in as many processed_sizes as target_sizes"
 
         if is_thing_map is None:
             # default to is_thing_map of COCO panoptic
             is_thing_map = {i: i <= 90 for i in range(201)}
 
         out_logits, raw_masks, raw_boxes = outputs.logits, outputs.pred_masks, outputs.pred_boxes
-        assert len(out_logits) == len(raw_masks) == len(target_sizes)
+        assert (
+            len(out_logits) == len(raw_masks) == len(target_sizes)
+        ), "Make sure that you pass in as many target sizes as the batch dimension of the logits and masks"
         preds = []
 
         def to_tuple(tup):

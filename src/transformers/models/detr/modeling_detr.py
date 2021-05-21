@@ -54,11 +54,28 @@ DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
 @dataclass
 class DetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     """
-    This class adds one attribute to BaseModelOutputWithCrossAttentions, namely an optional stack of intermediate
-    decoder activations, i.e. the output of each decoder layer, each of them gone through a layernorm.
+    Base class for outputs of the DETR decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
+    namely an optional stack of intermediate decoder activations, i.e. the output of each decoder layer, each of them
+    gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
 
     Args:
-        intermediate_hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(config.decoder_layers, batch_size, sequence_length, hidden_size)`):
+        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
+            each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
+            weighted average in the self-attention heads.
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` and ``config.add_cross_attention=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the
+            attention softmax, used to compute the weighted average in the cross-attention heads.
+        intermediate_hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(config.decoder_layers, batch_size, sequence_length, hidden_size)`, `optional`, returned when ``config.auxiliary_loss=True``):
+            Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
+            layernorm.
     """
 
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
@@ -67,11 +84,40 @@ class DetrDecoderOutput(BaseModelOutputWithCrossAttentions):
 @dataclass
 class DetrModelOutput(Seq2SeqModelOutput):
     """
-    This class adds one attribute to Seq2SeqModelOutput, namely an optional stack of intermediate decoder activations,
-    i.e. the output of each decoder layer, each of them gone through a layernorm.
+    Base class for outputs of the DETR encoder-decoder model. This class adds one attribute to Seq2SeqModelOutput,
+    namely an optional stack of intermediate decoder activations, i.e. the output of each decoder layer, each of them
+    gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
 
     Args:
-        intermediate_hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(config.decoder_layers, batch_size, sequence_length, hidden_size)`):
+        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the decoder of the model. If
+            :obj:`past_key_values` is used only the last hidden-state of the sequences of shape :obj:`(batch_size, 1,
+            hidden_size)` is output.
+        decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the decoder at the output of
+            each layer plus the initial embedding outputs.
+        decoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights of the decoder, after the attention softmax, used to
+            compute the weighted average in the self-attention heads.
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the
+            attention softmax, used to compute the weighted average in the cross-attention heads.
+        encoder_last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            Sequence of hidden-states at the output of the last layer of the encoder of the model.
+        encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the encoder at the output of
+            each layer plus the initial embedding outputs.
+        encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights of the encoder, after the attention softmax, used to
+            compute the weighted average in the self-attention heads.
+        intermediate_hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(config.decoder_layers, batch_size, sequence_length, hidden_size)`, `optional`, returned when ``config.auxiliary_loss=True``):
+            Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
+            layernorm.
     """
 
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
@@ -246,13 +292,13 @@ class FrozenBatchNorm2d(nn.Module):
     def forward(self, x):
         # move reshapes to the beginning
         # to make it user-friendly
-        w = self.weight.reshape(1, -1, 1, 1)
-        b = self.bias.reshape(1, -1, 1, 1)
-        rv = self.running_var.reshape(1, -1, 1, 1)
-        rm = self.running_mean.reshape(1, -1, 1, 1)
-        eps = 1e-5
-        scale = w * (rv + eps).rsqrt()
-        bias = b - rm * scale
+        weight = self.weight.reshape(1, -1, 1, 1)
+        bias = self.bias.reshape(1, -1, 1, 1)
+        running_var = self.running_var.reshape(1, -1, 1, 1)
+        running_mean = self.running_mean.reshape(1, -1, 1, 1)
+        epsilon = 1e-5
+        scale = weight * (running_var + epsilon).rsqrt()
+        bias = bias - running_mean * scale
         return x * scale + bias
 
 
@@ -369,16 +415,14 @@ class DetrSinePositionEmbedding(nn.Module):
         self.scale = scale
 
     def forward(self, pixel_values, pixel_mask):
-        x = pixel_values
-        mask = pixel_mask
-        assert mask is not None, "No pixel mask provided"
-        y_embed = mask.cumsum(1, dtype=torch.float32)
-        x_embed = mask.cumsum(2, dtype=torch.float32)
+        assert pixel_mask is not None, "No pixel mask provided"
+        y_embed = pixel_mask.cumsum(1, dtype=torch.float32)
+        x_embed = pixel_mask.cumsum(2, dtype=torch.float32)
         if self.normalize:
             y_embed = y_embed / (y_embed[:, -1:, :] + 1e-6) * self.scale
             x_embed = x_embed / (x_embed[:, :, -1:] + 1e-6) * self.scale
 
-        dim_t = torch.arange(self.embedding_dim, dtype=torch.float32, device=x.device)
+        dim_t = torch.arange(self.embedding_dim, dtype=torch.float32, device=pixel_values.device)
         dim_t = self.temperature ** (2 * (dim_t // 2) / self.embedding_dim)
 
         pos_x = x_embed[:, :, :, None] / dim_t
@@ -405,16 +449,15 @@ class DetrLearnedPositionEmbedding(nn.Module):
         nn.init.uniform_(self.column_embeddings.weight)
 
     def forward(self, pixel_values, pixel_mask=None):
-        x = pixel_values
-        h, w = x.shape[-2:]
-        i = torch.arange(w, device=x.device)
-        j = torch.arange(h, device=x.device)
+        h, w = pixel_values.shape[-2:]
+        i = torch.arange(w, device=pixel_values.device)
+        j = torch.arange(h, device=pixel_values.device)
         x_emb = self.column_embeddings(i)
         y_emb = self.row_embeddings(j)
         pos = torch.cat([x_emb.unsqueeze(0).repeat(h, 1, 1), y_emb.unsqueeze(1).repeat(1, w, 1)], dim=-1)
         pos = pos.permute(2, 0, 1)
         pos = pos.unsqueeze(0)
-        pos = pos.repeat(x.shape[0], 1, 1, 1)
+        pos = pos.repeat(pixel_values.shape[0], 1, 1, 1)
         return pos
 
 
@@ -426,7 +469,7 @@ def build_position_encoding(config):
     elif config.position_embedding_type == "learned":
         position_embedding = DetrLearnedPositionEmbedding(N_steps)
     else:
-        raise ValueError(f"not supported {config.position_embedding_type}")
+        raise ValueError(f"Not supported {config.position_embedding_type}")
 
     return position_embedding
 
@@ -465,7 +508,6 @@ class DetrAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    # added (Niels)
     def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
         return tensor if position_embeddings is None else tensor + position_embeddings
 
@@ -485,12 +527,12 @@ class DetrAttention(nn.Module):
         is_cross_attention = key_value_states is not None
         bsz, tgt_len, embed_dim = hidden_states.size()
 
-        # Added (Niels): add position embeddings to the hidden states before projecting to queries and keys
+        # add position embeddings to the hidden states before projecting to queries and keys
         if position_embeddings is not None:
             hidden_states_original = hidden_states
             hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
 
-        # Added (Niels): add key-value position embeddings to the key value states
+        # add key-value position embeddings to the key value states
         if key_value_position_embeddings is not None:
             key_value_states_original = key_value_states
             key_value_states = self.with_pos_embed(key_value_states, key_value_position_embeddings)
@@ -1751,8 +1793,12 @@ class DetrMHAttentionMap(nn.Module):
     def forward(self, q, k, mask: Optional[Tensor] = None):
         q = self.q_linear(q)
         k = F.conv2d(k, self.k_linear.weight.unsqueeze(-1).unsqueeze(-1), self.k_linear.bias)
+        print("Shape of q:", q.shape)
+        print("Shape of k:", k.shape)
         qh = q.view(q.shape[0], q.shape[1], self.num_heads, self.hidden_dim // self.num_heads)
         kh = k.view(k.shape[0], self.num_heads, self.hidden_dim // self.num_heads, k.shape[-2], k.shape[-1])
+        print("Shape of qh:", qh.shape)
+        print("Shape of kh:", kh.shape)
         weights = torch.einsum("bqnc,bnchw->bqnhw", qh * self.normalize_fact, kh)
 
         if mask is not None:
@@ -1852,7 +1898,7 @@ class SetCriterion(nn.Module):
         Classification loss (NLL) targets dicts must contain the key "class_labels" containing a tensor of dim
         [nb_target_boxes]
         """
-        assert "logits" in outputs
+        assert "logits" in outputs, "No logits were found in the outputs"
         src_logits = outputs["logits"]
 
         idx = self._get_src_permutation_idx(indices)
@@ -2213,5 +2259,5 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
             pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
             m[: img.shape[1], : img.shape[2]] = False
     else:
-        raise ValueError("not supported")
+        raise ValueError("Only 3-dimensional tensors are supported")
     return NestedTensor(tensor, mask)

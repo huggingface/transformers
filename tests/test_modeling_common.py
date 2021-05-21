@@ -21,7 +21,7 @@ import random
 import tempfile
 import unittest
 import warnings
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 from huggingface_hub import HfApi
 from requests.exceptions import HTTPError

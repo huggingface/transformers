@@ -84,7 +84,7 @@ class DetrConfig(PretrainedConfig):
         position_embedding_type (:obj:`str`, `optional`, defaults to :obj:`"sine"`):
             Type of position embeddings to be used on top of the image features. One of :obj:`"sine"` or
             :obj:`"learned"`.
-        backbone (:obj:`str`, `optional`, defaults to :obj:`resnet50`):
+        backbone (:obj:`str`, `optional`, defaults to :obj:`"resnet50"`):
             Name of convolutional backbone to use. Supports any convolutional backbone from the timm package.
         train_backbone (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to train (fine-tune) the backbone.
