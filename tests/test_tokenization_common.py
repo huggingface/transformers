@@ -166,7 +166,10 @@ class TokenizerTesterMixin:
 
     def get_tokenizers(self, fast=True, **kwargs) -> List[PreTrainedTokenizerBase]:
         if fast and self.test_rust_tokenizer:
-            return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
+            if self.tokenizer_class is not None:
+                return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
+            else:
+                return [self.get_rust_tokenizer(**kwargs)]
         return [self.get_tokenizer(**kwargs)]
 
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
