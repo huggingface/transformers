@@ -1872,8 +1872,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             save_directory (:obj:`str` or :obj:`os.PathLike`): The path to a directory where the tokenizer will be saved.
             legacy_format (:obj:`bool`, `optional`):
                 Only applicable for a fast tokenizer. If unset (default), will save the tokenizer in the unified JSON
-                format as well as in legacy format if it exists, i.e. with tokenizer specific vocabulary and a separate added_tokens
-                files.
+                format as well as in legacy format if it exists, i.e. with tokenizer specific vocabulary and a separate
+                added_tokens files.
 
                 If :obj:`False`, will only save the tokenizer in the unified JSON format. This format is incompatible
                 with "slow" tokenizers (not powered by the `tokenizers` library), so the tokenizer will not be able to
