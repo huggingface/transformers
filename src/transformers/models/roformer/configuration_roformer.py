@@ -78,7 +78,7 @@ class RoFormerConfig(PretrainedConfig):
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
 
-        Example::
+    Example::
 
         >>> from transformers import RoFormerModel, RoFormerConfig
 
