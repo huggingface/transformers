@@ -251,7 +251,7 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None):
         samples_per_second = 1 / (runtime / num_samples)
         result[f"{split}_samples_per_second"] = round(samples_per_second, 3)
     if num_steps is not None:
-        steps_per_second = 1 / (runtime / num_steps)
+        steps_per_second = num_steps / runtime
         result[f"{split}_steps_per_second"] = round(steps_per_second, 3)
     return result
 
