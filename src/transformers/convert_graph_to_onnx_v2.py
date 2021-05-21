@@ -372,6 +372,7 @@ def optimize(onnx_model_path: Path, model: Union[PreTrainedModel, TFPreTrainedMo
         if onnx_config.optimizer_features is not None:
             for feature_name, feature_value in onnx_config.optimizer_features.items():
                 print(f"\t- {feature_name} = {feature_value}")
+                setattr(optimizer_options, feature_name, feature_value)
 
         # Optimize
         optimizer = optimize_model(
