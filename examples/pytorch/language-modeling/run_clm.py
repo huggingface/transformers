@@ -322,7 +322,7 @@ def main():
     else:
         model = AutoModelForCausalLM.from_config(config)
         n_params = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
-        logger.info(f"Training new model from scratch - number of params={n_params>>20}M")
+        logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
 
     model.resize_token_embeddings(len(tokenizer))
 
