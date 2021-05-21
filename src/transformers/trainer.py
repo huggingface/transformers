@@ -2012,7 +2012,7 @@ class Trainer:
                 metric_key_prefix,
                 start_time,
                 num_samples=output.num_samples,
-                num_steps=output.num_samples // total_batch_size,
+                num_steps=math.ceil(output.num_samples / total_batch_size),
             )
         )
 
@@ -2077,7 +2077,7 @@ class Trainer:
                 metric_key_prefix,
                 start_time,
                 num_samples=output.num_samples,
-                num_steps=output.num_samples // total_batch_size,
+                num_steps=math.ceil(output.num_samples / total_batch_size),
             )
         )
 
