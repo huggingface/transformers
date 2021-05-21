@@ -687,9 +687,9 @@ def main(args=None, model=None) -> GenerativeQAModule:
 
 
     Path(args.output_dir).mkdir(exist_ok=True)
-    Path(args.output_dir+'/dpr_ctx_checkpoint').mkdir(exist_ok=True) #save dpr_context encoder seprately for the prior use
+    Path(args.output_dir+'/dpr_ctx_checkpoint').mkdir(exist_ok=True) #save dpr_context encoder seprately for the future use
 
-    if os.path.exists(args.shard_dir): #we do not need previous kb shards
+    if os.path.exists(args.shard_dir): #we do not need previous kb shards used in dataset re-conding and re-indexing
         shutil.rmtree(args.shard_dir)
     Path(args.shard_dir).mkdir(exist_ok=True)
 

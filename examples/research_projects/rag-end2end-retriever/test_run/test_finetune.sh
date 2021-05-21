@@ -1,7 +1,10 @@
 # Add parent directory to python path to access lightning_base.py
 export PYTHONPATH="../":"${PYTHONPATH}"
 
+#creates the custom knowlegebase
 python use_own_knowledge_dataset.py
+
+
 # Start a single-node Ray cluster.
 ray start --head
 

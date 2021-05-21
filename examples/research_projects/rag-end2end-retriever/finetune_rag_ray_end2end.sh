@@ -3,6 +3,11 @@
 # Add parent directory to python path to access lightning_base.py
 export PYTHONPATH="../":"${PYTHONPATH}"
 
+#creates the custom knowlegebase
+python use_own_knowledge_dataset.py  \
+    --csv_path /DIR/SQUAD-KB/squad-kb.csv \
+    --output_dir  /DIR/SQUAD-KB
+
 # Start a single-node Ray cluster.
 ray start --head
 
@@ -47,7 +52,7 @@ python finetune_rag.py \
     --index_name custom \
     --context_encoder_name facebook/dpr-ctx_encoder-multiset-base \
     --csv_path /DIR/SQUAD-KB/squad-kb.csv \
-    --data_cache_dir /DIR/test_dir/cache \
+    --cache_dir /DIR/test_dir/cache \
     --index_gpus 1 \
     --gpu_order [5,6,7,8,9,0,1,2,3,4] \
     --shard_dir ./test_dir/kb-shards \
