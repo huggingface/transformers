@@ -74,6 +74,14 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "This is a test",
         )
 
+    def test_get_vocab(self):
+        vocab_keys = list(self.get_tokenizer().get_vocab().keys())
+
+        self.assertEqual(vocab_keys[0], "</s>")
+        self.assertEqual(vocab_keys[1], "<unk>")
+        self.assertEqual(vocab_keys[-1], "<pad>")
+        self.assertEqual(len(vocab_keys), 9)
+
     def test_vocab_size(self):
         self.assertEqual(self.get_tokenizer().vocab_size, 9)
 

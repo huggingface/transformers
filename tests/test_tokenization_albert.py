@@ -47,6 +47,14 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         output_text = "this is a test"
         return input_text, output_text
 
+    def test_get_vocab(self):
+        vocab_keys = list(self.get_tokenizer().get_vocab().keys())
+
+        self.assertEqual(vocab_keys[0], "<pad>")
+        self.assertEqual(vocab_keys[1], "<unk>")
+        self.assertEqual(vocab_keys[-1], "▁eloquent")
+        self.assertEqual(len(vocab_keys), 30_000)
+
     def test_vocab_size(self):
         self.assertEqual(self.get_tokenizer().vocab_size, 30_000)
 

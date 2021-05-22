@@ -50,6 +50,14 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def get_input_output_texts(self, tokenizer):
         return ("This is a test", "This is a test")
 
+    def test_get_vocab(self):
+        vocab_keys = list(self.get_tokenizer().get_vocab().keys())
+
+        self.assertEqual(vocab_keys[0], "<pad>")
+        self.assertEqual(vocab_keys[1], "</s>")
+        self.assertEqual(vocab_keys[-1], "v")
+        self.assertEqual(len(vocab_keys), 1_103)
+
     def test_vocab_size(self):
         self.assertEqual(self.get_tokenizer().vocab_size, 1_103)
 

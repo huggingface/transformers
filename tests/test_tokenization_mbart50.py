@@ -47,6 +47,14 @@ class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = MBart50Tokenizer(SAMPLE_VOCAB, src_lang="en_XX", tgt_lang="ro_RO", keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
 
+    def test_get_vocab(self):
+        vocab_keys = list(self.get_tokenizer().get_vocab().keys())
+
+        self.assertEqual(vocab_keys[0], "<s>")
+        self.assertEqual(vocab_keys[1], "<pad>")
+        self.assertEqual(vocab_keys[-1], "<mask>")
+        self.assertEqual(len(vocab_keys), 1_054)
+
     def test_vocab_size(self):
         self.assertEqual(self.get_tokenizer().vocab_size, 1_054)
 
