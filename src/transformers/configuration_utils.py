@@ -676,10 +676,10 @@ class PretrainedConfig(PushToHubMixin):
         """
         Updates attributes of this class with attributes from ``update_str``.
 
-        The expected format is in the form of this example ``key1=10,key2=0.2,key3=true,key4=string`` - i.e. just write
-        ints and floats and strings as is, and for booleans use ``true`` or ``false``.
+        The expected format is ints, floats and strings as is, and for booleans use ``true`` or ``false``. For example:
+        "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
 
-        The key has to already exist in the config object.
+        The keys to change have to already exist in the config object.
 
         Args:
             update_str (:obj:`str`): String with attributes that should be updated for this class.

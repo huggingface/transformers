@@ -77,7 +77,10 @@ class ModelArguments:
     )
     config_overrides: Optional[str] = field(
         default=None,
-        metadata={"help": "override the default configs if any, format: key1=val1,key2=val2"},
+        metadata={
+            "help": "Override some existing default config settings. Example: "
+            "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+        },
     )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
