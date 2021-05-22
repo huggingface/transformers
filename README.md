@@ -45,6 +45,8 @@ for k in list(checkpoint.keys()):
 del checkpoint
 ```
 
+After converting the checkpoint to half precision, you can also `torch.save(checkpoint, "fp16.pt")` and load that from then on, which should be faster.
+
 ### Checkpoint splitting
 
 If your system RAM is smaller than the model and your VRAM isn't big enough to fit the model twice, you can first split up your checkpoint into per module checkpoints on a machine with more RAM and no GPU:
