@@ -704,6 +704,6 @@ class PretrainedConfig(PushToHubMixin):
             elif isinstance(old_v, float):
                 v = float(v)
             elif not isinstance(old_v, str):
-                raise ValueError(f"{v} (key {k}) is not int/float/bool/str")
+                raise ValueError(f"You can only update int, float, bool or string values in the config, got {v} for key {k}")
 
             setattr(self, k, v)
