@@ -11,15 +11,16 @@ import operator as op
 import regex
 from packaging.version import parse, Version
 
-from transformers import AutoModel, TFAutoModel, PreTrainedModel, is_torch_available, TFPreTrainedModel, AutoTokenizer, \
-    PreTrainedTokenizer, TensorType, BatchEncoding
+from transformers import is_torch_available, AutoTokenizer, PreTrainedTokenizer, TensorType, BatchEncoding, is_tf_available
 from transformers.configuration_utils import OnnxConfig, OnnxVariable
 from transformers.models.albert import ALBERT_ONNX_CONFIG
 from transformers.models.bart import BART_ONNX_CONFIG, BART_ONNX_CONFIG_WITH_PAST
 from transformers.models.bert import BERT_ONNX_CONFIG
-from transformers.models.distilbert import DISTILBERT_ONNX_CONFIG
+from transformers.models.distilbert import DISTILBERT_ONNX_CONFIG, DISTILBERT_TOKEN_CLASSIFICATION_ONNX_CONFIG
 from transformers.models.gpt2 import GPT2_ONNX_CONFIG, GPT2_ONNX_CONFIG_WITH_PAST
+from transformers.models.longformer import LONGFORMER_ONNX_CONFIG
 from transformers.models.roberta import ROBERTA_ONNX_CONFIG
+from transformers.models.t5 import T5_ONNX_CONFIG
 from transformers.models.xlm_roberta import XLM_ROBERTA_ONNX_CONFIG
 
 from onnxruntime import GraphOptimizationLevel
@@ -38,6 +39,22 @@ FRAMEWORK_NAME_PT = "pytorch"
 FRAMEWORK_NAME_TF = "tensorflow"
 FRAMEWORK_CHOICES = {FRAMEWORK_NAME_PT, FRAMEWORK_NAME_PT}
 
+if is_torch_available():
+    from transformers import AutoModel, AutoModelForTokenClassification, PreTrainedModel
+    FEATURES_TO_AUTOMODELS = {
+        "default": AutoModel,
+        "with_path": AutoModel,
+        "token_classification": AutoModelForTokenClassification
+    }
+
+if is_tf_available():
+    from transformers import TFAutoModel, TFAutoModelForTokenClassification, TFPreTrainedModel
+    FEATURES_TO_TF_AUTOMODELS = {
+        "default": TFAutoModel,
+        "with_path": TFAutoModel,
+        "token_classification": TFAutoModelForTokenClassification
+    }
+
 # Set of model topologies we support
 SUPPORTED_MODEL_KIND = {
     "albert": {
@@ -52,6 +69,7 @@ SUPPORTED_MODEL_KIND = {
     },
     "distilbert": {
         "default": DISTILBERT_ONNX_CONFIG,
+        "token_classification": DISTILBERT_TOKEN_CLASSIFICATION_ONNX_CONFIG
     },
     "gpt2": {
         "default": GPT2_ONNX_CONFIG,
@@ -131,23 +149,22 @@ def check_onnxruntime_requirements(minimum_version: Version):
 
 
 def check_supported_model_or_raise(model: Union[PreTrainedModel, TFPreTrainedModel], features: str = "default") -> Tuple[str, OnnxConfig]:
-    model_kind = type(model).__name__
-    if model_kind not in SUPPORTED_MODEL_KIND:
+    if model.config.model_type not in SUPPORTED_MODEL_KIND:
         raise KeyError(
-            f"{model_kind} ({args.model}) is not supported yet. "
+            f"{model.config.model_type} ({args.model}) is not supported yet. "
             f"Only {SUPPORTED_MODEL_KIND} are supported. "
-            f"If you want to support ({model_kind}) please propose a PR or open up an issue."
+            f"If you want to support ({model.config.model_type}) please propose a PR or open up an issue."
         )
 
     # Look for the features
-    model_features = SUPPORTED_MODEL_KIND[model_kind]
+    model_features = SUPPORTED_MODEL_KIND[model.config.model_type]
     if features not in model_features:
         raise ValueError(
-            f"{model_kind} doesn't support features {features}. "
+            f"{model.config.model_type} doesn't support features {features}. "
             f"Supported values are: {list(model_features.keys())}"
         )
 
-    return model_kind, SUPPORTED_MODEL_KIND[model_kind][features]
+    return model.config.model_type, SUPPORTED_MODEL_KIND[model.config.model_type][features]
 
 
 def evaluate_expr_to_int(expression: str) -> int:
@@ -291,6 +308,26 @@ def insert_additional_onnx_value_within_inputs(inputs: Union[BatchEncoding, Dict
             inputs[onnx_var.name] = encoding[onnx_var.name]
 
     return inputs
+
+
+def get_model_from_framework_and_features(framework: str, features: str, model: str):
+    if framework == FRAMEWORK_NAME_PT:
+        if features not in FEATURES_TO_AUTOMODELS:
+            raise KeyError(
+                f"Unknown feature: {features}."
+                f"Possible values are {list(FEATURES_TO_AUTOMODELS.values())}"
+            )
+
+        return FEATURES_TO_AUTOMODELS[features].from_pretrained(model)
+    elif framework == FRAMEWORK_NAME_TF:
+        if features not in FEATURES_TO_TF_AUTOMODELS:
+            raise KeyError(
+                f"Unknown feature: {features}."
+                f"Possible values are {list(FEATURES_TO_AUTOMODELS.values())}"
+            )
+        return FEATURES_TO_TF_AUTOMODELS[features].from_pretrained(model)
+    else:
+        raise ValueError(f"Unknown framework: {framework}")
 
 
 def convert_pytorch(tokenizer: PreTrainedTokenizer, model: PreTrainedModel, config: OnnxConfig, opset: int, output: Path) -> Tuple[List[OnnxVariable], List[OnnxVariable]]:
@@ -458,12 +495,12 @@ if __name__ == '__main__':
     parser = ArgumentParser("Hugging Face ONNX Exporter tool")
     parser.add_argument("-m", "--model", type=str, required=True, help="Model's name of path on disk to load.")
     parser.add_argument("-f", "--framework", choices=FRAMEWORK_CHOICES, required=True, help=f"Framework to use when exporting. Possible values are: {FRAMEWORK_CHOICES}")
-    parser.add_argument("--features", choices=["default", "with_past"], default="default", help="Export the model with some additional features.")
+    parser.add_argument("--features", choices=["default", "with_past", "token_classification"], default="default", help="Export the model with some additional features.")
     parser.add_argument("--opset", type=int, default=12, help="ONNX opset version to export the model with (default 12).")
     parser.add_argument("--optimize", action="store_true", help="Flag indicating if we should try to optimize the model.")
     parser.add_argument("--use-gpu", action="store_true", help="Flag indicating if we should try to optimize the model for GPU inference.")
     parser.add_argument("--optimization-level", choices=ONNX_OPTIMIZATION_LEVELS.keys(), default="disabled", help="Flag indicating if we should try to optimize the model.")
-    parser.add_argument("--atol", type=float, default=1e-4, help="Absolute difference tolerence when validating the model,")
+    parser.add_argument("--atol", type=float, default=1e-4, help="Absolute difference tolerence when validating the model.")
     parser.add_argument("output", type=Path, help="Path indicating where to store generated ONNX model.")
 
     # Retrieve CLI arguments
@@ -477,7 +514,7 @@ if __name__ == '__main__':
 
     # Allocate the model
     tokenizer = AutoTokenizer.from_pretrained(args.model)
-    model = (AutoModel if args.framework == FRAMEWORK_NAME_PT else TFAutoModel).from_pretrained(args.model)
+    model = get_model_from_framework_and_features(args.framework, args.features, args.model)
     model_kind, onnx_config = check_supported_model_or_raise(model, features=args.features)
 
     # Override model's config if needed
