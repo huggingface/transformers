@@ -693,9 +693,9 @@ class PretrainedConfig(PushToHubMixin):
 
             old_v = getattr(self, k)
             if isinstance(old_v, bool):
-                if v.lower() in ['true', '1', 'y', 'yes']:
+                if v.lower() in ["true", "1", "y", "yes"]:
                     v = True
-                elif v.lower() in ['false', '0', 'n', 'no']:
+                elif v.lower() in ["false", "0", "n", "no"]:
                     v = False
                 else:
                     raise ValueError(f"can't derive true or false from {v} (key {k})")
@@ -704,6 +704,8 @@ class PretrainedConfig(PushToHubMixin):
             elif isinstance(old_v, float):
                 v = float(v)
             elif not isinstance(old_v, str):
-                raise ValueError(f"You can only update int, float, bool or string values in the config, got {v} for key {k}")
+                raise ValueError(
+                    f"You can only update int, float, bool or string values in the config, got {v} for key {k}"
+                )
 
             setattr(self, k, v)
