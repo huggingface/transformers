@@ -495,7 +495,7 @@ def get_length_grouped_indices(lengths, batch_size, mega_batch_mult=None, genera
     # Switch to put the longest element in first position
     megabatches[0][0], megabatches[max_idx][0] = megabatches[max_idx][0], megabatches[0][0]
 
-    return sum(megabatches, [])
+    return [i for megabatch in megabatches for i in megabatch]
 
 
 class LengthGroupedSampler(Sampler):
