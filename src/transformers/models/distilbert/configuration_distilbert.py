@@ -164,3 +164,32 @@ DISTILBERT_ONNX_CONFIG = OnnxConfig(
         "hidden_size": "$config.hidden_size"
     }
 )
+
+
+DISTILBERT_TOKEN_CLASSIFICATION_ONNX_CONFIG = OnnxConfig(
+    inputs=[
+        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1, value=None),
+        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1, value=None),
+    ],
+    outputs=[
+        OnnxVariable("logits", {0: "batch", 1: "sequence"}, repeated=1, value=None),
+    ],
+    runtime_config_overrides=None,
+    use_external_data_format=False,
+    minimum_required_onnx_opset=12,
+    optimizer="bert",
+    optimizer_features={
+        "enable_gelu": True,
+        "enable_layer_norm": True,
+        "enable_attention": True,
+        "enable_skip_layer_norm": True,
+        "enable_embed_layer_norm": True,
+        "enable_bias_skip_layer_norm": True,
+        "enable_bias_gelu": True,
+        "enable_gelu_approximation": False,
+    },
+    optimizer_additional_args={
+        "num_heads": "$config.num_attention_heads",
+        "hidden_size": "$config.hidden_size"
+    }
+)
