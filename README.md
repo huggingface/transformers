@@ -9,6 +9,43 @@ This branch has the following patches:
 * tail free sampling
 * fix random samples showing up in fp16 mode
 
+
+## Memory efficient model loading
+
+If you have small system RAM and enough VRAM to fit your model twice as fp16, you can load it like this:
+
+```python
+model_name = "EleutherAI/gpt-neo-2.7B"
+from transformers.file_utils import cached_path, WEIGHTS_NAME, hf_bucket_url
+archive_file = hf_bucket_url(model_name, filename=WEIGHTS_NAME)
+resolved_archive_file = cached_path(archive_file)
+checkpoint = torch.load(resolved_archive_file, map_location="cuda:0")
+for k in checkpoint.keys():
+    checkpoint[k] = checkpoint[k].half()
+model = GPTNeoForCausalLM.from_pretrained(model_name, state_dict=checkpoint).half().to("cuda").eval()
+for k in list(checkpoint.keys()):
+    del checkpoint[k]
+del checkpoint
+```
+
+If you have bigger system RAM and small VRAM, do this instead:
+
+```python
+model_name = "EleutherAI/gpt-neo-2.7B"
+from transformers.file_utils import cached_path, WEIGHTS_NAME, hf_bucket_url
+archive_file = hf_bucket_url(model_name, filename=WEIGHTS_NAME)
+resolved_archive_file = cached_path(archive_file)
+checkpoint = torch.load(resolved_archive_file, map_location="cpu")
+for k in checkpoint.keys():
+    checkpoint[k] = checkpoint[k].half()
+model = GPTNeoForCausalLM.from_pretrained(model_name, state_dict=checkpoint).half().to("cuda").eval()
+for k in list(checkpoint.keys()):
+    del checkpoint[k]
+del checkpoint
+```
+
+Protip: Make sure to call model.generate with `use_cache=True`.
+
 <!---
 Copyright 2020 The HuggingFace Team. All rights reserved.
 
