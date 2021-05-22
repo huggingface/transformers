@@ -693,9 +693,9 @@ class PretrainedConfig(PushToHubMixin):
 
             old_v = getattr(self, k)
             if isinstance(old_v, bool):
-                if v.lower() == "true":
+                if v.lower() in ['true', '1', 'y', 'yes']:
                     v = True
-                elif v.lower() == "false":
+                elif v.lower() in ['false', '0', 'n', 'no']:
                     v = False
                 else:
                     raise ValueError(f"can't derive true or false from {v} (key {k})")
