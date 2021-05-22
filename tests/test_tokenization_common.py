@@ -224,6 +224,20 @@ class TokenizerTesterMixin:
             for i in range(len(batch_encode_plus_sequences["input_ids"]))
         ]
 
+    def test_tokenize_and_convert_tokens_to_string(self):
+        """Test ``_tokenize`` and ``convert_tokens_to_string``."""
+        tokenizer = self.get_tokenizer()
+        text = "This is text to test the tokenizer."
+
+        tokens = tokenizer.tokenize(text)
+
+        self.assertTrue(len(tokens) > 0)
+
+        # convert the tokens back to text
+        reverse_text = tokenizer.convert_tokens_to_string(tokens)
+
+        self.assertEqual(reverse_text, text)
+
     def test_subword_regularization_tokenizer(self) -> None:
         if not self.test_sentencepiece:
             return
