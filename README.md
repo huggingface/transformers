@@ -291,3 +291,7 @@ We now have a [paper](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) you 
     pages = "38--45"
 }
 ```
+
+## Contributor over time
+
+[![Contributor over time](https://contributor-graph-api.apiseven.com/contributors-svg?chart=contributorOverTime&repo=huggingface/transformers)](https://www.apiseven.com/en/contributor-graph?chart=contributorOverTime&repo=huggingface/transformers)
