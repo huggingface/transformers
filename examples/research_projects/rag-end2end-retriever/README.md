@@ -16,18 +16,18 @@ This code can be modified to experiment with other research on retrival augmente
 To start training, use the bash script (finetune_rag_ray_end2end.sh) in this folder. This script also includes descriptions on each command-line argument used. 
 
 
-## Testing
+# Testing
 
 The following two bash scripts can be used to quickly test the implementation.
-1. CUDA_VISIBLE_DEVICES=1,2,3... sh ./test_run/test_rag_new_features.sh 
+1. sh ./test_run/test_rag_new_features.sh 
     - Tests the newly added functions (set_context_encoder and set_context_encoder_tokenizer) related to modeling rag. 
     - This is sufficient to check the model's ability to use the set functions correctly.
-2. CUDA_VISIBLE_DEVICES=1,2,3... sh ./test_run/test_finetune.sh script
+2. sh ./test_run/test_finetune.sh script
     - Tests the full end-to-end fine-tuning ability with a dummy knowlendge-base and dummy training dataset (check test_dir directory).
     - Users can replace the dummy dataset and knowledge-base with their own to do their own finetuning. 
 
 
-### Comparison of end2end RAG (including DPR finetuning)  VS original-RAG
+# Comparison of end2end RAG (including DPR finetuning)  VS original-RAG
 
 We conducted a simple experiment to investigate the effectiveness of this end2end training extension using the SQuAD dataset.
 
@@ -37,7 +37,7 @@ We conducted a simple experiment to investigate the effectiveness of this end2en
 -   Test the Exact Match (EM) score and the F1-score with the SQuAD dataset's test set. 
 -   Training dataset and the  knowledge-base used in experiments can be download from [here](https://drive.google.com/drive/folders/1qyzV-PaEARWvaU_jjpnU_NUS3U_dSjtG?usp=sharing). 
 
-#### Results 
+# Results 
 
 | Model Type          | EM-Score|
 | --------------------| --------| 
