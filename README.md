@@ -5,10 +5,11 @@ This branch has the following patches:
 * gpt-neo model is loaded directly on GPU to save system memory (Colab or 8GB+ VRAM only)
 * repetition_penalty has range and slope settings, so it doesn't penalize all tokens in the context window
 * no copy of the state dict is made while loading a pretrained model
-* local self attention implemented in a simple way
+* local self attention uses padding so it doesn't OOM on long sequences
 * tail free sampling
 * fix random samples showing up in fp16 mode
 
+Protip: Make sure to call model.generate with `use_cache=True`.
 
 ## Memory efficient model loading
 
@@ -44,7 +45,59 @@ for k in list(checkpoint.keys()):
 del checkpoint
 ```
 
-Protip: Make sure to call model.generate with `use_cache=True`.
+### Checkpoint splitting
+
+If your system RAM is smaller than the model and your VRAM isn't big enough to fit the model twice, you can first split up your checkpoint into per module checkpoints on a machine with more RAM and no GPU:
+
+```python
+import os
+
+def save(model):
+    try: os.mkdir("chpt")
+    except: pass
+    checkpoint = {}
+    for i, x in enumerate(model.state_dict().items()):
+        checkpoint[x[0]] = f"chpt/b{i}.pt"
+        torch.save(x[1], f"chpt/b{i}.pt")
+    torch.save(checkpoint, f"chpt/m.pt")
+
+model_name = "EleutherAI/gpt-neo-2.7B"
+from transformers import GPTNeoForCausalLM
+model = GPTNeoForCausalLM.from_pretrained(model_name)
+save(model)
+```
+
+Then load it on the target system like this:
+
+```python
+import collections
+
+class Checkpoint(collections.MutableMapping):
+    def __init__(self):
+        self.checkpoint = torch.load("chpt/m.pt")
+    def __len__(self):
+        return len(self.checkpoint)
+    def __getitem__(self, key):
+        return torch.load(self.checkpoint[key])
+    def __setitem__(self, key, value):
+        return
+    def __delitem__(self, key, value):
+        return
+    def keys(self):
+        return self.checkpoint.keys()
+    def __iter__(self):
+        for key in self.checkpoint:
+            yield (key, self.__getitem__(key))
+    def __copy__(self):
+        return Checkpoint()
+    def copy(self):
+        return Checkpoint()
+
+model_name = "EleutherAI/gpt-neo-2.7B"
+from transformers import GPTNeoForCausalLM, AutoConfig
+config = AutoConfig.from_pretrained(model_name)
+model = GPTNeoForCausalLM.from_pretrained(pretrained_model_name_or_path=None, config=config, state_dict=Checkpoint())
+```
 
 <!---
 Copyright 2020 The HuggingFace Team. All rights reserved.
