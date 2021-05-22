@@ -35,11 +35,13 @@ We conducted a simple experiment to investigate the effectiveness of this end2en
 -   Use question-answer pairs as training data.
 -   Train the system for 10 epochs.
 -   Test the Exact Match (EM) score and the F1-score with the SQuAD dataset's test set. 
--   Training dataset and the  knowledge-base used in experiments can be download from [here](https://drive.google.com/drive/folders/1qyzV-PaEARWvaU_jjpnU_NUS3U_dSjtG?usp=sharing). 
+-   Training dataset, the knowledge-base, and hyperparameters used in experiments can be accessed from [here](https://drive.google.com/drive/folders/1qyzV-PaEARWvaU_jjpnU_NUS3U_dSjtG?usp=sharing). 
 
 # Results 
 
+- We train both models for 10 epochs. 
+
 | Model Type          | EM-Score|
 | --------------------| --------| 
-| RAG-original        | 26.12   |
-| RAG-end2end with DPR| 37.25   | 
+| RAG-original        | 28.12   |
+| RAG-end2end with DPR| 40.02   | 
