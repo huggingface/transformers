@@ -29,12 +29,12 @@ The following two bash scripts can be used to quickly test the implementation.
 
 # Comparison of end2end RAG (including DPR finetuning)  VS original-RAG
 
-We conducted a simple experiment to investigate the effectiveness of this end2end training extension using the SQuAD dataset.
+We conducted a simple experiment to investigate the effectiveness of this end2end training extension using the SQuAD dataset. Please execute the following steps to reproduce the results.
 
--   We create a knowledge-base using all the context passages in the SQuAD dataset with their repective titles.
--   Use question-answer pairs as training data.
+-   Create a knowledge-base using all the context passages in the SQuAD dataset with their repective titles.
+-   Use the question-answer pairs as training data.
 -   Train the system for 10 epochs.
--   Test the Exact Match (EM) score and the F1-score with the SQuAD dataset's test set. 
+-   Test the Exact Match (EM) score with the SQuAD dataset's validation set. 
 -   Training dataset, the knowledge-base, and hyperparameters used in experiments can be accessed from [here](https://drive.google.com/drive/folders/1qyzV-PaEARWvaU_jjpnU_NUS3U_dSjtG?usp=sharing). 
 
 # Results 
