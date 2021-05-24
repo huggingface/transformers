@@ -50,6 +50,7 @@ from ..gpt2.configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Co
 from ..gpt_neo.configuration_gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
 from ..ibert.configuration_ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
 from ..layoutlm.configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig
+from ..layoutlmv2.configuration_layoutlmv2 import LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv2Config
 from ..led.configuration_led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig
 from ..longformer.configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
 from ..luke.configuration_luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig
@@ -86,7 +87,6 @@ from ..xlm_prophetnet.configuration_xlm_prophetnet import (
 )
 from ..xlm_roberta.configuration_xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
 from ..xlnet.configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
-
 
 ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     (key, value)
@@ -131,6 +131,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -143,7 +144,6 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     ]
     for key, value, in pretrained_map.items()
 )
-
 
 CONFIG_MAPPING = OrderedDict(
     [
@@ -202,6 +202,7 @@ CONFIG_MAPPING = OrderedDict(
         ("lxmert", LxmertConfig),
         ("dpr", DPRConfig),
         ("layoutlm", LayoutLMConfig),
+        ("layoutlmv2", LayoutLMv2Config),
         ("rag", RagConfig),
         ("tapas", TapasConfig),
     ]
@@ -259,6 +260,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("deberta-v2", "DeBERTa-v2"),
         ("deberta", "DeBERTa"),
         ("layoutlm", "LayoutLM"),
+        ("layoutlmv2", "LayoutLMv2"),
         ("dpr", "DPR"),
         ("rag", "RAG"),
         ("xlm-prophetnet", "XLMProphetNet"),

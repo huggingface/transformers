@@ -782,6 +782,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "GPT2Tokenizer": GPT2Converter,
     "HerbertTokenizer": HerbertConverter,
     "LayoutLMTokenizer": BertConverter,
+    "LayoutLMv2Tokenizer": BertConverter,
     "LongformerTokenizer": RobertaConverter,
     "LEDTokenizer": RobertaConverter,
     "LxmertTokenizer": BertConverter,

@@ -160,6 +160,11 @@ from ..layoutlm.modeling_layoutlm import (
     LayoutLMForTokenClassification,
     LayoutLMModel,
 )
+from ..layoutlmv2.modeling_layoutlmv2 import (
+    LayoutLMv2ForTokenClassification,
+    LayoutLMv2Model,
+)
+
 from ..led.modeling_led import (
     LEDForConditionalGeneration,
     LEDForQuestionAnswering,
@@ -326,6 +331,7 @@ from .configuration_auto import (
     GPTNeoConfig,
     IBertConfig,
     LayoutLMConfig,
+    LayoutLMv2Config,
     LEDConfig,
     LongformerConfig,
     LukeConfig,
@@ -393,6 +399,7 @@ MODEL_MAPPING = OrderedDict(
         (LongformerConfig, LongformerModel),
         (RobertaConfig, RobertaModel),
         (LayoutLMConfig, LayoutLMModel),
+        (LayoutLMv2Config, LayoutLMv2Model),
         (SqueezeBertConfig, SqueezeBertModel),
         (BertConfig, BertModel),
         (OpenAIGPTConfig, OpenAIGPTModel),
@@ -690,6 +697,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (BigBirdConfig, BigBirdForTokenClassification),
         (ConvBertConfig, ConvBertForTokenClassification),
         (LayoutLMConfig, LayoutLMForTokenClassification),
+        (LayoutLMv2Config, LayoutLMv2ForTokenClassification),
         (DistilBertConfig, DistilBertForTokenClassification),
         (CamembertConfig, CamembertForTokenClassification),
         (FlaubertConfig, FlaubertForTokenClassification),
