@@ -316,6 +316,8 @@ class TrainerIntegrationCommon:
             _ = log1.pop("train_runtime", None)
             _ = log.pop("train_samples_per_second", None)
             _ = log1.pop("train_samples_per_second", None)
+            _ = log.pop("train_steps_per_second", None)
+            _ = log1.pop("train_steps_per_second", None)
             self.assertEqual(log, log1)
 
 
