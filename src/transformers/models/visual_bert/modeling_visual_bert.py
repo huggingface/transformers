@@ -229,10 +229,6 @@ class VisualBertSelfAttention(nn.Module):
     ):
         mixed_query_layer = self.query(hidden_states)
 
-        # If this is instantiated as a cross-attention module, the keys
-        # and values come from an encoder; the attention mask needs to be
-        # such that the encoder's padding tokens are not attended to.
-
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
 
@@ -268,7 +264,7 @@ class VisualBertSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->VisualBertSelfOutput
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->VisualBert
 class VisualBertSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -326,7 +322,7 @@ class VisualBertAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->VisualBertIntermediate
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->VisualBert
 class VisualBertIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -342,7 +338,7 @@ class VisualBertIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->VisualBertOutput
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->VisualBert
 class VisualBertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -363,11 +359,6 @@ class VisualBertLayer(nn.Module):
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
         self.attention = VisualBertAttention(config)
-        self.is_decoder = config.is_decoder
-        self.add_cross_attention = config.add_cross_attention
-        if self.add_cross_attention:
-            assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
-            self.crossattention = VisualBertAttention(config)
         self.intermediate = VisualBertIntermediate(config)
         self.output = VisualBertOutput(config)
 
@@ -469,7 +460,7 @@ class VisualBertEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->VisualBertPooler
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->VisualBert
 class VisualBertPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -485,7 +476,7 @@ class VisualBertPooler(nn.Module):
         return pooled_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->VisualBertPredictionHeadTransform
+# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->VisualBert
 class VisualBertPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -503,6 +494,7 @@ class VisualBertPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->VisualBert
 class VisualBertLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -523,6 +515,7 @@ class VisualBertLMPredictionHead(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertPreTrainingHeads with Bert->VisualBert
 class VisualBertPreTrainingHeads(nn.Module):
     def __init__(self, config):
         super().__init__()
