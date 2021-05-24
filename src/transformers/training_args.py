@@ -304,8 +304,8 @@ class TrainingArguments:
         dataloader_pin_memory (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether you want to pin memory in data loaders or not. Will default to :obj:`True`.
         skip_memory_metrics (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether to skip adding of memory profiler reports to metrics. This is skipped by default because it hurts
-            performance a little bit.
+            Whether to skip adding of memory profiler reports to metrics. This is skipped by default because it slows
+            down the training and evaluation speed.
         push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to upload the trained model to the hub after training. This argument is not directly used by
             :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
