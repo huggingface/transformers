@@ -1397,6 +1397,7 @@ class Trainer:
 
             self._total_loss_scalar += tr_loss_scalar
             self._globalstep_last_logged = self.state.global_step
+            self.store_flos()
 
             self.log(logs)
 
@@ -1909,7 +1910,7 @@ class Trainer:
             self.state.total_flos += distributed_broadcast_scalars([self.current_flos]).sum().item()
             self.current_flos = 0
         else:
-            self.state.total_flos = self.current_flos
+            self.state.total_flos += self.current_flos
             self.current_flos = 0
 
     def _sorted_checkpoints(
