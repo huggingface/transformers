@@ -518,6 +518,7 @@ def parse_log_history(log_history):
             step = metrics.pop("step", None)
             _ = metrics.pop("eval_runtime", None)
             _ = metrics.pop("eval_samples_per_second", None)
+            _ = metrics.pop("eval_steps_per_second", None)
             values = {"Training Loss": training_loss, "Epoch": epoch, "Step": step}
             for k, v in metrics.items():
                 if k == "eval_loss":
@@ -537,7 +538,7 @@ def parse_log_history(log_history):
         for key, value in log_history[idx].items():
             if key.startswith("eval_"):
                 key = key[5:]
-            if key not in ["runtime", "samples_per_second", "epoch", "step"]:
+            if key not in ["runtime", "samples_per_second", "steps_per_second", "epoch", "step"]:
                 camel_cased_key = " ".join([part.capitalize() for part in key.split("_")])
                 eval_results[camel_cased_key] = value
         return train_log, lines, eval_results
