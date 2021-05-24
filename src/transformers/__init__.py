@@ -218,6 +218,7 @@ _import_structure = {
     "models.reformer": ["REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ReformerConfig"],
     "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
     "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
+    "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
     "models.speech_to_text": [
         "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Speech2TextConfig",
@@ -323,6 +324,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
@@ -928,6 +930,21 @@ if is_torch_available():
             "RobertaModel",
         ]
     )
+    _import_structure["models.roformer"].extend(
+        [
+            "ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RoFormerForCausalLM",
+            "RoFormerForMaskedLM",
+            "RoFormerForMultipleChoice",
+            "RoFormerForQuestionAnswering",
+            "RoFormerForSequenceClassification",
+            "RoFormerForTokenClassification",
+            "RoFormerLayer",
+            "RoFormerModel",
+            "RoFormerPreTrainedModel",
+            "load_tf_weights_in_roformer",
+        ]
+    )
     _import_structure["models.speech_to_text"].extend(
         [
             "SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1353,6 +1370,20 @@ if is_tf_available():
             "TFRobertaPreTrainedModel",
         ]
     )
+    _import_structure["models.roformer"].extend(
+        [
+            "TF_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFRoFormerForCausalLM",
+            "TFRoFormerForMaskedLM",
+            "TFRoFormerForMultipleChoice",
+            "TFRoFormerForQuestionAnswering",
+            "TFRoFormerForSequenceClassification",
+            "TFRoFormerForTokenClassification",
+            "TFRoFormerLayer",
+            "TFRoFormerModel",
+            "TFRoFormerPreTrainedModel",
+        ]
+    )
     _import_structure["models.t5"].extend(
         [
             "TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1423,6 +1454,7 @@ if is_flax_available():
     _import_structure["modeling_flax_utils"] = ["FlaxPreTrainedModel"]
     _import_structure["models.auto"].extend(
         [
+            "FLAX_MODEL_FOR_CAUSAL_LM_MAPPING",
             "FLAX_MODEL_FOR_MASKED_LM_MAPPING",
             "FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
             "FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
@@ -1432,6 +1464,7 @@ if is_flax_available():
             "FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "FLAX_MODEL_MAPPING",
             "FlaxAutoModel",
+            "FlaxAutoModelForCausalLM",
             "FlaxAutoModelForMaskedLM",
             "FlaxAutoModelForMultipleChoice",
             "FlaxAutoModelForNextSentencePrediction",
@@ -1466,6 +1499,7 @@ if is_flax_available():
             "FlaxElectraPreTrainedModel",
         ]
     )
+    _import_structure["models.gpt2"].extend(["FlaxGPT2LMHeadModel", "FlaxGPT2Model"])
     _import_structure["models.roberta"].extend(
         [
             "FlaxRobertaForMaskedLM",
@@ -1652,6 +1686,7 @@ if TYPE_CHECKING:
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
+    from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
     from .models.speech_to_text import SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Speech2TextConfig
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
@@ -1779,6 +1814,7 @@ if TYPE_CHECKING:
         from .models.reformer import ReformerTokenizerFast
         from .models.retribert import RetriBertTokenizerFast
         from .models.roberta import RobertaTokenizerFast
+        from .models.roformer import RoFormerTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
@@ -2244,6 +2280,19 @@ if TYPE_CHECKING:
             RobertaForTokenClassification,
             RobertaModel,
         )
+        from .models.roformer import (
+            ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RoFormerForCausalLM,
+            RoFormerForMaskedLM,
+            RoFormerForMultipleChoice,
+            RoFormerForQuestionAnswering,
+            RoFormerForSequenceClassification,
+            RoFormerForTokenClassification,
+            RoFormerLayer,
+            RoFormerModel,
+            RoFormerPreTrainedModel,
+            load_tf_weights_in_roformer,
+        )
         from .models.speech_to_text import (
             SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
             Speech2TextForConditionalGeneration,
@@ -2598,6 +2647,18 @@ if TYPE_CHECKING:
             TFRobertaModel,
             TFRobertaPreTrainedModel,
         )
+        from .models.roformer import (
+            TF_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFRoFormerForCausalLM,
+            TFRoFormerForMaskedLM,
+            TFRoFormerForMultipleChoice,
+            TFRoFormerForQuestionAnswering,
+            TFRoFormerForSequenceClassification,
+            TFRoFormerForTokenClassification,
+            TFRoFormerLayer,
+            TFRoFormerModel,
+            TFRoFormerPreTrainedModel,
+        )
         from .models.t5 import (
             TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFT5EncoderModel,
@@ -2660,6 +2721,7 @@ if TYPE_CHECKING:
     if is_flax_available():
         from .modeling_flax_utils import FlaxPreTrainedModel
         from .models.auto import (
+            FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
             FLAX_MODEL_FOR_MASKED_LM_MAPPING,
             FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -2669,6 +2731,7 @@ if TYPE_CHECKING:
             FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             FLAX_MODEL_MAPPING,
             FlaxAutoModel,
+            FlaxAutoModelForCausalLM,
             FlaxAutoModelForMaskedLM,
             FlaxAutoModelForMultipleChoice,
             FlaxAutoModelForNextSentencePrediction,
@@ -2698,6 +2761,7 @@ if TYPE_CHECKING:
             FlaxElectraModel,
             FlaxElectraPreTrainedModel,
         )
+        from .models.gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model
         from .models.roberta import (
             FlaxRobertaForMaskedLM,
             FlaxRobertaForMultipleChoice,

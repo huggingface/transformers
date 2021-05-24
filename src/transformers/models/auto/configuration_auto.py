@@ -68,6 +68,7 @@ from ..rag.configuration_rag import RagConfig
 from ..reformer.configuration_reformer import ReformerConfig
 from ..retribert.configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
 from ..roberta.configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
+from ..roformer.configuration_roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig
 from ..speech_to_text.configuration_speech_to_text import (
     SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     Speech2TextConfig,
@@ -93,6 +94,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     for pretrained_map in [
         # Add archive maps here
         VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -149,6 +151,7 @@ CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
         ("visual_bert", VisualBertConfig),
+        ("roformer", RoFormerConfig),
         ("clip", CLIPConfig),
         ("bigbird_pegasus", BigBirdPegasusConfig),
         ("deit", DeiTConfig),
@@ -211,6 +214,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
         ("visual_bert", "VisualBert"),
+        ("roformer", "RoFormer"),
         ("clip", "CLIP"),
         ("bigbird_pegasus", "BigBirdPegasus"),
         ("deit", "DeiT"),
