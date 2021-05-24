@@ -303,8 +303,9 @@ class TrainingArguments:
             otherwise.
         dataloader_pin_memory (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether you want to pin memory in data loaders or not. Will default to :obj:`True`.
-        skip_memory_metrics (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to skip adding of memory profiler reports to metrics. Defaults to :obj:`False`.
+        skip_memory_metrics (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to skip adding of memory profiler reports to metrics. This is skipped by default because it slows
+            down the training and evaluation speed.
         push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to upload the trained model to the hub after training. This argument is not directly used by
             :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
@@ -546,7 +547,7 @@ class TrainingArguments:
         default=True, metadata={"help": "Whether or not to pin memory for DataLoader."}
     )
     skip_memory_metrics: bool = field(
-        default=False, metadata={"help": "Whether or not to skip adding of memory profiler reports to metrics."}
+        default=True, metadata={"help": "Whether or not to skip adding of memory profiler reports to metrics."}
     )
     use_legacy_prediction_loop: bool = field(
         default=False, metadata={"help": "Whether or not to use the legacy prediction_loop in the Trainer."}
