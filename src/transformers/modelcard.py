@@ -40,7 +40,6 @@ from .file_utils import (
     is_tokenizers_available,
     is_torch_available,
 )
-from .models.auto.configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .training_args import ParallelMode
 from .utils import logging
 
@@ -145,6 +144,9 @@ class ModelCard:
             modelcard = ModelCard.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)
 
         """
+        # This imports every model so let's do it dynamically here.
+        from transformers.models.auto.configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
+
         cache_dir = kwargs.pop("cache_dir", None)
         proxies = kwargs.pop("proxies", None)
         find_from_standard_name = kwargs.pop("find_from_standard_name", True)
