@@ -61,8 +61,9 @@ layer, and is expected to be bound by [CLS] and a [SEP] tokens, as in BERT. The 
 appropriately for the textual and visual parts.
 
 The :class:`~transformers.BertTokenizer` is used to encode the text. A custom detector/feature extractor must be used
-to get the visual embeddings. The following example shows how to get the last hidden state using
-:class:`~transformers.VisualBertModel`:
+to get the visual embeddings. For an example on how to generate visual embeddings, see the `colab notebook
+<https://colab.research.google.com/drive/1bLGxKdldwqnMVA5x4neY7-l_8fKGWQYI?usp=sharing>`__. The following example shows
+how to get the last hidden state using :class:`~transformers.VisualBertModel`:
 
 .. code-block::
 
@@ -73,7 +74,8 @@ to get the visual embeddings. The following example shows how to get the last hi
         >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
         >>> inputs = tokenizer("What is the man eating?", return_tensors="pt")
-        >>> visual_embeds = get_visual_embeddings(image_path) # this is a custom function that returns the visual embeddings given the image path
+        >>> # this is a custom function that returns the visual embeddings given the image path
+        >>> visual_embeds = get_visual_embeddings(image_path)
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
