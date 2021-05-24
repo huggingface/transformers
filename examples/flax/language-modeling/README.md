@@ -80,7 +80,7 @@ tokenizer.save(f"{model_dir}/tokenizer.json")
 ### Create configuration
 
 Next, we create the model's configuration file. This is as simple 
-as loading and storing [`**roberta-base**`](https://huggingface.co/roberta-base)
+as loading and storing [**`roberta-base`**](https://huggingface.co/roberta-base)
 in the local model folder:
 
 ```python
