@@ -202,7 +202,7 @@ class TrainingArguments:
             Number of subprocesses to use for data loading (PyTorch only). 0 means that the data will be loaded in the
             main process.
         past_index (:obj:`int`, `optional`, defaults to -1):
-            Some models like :doc:`TransformerXL <../model_doc/transformerxl>` or :doc`XLNet <../model_doc/xlnet>` can
+            Some models like :doc:`TransformerXL <../model_doc/transformerxl>` or :doc:`XLNet <../model_doc/xlnet>` can
             make use of the past hidden states for their predictions. If this argument is set to a positive int, the
             ``Trainer`` will use the corresponding output (usually index 2) as the past state and feed it to the model
             at the next training step under the keyword argument ``mems``.
@@ -303,8 +303,9 @@ class TrainingArguments:
             otherwise.
         dataloader_pin_memory (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether you want to pin memory in data loaders or not. Will default to :obj:`True`.
-        skip_memory_metrics (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to skip adding of memory profiler reports to metrics. Defaults to :obj:`False`.
+        skip_memory_metrics (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to skip adding of memory profiler reports to metrics. This is skipped by default because it slows
+            down the training and evaluation speed.
         push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to upload the trained model to the hub after training. This argument is not directly used by
             :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
@@ -546,7 +547,7 @@ class TrainingArguments:
         default=True, metadata={"help": "Whether or not to pin memory for DataLoader."}
     )
     skip_memory_metrics: bool = field(
-        default=False, metadata={"help": "Whether or not to skip adding of memory profiler reports to metrics."}
+        default=True, metadata={"help": "Whether or not to skip adding of memory profiler reports to metrics."}
     )
     use_legacy_prediction_loop: bool = field(
         default=False, metadata={"help": "Whether or not to use the legacy prediction_loop in the Trainer."}

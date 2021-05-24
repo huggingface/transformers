@@ -42,7 +42,7 @@ from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
 from transformers import (
     CONFIG_MAPPING,
-    MODEL_FOR_MASKED_LM_MAPPING,
+    FLAX_MODEL_FOR_MASKED_LM_MAPPING,
     AutoConfig,
     AutoTokenizer,
     FlaxAutoModelForMaskedLM,
@@ -71,7 +71,7 @@ else:
     )
 
 
-MODEL_CONFIG_CLASSES = list(MODEL_FOR_MASKED_LM_MAPPING.keys())
+MODEL_CONFIG_CLASSES = list(FLAX_MODEL_FOR_MASKED_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
