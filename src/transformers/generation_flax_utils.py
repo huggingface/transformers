@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The Google AI Language Team Authors, Facebook AI Research authors and The HuggingFace Inc. team.
+# Copyright 2021 The Google AI Flax Team Authors, and The HuggingFace Inc. team.
 # Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +20,7 @@ from typing import Dict, Optional
 import flax
 import jax
 import jax.numpy as jnp
+import jaxlib.xla_extension as jax_xla
 from jax import lax
 
 from .generation_flax_logits_process import (
@@ -36,26 +37,34 @@ logger = logging.get_logger(__name__)
 
 @flax.struct.dataclass
 class GreedyState:
-    cur_len: jnp.DeviceArray
-    sequences: jnp.DeviceArray
-    current_token: jnp.DeviceArray
-    is_sent_finished: jnp.DeviceArray
-    model_kwargs: Dict[str, jnp.DeviceArray]
+    cur_len: jax_xla.DeviceArray
+    sequences: jax_xla.DeviceArray
+    current_token: jax_xla.DeviceArray
+    is_sent_finished: jax_xla.DeviceArray
+    model_kwargs: Dict[str, jax_xla.DeviceArray]
 
 
 @flax.struct.dataclass
 class SampleState:
-    cur_len: jnp.DeviceArray
-    sequences: jnp.DeviceArray
-    current_token: jnp.DeviceArray
-    is_sent_finished: jnp.DeviceArray
-    prng_key: jnp.DeviceArray
-    model_kwargs: Dict[str, jnp.DeviceArray]
+    cur_len: jax_xla.DeviceArray
+    sequences: jax_xla.DeviceArray
+    current_token: jax_xla.DeviceArray
+    is_sent_finished: jax_xla.DeviceArray
+    prng_key: jax_xla.DeviceArray
+    model_kwargs: Dict[str, jax_xla.DeviceArray]
 
 
 class FlaxGenerationMixin:
+    """
+    A class containing all of the functions supporting generation, to be used as a mixin in
+    :class:`~transformers.FlaxPreTrainedModel`.
+    """
+
     @staticmethod
     def _run_loop_in_debug(cond_fn, body_fn, init_state):
+        """
+        Run generation in untraced mode. This should only be used for debugging purposes.
+        """
         state = init_state
         while cond_fn(state):
             state = body_fn(state)
@@ -63,18 +72,82 @@ class FlaxGenerationMixin:
 
     def generate(
         self,
-        input_ids: None,
+        input_ids: jax_xla.DeviceArray,
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
         do_sample: Optional[bool] = None,
-        prng_key: Optional[jnp.DeviceArray] = None,
+        prng_key: Optional[jax_xla.DeviceArray] = None,
         top_k: Optional[int] = None,
         top_p: Optional[float] = None,
         temperature: Optional[float] = None,
         trace: bool = True,
         **model_kwargs,
     ):
+        r"""
+        Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
+        and, multinomial sampling.
+
+        Apart from :obj:`input_ids`, all the arguments below will default to the value of the attribute of the same
+        name inside the :class:`~transformers.PretrainedConfig` of the model. The default values indicated are the
+        default values of those config.
+
+        Most of these parameters are explained in more detail in `this blog post
+        <https://huggingface.co/blog/how-to-generate>`__.
+
+        Parameters:
+
+            input_ids (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                The sequence used as a prompt for the generation. If :obj:`None` the method initializes it as an empty
+                :obj:`jax_xla.DeviceArray` of shape :obj:`(1,)`.
+            max_length (:obj:`int`, `optional`, defaults to 20):
+                The maximum length of the sequence to be generated.
+            do_sample (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to use sampling ; use greedy decoding otherwise.
+            temperature (:obj:`float`, `optional`, defaults to 1.0):
+                The value used to module the next token probabilities.
+            top_k (:obj:`int`, `optional`, defaults to 50):
+                The number of highest probability vocabulary tokens to keep for top-k-filtering.
+            top_p (:obj:`float`, `optional`, defaults to 1.0):
+                If set to float < 1, only the most probable tokens with probabilities that add up to :obj:`top_p` or
+                higher are kept for generation.
+            pad_token_id (:obj:`int`, `optional`):
+                The id of the `padding` token.
+            bos_token_id (:obj:`int`, `optional`):
+                The id of the `beginning-of-sequence` token.
+            eos_token_id (:obj:`int`, `optional`):
+                The id of the `end-of-sequence` token.
+            output_attentions (:obj:`bool`, `optional`, defaults to `False`):
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more details.
+            output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
+                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors
+                for more details.
+            output_scores (:obj:`bool`, `optional`, defaults to `False`):
+                Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
+            return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
+                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+
+            model_kwargs:
+                Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model.
+
+        Return:
+            :class:`~transformers.file_utils.ModelOutput` or :obj:`jax_xla.DeviceArray`: A
+            :class:`~transformers.file_utils.ModelOutput` (if ``return_dict_in_generate=True`` or when
+            ``config.return_dict_in_generate=True``) or a :obj:` jax_xla.DeviceArray`.
+
+        Examples::
+            >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+            >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+            >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+            >>> input_context = "The dog"
+            >>> # encode input context
+            >>> input_ids = tokenizer(input_context, return_tensors="pt").input_ids
+            >>> # generate candidates using sampling
+            >>> outputs = model.generate(input_ids=input_ids, max_length=20, top_k=30, do_sample=True)
+            >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
+        """
         # set init values
         max_length = max_length if max_length is not None else self.config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
@@ -83,7 +156,6 @@ class FlaxGenerationMixin:
 
         do_sample = do_sample if do_sample is not None else self.config.do_sample
 
-        #        model_kwargs["attention_mask"] = attention_mask
         if do_sample:
             logits_warper = self._get_logits_warper(top_k=top_k, top_p=top_p, temperature=temperature)
             return self._sample(
@@ -105,8 +177,8 @@ class FlaxGenerationMixin:
         self, top_k: int = None, top_p: float = None, temperature: float = None
     ) -> FlaxLogitsProcessorList:
         """
-        This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
-        :obj:`~transformers.LogitsWarper` instances used for multinomial sampling.
+        This class returns a :obj:`~transformers.FlaxLogitsProcessorList` list object that contains all relevant
+        :obj:`~transformers.FlaxLogitsWarper` instances used for multinomial sampling.
         """
 
         # init warp parameters
@@ -134,7 +206,7 @@ class FlaxGenerationMixin:
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
         trace: bool = True,
-        model_kwargs: Optional[Dict[str, jnp.DeviceArray]] = None,
+        model_kwargs: Optional[Dict[str, jax_xla.DeviceArray]] = None,
     ):
         # init values
         max_length = max_length if max_length is not None else self.config.max_length
@@ -203,7 +275,7 @@ class FlaxGenerationMixin:
         else:
             state = lax.while_loop(greedy_search_cond_fn, greedy_search_body_fn, state)
 
-        return state.sequences
+        return (state.sequences,)
 
     def _sample(
         self,
@@ -211,8 +283,8 @@ class FlaxGenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-        prng_key: jnp.DeviceArray = jax.random.PRNGKey(0),
-        model_kwargs: Optional[Dict[str, jnp.DeviceArray]] = None,
+        prng_key: jax_xla.DeviceArray = jax.random.PRNGKey(0),
+        model_kwargs: Optional[Dict[str, jax_xla.DeviceArray]] = None,
         logits_warper: Optional[FlaxLogitsProcessorList] = None,
         trace: bool = True,
     ):
