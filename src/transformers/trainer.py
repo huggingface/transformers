@@ -1397,6 +1397,7 @@ class Trainer:
 
             self._total_loss_scalar += tr_loss_scalar
             self._globalstep_last_logged = self.state.global_step
+            self.store_flos()
 
             self.log(logs)
 
