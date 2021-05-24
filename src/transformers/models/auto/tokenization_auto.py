@@ -129,7 +129,7 @@ if is_sentencepiece_available():
     from ..mbart.tokenization_mbart50 import MBart50Tokenizer
     from ..mt5 import MT5Tokenizer
     from ..pegasus.tokenization_pegasus import PegasusTokenizer
-    from ..reformer.tokenization_reformer import ReformerTokenizer
+    from ..reformer.tokenization_reformer import ReformerByteTokenizer, ReformerTokenizer
     from ..speech_to_text import Speech2TextTokenizer
     from ..t5.tokenization_t5 import T5Tokenizer
     from ..xlm_prophetnet.tokenization_xlm_prophetnet import XLMProphetNetTokenizer
@@ -149,6 +149,7 @@ else:
     MT5Tokenizer = None
     PegasusTokenizer = None
     ReformerTokenizer = None
+    ReformerByteTokenizer = None
     T5Tokenizer = None
     XLMRobertaTokenizer = None
     XLNetTokenizer = None
@@ -297,6 +298,7 @@ NO_CONFIG_TOKENIZER = [
     BarthezTokenizerFast,
     MBart50Tokenizer,
     MBart50TokenizerFast,
+    ReformerByteTokenizer,
 ]
 
 

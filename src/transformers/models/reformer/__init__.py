@@ -26,7 +26,7 @@ _import_structure = {
 }
 
 if is_sentencepiece_available():
-    _import_structure["tokenization_reformer"] = ["ReformerTokenizer"]
+    _import_structure["tokenization_reformer"] = ["ReformerTokenizer", "ReformerByteTokenizer"]
 
 if is_tokenizers_available():
     _import_structure["tokenization_reformer_fast"] = ["ReformerTokenizerFast"]
@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from .configuration_reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
 
     if is_sentencepiece_available():
-        from .tokenization_reformer import ReformerTokenizer
+        from .tokenization_reformer import ReformerByteTokenizer, ReformerTokenizer
 
     if is_tokenizers_available():
         from .tokenization_reformer_fast import ReformerTokenizerFast

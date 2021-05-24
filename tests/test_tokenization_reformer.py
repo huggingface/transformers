@@ -15,7 +15,7 @@
 import os
 import unittest
 
-from transformers import SPIECE_UNDERLINE, ReformerTokenizer, ReformerTokenizerFast
+from transformers import SPIECE_UNDERLINE, ReformerByteTokenizer, ReformerTokenizer, ReformerTokenizerFast
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow
 
@@ -368,4 +368,64 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             revision="0e6c3decb8211d49bf881013425dc8b0448b3f5a",
             padding=False,
             sequences=sequences,
+
+class ReformerByteTokenizationTest(unittest.TestCase):
+    tokenizer_class = ReformerByteTokenizer
+
+    def test_full_tokenizer(self):
+        tokenizer = ReformerByteTokenizer()
+
+        tokens = tokenizer.tokenize("This is a test")
+        self.assertListEqual(tokens, [84, 104, 105, 115, 32, 105, 115, 32, 97, 32, 116, 101, 115, 116])
+
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(tokens),
+            [86, 106, 107, 117, 34, 107, 117, 34, 99, 34, 118, 103, 117, 118],
+        )
+
+        tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
+        self.assertListEqual(
+            tokens,
+            [
+                73,
+                32,
+                119,
+                97,
+                115,
+                32,
+                98,
+                111,
+                114,
+                110,
+                32,
+                105,
+                110,
+                32,
+                57,
+                50,
+                48,
+                48,
+                48,
+                44,
+                32,
+                97,
+                110,
+                100,
+                32,
+                116,
+                104,
+                105,
+                115,
+                32,
+                105,
+                115,
+                32,
+                102,
+                97,
+                108,
+                115,
+                195,
+                169,
+                46,
+            ],
         )

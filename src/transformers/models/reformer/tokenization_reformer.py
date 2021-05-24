@@ -167,3 +167,35 @@ class ReformerTokenizer(PreTrainedTokenizer):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+
+class ReformerByteTokenizer(PreTrainedTokenizer):
+    def _tokenize(self, text, sample=False):
+        """Take as input a string and return a list of raw bytes"""
+        return [c for c in text.encode("utf-8")]
+
+    def _convert_token_to_id(self, token: int):
+        """raw bytes (0, 256) to id (2, 258)"""
+        return token + 2
+
+    def _convert_id_to_token(self, index):
+        """Converts an index (integer) in a token (u8)"""
+        assert 2 <= index < 258
+        return index - 2
+
+    def convert_tokens_to_string(self, tokens: List[int]):
+        """Converts a sequence of tokens (u8) in a single string."""
+        return bytes(tokens).decode("utf-8")
+
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        if not os.path.isdir(save_directory):
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
+            return
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + "special_tokens_map.json"
+        )
+
+        with open(out_vocab_file, "w") as f:
+            f.write("{}")
+
+        return (out_vocab_file,)
