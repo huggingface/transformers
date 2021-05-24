@@ -107,7 +107,7 @@ This command performs a magical link between the folder you cloned the repositor
 ```
 now this editable install will reside where you clone the folder to, e.g. `~/transformers/` and python will search it too.
 
-Do note that you have to keep that `transformers` folder around and not delete it to continue using the  `transfomers` library.
+Do note that you have to keep that `transformers` folder around and not delete it to continue using the  `transformers` library.
 
 Now, let's get to the real benefit of this installation approach. Say, you saw some new feature has been just committed into `master`. If you have already performed all the steps above, to update your transformers to include all the latest commits, all you need to do is to `cd` into that cloned repository folder and update the clone to the latest version:
 
