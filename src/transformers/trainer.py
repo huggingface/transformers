@@ -1077,6 +1077,7 @@ class Trainer:
         # number of training epochs: num_train_epochs
         # number of training steps per epoch: num_update_steps_per_epoch
         # total number of training steps to execute: max_steps
+        total_train_batch_size = args.train_batch_size * args.gradient_accumulation_steps * args.world_size
         if train_dataset_is_sized:
             num_update_steps_per_epoch = len(train_dataloader) // args.gradient_accumulation_steps
             num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
@@ -1085,14 +1086,19 @@ class Trainer:
                 num_train_epochs = args.max_steps // num_update_steps_per_epoch + int(
                     args.max_steps % num_update_steps_per_epoch > 0
                 )
+                # May be slightly incorrect if the last batch in the training datalaoder has a smaller size but it's
+                # the best we can do.
+                num_train_samples = args.max_steps * total_train_batch_size
             else:
                 max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
                 num_train_epochs = math.ceil(args.num_train_epochs)
+                num_train_samples = len(self.train_dataset) * args.num_train_epochs
         else:
             # see __init__. max_steps is set when the dataset has no __len__
             max_steps = args.max_steps
             num_train_epochs = int(args.num_train_epochs)
             num_update_steps_per_epoch = max_steps
+            num_train_samples = args.max_steps * total_train_batch_size
 
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
             debug_overflow = DebugUnderflowOverflow(self.model)  # noqa
@@ -1130,14 +1136,6 @@ class Trainer:
         # self.model_wrapped is DDP(Transformers Model), Deepspeed(Transformers Model), etc.
 
         # Train!
-        if is_torch_tpu_available():
-            world_size = xm.xrt_world_size()
-        elif args.local_rank != -1:
-            world_size = dist.get_world_size()
-        else:
-            world_size = 1
-
-        total_train_batch_size = args.train_batch_size * args.gradient_accumulation_steps * world_size
         num_examples = (
             self.num_examples(train_dataloader) if train_dataset_is_sized else total_train_batch_size * args.max_steps
         )
@@ -1359,7 +1357,7 @@ class Trainer:
                     self.state.best_model_checkpoint, load_optimizer_states=False, load_lr_scheduler_states=False
                 )
 
-        metrics = speed_metrics("train", start_time, self.state.max_steps)
+        metrics = speed_metrics("train", start_time, num_samples=num_train_samples, num_steps=self.state.max_steps)
         self.store_flos()
         metrics["total_flos"] = self.state.total_flos
         self.log(metrics)
@@ -2009,7 +2007,15 @@ class Trainer:
             metric_key_prefix=metric_key_prefix,
         )
 
-        output.metrics.update(speed_metrics(metric_key_prefix, start_time, output.num_samples))
+        total_batch_size = self.args.eval_batch_size * self.args.world_size
+        output.metrics.update(
+            speed_metrics(
+                metric_key_prefix,
+                start_time,
+                num_samples=output.num_samples,
+                num_steps=math.ceil(output.num_samples / total_batch_size),
+            )
+        )
 
         self.log(output.metrics)
 
@@ -2066,7 +2072,15 @@ class Trainer:
         output = eval_loop(
             test_dataloader, description="Prediction", ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix
         )
-        output.metrics.update(speed_metrics(metric_key_prefix, start_time, output.num_samples))
+        total_batch_size = self.args.eval_batch_size * self.args.world_size
+        output.metrics.update(
+            speed_metrics(
+                metric_key_prefix,
+                start_time,
+                num_samples=output.num_samples,
+                num_steps=math.ceil(output.num_samples / total_batch_size),
+            )
+        )
 
         self._memory_tracker.stop_and_update_metrics(output.metrics)
 
