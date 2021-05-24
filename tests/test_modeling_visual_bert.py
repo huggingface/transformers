@@ -213,7 +213,7 @@ class VisualBertModelTester:
         vqa_labels = None
 
         if self.use_labels:
-            vqa_labels = ids_tensor([self.batch_size, self.num_labels], self.num_labels)
+            vqa_labels = floats_tensor([self.batch_size, self.num_labels])
 
         config, input_dict = self.prepare_config_and_inputs_for_common()
 
@@ -241,8 +241,8 @@ class VisualBertModelTester:
         )
         flickr_labels = None
         if self.use_labels:
-            flickr_labels = ids_tensor(
-                [self.batch_size, self.seq_length + self.visual_seq_length, self.visual_seq_length], 2
+            flickr_labels = floats_tensor(
+                [self.batch_size, self.seq_length + self.visual_seq_length, self.visual_seq_length]
             )
 
         config, input_dict = self.prepare_config_and_inputs_for_common()

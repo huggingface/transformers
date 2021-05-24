@@ -34,7 +34,7 @@ verbs and image regions corresponding to their arguments.*
 Tips:
 
 1. Most of the checkpoints provided work with the :class:`~transformers.VisualBertForPreTraining` configuration. Other
-   checkpoints provided are the fine-tuning checkpoints for down-stream tasks - VQA ('visualbert-vqa'), VCR
+   checkpoints provided are the fine-tuned checkpoints for down-stream tasks - VQA ('visualbert-vqa'), VCR
    ('visualbert-vcr'), NLVR2 ('visualbert-nlvr2'). Hence, if you are not working on these downstream tasks, it is
    recommended that you use the pretrained checkpoints.
 
@@ -49,7 +49,7 @@ Usage
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 VisualBERT is a multi-modal vision and language model. It can be used for visual question answering, multiple choice,
-visual reasoning and region-to-phrase correspondence tasks. VisulBERT uses a BERT-like transformer to prepare
+visual reasoning and region-to-phrase correspondence tasks. VisualBERT uses a BERT-like transformer to prepare
 embeddings for image-text pairs. Both the text and visual features are then projected to a latent space with identical
 dimension.
 
