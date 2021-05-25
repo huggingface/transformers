@@ -26,7 +26,7 @@ _import_structure = {
 }
 
 if is_sentencepiece_available():
-    _import_structure["tokenization_reformer"] = ["ReformerTokenizer", "ReformerByteTokenizer"]
+    _import_structure["tokenization_reformer"] = ["ReformerByteTokenizer", "ReformerTokenizer"]
 
 if is_tokenizers_available():
     _import_structure["tokenization_reformer_fast"] = ["ReformerTokenizerFast"]

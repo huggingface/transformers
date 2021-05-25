@@ -101,6 +101,15 @@ class PegasusTokenizer:
         requires_backends(self, ["sentencepiece"])
 
 
+class ReformerByteTokenizer:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece"])
+
+
 class ReformerTokenizer:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["sentencepiece"])
