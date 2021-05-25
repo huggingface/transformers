@@ -165,7 +165,8 @@ sure all your batches have the same length.
 
 ## Creating a model on the fly
 
-A model can be created on the fly with the help of `--config_overrides`
+When training a model from scratch, configuration values may be overridden with the help of `--config_overrides`:
+
 
 ```bash
 python run_clm.py --model_type gpt2 --tokenizer_name gpt2 \ --config_overrides="n_embd=1024,n_head=16,n_layer=48,n_positions=102" \

@@ -78,7 +78,7 @@ class ModelArguments:
     config_overrides: Optional[str] = field(
         default=None,
         metadata={
-            "help": "Override some existing default config settings. Example: "
+            "help": "Override some existing default config settings when a model is trained from scratch. Example: "
             "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
         },
     )
@@ -107,6 +107,12 @@ class ModelArguments:
             "with private models)."
         },
     )
+
+    def __post_init__(self):
+        if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
+            raise ValueError(
+                "--config_overrides can't be used in combination with --config_name or --model_name_or_path"
+            )
 
 
 @dataclass
