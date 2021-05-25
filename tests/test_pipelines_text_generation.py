@@ -15,7 +15,7 @@
 import unittest
 
 from transformers import pipeline
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_torch, slow
 
 from .test_pipelines_common import MonoInputPipelineCommonMixin
 
@@ -60,3 +60,10 @@ class TextGenerationPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCas
 
         outputs = text_generator("This is a test", return_full_text=True)
         self.assertIn("This is a test", outputs[0]["generated_text"])
+
+    @slow
+    @require_torch
+    def test_infinite_generation_gpt2(self):
+        text_generator = pipeline(task="text-generation", model="gpt2")
+        outputs = text_generator("This is a test" * 1000, max_new_tokens=10)
+        self.assertIn("This is a test" * 1000, outputs[0]["generated_text"])

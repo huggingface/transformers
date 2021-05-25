@@ -590,6 +590,28 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             model = GPT2Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @slow
+    def test_infinite_generation(self):
+        model = GPT2DoubleHeadsModel.from_pretrained("gpt2")
+        model.to(torch_device)
+        # > config.n_positions
+        input_ids = torch.zeros((1, 3000)).long().to(torch_device)
+        output = model.prepare_inputs_for_generation(input_ids=input_ids)
+        self.assertEqual(output["input_ids"].shape, (1, 3000))
+
+        output = model.prepare_inputs_for_generation(input_ids=input_ids, infinite=True)
+        self.assertEqual(output["input_ids"].shape, (1, 1023))
+
+        past = tuple([tuple(torch.zeros(1, 12, 3000, 64) for j in range(4)) for i in range(12)])
+
+        output = model.prepare_inputs_for_generation(input_ids=input_ids, past=past)
+        self.assertEqual(output["input_ids"].shape, (1, 1))
+        self.assertEqual(tuple(output["past_key_values"][0][0].shape), (1, 12, 3000, 64))
+
+        output = model.prepare_inputs_for_generation(input_ids=input_ids, past=past, infinite=True)
+        self.assertEqual(output["input_ids"].shape, (1, 1))
+        self.assertEqual(tuple(output["past_key_values"][0][0].shape), (1, 12, 1023, 64))
+
 
 @require_torch
 class GPT2ModelLanguageGenerationTest(unittest.TestCase):

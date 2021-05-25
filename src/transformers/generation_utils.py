@@ -674,6 +674,7 @@ class GenerationMixin:
         forced_eos_token_id: Optional[int] = None,
         remove_invalid_values: Optional[bool] = None,
         synced_gpus: Optional[bool] = None,
+        infinite: bool = False,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, SampleOutput, BeamSearchOutput, BeamSampleOutput, torch.LongTensor]:
         r"""
@@ -781,6 +782,9 @@ class GenerationMixin:
                 crash. Note that using ``remove_invalid_values`` can slow down generation.
             synced_gpus (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+            infinite (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                If enabled, model will attempt to generate infinitely many tokens, by left clipping tokens as
+                necessary. (Not enabled on all architectures)
 
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If the
@@ -940,6 +944,7 @@ class GenerationMixin:
 
         # set model_kwargs
         model_kwargs["use_cache"] = use_cache
+        model_kwargs["infinite"] = infinite
 
         # get distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
