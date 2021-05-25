@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Iterable, Any, Dict
+from typing import Any, Dict, Iterable
 
 
 def generate_identified_filename(filename: Path, identifier: str) -> Path:
@@ -18,8 +18,9 @@ def generate_identified_filename(filename: Path, identifier: str) -> Path:
 
 def flatten_output_collection_property(name: str, field: Iterable[Any]) -> Dict[str, Any]:
     """
-    Flatten any potential nested structure expanding the name of the field with the index of the element within
-    the structure.
+    Flatten any potential nested structure expanding the name of the field with the index of the element within the
+    structure.
+
     Args:
         name: The name of the nested structure
         field: The structure to, potentially, be flattened
@@ -29,7 +30,5 @@ def flatten_output_collection_property(name: str, field: Iterable[Any]) -> Dict[
 
     """
     from itertools import chain
-    return {
-        f"{name}.{idx}": item
-        for idx, item in enumerate(chain.from_iterable(field))
-    }
+
+    return {f"{name}.{idx}": item for idx, item in enumerate(chain.from_iterable(field))}

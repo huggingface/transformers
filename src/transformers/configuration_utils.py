@@ -19,8 +19,7 @@
 import copy
 import json
 import os
-from dataclasses import dataclass
-from typing import Any, Dict, Tuple, Union, Optional, Set, List, NamedTuple
+from typing import Any, Dict, Tuple, Union
 
 from . import __version__
 from .file_utils import CONFIG_NAME, PushToHubMixin, cached_path, hf_bucket_url, is_offline_mode, is_remote_url

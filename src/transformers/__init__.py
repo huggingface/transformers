@@ -60,7 +60,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Base objects, independent of any specific backend
 _import_structure = {
-    "configuration_utils": ["PretrainedConfig", "OnnxConfig", "OnnxVariable"],
+    "configuration_utils": ["OnnxConfig", "OnnxVariable", "PretrainedConfig"],
     "data": [
         "DataProcessor",
         "InputExample",
@@ -1668,7 +1668,7 @@ else:
 # Direct imports for type-checking
 if TYPE_CHECKING:
     # Configuration
-    from .configuration_utils import PretrainedConfig, OnnxConfig, OnnxVariable
+    from .configuration_utils import OnnxConfig, OnnxVariable, PretrainedConfig
 
     # Data
     from .data import (

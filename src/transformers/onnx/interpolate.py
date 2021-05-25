@@ -1,11 +1,13 @@
 import ast
 import functools
 import operator as op
+from typing import Any, Dict, List, Union
+
 import regex
 
-from typing import Union, List, Dict, Any
+from .. import BatchEncoding, PreTrainedModel, TensorType, TFPreTrainedModel
+from .config import OnnxVariable
 
-from transformers import PreTrainedModel, TFPreTrainedModel, BatchEncoding, TensorType
 
 # Regular expression used to match interpolation keys
 INTERPOLATION_RE = regex.compile(r"\$([^\s]+)")
@@ -23,6 +25,7 @@ SUPPORTED_OPERATORS = {
 def evaluate_expr_to_int(expression: str) -> int:
     """
     From an expression like 4 * 5 - 1, evaluate the following using Python's AST (abstract syntaxic tree)
+
     Args:
         expression: A string representation of a "simple" mathematical expression
 
@@ -50,13 +53,15 @@ def evaluate_expr_to_int(expression: str) -> int:
 def interpolate_expression(expression: str, model: Union[PreTrainedModel, TFPreTrainedModel]) -> str:
     """
     Interpolate the string expression with the properties from the model. Expressions can be of different forms:
+
         - Simple mathematical
         - Mono variable from model's property: $config.hidden_size
         - Multiple variables from model's property: $config.hidden_size * $config.num_heads
-        - Mono variable from model's property with constant: $config.hidden_size  + 1
+        - Mono variable from model's property with constant: $config.hidden_size + 1
 
     The variable present within the expression are replaced at runtime with the value from the model properties such
     that: `$config.hidden_size * 4` would be replaced by (for instance) `768 * 4`
+
     Args:
         expression: A string expression to be evaluated (i.e. interpolated)
         model: The model from which property will be taken
@@ -64,16 +69,17 @@ def interpolate_expression(expression: str, model: Union[PreTrainedModel, TFPreT
     Returns:
         str with interpolated (i.e. replaced) value(s) from model's properties
     """
+
     def rgetattr(obj, attr):
         """
-        Get an attribute recursively (i.e. multiple nested object obj.property_x.propert_y)
-        :param obj:
-        :param attr:
+        Get an attribute recursively (i.e. multiple nested object obj.property_x.propert_y) :param obj: :param attr:
         :return:
         """
+
         def _getattr(_obj, _attr):
             return getattr(_obj, _attr)
-        return functools.reduce(_getattr, [obj] + attr.split('.'))
+
+        return functools.reduce(_getattr, [obj] + attr.split("."))
 
     # Copy the expression string to operate on it
     interpolated_expr = expression
@@ -86,10 +92,7 @@ def interpolate_expression(expression: str, model: Union[PreTrainedModel, TFPreT
         interpolation_value = rgetattr(model, interpolation_key.group(1))
 
         # Regenerate the expression with the interpolated value
-        interpolated_expr = interpolated_expr.replace(
-            f"${interpolation_key.group(1)}",
-            str(interpolation_value)
-        )
+        interpolated_expr = interpolated_expr.replace(f"${interpolation_key.group(1)}", str(interpolation_value))
 
         # Check if anything remains (another key)
         interpolation_key = INTERPOLATION_RE.search(interpolated_expr)
@@ -97,29 +100,19 @@ def interpolate_expression(expression: str, model: Union[PreTrainedModel, TFPreT
     return interpolated_expr
 
 
-def expand_repeated_onnx_variables(model: Union[PreTrainedModel, TFPreTrainedModel], variables: List[OnnxVariable]) -> List[OnnxVariable]:
+def expand_repeated_onnx_variables(
+    model: Union["PreTrainedModel", "TFPreTrainedModel"], variables: List["OnnxVariable"]
+) -> List["OnnxVariable"]:
     """
     From a list of OnnxVariable, which may or may not have repeated field, this method will expand (i.e repeat)
-     individual variables the number of time specified by the field `repeat`.
+    individual variables the number of time specified by the field `repeat`.
 
-    As an example, the following list of OnnxVariable:
-    ```python
-    in_variables = [
-        OnnxVariable(name="input_ids", ..., "repeat"=1),
-        OnnxVariable(name="past_keys", ..., "repeat"="$config.num_encoder_layers"),
-    ]
-    ```
+    As an example, the following list of OnnxVariable: ```python in_variables = [ OnnxVariable(name="input_ids", ...,
+    "repeat"=1), OnnxVariable(name="past_keys", ..., "repeat"="$config.num_encoder_layers"), ] ```
 
-    would be expanded as the following:
-    ```python
-    out_variables = [
-        OnnxVariable(name="input_ids", ..., "repeat"=1),
-        OnnxVariable(name="past_keys.0", ..., "repeat"=1),
-        OnnxVariable(name="past_keys.1", ..., "repeat"=1),
-        # ... n times, with n = $config.num_encoder_layers
-        OnnxVariable(name="past_keys.(n - 1)", ..., "repeat"=1),
-    ]
-    ```
+    would be expanded as the following: ```python out_variables = [ OnnxVariable(name="input_ids", ..., "repeat"=1),
+    OnnxVariable(name="past_keys.0", ..., "repeat"=1), OnnxVariable(name="past_keys.1", ..., "repeat"=1), # ... n
+    times, with n = $config.num_encoder_layers OnnxVariable(name="past_keys.(n - 1)", ..., "repeat"=1), ] ```
 
     Args:
         model: Model to be used a reference to interpolate potential expressions from
@@ -143,7 +136,7 @@ def expand_repeated_onnx_variables(model: Union[PreTrainedModel, TFPreTrainedMod
                     variable.name,
                     variable.axes,
                     interpolate_expression(variable.repeated, model),  # Interpolate from model instance
-                    variable.value
+                    variable.value,
                 )
 
             # str values purpose is to refer to dynamic values from within the model, evaluated at runtime
@@ -159,8 +152,7 @@ def expand_repeated_onnx_variables(model: Union[PreTrainedModel, TFPreTrainedMod
             repeated = variable.repeated
         else:
             raise ValueError(
-                f"Invalid type for repeated property, should be either int or str, "
-                f"got {type(variable.repeated)}"
+                f"Invalid type for repeated property, should be either int or str, " f"got {type(variable.repeated)}"
             )
 
         # Generate the variables by suffixing the name with ".{index}" and setting repeated = 1
@@ -179,28 +171,17 @@ def expand_repeated_onnx_variables(model: Union[PreTrainedModel, TFPreTrainedMod
 
 
 def insert_additional_onnx_value_within_inputs(
-        inputs: Union[BatchEncoding, Dict[str, Any]],
-        onnx_variables: List[OnnxVariable],
-        tensor_type: TensorType
+    inputs: Union[BatchEncoding, Dict[str, Any]], onnx_variables: List["OnnxVariable"], tensor_type: TensorType
 ) -> Dict[str, Any]:
     """
-    Introduce constant inputs for a model from a non None `value` of `OnnxVariable`.
-    For instance, the taking the following list of OnnxVariable:
-    ```python
-    in_variables = [
-        OnnxVariable(name="input_ids", ..., repeat=1, value=None),
-        OnnxVariable(name="decoder_input_ids", repeat=1, value=[1, 2, 3])
-    ]
-    ```
+    Introduce constant inputs for a model from a non None `value` of `OnnxVariable`. For instance, the taking the
+    following list of OnnxVariable: ```python in_variables = [ OnnxVariable(name="input_ids", ..., repeat=1,
+    value=None), OnnxVariable(name="decoder_input_ids", repeat=1, value=[1, 2, 3]) ] ```
 
     would generate the following model's inputs:
 
-    ```python
-    out_variables = {
-        "input_ids": Tensor([...]),
-        "decoder_input_ids": Tensor([1, 2, 3])
-    }
-    ```
+    ```python out_variables = { "input_ids": Tensor([...]), "decoder_input_ids": Tensor([1, 2, 3]) } ```
+
     Args:
         inputs: (BatchEncoding or Dict[str, Any]) List of inputs as generated by the model's tokenizer
         onnx_variables: (List[OnnxVariable]) List of OnnxVariable input to be compared against model's tokenizer input
@@ -211,9 +192,9 @@ def insert_additional_onnx_value_within_inputs(
     """
     for onnx_var in onnx_variables:
         if onnx_var.name not in inputs and onnx_var.value is not None:
-            encoding = BatchEncoding(
-                {onnx_var.name: onnx_var.value}
-            ).convert_to_tensors(tensor_type=tensor_type, prepend_batch_axis=True)
+            encoding = BatchEncoding({onnx_var.name: onnx_var.value}).convert_to_tensors(
+                tensor_type=tensor_type, prepend_batch_axis=True
+            )
 
             inputs[onnx_var.name] = encoding[onnx_var.name]
 
