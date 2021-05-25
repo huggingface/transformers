@@ -316,6 +316,8 @@ class TrainingArguments:
             :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
             the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
             details.
+        log_on_each_node (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            In multinode distributed training, whether to log once per node, or only on the main node.
     """
 
     output_dir: str = field(
@@ -558,6 +560,12 @@ class TrainingArguments:
     resume_from_checkpoint: Optional[str] = field(
         default=None,
         metadata={"help": "The path to a folder with a valid checkpoint for your model."},
+    )
+    log_on_each_node: bool = field(
+        default=True,
+        metadata={
+            "help": "When doing a multinode distributed training, whether to log once per node or just once on the main node."
+        },
     )
     _n_gpu: int = field(init=False, repr=False, default=-1)
     mp_parameters: str = field(
@@ -834,7 +842,7 @@ class TrainingArguments:
     @torch_required
     def process_index(self):
         """
-        The number of processes used in parallel.
+        The index of the current process used.
         """
         if is_torch_tpu_available():
             return xm.get_ordinal()
@@ -845,6 +853,35 @@ class TrainingArguments:
         elif self.local_rank != -1:
             return torch.distributed.get_rank()
         return 0
+
+    @property
+    @torch_required
+    def local_process_index(self):
+        """
+        The index of the local process used.
+        """
+        if is_torch_tpu_available():
+            return xm.get_ordinal(local=True)
+        elif is_sagemaker_mp_enabled():
+            return smp.local_rank()
+        elif is_sagemaker_dp_enabled():
+            return sm_dist.get_rank()
+        elif self.local_rank != -1:
+            return self.local_rank
+        return 0
+
+    @property
+    def should_log(self):
+        """
+        Whether or not the current process should produce log.
+        """
+        if self.log_on_each_node:
+            return self.local_process_index == 0
+        else:
+            if is_sagemaker_mp_enabled():
+                return smp.rank() == 0
+            else:
+                return self.process_index == 0
 
     @property
     def place_model_on_device(self):
