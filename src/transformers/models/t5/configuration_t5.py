@@ -14,7 +14,8 @@
 # limitations under the License.
 """ T5 model configuration """
 
-from ...configuration_utils import PretrainedConfig, OnnxConfig, OnnxVariable
+from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig, OnnxVariable
 from ...utils import logging
 
 
