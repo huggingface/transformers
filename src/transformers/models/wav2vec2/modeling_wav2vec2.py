@@ -1026,7 +1026,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
             >>> # wrap processor as target processor to encode labels
             >>> with processor.as_target_processor():
-            >>>     labels = processor(transcription, return_tensors="pt").input_ids
+            >>>     labels = processor(target_transcription, return_tensors="pt").input_ids
 
             >>> loss = model(input_values, labels=labels).loss
         """
