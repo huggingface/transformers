@@ -156,6 +156,7 @@ else:
     Speech2TextTokenizer = None
 
 if is_tokenizers_available():
+    from ...tokenization_utils_fast import PreTrainedTokenizerFast
     from ..albert.tokenization_albert_fast import AlbertTokenizerFast
     from ..bart.tokenization_bart_fast import BartTokenizerFast
     from ..barthez.tokenization_barthez_fast import BarthezTokenizerFast
@@ -188,7 +189,6 @@ if is_tokenizers_available():
     from ..t5.tokenization_t5_fast import T5TokenizerFast
     from ..xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
     from ..xlnet.tokenization_xlnet_fast import XLNetTokenizerFast
-    from ...tokenization_utils_fast import PreTrainedTokenizerFast
 
 else:
     AlbertTokenizerFast = None
@@ -297,7 +297,7 @@ NO_CONFIG_TOKENIZER = [
     BarthezTokenizerFast,
     MBart50Tokenizer,
     MBart50TokenizerFast,
-    PreTrainedTokenizerFast
+    PreTrainedTokenizerFast,
 ]
 
 
