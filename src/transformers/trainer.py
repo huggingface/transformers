@@ -1781,21 +1781,16 @@ class Trainer:
         Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on several
         machines) main process.
         """
-        if is_torch_tpu_available():
-            return xm.is_master_ordinal(local=True)
-        elif is_sagemaker_mp_enabled():
-            return smp.local_rank() == 0
-        else:
-            return self.args.local_rank in [-1, 0]
+        return self.args.local_process_index == 0
 
     def is_world_process_zero(self) -> bool:
         """
         Whether or not this process is the global main process (when training in a distributed fashion on several
         machines, this is only going to be :obj:`True` for one process).
         """
-        if is_torch_tpu_available():
-            return xm.is_master_ordinal(local=False)
-        elif is_sagemaker_mp_enabled():
+        # Special case for SageMaker ModelParallel since there process_index is dp_process_index, not the global
+        # process index.
+        if is_sagemaker_mp_enabled():
             return smp.rank() == 0
         else:
             return self.args.process_index == 0
