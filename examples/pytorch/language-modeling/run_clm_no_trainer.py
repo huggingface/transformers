@@ -445,7 +445,7 @@ def main():
         try:
             perplexity = math.exp(torch.mean(losses))
         except OverflowError:
-            perplexity = float("nan")
+            perplexity = float("inf")
 
         logger.info(f"epoch {epoch}: perplexity: {perplexity}")
 

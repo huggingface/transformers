@@ -443,7 +443,7 @@ def main():
         try:
             perplexity = math.exp(metrics["eval_loss"])
         except OverflowError:
-            perplexity = float("nan")
+            perplexity = float("inf")
         metrics["perplexity"] = perplexity
 
         trainer.log_metrics("eval", metrics)

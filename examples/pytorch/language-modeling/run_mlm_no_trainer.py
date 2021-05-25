@@ -489,7 +489,7 @@ def main():
         try:
             perplexity = math.exp(metrics["eval_loss"])
         except OverflowError:
-            perplexity = float("nan")
+            perplexity = float("inf")
 
         logger.info(f"epoch {epoch}: perplexity: {perplexity}")
 
