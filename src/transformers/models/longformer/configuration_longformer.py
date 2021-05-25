@@ -95,8 +95,5 @@ LONGFORMER_ONNX_CONFIG = OnnxConfig(
         "enable_bias_gelu": True,
         "enable_gelu_approximation": False,
     },
-    optimizer_additional_args={
-        "num_heads": "$config.num_attention_heads",
-        "hidden_size": "$config.hidden_size"
-    }
+    optimizer_additional_args={"num_heads": "$config.num_attention_heads", "hidden_size": "$config.hidden_size"},
 )

@@ -21,7 +21,12 @@ from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_availa
 
 
 _import_structure = {
-    "configuration_bart": ["BART_PRETRAINED_CONFIG_ARCHIVE_MAP", "BartConfig", "BART_ONNX_CONFIG", "BART_ONNX_CONFIG_WITH_PAST"],
+    "configuration_bart": [
+        "BART_ONNX_CONFIG",
+        "BART_ONNX_CONFIG_WITH_PAST",
+        "BART_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BartConfig",
+    ],
     "tokenization_bart": ["BartTokenizer"],
 }
 
@@ -45,7 +50,12 @@ if is_tf_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BART_ONNX_CONFIG, BART_ONNX_CONFIG_WITH_PAST, BartConfig
+    from .configuration_bart import (
+        BART_ONNX_CONFIG,
+        BART_ONNX_CONFIG_WITH_PAST,
+        BART_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BartConfig,
+    )
     from .tokenization_bart import BartTokenizer
 
     if is_tokenizers_available():

@@ -14,7 +14,8 @@
 # limitations under the License.
 """ DistilBERT model configuration """
 
-from ...configuration_utils import PretrainedConfig, OnnxConfig, OnnxVariable
+from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig, OnnxVariable
 from ...utils import logging
 
 
@@ -159,10 +160,7 @@ DISTILBERT_ONNX_CONFIG = OnnxConfig(
         "enable_bias_gelu": True,
         "enable_gelu_approximation": False,
     },
-    optimizer_additional_args={
-        "num_heads": "$config.num_attention_heads",
-        "hidden_size": "$config.hidden_size"
-    }
+    optimizer_additional_args={"num_heads": "$config.num_attention_heads", "hidden_size": "$config.hidden_size"},
 )
 
 
@@ -188,8 +186,5 @@ DISTILBERT_TOKEN_CLASSIFICATION_ONNX_CONFIG = OnnxConfig(
         "enable_bias_gelu": True,
         "enable_gelu_approximation": False,
     },
-    optimizer_additional_args={
-        "num_heads": "$config.num_attention_heads",
-        "hidden_size": "$config.hidden_size"
-    }
+    optimizer_additional_args={"num_heads": "$config.num_attention_heads", "hidden_size": "$config.hidden_size"},
 )

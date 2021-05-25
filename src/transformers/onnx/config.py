@@ -1,19 +1,17 @@
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Any, Union, NamedTuple
+from typing import Any, Dict, List, NamedTuple, Optional, Union
 
-OnnxVariable = NamedTuple("OnnxVariable", [
-    ("name", str),
-    ("axes", Dict[int, str]),
-    ("repeated", Union[int, str]),
-    ("value", Optional[List[int]])
-])
+
+OnnxVariable = NamedTuple(
+    "OnnxVariable",
+    [("name", str), ("axes", Dict[int, str]), ("repeated", Union[int, str]), ("value", Optional[List[int]])],
+)
 
 
 @dataclass
 class OnnxConfig:
     """
-    Base class for ONNX exportable model describing metadata on how to export the model
-    through the ONNX format.
+    Base class for ONNX exportable model describing metadata on how to export the model through the ONNX format.
     """
 
     # Input mapping of the form "input_name": {axis_id: "axis_name"}

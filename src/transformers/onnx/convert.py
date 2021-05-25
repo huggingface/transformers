@@ -1,16 +1,21 @@
 from itertools import chain
 from pathlib import Path
-
-from typing import Tuple, List, Union, Iterable
+from typing import Iterable, List, Tuple, Union
 
 import numpy as np
-from onnxruntime import GraphOptimizationLevel
-from packaging.version import parse, Version
+from packaging.version import Version, parse
 
-# from transformers import is_torch_available, PreTrainedTokenizer, TensorType, PreTrainedModel, TFPreTrainedModel
-# from .config import OnnxConfig, OnnxVariable
-# from .interpolate import evaluate_expr_to_int, expand_repeated_onnx_variables, interpolate_expression, insert_additional_onnx_value_within_inputs
-# from .utils import flatten_output_collection_property
+from onnxruntime import GraphOptimizationLevel
+
+from .. import PreTrainedModel, PreTrainedTokenizer, TensorType, TFPreTrainedModel, is_torch_available
+from .config import OnnxConfig, OnnxVariable
+from .interpolate import (
+    evaluate_expr_to_int,
+    expand_repeated_onnx_variables,
+    insert_additional_onnx_value_within_inputs,
+    interpolate_expression,
+)
+from .utils import flatten_output_collection_property
 
 
 # This is the minimal required version to support some ONNX Runtime features
@@ -47,11 +52,7 @@ def check_onnxruntime_requirements(minimum_version: Version):
 
 
 def convert_pytorch(
-    tokenizer: PreTrainedTokenizer,
-    model: PreTrainedModel,
-    config: OnnxConfig,
-    opset: int,
-    output: Path
+    tokenizer: PreTrainedTokenizer, model: PreTrainedModel, config: OnnxConfig, opset: int, output: Path
 ) -> Tuple[List[OnnxVariable], List[OnnxVariable]]:
     """
     Export a PyTorch backed pipeline to ONNX Intermediate Representation (IR
@@ -62,6 +63,7 @@ def convert_pytorch(
         config:
         opset:
         output:
+
     Returns:
 
     """
@@ -83,10 +85,7 @@ def convert_pytorch(
     model_inputs = tokenizer([tokenizer.unk_token] * 4, is_split_into_words=True, return_tensors=TensorType.PYTORCH)
     model_inputs = insert_additional_onnx_value_within_inputs(model_inputs, onnx_inputs, TensorType.PYTORCH)
 
-    inputs_match, ordered_onnx_inputs = ensure_model_and_config_inputs_match(
-        model_inputs.keys(),
-        onnx_inputs
-    )
+    inputs_match, ordered_onnx_inputs = ensure_model_and_config_inputs_match(model_inputs.keys(), onnx_inputs)
 
     if not inputs_match:
         raise ValueError("Model and config inputs doesn't match")
@@ -94,7 +93,7 @@ def convert_pytorch(
     # export can works with named args but the dict containing named args as to be last element of the args tuple
     export(
         model,
-        (dict(model_inputs), ),
+        (dict(model_inputs),),
         f=output.as_posix(),
         input_names=[var.name for var in ordered_onnx_inputs],
         output_names=[var.name for var in onnx_outputs],
@@ -109,14 +108,15 @@ def convert_pytorch(
 
 
 def optimize(
-    onnx_model_path: Path, model: Union[PreTrainedModel, TFPreTrainedModel],
+    onnx_model_path: Path,
+    model: Union[PreTrainedModel, TFPreTrainedModel],
     onnx_config: OnnxConfig,
     optimization_level: GraphOptimizationLevel,
     use_gpu: bool,
-    output: Path
+    output: Path,
 ):
-    from onnxruntime.transformers.optimizer import optimize_model, optimize_by_onnxruntime
     from onnxruntime.transformers.onnx_model_bert import BertOptimizationOptions
+    from onnxruntime.transformers.optimizer import optimize_by_onnxruntime, optimize_model
 
     # If we have an optimizer in the config, let's optimize offline
     if onnx_config.optimizer is not None:
@@ -144,7 +144,7 @@ def optimize(
             optimization_options=optimizer_options,
             opt_level=int(optimization_level),
             use_gpu=use_gpu,
-            **additional_args
+            **additional_args,
         )
 
         print(f"Optimization statistics: {optimizer.get_fused_operator_statistics()}")
@@ -153,6 +153,7 @@ def optimize(
     # Else use online ONNX Runtime optimization
     else:
         from os import replace
+
         temp_output_path = Path(optimize_by_onnxruntime(onnx_model_path.as_posix()))
         replace(temp_output_path, output)
 
@@ -163,19 +164,25 @@ def validate_model_outputs(
     onnx_model: Path,
     onnx_inputs: List[OnnxVariable],
     onnx_named_outputs: List[OnnxVariable],
-    atol: float
+    atol: float,
 ):
     from onnxruntime import InferenceSession, SessionOptions
 
     print("Validating ONNX model...")
 
     # TODO: Sequence length = 4 hard coded, provide this value through CLI would be better
-    reference_tensor_type = TensorType.PYTORCH if isinstance(reference_model, PreTrainedModel) else TensorType.TENSORFLOW
-    reference_model_inputs = tokenizer([tokenizer.unk_token] * 4, is_split_into_words=True, return_tensors=reference_tensor_type)
+    reference_tensor_type = (
+        TensorType.PYTORCH if isinstance(reference_model, PreTrainedModel) else TensorType.TENSORFLOW
+    )
+    reference_model_inputs = tokenizer(
+        [tokenizer.unk_token] * 4, is_split_into_words=True, return_tensors=reference_tensor_type
+    )
     onnx_model_inputs = tokenizer([tokenizer.unk_token] * 4, is_split_into_words=True, return_tensors=TensorType.NUMPY)
 
     # Check if we need to introduce some more variables
-    reference_model_inputs = insert_additional_onnx_value_within_inputs(reference_model_inputs, onnx_inputs, TensorType.PYTORCH)
+    reference_model_inputs = insert_additional_onnx_value_within_inputs(
+        reference_model_inputs, onnx_inputs, TensorType.PYTORCH
+    )
     onnx_model_inputs = insert_additional_onnx_value_within_inputs(onnx_model_inputs, onnx_inputs, TensorType.NUMPY)
 
     # Create ONNX Runtime session
@@ -227,8 +234,7 @@ def validate_model_outputs(
 
 
 def ensure_model_and_config_inputs_match(
-    model_inputs: Iterable[str],
-    config_inputs: Iterable[OnnxVariable]
+    model_inputs: Iterable[str], config_inputs: Iterable[OnnxVariable]
 ) -> Tuple[bool, List[OnnxVariable]]:
     """
 

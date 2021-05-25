@@ -18,6 +18,7 @@
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig, OnnxVariable
 
+
 ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "albert-base-v1": "https://huggingface.co/albert-base-v1/resolve/main/config.json",
     "albert-large-v1": "https://huggingface.co/albert-large-v1/resolve/main/config.json",
@@ -177,8 +178,5 @@ ALBERT_ONNX_CONFIG = OnnxConfig(
         "enable_bias_gelu": True,
         "enable_gelu_approximation": False,
     },
-    optimizer_additional_args={
-        "num_heads": "$config.num_attention_heads",
-        "hidden_size": "$config.hidden_size"
-    }
+    optimizer_additional_args={"num_heads": "$config.num_attention_heads", "hidden_size": "$config.hidden_size"},
 )

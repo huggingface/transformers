@@ -28,7 +28,12 @@ from ...file_utils import (
 
 
 _import_structure = {
-    "configuration_gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2_ONNX_CONFIG", "GPT2_ONNX_CONFIG_WITH_PAST", "GPT2Config"],
+    "configuration_gpt2": [
+        "GPT2_ONNX_CONFIG",
+        "GPT2_ONNX_CONFIG_WITH_PAST",
+        "GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "GPT2Config",
+    ],
     "tokenization_gpt2": ["GPT2Tokenizer"],
 }
 
@@ -61,7 +66,12 @@ if is_flax_available():
     _import_structure["modeling_flax_gpt2"] = ["FlaxGPT2LMHeadModel", "FlaxGPT2Model"]
 
 if TYPE_CHECKING:
-    from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2_ONNX_CONFIG, GPT2_ONNX_CONFIG_WITH_PAST, GPT2Config
+    from .configuration_gpt2 import (
+        GPT2_ONNX_CONFIG,
+        GPT2_ONNX_CONFIG_WITH_PAST,
+        GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        GPT2Config,
+    )
     from .tokenization_gpt2 import GPT2Tokenizer
 
     if is_tokenizers_available():

@@ -146,17 +146,12 @@ T5_ONNX_CONFIG = OnnxConfig(
         OnnxVariable("last_hidden_state", {0: "batch", 1: "decoder_sequence"}, repeated=1, value=None),
         OnnxVariable("encoder_last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1, value=None),
     ],
-    runtime_config_overrides={
-        "use_cache": False
-    },
+    runtime_config_overrides={"use_cache": False},
     use_external_data_format=False,
     minimum_required_onnx_opset=11,
     optimizer="bert",
     optimizer_features=None,
-    optimizer_additional_args={
-        "num_heads": "$config.num_attention_heads",
-        "hidden_size": "$config.hidden_size"
-    }
+    optimizer_additional_args={"num_heads": "$config.num_attention_heads", "hidden_size": "$config.hidden_size"},
 )
 
 # TODO: Enable this? past_keys shape are interleaved (decoder_sequence, decoder_sequence, sequence, sequence)

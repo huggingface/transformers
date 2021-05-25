@@ -198,17 +198,12 @@ BART_ONNX_CONFIG = OnnxConfig(
         OnnxVariable("last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1, value=None),
         OnnxVariable("encoder_last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1, value=None),
     ],
-    runtime_config_overrides={
-        "use_cache": False
-    },
+    runtime_config_overrides={"use_cache": False},
     use_external_data_format=False,
     minimum_required_onnx_opset=11,
     optimizer="bert",
     optimizer_features=None,
-    optimizer_additional_args={
-        "num_heads": "$config.decoder_attention_heads",
-        "hidden_size": "$config.d_model"
-    }
+    optimizer_additional_args={"num_heads": "$config.decoder_attention_heads", "hidden_size": "$config.d_model"},
 )
 
 BART_ONNX_CONFIG_WITH_PAST = OnnxConfig(
@@ -221,15 +216,10 @@ BART_ONNX_CONFIG_WITH_PAST = OnnxConfig(
         OnnxVariable("past_keys", {0: "batch", 2: "sequence"}, repeated="$config.decoder_layers * 4", value=None),
         OnnxVariable("encoder_last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1, value=None),
     ],
-    runtime_config_overrides={
-        "use_cache": True
-    },
+    runtime_config_overrides={"use_cache": True},
     use_external_data_format=False,
     minimum_required_onnx_opset=11,
     optimizer="bert",
     optimizer_features=None,
-    optimizer_additional_args={
-        "num_heads": "$config.decoder_attention_heads",
-        "hidden_size": "$config.d_model"
-    }
+    optimizer_additional_args={"num_heads": "$config.decoder_attention_heads", "hidden_size": "$config.d_model"},
 )

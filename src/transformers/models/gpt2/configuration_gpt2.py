@@ -206,17 +206,12 @@ GPT2_ONNX_CONFIG = OnnxConfig(
     outputs=[
         OnnxVariable("last_hidden_state", {0: "sequence", 1: "batch"}, repeated=1, value=None),
     ],
-    runtime_config_overrides={
-        "use_cache": False
-    },
+    runtime_config_overrides={"use_cache": False},
     use_external_data_format=False,
     minimum_required_onnx_opset=11,
     optimizer="gpt2",
     optimizer_features=None,
-    optimizer_additional_args={
-        "num_heads": "$config.num_attention_heads",
-        "hidden_size": "$config.hidden_size"
-    }
+    optimizer_additional_args={"num_heads": "$config.num_attention_heads", "hidden_size": "$config.hidden_size"},
 )
 
 GPT2_ONNX_CONFIG_WITH_PAST = OnnxConfig(
@@ -228,15 +223,10 @@ GPT2_ONNX_CONFIG_WITH_PAST = OnnxConfig(
         OnnxVariable("last_hidden_state", {0: "sequence", 1: "batch"}, repeated=1, value=None),
         OnnxVariable("past_key_values", {0: "batch", 2: "sequence"}, repeated="$config.n_layer * 2", value=None),
     ],
-    runtime_config_overrides={
-        "use_cache": True
-    },
+    runtime_config_overrides={"use_cache": True},
     use_external_data_format=False,
     minimum_required_onnx_opset=11,
     optimizer="gpt2",
     optimizer_features=None,
-    optimizer_additional_args={
-        "num_heads": "$config.num_attention_heads",
-        "hidden_size": "$config.hidden_size"
-    }
+    optimizer_additional_args={"num_heads": "$config.num_attention_heads", "hidden_size": "$config.hidden_size"},
 )

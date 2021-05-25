@@ -14,7 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ BERT model configuration """
-from ...onnx import OnnxConfig, OnnxVariable
+
+from ...configuration_utils import PretrainedConfig
+from ...onnx.config import OnnxConfig, OnnxVariable
 from ...utils import logging
 
 
@@ -179,8 +181,5 @@ BERT_ONNX_CONFIG = OnnxConfig(
         "enable_bias_gelu": True,
         "enable_gelu_approximation": False,
     },
-    optimizer_additional_args={
-        "num_heads": "$config.num_attention_heads",
-        "hidden_size": "$config.hidden_size"
-    }
+    optimizer_additional_args={"num_heads": "$config.num_attention_heads", "hidden_size": "$config.hidden_size"},
 )
