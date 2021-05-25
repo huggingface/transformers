@@ -15,6 +15,7 @@
 import os
 import subprocess
 import sys
+import warnings
 from argparse import ArgumentParser
 from getpass import getpass
 from typing import List, Union
@@ -46,7 +47,11 @@ class UserCommands(BaseTransformersCLICommand):
         ls_parser.add_argument("--organization", type=str, help="Optional: organization namespace.")
         ls_parser.set_defaults(func=lambda args: ListObjsCommand(args))
         rm_parser = s3_subparsers.add_parser("rm")
-        rm_parser.add_argument("filename", type=str, help="individual object filename to delete from huggingface.co.")
+        rm_parser.add_argument(
+            "filename",
+            type=str,
+            help="Deprecated: use `huggingface-cli` instead. individual object filename to delete from huggingface.co.",
+        )
         rm_parser.add_argument("--organization", type=str, help="Optional: organization namespace.")
         rm_parser.set_defaults(func=lambda args: DeleteObjCommand(args))
         upload_parser = s3_subparsers.add_parser("upload", help="Upload a file to S3.")
@@ -70,13 +75,21 @@ class UserCommands(BaseTransformersCLICommand):
 
         # new system: git-based repo system
         repo_parser = parser.add_parser(
-            "repo", help="{create, ls-files} Commands to interact with your huggingface.co repos."
+            "repo",
+            help="Deprecated: use `huggingface-cli` instead. "
+            "{create, ls-files} Commands to interact with your huggingface.co repos.",
         )
-        repo_subparsers = repo_parser.add_subparsers(help="huggingface.co repos related commands")
-        ls_parser = repo_subparsers.add_parser("ls-files", help="List all your files on huggingface.co")
+        repo_subparsers = repo_parser.add_subparsers(
+            help="Deprecated: use `huggingface-cli` instead. huggingface.co repos related commands"
+        )
+        ls_parser = repo_subparsers.add_parser(
+            "ls-files", help="Deprecated: use `huggingface-cli` instead. List all your files on huggingface.co"
+        )
         ls_parser.add_argument("--organization", type=str, help="Optional: organization namespace.")
         ls_parser.set_defaults(func=lambda args: ListReposObjsCommand(args))
-        repo_create_parser = repo_subparsers.add_parser("create", help="Create a new repo on huggingface.co")
+        repo_create_parser = repo_subparsers.add_parser(
+            "create", help="Deprecated: use `huggingface-cli` instead. Create a new repo on huggingface.co"
+        )
         repo_create_parser.add_argument(
             "name",
             type=str,
@@ -190,6 +203,9 @@ class LogoutCommand(BaseUserCommand):
 
 class ListObjsCommand(BaseUserCommand):
     def run(self):
+        warnings.warn(
+            "Managing repositories through transformers-cli is deprecated. Please use `huggingface-cli` instead."
+        )
         token = HfFolder.get_token()
         if token is None:
             print("Not logged in")
@@ -209,6 +225,9 @@ class ListObjsCommand(BaseUserCommand):
 
 class DeleteObjCommand(BaseUserCommand):
     def run(self):
+        warnings.warn(
+            "Managing repositories through transformers-cli is deprecated. Please use `huggingface-cli` instead."
+        )
         token = HfFolder.get_token()
         if token is None:
             print("Not logged in")
@@ -224,6 +243,9 @@ class DeleteObjCommand(BaseUserCommand):
 
 class ListReposObjsCommand(BaseUserCommand):
     def run(self):
+        warnings.warn(
+            "Managing repositories through transformers-cli is deprecated. Please use `huggingface-cli` instead."
+        )
         token = HfFolder.get_token()
         if token is None:
             print("Not logged in")
@@ -243,6 +265,9 @@ class ListReposObjsCommand(BaseUserCommand):
 
 class RepoCreateCommand(BaseUserCommand):
     def run(self):
+        warnings.warn(
+            "Managing repositories through transformers-cli is deprecated. Please use `huggingface-cli` instead."
+        )
         token = HfFolder.get_token()
         if token is None:
             print("Not logged in")
@@ -314,6 +339,9 @@ class UploadCommand(BaseUserCommand):
         return files
 
     def run(self):
+        warnings.warn(
+            "Managing repositories through transformers-cli is deprecated. Please use `huggingface-cli` instead."
+        )
         token = HfFolder.get_token()
         if token is None:
             print("Not logged in")
