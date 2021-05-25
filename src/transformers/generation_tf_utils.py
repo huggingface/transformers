@@ -69,6 +69,7 @@ class TFGenerationMixin:
         use_cache=None,
         forced_bos_token_id=None,
         forced_eos_token_id=None,
+        infinite_generation=False,
     ):
         r"""
         Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
@@ -145,6 +146,9 @@ class TFGenerationMixin:
                 needs to be the target language token.
             forced_eos_token_id (:obj:`int`, `optional`):
                 The id of the token to force as the last generated token when :obj:`max_length` is reached.
+            infinite (:obj:`bool`, `optional`, default: :obj:`False`):
+                Will generate tokens infinitely by left truncating extra tokens when necessary.
+                (Not available for all models).
             model_specific_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model.
 
