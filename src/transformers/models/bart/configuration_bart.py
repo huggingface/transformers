@@ -15,7 +15,8 @@
 """ BART model configuration """
 import warnings
 
-from ...configuration_utils import PretrainedConfig, OnnxConfig, OnnxVariable
+from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig, OnnxVariable
 from ...utils import logging
 
 

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ XLM-RoBERTa configuration """
-from ... import OnnxConfig, OnnxVariable
+from ...onnx import OnnxConfig, OnnxVariable
 from ...utils import logging
 from ..roberta.configuration_roberta import RobertaConfig
 

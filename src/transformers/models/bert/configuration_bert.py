@@ -14,8 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ BERT model configuration """
-
-from ...configuration_utils import PretrainedConfig, OnnxConfig, OnnxVariable
+from ...onnx import OnnxConfig, OnnxVariable
 from ...utils import logging
 
 

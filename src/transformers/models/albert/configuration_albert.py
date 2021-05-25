@@ -15,7 +15,8 @@
 # limitations under the License.
 """ ALBERT model configuration """
 
-from ...configuration_utils import PretrainedConfig, OnnxConfig, OnnxVariable
+from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig, OnnxVariable
 
 ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "albert-base-v1": "https://huggingface.co/albert-base-v1/resolve/main/config.json",
