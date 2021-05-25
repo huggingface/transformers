@@ -233,8 +233,8 @@ class Trainer:
             A function that instantiates the model to be used. If provided, each call to
             :meth:`~transformers.Trainer.train` will start from a new instance of the model as given by this function.
 
-            The function may have zero argument, or a single one containing the optuna/Ray Tune trial object, to be
-            able to choose different architectures according to hyper parameters (such as layer count, sizes of inner
+            The function may have zero argument, or a single one containing the optuna/Ray Tune/SigOpt trial object, to
+            be able to choose different architectures according to hyper parameters (such as layer count, sizes of inner
             layers, dropout probabilities etc).
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
@@ -872,7 +872,7 @@ class Trainer:
             params = trial
             params.pop("wandb", None)
         elif self.hp_search_backend == HPSearchBackend.SIGOPT:
-            params = {k:int(v) if isinstance(v, str) else v for k, v in trial.items()}
+            params = {k:int(v) if isinstance(v, str) else v for k, v in trial.assignments.items()}
 
         for key, value in params.items():
             if not hasattr(self.args, key):
@@ -887,6 +887,8 @@ class Trainer:
             setattr(self.args, key, value)
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             logger.info("Trial:", trial.params)
+        if self.hp_search_backend == HPSearchBackend.SIGOPT:
+            logger.info("SigOpt Assignments: %s" % trial.assignments)
         if self.args.deepspeed:
             # Rebuild the deepspeed config to reflect the updated training parameters
             from transformers.deepspeed import HfDeepSpeedConfig
@@ -1232,7 +1234,7 @@ class Trainer:
         self.callback_handler.lr_scheduler = self.lr_scheduler
         self.callback_handler.train_dataloader = train_dataloader
         self.state.trial_name = self.hp_name(trial) if self.hp_name is not None else None
-        self.state.trial_params = hp_params(trial) if trial is not None else None
+        self.state.trial_params = hp_params(trial.assignments) if trial is not None else None
         # This should be the same if the state has been saved but in case the training arguments changed, it's safer
         # to set this after the load.
         self.state.max_steps = max_steps
@@ -1517,10 +1519,11 @@ class Trainer:
         if self.hp_search_backend is not None and trial is not None:
             if self.hp_search_backend == HPSearchBackend.OPTUNA:
                 run_id = trial.number
-            else:
+            elif self.hp_search_backend == HPSearchBackend.RAY:
                 from ray import tune
-
                 run_id = tune.get_trial_id()
+            elif self.hp_search_backend == HPSearchBackend.SIGOPT:
+                run_id = trial.id
             run_name = self.hp_name(trial) if self.hp_name is not None else f"run-{run_id}"
             run_dir = os.path.join(self.args.output_dir, run_name)
         else:

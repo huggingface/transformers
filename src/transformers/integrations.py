@@ -301,7 +301,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
 
     from sigopt import Connection
-    conn = Connection(client_token="WECSOKFVSWZNKNOPOMMIILBOXJHNMOBWPIKLKEGXSDRPCIGR")
+    conn = Connection()
     proxies = kwargs.pop("proxies", None)
     if proxies is not None:
         conn.set_proxies(proxies)
@@ -320,7 +320,8 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
 
     while experiment.progress.observation_count < experiment.observation_budget:
         suggestion = conn.experiments(experiment.id).suggestions().create()
-        trainer.train(resume_from_checkpoint=None, trial=suggestion.assignments)
+        trainer.objective = None
+        trainer.train(resume_from_checkpoint=None, trial=suggestion)
         # If there hasn't been any evaluation during the training loop.
         if getattr(trainer, "objective", None) is None:
             metrics = trainer.evaluate()
