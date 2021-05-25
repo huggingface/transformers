@@ -188,6 +188,7 @@ if is_tokenizers_available():
     from ..t5.tokenization_t5_fast import T5TokenizerFast
     from ..xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
     from ..xlnet.tokenization_xlnet_fast import XLNetTokenizerFast
+    from ...tokenization_utils_fast import PreTrainedTokenizerFast
 
 else:
     AlbertTokenizerFast = None
@@ -222,6 +223,7 @@ else:
     T5TokenizerFast = None
     XLMRobertaTokenizerFast = None
     XLNetTokenizerFast = None
+    PreTrainedTokenizerFast = None
 
 
 logger = logging.get_logger(__name__)
@@ -295,6 +297,7 @@ NO_CONFIG_TOKENIZER = [
     BarthezTokenizerFast,
     MBart50Tokenizer,
     MBart50TokenizerFast,
+    PreTrainedTokenizerFast
 ]
 
 
