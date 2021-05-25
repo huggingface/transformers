@@ -283,7 +283,7 @@ class FlaxGenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-        prng_key: jax_xla.DeviceArray = jax.random.PRNGKey(0),
+        prng_key: Optional[jax_xla.DeviceArray] = None,
         model_kwargs: Optional[Dict[str, jax_xla.DeviceArray]] = None,
         logits_warper: Optional[FlaxLogitsProcessorList] = None,
         trace: bool = True,
@@ -292,6 +292,7 @@ class FlaxGenerationMixin:
         max_length = max_length if max_length is not None else self.config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        prng_key = prng_key if prng_key is not None else jax.random.PRNGKey(0)
 
         batch_size, cur_len = input_ids.shape
 
