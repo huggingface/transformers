@@ -487,7 +487,7 @@ def main():
         losses = torch.cat(losses)
         losses = losses[: len(eval_dataset)]
         try:
-            perplexity = math.exp(metrics["eval_loss"])
+            perplexity = math.exp(torch.mean(losses))
         except OverflowError:
             perplexity = float("inf")
 
