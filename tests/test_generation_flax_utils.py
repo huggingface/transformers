@@ -90,7 +90,7 @@ class FlaxGenerationTesterMixin:
             self.assertEqual(generation_outputs.shape[-1], max_length)
 
             jit_generate = jit(model.generate)
-            jit_generation_outputs = jit_generate(input_ids)
+            jit_generation_outputs = jit_generate(input_ids).sequences
 
             self.assertListEqual(generation_outputs.tolist(), jit_generation_outputs.tolist())
 
@@ -106,7 +106,7 @@ class FlaxGenerationTesterMixin:
             self.assertEqual(generation_outputs.shape[-1], max_length)
 
             jit_generate = jit(model.generate)
-            jit_generation_outputs = jit_generate(input_ids)
+            jit_generation_outputs = jit_generate(input_ids).sequences
 
             self.assertListEqual(generation_outputs.tolist(), jit_generation_outputs.tolist())
 
@@ -125,7 +125,7 @@ class FlaxGenerationTesterMixin:
             self.assertEqual(generation_outputs.shape[-1], max_length)
 
             jit_generate = jit(model.generate)
-            jit_generation_outputs = jit_generate(input_ids)
+            jit_generation_outputs = jit_generate(input_ids).sequences
 
             self.assertListEqual(generation_outputs.tolist(), jit_generation_outputs.tolist())
 
@@ -145,7 +145,7 @@ class FlaxGenerationTesterMixin:
             self.assertEqual(generation_outputs.shape[-1], max_length)
 
             jit_generate = jit(model.generate)
-            jit_generation_outputs = jit_generate(input_ids, attention_mask=attention_mask)
+            jit_generation_outputs = jit_generate(input_ids, attention_mask=attention_mask).sequences
 
             self.assertListEqual(generation_outputs.tolist(), jit_generation_outputs.tolist())
 
@@ -165,6 +165,6 @@ class FlaxGenerationTesterMixin:
             self.assertEqual(generation_outputs.shape[-1], max_length)
 
             jit_generate = jit(model.generate)
-            jit_generation_outputs = jit_generate(input_ids, attention_mask=attention_mask)
+            jit_generation_outputs = jit_generate(input_ids, attention_mask=attention_mask).sequences
 
             self.assertListEqual(generation_outputs.tolist(), jit_generation_outputs.tolist())
