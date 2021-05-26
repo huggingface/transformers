@@ -373,6 +373,9 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
         batch_size, sequence_length = input_ids.shape
 
         if position_ids is None:
+            if past_key_values is not None:
+                raise ValueError("Make sure to provide `position_ids` when passing `past_key_values`.")
+
             position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
 
         if attention_mask is None:
