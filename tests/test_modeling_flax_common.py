@@ -73,7 +73,7 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
     for _ in range(total_dims):
         values.append(rng.random() * scale)
 
-    return np.array(values, dtype=jnp.int32).reshape(shape)
+    return np.array(values, dtype=jnp.float32).reshape(shape)
 
 
 def random_attention_mask(shape, rng=None):
