@@ -700,7 +700,6 @@ class T5Block(nn.Module):
         else:
             outputs = outputs + attention_outputs
 
-        outputs = outputs + (present_key_value_state,) + attention_outputs
         return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
 
 
