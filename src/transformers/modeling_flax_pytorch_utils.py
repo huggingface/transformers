@@ -173,7 +173,8 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
         # rename flax weights to PyTorch format
         if flax_key_tuple[-1] == "kernel" and ".".join(flax_key_tuple) not in pt_model_dict:
             flax_key_tuple = flax_key_tuple[:-1] + ("weight",)
-            flax_tensor = flax_tensor.T
+            is_conv = flax_tensor.ndim == 4  # hackish way of detecting conv layer
+            flax_tensor = jnp.transpose(flax_tensor, (3, 2, 0, 1)) if is_conv else flax_tensor.T
         elif flax_key_tuple[-1] in ["scale", "embedding"]:
             flax_key_tuple = flax_key_tuple[:-1] + ("weight",)
 
