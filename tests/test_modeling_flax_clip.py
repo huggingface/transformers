@@ -212,10 +212,10 @@ class FlaxCLIPTextModelTester:
 
         if input_mask is not None:
             batch_size, seq_length = input_mask.shape
-            rnd_start_indices = np.random.randint(0, seq_length - 1, size=(batch_size,))
+            rnd_start_indices = np.random.randint(1, seq_length - 1, size=(batch_size,))
             for batch_idx, start_index in enumerate(rnd_start_indices):
-                input_mask[batch_idx, :start_index] = 0
-                input_mask[batch_idx, start_index:] = 1
+                input_mask[batch_idx, :start_index] = 1
+                input_mask[batch_idx, start_index:] = 0
 
         config = CLIPTextConfig(
             vocab_size=self.vocab_size,
