@@ -1,16 +1,24 @@
 import inspect
+import tempfile
 import unittest
 
 import numpy as np
+import torch
 
+import transformers
 from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig, is_flax_available
-from transformers.testing_utils import require_flax, slow
+from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 
 from .test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_flax_available():
     import jax
+    import jax.numpy as jnp
+    from transformers.modeling_flax_pytorch_utils import (
+        convert_pytorch_state_dict_to_flax,
+        load_flax_weights_in_pytorch_model,
+    )
     from transformers.models.clip.modeling_flax_clip import FlaxCLIPModel, FlaxCLIPTextModel, FlaxCLIPVisionModel
 
 
@@ -339,3 +347,91 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
             model = model_class_name.from_pretrained("openai/clip-vit-base-patch32", from_pt=True)
             outputs = model(input_ids=np.ones((1, 1)), pixel_values=np.ones((1, 3, 224, 224)))
             self.assertIsNotNone(outputs)
+
+    @is_pt_flax_cross_test
+    def test_equivalence_pt_to_flax(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                # prepare inputs
+                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
+
+                # load corresponding PyTorch class
+                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
+                pt_model_class = getattr(transformers, pt_model_class_name)
+
+                pt_model = pt_model_class(config).eval()
+                fx_model = model_class(config, dtype=jnp.float32)
+
+                fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
+                fx_model.params = fx_state
+
+                with torch.no_grad():
+                    pt_outputs = pt_model(**pt_inputs).to_tuple()
+                # PyTorch CLIPModel returns loss, we skip it here as we don't return loss in JAX/Flax models
+                pt_outputs = pt_outputs[1:]
+
+                fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
+                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+                for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    pt_model.save_pretrained(tmpdirname)
+                    fx_model_loaded = model_class.from_pretrained(tmpdirname, from_pt=True)
+
+                fx_outputs_loaded = fx_model_loaded(**prepared_inputs_dict).to_tuple()
+                self.assertEqual(
+                    len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
+                )
+                for fx_output_loaded, pt_output in zip(fx_outputs_loaded[:4], pt_outputs[:4]):
+                    self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 4e-2)
+
+    @is_pt_flax_cross_test
+    def test_equivalence_flax_to_pt(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                # prepare inputs
+                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
+
+                # load corresponding PyTorch class
+                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
+                pt_model_class = getattr(transformers, pt_model_class_name)
+
+                pt_model = pt_model_class(config).eval()
+                fx_model = model_class(config, dtype=jnp.float32)
+
+                pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
+
+                # make sure weights are tied in PyTorch
+                pt_model.tie_weights()
+
+                with torch.no_grad():
+                    pt_outputs = pt_model(**pt_inputs).to_tuple()
+                # PyTorch CLIPModel returns loss, we skip it here as we don't return loss in JAX/Flax models
+                pt_outputs = pt_outputs[1:]
+
+                fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
+                print("check", pt_outputs[0])
+                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+                for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    fx_model.save_pretrained(tmpdirname)
+                    pt_model_loaded = pt_model_class.from_pretrained(tmpdirname, from_flax=True)
+
+                with torch.no_grad():
+                    pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
+                pt_outputs_loaded = pt_outputs_loaded[1:]
+
+                self.assertEqual(
+                    len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch"
+                )
+                for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs_loaded[:4]):
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
