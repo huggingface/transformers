@@ -13,11 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 from typing import Callable, Optional, Tuple
 
 import numpy as np
 
+import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
@@ -55,7 +55,7 @@ _CONFIG_FOR_DOC = "BertConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
 
 
-@dataclass
+@flax.struct.dataclass
 class FlaxBertForPreTrainingOutput(ModelOutput):
     """
     Output type of :class:`~transformers.BertForPreTraining`.
