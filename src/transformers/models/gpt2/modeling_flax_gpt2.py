@@ -20,7 +20,6 @@ import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, unfreeze
 from flax.linen import combine_masks, dot_product_attention, make_causal_mask
-from flax.traverse_util import flatten_dict
 from jax import lax
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
@@ -322,13 +321,6 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
-    @property
-    def _attn_layer_name(self):
-        attn_layer_key_tuple = ("h", "0", "attn")
-        if self.base_model_prefix in set(self.params.keys()):
-            attn_layer_key_tuple = (self.base_model_prefix,) + attn_layer_key_tuple
-        return attn_layer_key_tuple
-
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
@@ -381,28 +373,13 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
         batch_size, sequence_length = input_ids.shape
 
         if position_ids is None:
-            if past_key_values is not None and input_ids.shape[-1] == 1:
-                # if `past_key_values` are passed and input_ids are longer than 1, we are in cached auto-regressive generation. It has to be made sure that position_ids are set correctly
-                cache_shift = flatten_dict(unfreeze(past_key_values))[self._attn_layer_name + ("cache_index",)]
-                position_ids = jnp.broadcast_to(
-                    jnp.arange(self.config.max_position_embeddings)[None, :],
-                    (batch_size, self.config.max_position_embeddings),
-                )
-                position_ids = lax.dynamic_slice(position_ids, (0, cache_shift), (batch_size, 1))
-            else:
-                position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
+            if past_key_values is not None:
+                raise ValueError("Make sure to provide `position_ids` when passing `past_key_values`.")
+
+            position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
 
         if attention_mask is None:
-            # if past_key_values are passed we need to create an attention_mask of the same length as `cache_length`
-            if past_key_values is not None:
-                cache_length = flatten_dict(unfreeze(past_key_values))[self._attn_layer_name + ("cached_key",)].shape[
-                    1
-                ]
-            else:
-                cache_length = sequence_length
-
-            # Note that usually one would have to put 0's in the attention_mask for x > input_ids.shape[-1] and x < cache_length. But since GPT2 uses a causal mask, those positions are masked anyways. Thus we can create a single static attention_mask here, which is more efficient for compilation
-            attention_mask = jnp.ones((batch_size, cache_length))
+            attention_mask = jnp.ones((batch_size, sequence_length))
 
         # Handle any PRNG if needed
         rngs = {}
@@ -626,6 +603,32 @@ class FlaxGPT2LMHeadModule(nn.Module):
 )
 class FlaxGPT2LMHeadModel(FlaxGPT2PreTrainedModel):
     module_class = FlaxGPT2LMHeadModule
+
+    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jnp.DeviceArray] = None):
+        # initializing the cache
+        batch_size, seq_length = input_ids.shape
+
+        past_key_values = self.init_cache(batch_size, max_length)
+        # Note that usually one would have to put 0's in the attention_mask for x > input_ids.shape[-1] and x < cache_length.
+        # But since GPT2 uses a causal mask, those positions are masked anyways.
+        # Thus we can create a single static attention_mask here, which is more efficient for compilation
+        extended_attention_mask = jnp.ones((batch_size, max_length), dtype="i4")
+        if attention_mask is not None:
+            position_ids = attention_mask.cumsum(axis=-1) - 1
+            extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, attention_mask, (0, 0))
+        else:
+            position_ids = jnp.broadcast_to(jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length))
+
+        return {
+            "past_key_values": past_key_values,
+            "attention_mask": extended_attention_mask,
+            "position_ids": position_ids,
+        }
+
+    def update_inputs_for_generation(self, model_outputs, model_kwargs):
+        model_kwargs["past_key_values"] = model_outputs.past_key_values
+        model_kwargs["position_ids"] = model_kwargs["position_ids"][:, -1:] + 1
+        return model_kwargs
 
 
 append_call_sample_docstring(
