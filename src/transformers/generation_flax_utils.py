@@ -129,8 +129,7 @@ class FlaxGenerationMixin:
         Parameters:
 
             input_ids (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                The sequence used as a prompt for the generation. If :obj:`None` the method initializes it as an empty
-                :obj:`jax_xla.DeviceArray` of shape :obj:`(1,)`.
+                The sequence used as a prompt for the generation.
             max_length (:obj:`int`, `optional`, defaults to 20):
                 The maximum length of the sequence to be generated.
             do_sample (:obj:`bool`, `optional`, defaults to :obj:`False`):
