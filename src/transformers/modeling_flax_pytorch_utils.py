@@ -92,7 +92,8 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
             pt_tuple_key = pt_tuple_key[:-1] + ("embedding",)
         elif pt_tuple_key[-1] == "weight" and pt_tuple_key not in random_flax_state_dict:
             pt_tuple_key = pt_tuple_key[:-1] + ("kernel",)
-            pt_tensor = pt_tensor.T
+            is_conv = pt_tensor.ndim == 4  # hackish way of detecting conv layer
+            pt_tensor = pt_tensor.transpose(2, 3, 1, 0) if is_conv else pt_tensor.T
         elif pt_tuple_key[-1] == "gamma":
             pt_tuple_key = pt_tuple_key[:-1] + ("weight",)
         elif pt_tuple_key[-1] == "beta":
