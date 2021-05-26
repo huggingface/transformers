@@ -337,5 +337,5 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
             model = model_class_name.from_pretrained("openai/clip-vit-base-patch32", from_pt=True)
-            outputs = model(input_ids=np.ones(1, 1), pixel_values=np.ones((1, 3, 224, 224)))
+            outputs = model(input_ids=np.ones((1, 1)), pixel_values=np.ones((1, 3, 224, 224)))
             self.assertIsNotNone(outputs)
