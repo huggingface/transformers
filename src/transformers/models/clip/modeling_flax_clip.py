@@ -305,12 +305,12 @@ class FlaxCLIPAttention(nn.Module):
             causal_attention_mask = self.causal_mask[:, :, key_length - query_length : key_length, :key_length]
 
         if attention_mask is not None and causal_attention_mask is not None:
-            attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -1))
-            attention_mask = combine_masks(causal_attention_mask, attention_mask, dtype="i4")
+            attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
+            attention_mask = combine_masks(attention_mask, causal_attention_mask, dtype="i4")
         elif causal_attention_mask is not None:
             attention_mask = causal_attention_mask
         elif attention_mask is not None:
-            attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -1))
+            attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
 
         if attention_mask is not None:
             attention_bias = lax.select(
