@@ -830,7 +830,7 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
             method=_get_features,
         )
 
-    def get_vision_features(self, pixel_values):
+    def get_image_features(self, pixel_values):
         r"""
         Args:
             pixel_values (:obj:`numpy.ndarray` of shape :obj:`(batch_size, num_channels, height, width)`):
