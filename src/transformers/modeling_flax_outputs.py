@@ -19,7 +19,7 @@ import jaxlib.xla_extension as jax_xla
 from .file_utils import ModelOutput
 
 
-@flax.struct.flax.struct.dataclass
+@flax.struct.dataclass
 class FlaxBaseModelOutput(ModelOutput):
     """
     Base class for model's outputs, with potential hidden states and attentions.
