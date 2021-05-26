@@ -147,8 +147,8 @@ class TFGenerationMixin:
             forced_eos_token_id (:obj:`int`, `optional`):
                 The id of the token to force as the last generated token when :obj:`max_length` is reached.
             infinite (:obj:`bool`, `optional`, default: :obj:`False`):
-                Will generate tokens infinitely by left truncating extra tokens when necessary.
-                (Not available for all models).
+                Will generate tokens infinitely by left truncating extra tokens when necessary. (Not available for all
+                models).
             model_specific_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model.
 
