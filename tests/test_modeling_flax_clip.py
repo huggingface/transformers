@@ -3,10 +3,9 @@ import tempfile
 import unittest
 
 import numpy as np
-import torch
 
 import transformers
-from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig, is_flax_available
+from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig, is_flax_available, is_torch_available
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 
 from .test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -20,6 +19,9 @@ if is_flax_available():
         load_flax_weights_in_pytorch_model,
     )
     from transformers.models.clip.modeling_flax_clip import FlaxCLIPModel, FlaxCLIPTextModel, FlaxCLIPVisionModel
+
+if is_torch_available():
+    import torch
 
 
 class FlaxCLIPVisionModelTester:
