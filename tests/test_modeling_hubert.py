@@ -29,7 +29,7 @@ from .test_modeling_common import ModelTesterMixin, _config_zero_init
 if is_torch_available():
     import torch
 
-    from transformers import HubertConfig, HubertForCTC, HubertForMaskedLM, HubertModel, HubertProcessor
+    from transformers import HubertConfig, HubertForCTC, HubertModel, Wav2Vec2Processor
     from transformers.models.hubert.modeling_hubert import _compute_mask_indices
 
 
@@ -218,15 +218,7 @@ class HubertModelTester:
 
 @require_torch
 class HubertModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            HubertForCTC,
-            HubertModel,
-            HubertForMaskedLM,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (HubertForCTC, HubertModel) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -346,7 +338,7 @@ class HubertModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (HubertForCTC, HubertModel, HubertForMaskedLM) if is_torch_available() else ()
+    all_model_classes = (HubertForCTC, HubertModel) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -525,7 +517,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
     def test_inference_ctc_normal(self):
         model = HubertForCTC.from_pretrained("facebook/hubert-base-960h")
         model.to(torch_device)
-        processor = HubertProcessor.from_pretrained("facebook/hubert-base-960h", do_lower_case=True)
+        processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-base-960h", do_lower_case=True)
         input_speech = self._load_datasamples(1)
 
         input_values = processor(input_speech, return_tensors="pt").input_values.to(torch_device)
@@ -542,7 +534,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
     def test_inference_ctc_normal_batched(self):
         model = HubertForCTC.from_pretrained("facebook/hubert-base-960h")
         model.to(torch_device)
-        processor = HubertProcessor.from_pretrained("facebook/hubert-base-960h", do_lower_case=True)
+        processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-base-960h", do_lower_case=True)
 
         input_speech = self._load_datasamples(2)
 
@@ -564,7 +556,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
 
     def test_inference_ctc_robust_batched(self):
         model = HubertForCTC.from_pretrained("facebook/hubert-large-960h-lv60-self").to(torch_device)
-        processor = HubertProcessor.from_pretrained("facebook/hubert-large-960h-lv60-self", do_lower_case=True)
+        processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-960h-lv60-self", do_lower_case=True)
 
         input_speech = self._load_datasamples(4)
 

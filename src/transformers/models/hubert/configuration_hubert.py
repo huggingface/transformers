@@ -20,7 +20,7 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/hubert-base-960h": "https://huggingface.co/facebook/hubert-base-960h/resolve/main/config.json",
     # See all Hubert models at https://huggingface.co/models?filter=hubert
 }

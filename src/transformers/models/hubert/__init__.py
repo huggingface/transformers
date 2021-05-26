@@ -28,7 +28,6 @@ if is_torch_available():
     _import_structure["modeling_hubert"] = [
         "HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "HubertForCTC",
-        "HubertForMaskedLM",
         "HubertModel",
         "HubertPreTrainedModel",
     ]
