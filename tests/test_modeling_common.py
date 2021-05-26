@@ -496,15 +496,18 @@ class ModelTesterMixin:
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
 
+    @slow
     def test_torchscript(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self._create_and_check_torchscript(config, inputs_dict)
 
+    @slow
     def test_torchscript_output_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_attentions = True
         self._create_and_check_torchscript(config, inputs_dict)
 
+    @slow
     def test_torchscript_output_hidden_state(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
