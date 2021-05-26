@@ -112,7 +112,7 @@ def find_batch_size(tensors):
             result = find_batch_size(t)
             if result is not None:
                 return result
-    elif isinstance(tensors, dict):
+    elif isinstance(tensors, (dict, BatchEncoding)):
         for key, value in tensors.items():
             result = find_batch_size(value)
             if result is not None:
