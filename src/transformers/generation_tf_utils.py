@@ -117,9 +117,9 @@ class TFGenerationMixin:
             eos_token_id (:obj:`int`, `optional`):
                 The id of the `end-of-sequence` token.
             length_penalty (:obj:`float`, `optional`, defaults to 1.0):
-                Exponential penalty to the length. 1.0 means no penalty.
-                Set to values < 1.0 in order to encourage the model to generate shorter sequences, to a value > 1.0 in
-                order to encourage the model to produce longer sequences.
+                Exponential penalty to the length. 1.0 means no penalty. Set to values < 1.0 in order to encourage the
+                model to generate shorter sequences, to a value > 1.0 in order to encourage the model to produce longer
+                sequences.
             no_repeat_ngram_size (:obj:`int`, `optional`, defaults to 0):
                 If set to int > 0, all ngrams of that size can only occur once.
             bad_words_ids(:obj:`List[int]`, `optional`):
@@ -129,9 +129,9 @@ class TFGenerationMixin:
                 The number of independently computed returned sequences for each element in the batch.
             attention_mask (:obj:`tf.Tensor` of :obj:`dtype=tf.int32` and shape :obj:`(batch_size, sequence_length)`, `optional`):
                 Mask to avoid performing attention on padding token indices. Mask values are in ``[0, 1]``, 1 for
-                tokens that are not masked, and 0 for masked tokens.
-                If not provided, will default to a tensor the same shape as :obj:`input_ids` that masks the pad token.
-                `What are attention masks? <../glossary.html#attention-mask>`__
+                tokens that are not masked, and 0 for masked tokens. If not provided, will default to a tensor the same
+                shape as :obj:`input_ids` that masks the pad token. `What are attention masks?
+                <../glossary.html#attention-mask>`__
             decoder_start_token_id (:obj:`int`, `optional`):
                 If an encoder-decoder model starts decoding with a different token than `bos`, the id of that token.
             use_cache: (:obj:`bool`, `optional`, defaults to :obj:`True`):
