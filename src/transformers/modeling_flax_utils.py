@@ -41,6 +41,7 @@ from .file_utils import (
     is_remote_url,
     replace_return_docstrings,
 )
+from .generation_flax_utils import FlaxGenerationMixin
 from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
 from .utils import logging
 
@@ -57,7 +58,7 @@ ACT2FN = {
 }
 
 
-class FlaxPreTrainedModel(PushToHubMixin):
+class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     r"""
     Base class for all models.
 
