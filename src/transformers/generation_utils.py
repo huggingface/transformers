@@ -785,7 +785,6 @@ class GenerationMixin:
             infinite (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 If enabled, model will attempt to generate infinitely many tokens, by left clipping tokens as
                 necessary. (Not enabled on all architectures)
-
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If the
                 model is an encoder-decoder model, encoder specific kwargs should not be prefixed and decoder specific
