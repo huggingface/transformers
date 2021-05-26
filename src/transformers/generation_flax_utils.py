@@ -23,8 +23,7 @@ import jax.numpy as jnp
 import jaxlib.xla_extension as jax_xla
 from jax import lax
 
-from .modeling_flax_outputs import FlaxModelOutput
-
+from .file_utils import ModelOutput
 from .generation_flax_logits_process import (
     FlaxLogitsProcessorList,
     FlaxTemperatureLogitsWarper,
@@ -38,28 +37,32 @@ logger = logging.get_logger(__name__)
 
 
 @flax.struct.dataclass
-class FlaxGreedySearchOutput(FlaxModelOutput):
+class FlaxGreedySearchOutput(ModelOutput):
     """
     Flax Base class for outputs of decoder-only generation models using greedy search.
 
 
     Args:
         sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            The generated sequences. If all batches finished early due to the :obj:`eos_token_id`, :obj:`sequences` is padded to :obj:`max_length.
+            The generated sequences. If all batches finished early due to the :obj:`eos_token_id`, :obj:`sequences` is
+            padded to :obj:`max_length`.
     """
+
     sequences: jax_xla.DeviceArray = None
 
 
 @flax.struct.dataclass
-class FlaxSampleOutput(FlaxModelOutput):
+class FlaxSampleOutput(ModelOutput):
     """
     Flax Base class for outputs of decoder-only generation models using sampling.
 
 
     Args:
         sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size, max_length)`):
-            The generated sequences. If all batches finished early due to the :obj:`eos_token_id`, :obj:`sequences` is padded to :obj:`max_length.
+            The generated sequences. If all batches finished early due to the :obj:`eos_token_id`, :obj:`sequences` is
+            padded to :obj:`max_length`.
     """
+
     sequences: jax_xla.DeviceArray = None
 
 
@@ -145,33 +148,23 @@ class FlaxGenerationMixin:
                 The id of the `beginning-of-sequence` token.
             eos_token_id (:obj:`int`, `optional`):
                 The id of the `end-of-sequence` token.
-            output_attentions (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
-                returned tensors for more details.
-            output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors
-                for more details.
-            output_scores (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
-            return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
-
+            trace (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether to trace generation. Setting ``trace=False`` should only be used for debugging and will lead to
+                a considerably slower runtime.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model.
 
         Return:
-            :class:`~transformers.file_utils.ModelOutput` or :obj:`jax_xla.DeviceArray`: A
-            :class:`~transformers.file_utils.ModelOutput` (if ``return_dict_in_generate=True`` or when
-            ``config.return_dict_in_generate=True``) or a :obj:` jax_xla.DeviceArray`.
+            :class:`~transformers.file_utils.ModelOutput`.
 
         Examples::
-            >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+            >>> from transformers import AutoTokenizer, FlaxAutoModelForCausalLM
 
             >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
-            >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+            >>> model = FlaxAutoModelForCausalLM.from_pretrained("distilgpt2")
             >>> input_context = "The dog"
             >>> # encode input context
-            >>> input_ids = tokenizer(input_context, return_tensors="pt").input_ids
+            >>> input_ids = tokenizer(input_context, return_tensors="jax").input_ids
             >>> # generate candidates using sampling
             >>> outputs = model.generate(input_ids=input_ids, max_length=20, top_k=30, do_sample=True)
             >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))

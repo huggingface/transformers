@@ -14,8 +14,8 @@
 
 from typing import Dict, Optional, Tuple
 
-import jaxlib.xla_extension as jax_xla
 import flax
+import jaxlib.xla_extension as jax_xla
 
 from .file_utils import ModelOutput
 
