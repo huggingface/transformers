@@ -25,6 +25,7 @@ from transformers.file_utils import WEIGHTS_NAME
 from transformers.integrations import is_deepspeed_available
 from transformers.testing_utils import (
     CaptureLogger,
+    CaptureStderr,
     ExtendSysPath,
     TestCasePlus,
     execute_subprocess_async,
@@ -741,7 +742,38 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
         execute_subprocess_async(cmd, env=self.get_env())
 
-        return output_dir
+    def test_clm_from_config_zero3(self):
+        # this test exercises AutoModel.from_config(config) - to ensure zero.Init is called
+
+        data_dir = self.tests_dir / "fixtures"
+        output_dir = self.get_auto_remove_tmp_dir()
+        args = f"""
+            --model_type gpt2
+            --tokenizer_name sshleifer/tiny-gpt2
+            --train_file {data_dir}/sample_text.txt
+            --validation_file {data_dir}/sample_text.txt
+            --output_dir {output_dir}
+            --overwrite_output_dir
+            --do_train
+            --max_train_samples 4
+            --per_device_train_batch_size 2
+            --num_train_epochs 1
+            --warmup_steps 8
+            --block_size 8
+            --fp16
+            --report_to none
+            """.split()
+
+        ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_zero3.json".split()
+        script = [f"{self.examples_dir_str}/pytorch/language-modeling/run_clm.py"]
+        launcher = self.get_launcher(distributed=True)
+
+        cmd = launcher + script + args + ds_args
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        with CaptureStderr() as cs:
+            execute_subprocess_async(cmd, env=self.get_env())
+        assert "Detected DeepSpeed ZeRO-3" in cs.err
 
     def get_launcher(self, distributed=False):
         # 1. explicitly set --num_nodes=1 just in case these tests end up run on a multi-node setup

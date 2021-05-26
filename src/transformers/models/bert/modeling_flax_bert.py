@@ -551,7 +551,7 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
-        token_type_ids = jnp.ones_like(input_ids)
+        token_type_ids = jnp.zeros_like(input_ids)
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape)
         attention_mask = jnp.ones_like(input_ids)
 
