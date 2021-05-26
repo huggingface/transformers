@@ -86,7 +86,7 @@ class FlaxGenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
 
-            generation_outputs = model.generate(input_ids)
+            generation_outputs = model.generate(input_ids).sequences
             self.assertEqual(generation_outputs.shape[-1], max_length)
 
             jit_generate = jit(model.generate)
@@ -102,7 +102,7 @@ class FlaxGenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
 
-            generation_outputs = model.generate(input_ids)
+            generation_outputs = model.generate(input_ids).sequences
             self.assertEqual(generation_outputs.shape[-1], max_length)
 
             jit_generate = jit(model.generate)
@@ -121,7 +121,7 @@ class FlaxGenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
 
-            generation_outputs = model.generate(input_ids)
+            generation_outputs = model.generate(input_ids).sequences
             self.assertEqual(generation_outputs.shape[-1], max_length)
 
             jit_generate = jit(model.generate)
@@ -141,7 +141,7 @@ class FlaxGenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
 
-            generation_outputs = model.generate(input_ids, attention_mask=attention_mask)
+            generation_outputs = model.generate(input_ids, attention_mask=attention_mask).sequences
             self.assertEqual(generation_outputs.shape[-1], max_length)
 
             jit_generate = jit(model.generate)
@@ -161,7 +161,7 @@ class FlaxGenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
 
-            generation_outputs = model.generate(input_ids, attention_mask=attention_mask)
+            generation_outputs = model.generate(input_ids, attention_mask=attention_mask).sequences
             self.assertEqual(generation_outputs.shape[-1], max_length)
 
             jit_generate = jit(model.generate)

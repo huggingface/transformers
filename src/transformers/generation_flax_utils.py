@@ -23,6 +23,8 @@ import jax.numpy as jnp
 import jaxlib.xla_extension as jax_xla
 from jax import lax
 
+from .modeling_flax_outputs import FlaxModelOutput
+
 from .generation_flax_logits_process import (
     FlaxLogitsProcessorList,
     FlaxTemperatureLogitsWarper,
@@ -33,6 +35,32 @@ from .utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+
+@flax.struct.dataclass
+class FlaxGreedySearchOutput(FlaxModelOutput):
+    """
+    Flax Base class for outputs of decoder-only generation models using greedy search.
+
+
+    Args:
+        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+            The generated sequences. If all batches finished early due to the :obj:`eos_token_id`, :obj:`sequences` is padded to :obj:`max_length.
+    """
+    sequences: jax_xla.DeviceArray = None
+
+
+@flax.struct.dataclass
+class FlaxSampleOutput(FlaxModelOutput):
+    """
+    Flax Base class for outputs of decoder-only generation models using sampling.
+
+
+    Args:
+        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size, max_length)`):
+            The generated sequences. If all batches finished early due to the :obj:`eos_token_id`, :obj:`sequences` is padded to :obj:`max_length.
+    """
+    sequences: jax_xla.DeviceArray = None
 
 
 @flax.struct.dataclass
@@ -275,7 +303,7 @@ class FlaxGenerationMixin:
         else:
             state = lax.while_loop(greedy_search_cond_fn, greedy_search_body_fn, state)
 
-        return (state.sequences,)
+        return FlaxGreedySearchOutput(sequences=state.sequences)
 
     def _sample(
         self,
@@ -365,4 +393,4 @@ class FlaxGenerationMixin:
         else:
             state = lax.while_loop(sample_search_cond_fn, sample_search_body_fn, state)
 
-        return state.sequences
+        return FlaxSampleOutput(sequences=state.sequences)
