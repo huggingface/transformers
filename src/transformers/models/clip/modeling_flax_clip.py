@@ -659,14 +659,8 @@ class FlaxCLIPVisionPreTrainedModel(FlaxPreTrainedModel):
     config_class = CLIPVisionConfig
     module_class: nn.Module = None
 
-    def __init__(
-        self,
-        config: CLIPVisionConfig,
-        input_shape=(1, 224, 224, 3),
-        seed: int = 0,
-        dtype: jnp.dtype = jnp.float32,
-        **kwargs
-    ):
+    def __init__(self, config: CLIPVisionConfig, seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs):
+        input_shape = (1, config.image_size, config.image_size, 3)
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
@@ -722,14 +716,8 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
     config_class = CLIPConfig
     module_class: nn.Module = None
 
-    def __init__(
-        self,
-        config: CLIPConfig,
-        input_shape=((1, 1), (1, 224, 224, 3)),
-        seed: int = 0,
-        dtype: jnp.dtype = jnp.float32,
-        **kwargs
-    ):
+    def __init__(self, config: CLIPConfig, seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs):
+        input_shape = ((1, 1), (1, config.vision_config.image_size, config.vision_config.image_size, 3))
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
