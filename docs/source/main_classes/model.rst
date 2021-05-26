@@ -74,6 +74,9 @@ Generation
 .. autoclass:: transformers.generation_tf_utils.TFGenerationMixin
     :members:
 
+.. autoclass:: transformers.generation_flax_utils.FlaxGenerationMixin
+    :members:
+
 
 Pushing to the Hub
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

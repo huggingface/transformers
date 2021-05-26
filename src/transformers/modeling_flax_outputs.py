@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
 import jaxlib.xla_extension as jax_xla
+import flax
 
 from .file_utils import ModelOutput
 
 
-@dataclass
+@flax.struct.dataclass
 class FlaxBaseModelOutput(ModelOutput):
     """
     Base class for model's outputs, with potential hidden states and attentions.
@@ -46,7 +46,7 @@ class FlaxBaseModelOutput(ModelOutput):
     attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
 
 
-@dataclass
+@flax.struct.dataclass
 class FlaxBaseModelOutputWithPast(ModelOutput):
     """
     Base class for model's outputs, with potential hidden states and attentions.
@@ -76,7 +76,7 @@ class FlaxBaseModelOutputWithPast(ModelOutput):
     attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
 
 
-@dataclass
+@flax.struct.dataclass
 class FlaxBaseModelOutputWithPooling(ModelOutput):
     """
     Base class for model's outputs that also contains a pooling of the last hidden states.
@@ -107,7 +107,7 @@ class FlaxBaseModelOutputWithPooling(ModelOutput):
     attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
 
 
-@dataclass
+@flax.struct.dataclass
 class FlaxMaskedLMOutput(ModelOutput):
     """
     Base class for masked language models outputs.
@@ -136,7 +136,7 @@ class FlaxMaskedLMOutput(ModelOutput):
 FlaxCausalLMOutput = FlaxMaskedLMOutput
 
 
-@dataclass
+@flax.struct.dataclass
 class FlaxNextSentencePredictorOutput(ModelOutput):
     """
     Base class for outputs of models predicting if two sentences are consecutive or not.
@@ -163,7 +163,7 @@ class FlaxNextSentencePredictorOutput(ModelOutput):
     attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
 
 
-@dataclass
+@flax.struct.dataclass
 class FlaxSequenceClassifierOutput(ModelOutput):
     """
     Base class for outputs of sentence classification models.
@@ -189,7 +189,7 @@ class FlaxSequenceClassifierOutput(ModelOutput):
     attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
 
 
-@dataclass
+@flax.struct.dataclass
 class FlaxMultipleChoiceModelOutput(ModelOutput):
     """
     Base class for outputs of multiple choice models.
@@ -217,7 +217,7 @@ class FlaxMultipleChoiceModelOutput(ModelOutput):
     attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
 
 
-@dataclass
+@flax.struct.dataclass
 class FlaxTokenClassifierOutput(ModelOutput):
     """
     Base class for outputs of token classification models.
@@ -243,7 +243,7 @@ class FlaxTokenClassifierOutput(ModelOutput):
     attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
 
 
-@dataclass
+@flax.struct.dataclass
 class FlaxQuestionAnsweringModelOutput(ModelOutput):
     """
     Base class for outputs of question answering models.
