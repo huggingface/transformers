@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
-import dataclass
 import jaxlib.xla_extension as jax_xla
 
 from .file_utils import ModelOutput
