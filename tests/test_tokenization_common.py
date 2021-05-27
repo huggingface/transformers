@@ -183,6 +183,39 @@ class TokenizerTesterMixin:
     #         "This is a test",
     #     )
 
+    def tokenizer_integration_test_util(self, expected_encoding, model_name, revision=None, sequences=None):
+        if sequences is None:
+            sequences = [
+                "Transformers (formerly known as pytorch-transformers and pytorch-pretrained-bert) provides "
+                "general-purpose architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural "
+                "Language Understanding (NLU) and Natural Language Generation (NLG) with over 32+ pretrained "
+                "models in 100+ languages and deep interoperability between Jax, PyTorch and TensorFlow.",
+                "BERT is designed to pre-train deep bidirectional representations from unlabeled text by jointly "
+                "conditioning on both left and right context in all layers.",
+                "The quick brown fox jumps over the lazy dog.",
+            ]
+
+        tokenizer_classes = [self.tokenizer_class]
+        if self.test_rust_tokenizer:
+            tokenizer_classes.append(self.rust_tokenizer_class)
+
+        for tokenizer_class in tokenizer_classes:
+            tokenizer = tokenizer_class.from_pretrained(
+                model_name,
+                revision=revision,  # to pin the tokenizer version
+            )
+
+            encoding = tokenizer(sequences, padding=True)
+            decoded_sequences = [tokenizer.decode(seq, skip_special_tokens=True) for seq in encoding["input_ids"]]
+
+            encoding_data = encoding.data
+            self.assertDictEqual(encoding_data, expected_encoding)
+
+            for expected, decoded in zip(sequences, decoded_sequences):
+                if self.test_sentencepiece_ignore_case:
+                    expected = expected.lower()
+                self.assertEqual(expected, decoded)
+
     def assert_padded_input_match(self, input_r: list, input_p: list, max_length: int, pad_token_id: int):
         # Ensure we match max_length
         self.assertEqual(len(input_r), max_length)
