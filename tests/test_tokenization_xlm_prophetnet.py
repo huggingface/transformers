@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import os
 import unittest
 
@@ -32,6 +31,7 @@ class XLMProphetNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = XLMProphetNetTokenizer
     test_rust_tokenizer = False
+    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()

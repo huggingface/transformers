@@ -41,12 +41,12 @@ from transformers import (
 )
 from transformers.file_utils import PaddingStrategy
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
-from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.6.0.dev0")
+check_min_version("4.7.0.dev0")
 
 logger = logging.getLogger(__name__)
 
@@ -235,7 +235,7 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
-    logger.setLevel(logging.INFO if is_main_process(training_args.local_rank) else logging.WARN)
+    logger.setLevel(logging.INFO if training_args.should_log else logging.WARN)
 
     # Log on each process the small summary:
     logger.warning(
@@ -243,7 +243,7 @@ def main():
         + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
     # Set the verbosity to info of the Transformers logger (on main process only):
-    if is_main_process(training_args.local_rank):
+    if training_args.should_log:
         transformers.utils.logging.set_verbosity_info()
         transformers.utils.logging.enable_default_handler()
         transformers.utils.logging.enable_explicit_format()
@@ -347,9 +347,9 @@ def main():
         return {k: [v[i : i + 4] for i in range(0, len(v), 4)] for k, v in tokenized_examples.items()}
 
     if training_args.do_train:
-        train_dataset = datasets["train"]
         if "train" not in datasets:
             raise ValueError("--do_train requires a train dataset")
+        train_dataset = datasets["train"]
         if data_args.max_train_samples is not None:
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
         train_dataset = train_dataset.map(
@@ -428,7 +428,14 @@ def main():
         trainer.save_metrics("eval", metrics)
 
     if training_args.push_to_hub:
-        trainer.push_to_hub()
+        trainer.push_to_hub(
+            finetuned_from=model_args.model_name_or_path,
+            tags="multiple-choice",
+            dataset_tags="swag",
+            dataset_args="regular",
+            dataset="SWAG",
+            language="en",
+        )
 
 
 def _mp_fn(index):

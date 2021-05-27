@@ -13,13 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import os
 import unittest
 
-from transformers import BigBirdTokenizer
+from transformers import BigBirdTokenizer, BigBirdTokenizerFast
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_sentencepiece, require_torch, slow
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -30,15 +29,41 @@ SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixture
 
 
 @require_sentencepiece
+@require_tokenizers
 class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = BigBirdTokenizer
+    rust_tokenizer_class = BigBirdTokenizerFast
+    test_rust_tokenizer = True
+    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()
 
-        tokenizer = BigBirdTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = self.tokenizer_class(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
+
+    def test_rust_and_python_full_tokenizers(self):
+        if not self.test_rust_tokenizer:
+            return
+
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+
+        sequence = "I was born in 92000, and this is falsé."
+
+        tokens = tokenizer.tokenize(sequence)
+        rust_tokens = rust_tokenizer.tokenize(sequence)
+        self.assertListEqual(tokens, rust_tokens)
+
+        ids = tokenizer.encode(sequence, add_special_tokens=False)
+        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
+        self.assertListEqual(ids, rust_ids)
+
+        rust_tokenizer = self.get_rust_tokenizer()
+        ids = tokenizer.encode(sequence)
+        rust_ids = rust_tokenizer.encode(sequence)
+        self.assertListEqual(ids, rust_ids)
 
     def test_full_tokenizer(self):
         tokenizer = BigBirdTokenizer(SAMPLE_VOCAB, keep_accents=True)
