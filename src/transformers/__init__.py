@@ -102,6 +102,7 @@ _import_structure = {
         "is_flax_available",
         "is_psutil_available",
         "is_py3nvml_available",
+        "is_scipy_available",
         "is_sentencepiece_available",
         "is_sklearn_available",
         "is_speech_available",
@@ -418,7 +419,7 @@ else:
     ]
 
 # Timm-backed objects
-if is_timm_available():
+if is_timm_available() and is_vision_available():
     _import_structure["models.detr"].extend(
         [
             "DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1609,6 +1610,7 @@ if TYPE_CHECKING:
         is_flax_available,
         is_psutil_available,
         is_py3nvml_available,
+        is_scipy_available,
         is_sentencepiece_available,
         is_sklearn_available,
         is_speech_available,
@@ -1893,7 +1895,7 @@ if TYPE_CHECKING:
         from .utils.dummy_vision_objects import *
 
     # Modeling
-    if is_timm_available():
+    if is_timm_available() and is_vision_available():
         from .models.detr import (
             DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
             DetrForObjectDetection,

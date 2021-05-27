@@ -325,12 +325,14 @@ def is_faiss_available():
     return _faiss_available
 
 
+def is_scipy_available():
+    return importlib.util.find_spec("scipy") is not None
+
+
 def is_sklearn_available():
     if importlib.util.find_spec("sklearn") is None:
         return False
-    if importlib.util.find_spec("scipy") is None:
-        return False
-    return importlib.util.find_spec("sklearn.metrics") and importlib.util.find_spec("scipy.stats")
+    return importlib.util.find_spec("sklearn.metrics") and is_scipy_available()
 
 
 def is_sentencepiece_available():

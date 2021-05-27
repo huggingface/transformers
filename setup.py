@@ -142,6 +142,7 @@ _deps = [
     "tensorflow-cpu>=2.3",
     "tensorflow>=2.3",
     "timeout-decorator",
+    "timm",
     "tokenizers>=0.10.1,<0.11",
     "torch>=1.0",
     "torchaudio",
@@ -249,6 +250,7 @@ extras["integrations"] = extras["optuna"] + extras["ray"]
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["speech"] = deps_list("soundfile", "torchaudio")
 extras["vision"] = deps_list("Pillow")
+extras["timm"] = deps_list("timm")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
@@ -270,6 +272,7 @@ extras["all"] = (
     + extras["speech"]
     + extras["vision"]
     + extras["integrations"]
+    + extras["timm"]
 )
 
 extras["docs_specific"] = deps_list(

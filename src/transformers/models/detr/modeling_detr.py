@@ -24,22 +24,30 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from scipy.optimize import linear_sum_assignment
-from timm import create_model
-
 from ...activations import ACT2FN
 from ...file_utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_scipy_available,
+    is_timm_available,
+    is_vision_available,
     replace_return_docstrings,
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_detr import DetrConfig
-from .feature_extraction_detr import center_to_corners_format
 
+
+if is_scipy_available():
+    from scipy.optimize import linear_sum_assignment
+
+if is_vision_available():
+    from .feature_extraction_detr import center_to_corners_format
+
+if is_timm_available():
+    from timm import create_model
 
 logger = logging.get_logger(__name__)
 
