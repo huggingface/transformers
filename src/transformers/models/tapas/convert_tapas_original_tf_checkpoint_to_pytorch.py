@@ -33,7 +33,7 @@ logging.set_verbosity_info()
 
 
 def convert_tf_checkpoint_to_pytorch(
-    task, reset_position_index_per_cell, tf_checkpoint_path, tapas_config_file, pytorch_dump_path
+    task, reset_position_index_per_cell, tf_checkpoint_path, tapas_config_file, vocab_file, pytorch_dump_path
 ):
     # Initialise PyTorch model.
     # If you want to convert a checkpoint that uses absolute position embeddings, make sure to set reset_position_index_per_cell of
@@ -81,24 +81,46 @@ def convert_tf_checkpoint_to_pytorch(
         model = TapasForMaskedLM(config=config)
     elif task == "INTERMEDIATE_PRETRAINING":
         model = TapasModel(config=config)
+    elif task == "RETRIEVAL":
+        question_model = TapasModel(config=config)
+        table_model = TapasModel(config=config)
 
     print(f"Building PyTorch model from configuration: {config}")
 
-    # Load weights from tf checkpoint
-    load_tf_weights_in_tapas(model, config, tf_checkpoint_path)
+    if task == "RETRIEVAL":
+        # Load weights from tf checkpoint
+        load_tf_weights_in_tapas(question_model, config, tf_checkpoint_path, "bert_1")
+        load_tf_weights_in_tapas(table_model, config, tf_checkpoint_path, "bert")
 
-    # Save pytorch-model (weights and configuration)
-    print(f"Save PyTorch model to {pytorch_dump_path}")
-    model.save_pretrained(pytorch_dump_path[:-17])
+        # Save pytorch-model (weights and configuration)
+        print(f"Save PyTorch question encoder model to {pytorch_dump_path}/question_encoder")
+        question_model.save_pretrained(f"{pytorch_dump_path}/question_encoder")
 
-    # Save tokenizer files
-    dir_name = r"C:\Users\niels.rogge\Documents\Python projecten\tensorflow\Tensorflow models\SQA\Base\tapas_sqa_inter_masklm_base_reset"
-    tokenizer = TapasTokenizer(vocab_file=dir_name + r"\vocab.txt", model_max_length=512)
+        print(f"Save PyTorch table encoder model to {pytorch_dump_path}/table_encoder")
+        table_model.save_pretrained(f"{pytorch_dump_path}/table_encoder")
 
-    print(f"Save tokenizer files to {pytorch_dump_path}")
-    tokenizer.save_pretrained(pytorch_dump_path[:-17])
+        # Save tokenizer files
+        tokenizer = TapasTokenizer(vocab_file=vocab_file, model_max_length=512)
+        print(f"Save tokenizer files to {pytorch_dump_path}/question_encoder")
+        tokenizer.save_pretrained(f"{pytorch_dump_path}/question_encoder")
 
-    print("Used relative position embeddings:", model.config.reset_position_index_per_cell)
+        print(f"Save tokenizer files to {pytorch_dump_path}/table_encoder")
+        tokenizer.save_pretrained(f"{pytorch_dump_path}/question_encoder")
+    else:
+        # Load weights from tf checkpoint
+        load_tf_weights_in_tapas(model, config, tf_checkpoint_path)
+
+        # Save pytorch-model (weights and configuration)
+        print(f"Save PyTorch model to {pytorch_dump_path}")
+        model.save_pretrained(pytorch_dump_path)
+
+        # Save tokenizer files
+        tokenizer = TapasTokenizer(vocab_file=vocab_file, model_max_length=512)
+
+        print(f"Save tokenizer files to {pytorch_dump_path}")
+        tokenizer.save_pretrained(pytorch_dump_path)
+
+    print("Used relative position embeddings:", config.reset_position_index_per_cell)
 
 
 if __name__ == "__main__":

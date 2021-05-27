@@ -20,7 +20,6 @@ from typing import TYPE_CHECKING
 
 from ...file_utils import _BaseLazyModule, is_torch_available
 
-
 _import_structure = {
     "configuration_tapas": ["TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP", "TapasConfig"],
     "tokenization_tapas": ["TapasTokenizer"],
@@ -33,6 +32,7 @@ if is_torch_available():
         "TapasForQuestionAnswering",
         "TapasForSequenceClassification",
         "TapasModel",
+        "load_tf_weights_in_tapas",
     ]
 
 
@@ -47,6 +47,7 @@ if TYPE_CHECKING:
             TapasForQuestionAnswering,
             TapasForSequenceClassification,
             TapasModel,
+            load_tf_weights_in_tapas,
         )
 
 else:

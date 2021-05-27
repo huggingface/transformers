@@ -123,7 +123,7 @@ class TableQuestionAnsweringOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-def load_tf_weights_in_tapas(model, config, tf_checkpoint_path):
+def load_tf_weights_in_tapas(model, config, tf_checkpoint_path, model_prefix=None):
     """
     Load tf checkpoints in a PyTorch model. This is an adaptation from load_tf_weights_in_bert
 
@@ -145,6 +145,8 @@ def load_tf_weights_in_tapas(model, config, tf_checkpoint_path):
     logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
     # Load weights from TF model
     init_vars = tf.train.list_variables(tf_path)
+    if model_prefix:
+        init_vars = [var for var in init_vars if var[0].split("/")[0] == model_prefix]
     names = []
     arrays = []
     for name, shape in init_vars:
@@ -184,7 +186,7 @@ def load_tf_weights_in_tapas(model, config, tf_checkpoint_path):
                 logger.info(f"Skipping {'/'.join(name)}")
                 continue
         # if first scope name starts with "bert", change it to "tapas"
-        if name[0] == "bert":
+        if name[0] == "bert" or name[0] == "bert_1":
             name[0] = "tapas"
         pointer = model
         for m_name in name:
