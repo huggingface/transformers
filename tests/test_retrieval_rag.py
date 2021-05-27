@@ -256,25 +256,6 @@ class RagRetrieverTest(TestCase):
         self.assertEqual(doc_dicts[1]["id"][0], "0")  # max inner product is reached with first doc
         self.assertListEqual(doc_ids.tolist(), [[1], [0]])
 
-    def test_custom_hf_index_end2end_retriever_call(self):
-        context_encoder_tokenizer = self.get_dpr_ctx_encoder_tokenizer()
-        n_docs = 1
-        retriever = self.get_dummy_custom_hf_index_retriever(from_disk=False)
-        retriever.set_ctx_encoder_tokenizer(context_encoder_tokenizer)
-
-        question_input_ids = [[5, 7], [10, 11]]
-        hidden_states = np.array(
-            [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
-        )
-        out = retriever(question_input_ids, hidden_states, prefix=retriever.config.generator.prefix, n_docs=n_docs)
-
-        self.assertEqual(
-            len(out), 6
-        )  # check whether the retriever output consist of 6 attributes including tokenized docs
-        self.assertEqual(
-            all(k in out for k in ("tokenized_doc_ids", "tokenized_doc_attention_mask")), True
-        )  # check for doc token related keys in dictionary.
-
     def test_custom_hf_index_retriever_save_and_from_pretrained(self):
         retriever = self.get_dummy_custom_hf_index_retriever(from_disk=False)
         with tempfile.TemporaryDirectory() as tmp_dirname:
@@ -381,3 +362,26 @@ class RagRetrieverTest(TestCase):
         self.assertIsInstance(context_input_ids, torch.Tensor)
         self.assertIsInstance(context_attention_mask, torch.Tensor)
         self.assertIsInstance(retrieved_doc_embeds, torch.Tensor)
+
+    @require_torch
+    @require_tokenizers
+    @require_sentencepiece
+    def test_custom_hf_index_end2end_retriever_call(self):
+
+        context_encoder_tokenizer = self.get_dpr_ctx_encoder_tokenizer()
+        n_docs = 1
+        retriever = self.get_dummy_custom_hf_index_retriever(from_disk=False)
+        retriever.set_ctx_encoder_tokenizer(context_encoder_tokenizer)
+
+        question_input_ids = [[5, 7], [10, 11]]
+        hidden_states = np.array(
+            [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
+        )
+        out = retriever(question_input_ids, hidden_states, prefix=retriever.config.generator.prefix, n_docs=n_docs)
+
+        self.assertEqual(
+            len(out), 6
+        )  # check whether the retriever output consist of 6 attributes including tokenized docs
+        self.assertEqual(
+            all(k in out for k in ("tokenized_doc_ids", "tokenized_doc_attention_mask")), True
+        )  # check for doc token related keys in dictionary.
