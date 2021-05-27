@@ -262,88 +262,21 @@ class FlaxModelTesterMixin:
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
                 model = model_class(config)
 
-                if config.is_encoder_decoder:
-
-                    @jax.jit
-                    def model_jitted(
-                        input_ids,
-                        decoder_input_ids=None,
-                        attention_mask=None,
-                        decoder_attention_mask=None,
-                        head_mask=None,
-                        decoder_head_mask=None,
-                        cross_attn_head_mask=None,
-                    ):
-                        return model(
-                            input_ids=input_ids,
-                            decoder_input_ids=decoder_input_ids,
-                            attention_mask=attention_mask,
-                            decoder_attention_mask=decoder_attention_mask,
-                            head_mask=head_mask,
-                            decoder_head_mask=decoder_head_mask,
-                            cross_attn_head_mask=cross_attn_head_mask,
-                        ).to_tuple()
-
-                else:
-
-                    @jax.jit
-                    def model_jitted(input_ids, attention_mask=None, **kwargs):
-                        return model(input_ids=input_ids, attention_mask=attention_mask, **kwargs).to_tuple()
-
-                # Necessary implementation due to encoder-decoder past_key_values which are nested tuples
-                def assertEqual_nested(jitted_output, output):
-                    if isinstance(jitted_output, tuple) and isinstance(output, tuple):
-                        for jitted_out, out in zip(jitted_output, output):
-                            assertEqual_nested(jitted_out, out)
-                    else:
-                        self.assertEqual(jitted_output.shape, output.shape)
+                @jax.jit
+                def model_jitted(input_ids, attention_mask=None, **kwargs):
+                    return model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
 
                 with self.subTest("JIT Enabled"):
-                    jitted_outputs = model_jitted(**prepared_inputs_dict)
+                    jitted_outputs = model_jitted(**prepared_inputs_dict).to_tuple()
 
                 with self.subTest("JIT Disabled"):
                     with jax.disable_jit():
-                        outputs = model_jitted(**prepared_inputs_dict)
+                        outputs = model_jitted(**prepared_inputs_dict).to_tuple()
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
-                    assertEqual_nested(jitted_output, output)
 
-                if config.is_encoder_decoder:
-
-                    @jax.jit
-                    def model_jitted_return_dict(
-                        input_ids,
-                        decoder_input_ids=None,
-                        attention_mask=None,
-                        decoder_attention_mask=None,
-                        head_mask=None,
-                        decoder_head_mask=None,
-                        cross_attn_head_mask=None,
-                    ):
-                        return model(
-                            input_ids=input_ids,
-                            decoder_input_ids=decoder_input_ids,
-                            attention_mask=attention_mask,
-                            decoder_attention_mask=decoder_attention_mask,
-                            head_mask=head_mask,
-                            decoder_head_mask=decoder_head_mask,
-                            cross_attn_head_mask=cross_attn_head_mask,
-                        )
-
-                else:
-
-                    @jax.jit
-                    def model_jitted_return_dict(input_ids, attention_mask=None, **kwargs):
-                        return model(
-                            input_ids=input_ids,
-                            attention_mask=attention_mask,
-                            **kwargs,
-                        )
-
-                # jitted function cannot return OrderedDict
-                with self.assertRaises(TypeError):
-                    model_jitted_return_dict(**prepared_inputs_dict)
+                    self.assertEqual(jitted_output.shape, output.shape)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
