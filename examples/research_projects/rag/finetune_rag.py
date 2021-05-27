@@ -14,8 +14,8 @@ import pytorch_lightning as pl
 import torch
 import torch.distributed as dist
 import torch.distributed as torch_distrib
-from pytorch_lightning.plugins.training_type import DDPPlugin
 from pytorch_lightning.plugins.environments import TorchElasticEnvironment
+from pytorch_lightning.plugins.training_type import DDPPlugin
 from torch.utils.data import DataLoader
 
 from transformers import (
@@ -36,7 +36,6 @@ from transformers.integrations import is_ray_available
 if is_ray_available():
     import ray
     from distributed_ray_retriever import RagRayDistributedRetriever, RayRetriever
-
 
 from callbacks_rag import (  # noqa: E402 # isort:skipq
     get_checkpoint_callback,
@@ -75,8 +74,7 @@ class AttrDict(dict):
         self.__dict__ = self
 
 
-
-#DDP accelerator is removed in PL 1.3 and they advised to use pluggings.
+# DDP accelerator is removed in PL 1.3 and they advised to use pluggings.
 # class CustomAccel(DDPAccelerator):
 #     def __init__(self, trainer=None, **kwargs):
 #         # Trainer is set later.
@@ -98,11 +96,10 @@ class AttrDict(dict):
 #                 # rank is 0.
 #                 module.model.rag.retriever.init_retrieval()# We override init DDP with DDPPluging since previous DDPAccelerator is removed.
 
-#https://pytorch-lightning.readthedocs.io/en/stable/extensions/plugins.html
+# https://pytorch-lightning.readthedocs.io/en/stable/extensions/plugins.html
 class MyDDP(DDPPlugin):
-
-    def init_ddp_connection(self, global_rank = None, world_size = None) -> None:
-        module=self.model
+    def init_ddp_connection(self, global_rank=None, world_size=None) -> None:
+        module = self.model
         global_rank = global_rank if global_rank is not None else self.cluster_environment.global_rank()
         world_size = world_size if world_size is not None else self.cluster_environment.world_size()
         os.environ["MASTER_ADDR"] = self.cluster_environment.master_address()
@@ -110,7 +107,7 @@ class MyDDP(DDPPlugin):
         if not torch.distributed.is_initialized():
             logger.info(f"initializing ddp: GLOBAL_RANK: {global_rank}, MEMBER: {global_rank + 1}/{world_size}")
             torch_distrib.init_process_group(self.torch_distributed_backend, rank=global_rank, world_size=world_size)
-        
+
         if module.is_rag_model:
             self.distributed_port = module.hparams.distributed_port
             if module.distributed_retriever == "pytorch":

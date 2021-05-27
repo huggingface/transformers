@@ -374,12 +374,12 @@ def generic_train(
         train_params["accelerator"] = "ddp"
 
     train_params["accumulate_grad_batches"] = args.accumulate_grad_batches
-    train_params["profiler"] = None#extra_train_kwargs.get("profiler", None) #get unwanted logs
+    train_params["profiler"] = None  # extra_train_kwargs.get("profiler", None) #get unwanted logs
 
     trainer = pl.Trainer.from_argparse_args(
         args,
         weights_summary=None,
-        callbacks=[logging_callback] + extra_callbacks+[checkpoint_callback],
+        callbacks=[logging_callback] + extra_callbacks + [checkpoint_callback],
         plugins=[myddp_plugin],
         logger=logger,
         **train_params,
