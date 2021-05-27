@@ -26,7 +26,7 @@ import numpy as np
 from transformers import BartTokenizer, T5Tokenizer
 from transformers.file_utils import cached_property, is_datasets_available, is_faiss_available, is_torch_available
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
-from transformers.models.dpr.tokenization_dpr import DPRQuestionEncoderTokenizer
+from transformers.models.dpr.tokenization_dpr import DPRQuestionEncoderTokenizer,DPRContextEncoderTokenizer
 from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 from transformers.testing_utils import (
     require_sentencepiece,
@@ -56,7 +56,6 @@ if is_torch_available() and is_datasets_available() and is_faiss_available():
         AutoModel,
         AutoModelForSeq2SeqLM,
         DPRContextEncoder,
-        DPRContextEncoderTokenizer,
         RagConfig,
         RagModel,
         RagRetriever,
