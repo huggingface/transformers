@@ -311,8 +311,28 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
     def test_generate_with_headmasking(self):
-        # TODO: Fix head-masking according to PyTorch T5 model
-        pass
+        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = TFT5ForConditionalGeneration(config)
+
+        head_masking = {
+            "head_mask": tf.zeros((config.num_layers, config.num_heads)),
+            "decoder_head_mask": tf.zeros((config.num_decoder_layers, config.num_heads)),
+            "cross_attn_head_mask": tf.zeros((config.num_decoder_layers, config.num_heads)),
+        }
+
+        for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
+            out = model.generate(
+                inputs_dict["input_ids"],
+                num_beams=1,
+                max_length=inputs_dict["input_ids"] + 5,
+                output_attentions=True,
+                return_dict_in_generate=True,
+                **{name: mask},
+            )
+            # We check the state of decoder_attentions and cross_attentions just from the last step
+            attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
+            self.assertEqual(sum([tf.reduce_sum(w).numpy() for w in attn_weights]), 0.0)
 
 
 class TFT5EncoderOnlyModelTester:

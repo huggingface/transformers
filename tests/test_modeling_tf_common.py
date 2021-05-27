@@ -1213,7 +1213,7 @@ class TFModelTesterMixin:
             }
 
             signature = inspect.signature(model.call)
-            if set(head_masking.keys()) < set([*signature.parameters.keys()]):
+            if set(head_masking.keys()) > set([*signature.parameters.keys()]):
                 continue
 
             for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
