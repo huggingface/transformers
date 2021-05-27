@@ -10,14 +10,7 @@ import torch
 from datasets import Features, Sequence, Value, load_dataset
 
 import faiss
-from transformers import (
-    DPRContextEncoder,
-    DPRContextEncoderTokenizerFast,
-    HfArgumentParser,
-    RagRetriever,
-    RagSequenceForGeneration,
-    RagTokenizer,
-)
+from transformers import DPRContextEncoder, DPRContextEncoderTokenizerFast, HfArgumentParser
 
 
 logger = logging.getLogger(__name__)
@@ -72,7 +65,7 @@ def main(
     dataset = load_dataset(
         "csv", data_files=[rag_example_args.csv_path], split="train", delimiter="\t", column_names=["title", "text"]
     )
-    
+
     # More info about loading csv files in the documentation: https://huggingface.co/docs/datasets/loading_datasets.html?highlight=csv#csv-files
 
     # Then split the documents into passages of 100 words
@@ -111,7 +104,6 @@ def main(
     # dataset.load_faiss_index("embeddings", index_path)  # to reload the index
 
 
-
 @dataclass
 class RagExampleArguments:
     csv_path: str = field(
@@ -133,7 +125,7 @@ class RagExampleArguments:
         },
     )
     output_dir: Optional[str] = field(
-        default=str(Path(__file__).parent / "test_run" /  "dummy-kb"),
+        default=str(Path(__file__).parent / "test_run" / "dummy-kb"),
         metadata={"help": "Path to a directory where the dataset passages and the index will be saved"},
     )
 

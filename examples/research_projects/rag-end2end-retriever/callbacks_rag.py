@@ -1,5 +1,4 @@
 import logging
-import os
 from pathlib import Path
 
 import numpy as np
@@ -34,14 +33,14 @@ def get_checkpoint_callback(output_dir, metric):
         raise NotImplementedError(
             f"seq2seq callbacks only support rouge2 and bleu, got {metric}, You can make your own by adding to this function."
         )
-  
+
     checkpoint_callback = ModelCheckpoint(
         dirpath=output_dir,
         filename=exp,
         monitor=f"val_{metric}",
         mode="max",
         save_top_k=2,
-        every_n_val_epochs=1,  #works only with PL > 1.3
+        every_n_val_epochs=1,  # works only with PL > 1.3
     )
 
     return checkpoint_callback

@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Any, Dict
 
 import pytorch_lightning as pl
-from pytorch_lightning.utilities import rank_zero_info
 from pytorch_lightning.plugins.training_type import DDPPlugin
+from pytorch_lightning.utilities import rank_zero_info
 
 from transformers import (
     AdamW,
@@ -133,7 +133,9 @@ class BaseTransformer(pl.LightningModule):
         no_decay = ["bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
             {
-                "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)], #check this named paramters
+                "params": [
+                    p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)
+                ],  # check this named paramters
                 "weight_decay": self.hparams.weight_decay,
             },
             {
@@ -224,7 +226,7 @@ class BaseTransformer(pl.LightningModule):
         )
         parser.add_argument(
             "--cache_dir",
-            default=str(Path(__file__).parent / "test_run" /"cache"),
+            default=str(Path(__file__).parent / "test_run" / "cache"),
             type=str,
             help="Where do you want to store the pre-trained models downloaded from huggingface.co",
         )
@@ -266,22 +268,23 @@ class BaseTransformer(pl.LightningModule):
         parser.add_argument("--eval_batch_size", default=32, type=int)
         parser.add_argument("--adafactor", action="store_true")
 
-class InitCallback(pl.Callback):
- 
-    def on_sanity_check_start(self,trainer,pl_module):
-        if trainer.is_global_zero and trainer.global_rank==0: #we initialize the retriever only on master worker with RAY. In new pytorch-lightning accelorators are removed. 
-            pl_module.model.rag.retriever.init_retrieval()    #better to use hook functions.
 
-        
+class InitCallback(pl.Callback):
+    def on_sanity_check_start(self, trainer, pl_module):
+        if (
+            trainer.is_global_zero and trainer.global_rank == 0
+        ):  # we initialize the retriever only on master worker with RAY. In new pytorch-lightning accelorators are removed.
+            pl_module.model.rag.retriever.init_retrieval()  # better to use hook functions.
+
 
 class CheckParamCallback(pl.Callback):
-    #check whether new added model paramters are differentiable
-    def on_after_backward(self,trainer, pl_module):
-        #print(pl_module.model.rag)
+    # check whether new added model paramters are differentiable
+    def on_after_backward(self, trainer, pl_module):
+        # print(pl_module.model.rag)
         for name, param in pl_module.model.rag.named_parameters():
             if param.grad is None:
                 print(name)
-       
+
 
 class LoggingCallback(pl.Callback):
     def on_batch_end(self, trainer, pl_module):
@@ -314,7 +317,7 @@ def add_generic_args(parser, root_dir) -> None:
     #  parser = pl.Trainer.add_argparse_args(parser)
     parser.add_argument(
         "--output_dir",
-        default=str(Path(__file__).parent /"test_run"/ "model_checkpoints"),
+        default=str(Path(__file__).parent / "test_run" / "model_checkpoints"),
         type=str,
         help="The output directory where the model predictions and checkpoints will be written.",
     )
@@ -345,7 +348,7 @@ def add_generic_args(parser, root_dir) -> None:
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
     parser.add_argument(
         "--data_dir",
-        default=str(Path(__file__).parent /"test_run"/ "dummy-train-data"),
+        default=str(Path(__file__).parent / "test_run" / "dummy-train-data"),
         type=str,
         help="The input data dir. Should contain the training files for the CoNLL-2003 NER task.",
     )
@@ -388,22 +391,20 @@ def generic_train(
         train_params["accelerator"] = "ddp"
 
     train_params["accumulate_grad_batches"] = args.accumulate_grad_batches
-    #train_params["accelerator"] = extra_train_kwargs.get("accelerator", None)
-    train_params["profiler"] = None#extra_train_kwargs.get("profiler", None)
+    # train_params["accelerator"] = extra_train_kwargs.get("accelerator", None)
+    train_params["profiler"] = None  # extra_train_kwargs.get("profiler", None)
 
- 
     trainer = pl.Trainer.from_argparse_args(
         args,
         weights_summary=None,
-        callbacks=[logging_callback] + extra_callbacks+[InitCallback()]+[checkpoint_callback],
+        callbacks=[logging_callback] + extra_callbacks + [InitCallback()] + [checkpoint_callback],
         logger=logger,
-        plugins=[DDPPlugin(find_unused_parameters=True)],  #this is needed in new pytorch-lightning new version
+        plugins=[DDPPlugin(find_unused_parameters=True)],  # this is needed in new pytorch-lightning new version
         val_check_interval=0.5,
-        #checkpoint_callback=checkpoint_callback, #deprivated in PL 1.3.1
+        # checkpoint_callback=checkpoint_callback, #deprivated in PL 1.3.1
         num_sanity_val_steps=2,
         **train_params,
     )
-
 
     if args.do_train:
         trainer.fit(model)
