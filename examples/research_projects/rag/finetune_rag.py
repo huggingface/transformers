@@ -14,7 +14,6 @@ import pytorch_lightning as pl
 import torch
 import torch.distributed as dist
 import torch.distributed as torch_distrib
-#from pytorch_lightning.plugins.environments import TorchElasticEnvironment
 from pytorch_lightning.plugins.training_type import DDPPlugin
 from torch.utils.data import DataLoader
 
@@ -74,29 +73,6 @@ class AttrDict(dict):
         self.__dict__ = self
 
 
-# DDP accelerator is removed in PL 1.3 and they advised to use pluggings.
-# class CustomAccel(DDPAccelerator):
-#     def __init__(self, trainer=None, **kwargs):
-#         # Trainer is set later.
-#         super().__init__(trainer, **kwargs)
-
-#     def init_ddp_connection(self, global_rank: int, world_size: int, is_slurm_managing_tasks: bool = True):
-#         logger.info("Custom init_ddp_connection.")
-#         module = self.trainer.model
-#         if self.cluster_environment is None:
-#             self.cluster_environment = TorchElasticEnvironment()
-#         self.distributed_port = module.hparams.distributed_port
-#         os.environ["MASTER_PORT"] = str(self.distributed_port)
-#         super().init_ddp_connection(global_rank, world_size, is_slurm_managing_tasks)
-#         if module.is_rag_model:
-#             if module.distributed_retriever == "pytorch":
-#                 module.model.rag.retriever.init_retrieval(self.distributed_port)
-#             elif module.distributed_retriever == "ray" and global_rank == 0:
-#                 # For the Ray retriever, only initialize it once when global
-#                 # rank is 0.
-#                 module.model.rag.retriever.init_retrieval()# We override init DDP with DDPPluging since previous DDPAccelerator is removed.
-
-# https://pytorch-lightning.readthedocs.io/en/stable/extensions/plugins.html
 class MyDDP(DDPPlugin):
     def init_ddp_connection(self, global_rank=None, world_size=None) -> None:
         module = self.model
