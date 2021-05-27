@@ -14,7 +14,7 @@ import pytorch_lightning as pl
 import torch
 import torch.distributed as dist
 import torch.distributed as torch_distrib
-from pytorch_lightning.plugins.environments import TorchElasticEnvironment
+#from pytorch_lightning.plugins.environments import TorchElasticEnvironment
 from pytorch_lightning.plugins.training_type import DDPPlugin
 from torch.utils.data import DataLoader
 
