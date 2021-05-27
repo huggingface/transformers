@@ -861,6 +861,11 @@ class Trainer:
             setattr(self.args, key, value)
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             logger.info("Trial:", trial.params)
+        if self.args.deepspeed:
+            # Rebuild the deepspeed config to reflect the updated training parameters
+            from transformers.integrations import DeepSpeedConfigHF
+
+            self.args.deepspeed_config_hf = DeepSpeedConfigHF(self.args)
 
     def _report_to_hp_search(
         self, trial: Union["optuna.Trial", Dict[str, Any]], epoch: int, metrics: Dict[str, float]
