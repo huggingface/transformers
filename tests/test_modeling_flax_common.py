@@ -79,8 +79,9 @@ class FlaxModelTesterMixin:
         if "ForMultipleChoice" in model_class.__name__:
             inputs_dict = {
                 k: jnp.broadcast_to(v[:, None], (v.shape[0], self.model_tester.num_choices, v.shape[-1]))
-                for k, v in inputs_dict.items()
                 if isinstance(v, (jax_xla.DeviceArray, np.ndarray))
+                else v
+                for k, v in inputs_dict.items()
             }
 
         return inputs_dict
@@ -310,3 +311,36 @@ class FlaxModelTesterMixin:
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+    
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        seq_len = getattr(self.model_tester, "seq_length", None)
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            model = model_class(config)
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+            )
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            # finish this test

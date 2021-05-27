@@ -97,7 +97,7 @@ _deps = [
     "fastapi",
     "filelock",
     "flake8>=3.8.3",
-    "flax>=0.3.2",
+    "flax>=0.3.4",
     "fugashi>=1.0",
     "huggingface-hub==0.0.8",
     "importlib_metadata",
