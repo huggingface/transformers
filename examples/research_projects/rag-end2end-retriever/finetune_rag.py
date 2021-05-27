@@ -42,15 +42,15 @@ if is_ray_available():
     import ray
     from distributed_ray_retriever import RagRayDistributedRetriever, RayRetriever
 
-from callbacks_rag import (  # noqa: E402 # isort:skipq
-    get_checkpoint_callback,
-    get_early_stopping_callback,
-    Seq2SeqLoggingCallback,
-)
+from glob import glob
 
-from utils_rag import (  # noqa: E402 # isort:skip
+from callbacks_rag import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
+from kb_encode_utils import add_index, embed_update, split_documents
+from lightning_base import BaseTransformer, add_generic_args, generic_train
+from pynvml import nvmlDeviceGetCount, nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo, nvmlInit
+from utils_rag import (  # flatten_list,
+    Seq2SeqDataset,
     calculate_exact_match,
-    flatten_list,
     get_git_info,
     is_rag_model,
     lmap,
@@ -58,35 +58,26 @@ from utils_rag import (  # noqa: E402 # isort:skip
     save_git_info,
     save_json,
     set_extra_model_params,
-    Seq2SeqDataset,
 )
-
-# need the parent dir module
-sys.path.insert(2, str(Path(__file__).resolve().parents[1]))
-from lightning_base import BaseTransformer, add_generic_args, generic_train  # noqa
 
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 transformers_logging.set_verbosity_info()
-from glob import glob
 
-from kb_encode_utils import *
-from pynvml import *
+
+sys.path.insert(2, str(Path(__file__).resolve().parents[1]))
+isEmUpdateBusy = False
+isAddIndexBusy = False
+processes = []
+threadHandle_index = None
 
 
 class AttrDict(dict):
     def __init__(self, *args, **kwargs):
         super(AttrDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
-
-
-# In PTL >v1.0, `init_ddp_connection` method in the `LightningModule`
-# is no longer used, and is moved into DDPAccelerator instead.
-# We override DDPAccelerator to add our custom logic for initializing the
-# retriever.
-# https://github.com/PyTorchLightning/pytorch-lightning/blob/master/tests/backends/test_accelerator_connector.py
 
 
 class GenerativeQAModule(BaseTransformer):
@@ -157,7 +148,7 @@ class GenerativeQAModule(BaseTransformer):
             else AutoTokenizer.from_pretrained(hparams.model_name_or_path)
         )
 
-        self.config_dpr = DPRConfig.from_pretrained(hparams.context_encoder_name)  # used in the re-encode process
+        self.config_dpr = DPRConfig.from_pretrained(hparams.context_encoder_name)
         self.custom_config = hparams
         self.context_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained(hparams.context_encoder_name)
 
@@ -296,7 +287,6 @@ class GenerativeQAModule(BaseTransformer):
                     )  # get a new instance  #this will be load in the CPU
                     model_copy.load_state_dict(self.model.rag.ctx_encoder.state_dict())  # copy weights and stuff
 
-                    # ############using multi-gpus#################################
                     model_copy.share_memory()
                     processes = []
 
@@ -321,7 +311,7 @@ class GenerativeQAModule(BaseTransformer):
 
                     for rank in range(num_processes):
                         logger.info("Iniitializing  embedding calculation process rank{}".format(rank))
-                        device = cuda_devices[rank]  #'cuda:'+str(2+rank)
+                        device = cuda_devices[rank]
                         p = multiprocessing.Process(
                             target=embed_update,
                             args=(
@@ -343,7 +333,6 @@ class GenerativeQAModule(BaseTransformer):
 
             if isEmUpdateBusy and (not isAddIndexBusy):
                 index_process_list = [processes[k].is_alive() for k in range(self.custom_config.index_gpus)]
-                # index_process_list=[False,False,False,False]
                 if (
                     sum(index_process_list) == 0
                 ):  # If entire list is false, we can say all embedding calculation process has finished
@@ -430,7 +419,6 @@ class GenerativeQAModule(BaseTransformer):
         metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
         metrics["step_count"] = self.step_count
         self.save_metrics(metrics, prefix)  # writes to self.metrics_save_path
-        preds = flatten_list([x["preds"] for x in outputs])
 
         log_dict = {
             "val_avg_em": metrics["val_avg_em"],
@@ -520,12 +508,12 @@ class GenerativeQAModule(BaseTransformer):
 
         if self.custom_config.end2end:
 
-            ##### we also can save only the RAG checkpoint####################################
-            # modified_state_dict= model.state_dict()
-            # for key in model.state_dict().keys():
-            #     if key.split('.')[1]=='ctx_encoder':
-            #         del modified_state_dict[key]
-            # model.save_pretrained(save_directory='./my-test-check',state_dict=modified_state_dict)
+            modified_state_dict = self.model.state_dict()
+            for key in self.model.state_dict().keys():
+                if key.split(".")[1] == "ctx_encoder":
+                    del modified_state_dict[key]
+            self.model.save_pretrained(save_directory="./my-test-check", state_dict=modified_state_dict)
+
             save_path_dpr = os.path.join(self.dpr_ctx_check_dir, "checkpoint{}".format(self.step_count))
             self.model.rag.ctx_encoder.save_pretrained(save_path_dpr)
             self.context_tokenizer.save_pretrained(save_path_dpr)

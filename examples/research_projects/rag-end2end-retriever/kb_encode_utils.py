@@ -8,12 +8,6 @@ import faiss
 from transformers import DPRContextEncoder, DPRContextEncoderTokenizerFast
 
 
-isEmUpdateBusy = False
-isAddIndexBusy = False
-processes = []
-threadHandle_index = None
-
-
 def split_text(text, n=100, character=" "):
     """Split the text every ``n``-th occurrence of ``character``"""
     text = text.split(character)
