@@ -246,7 +246,6 @@ class GPTNeoModelTester:
         model = GPTNeoForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
-        print(config.num_labels, sequence_labels.size())
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
@@ -318,6 +317,10 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     def test_gpt_neo_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
+
+    def test_gpt_neo_sequence_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt_neo_for_sequence_classification(*config_and_inputs)
 
     def test_gpt_neo_gradient_checkpointing(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(gradient_checkpointing=True)
