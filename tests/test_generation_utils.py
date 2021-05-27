@@ -1626,18 +1626,15 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # Encoder decoder call
         max_new_tokens = 3
-        with torch.no_grad():
-            outputs = bart_model.generate(input_ids, max_new_tokens=max_new_tokens)
+        outputs = bart_model.generate(input_ids, max_new_tokens=max_new_tokens)
         # 1 BOS + 3 new tokens
         self.assertEqual(list(outputs.shape), [1, 4])
 
         # Decoder only call
-        with torch.no_grad():
-            outputs = bart_model.generate(decoder_input_ids=input_ids, max_new_tokens=max_new_tokens)
+        outputs = bart_model.generate(decoder_input_ids=input_ids, max_new_tokens=max_new_tokens)
         # 15 + 3 new tokens
         self.assertEqual(list(outputs.shape), [1, 18])
 
-        with torch.no_grad():
-            # max_new_tokens and max_length serve the same purpose and should not be used together.
-            with self.assertWarns(UserWarning):
-                outputs = bart_model.generate(decoder_input_ids=input_ids, max_new_tokens=10, max_length=20)
+        # max_new_tokens and max_length serve the same purpose and should not be used together.
+        with self.assertWarns(UserWarning):
+            outputs = bart_model.generate(decoder_input_ids=input_ids, max_new_tokens=10, max_length=20)
