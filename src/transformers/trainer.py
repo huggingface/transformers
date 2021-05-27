@@ -864,6 +864,7 @@ class Trainer:
         if self.args.deepspeed:
             # Rebuild the deepspeed config to reflect the updated training parameters
             from transformers.integrations import DeepSpeedConfigHF
+
             self.args.deepspeed_config_hf = DeepSpeedConfigHF(self.args)
 
     def _report_to_hp_search(
