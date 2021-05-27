@@ -2,7 +2,7 @@ import os
 from functools import partial
 from glob import glob
 
-from datasets import Features, Sequence, Value, concatenate_datasets, load_from_disk
+from datasets import Features, Sequence, Value, concatenate_datasets, load_dataset, load_from_disk
 
 import faiss
 from transformers import DPRContextEncoder, DPRContextEncoderTokenizerFast
@@ -25,16 +25,22 @@ def split_documents(documents):
     return {"title": titles, "text": texts}
 
 
-def embed_update(ctx_encoder, context_tokenizer, device, process_num, data_shrad, shard_dir, data_cache_dir):
+def embed_update(ctx_encoder, total_processes, device, process_num, shard_dir, csv_path):
+
+    kb_dataset = load_dataset(
+        "csv", data_files=[csv_path], split="train", delimiter="\t", column_names=["title", "text"]
+    )
+    kb_dataset = kb_dataset.map(
+        split_documents, batched=True, num_proc=1
+    )  # if you want you can load already splitted csv.
+    kb_list = [kb_dataset.shard(total_processes, i, contiguous=True) for i in range(total_processes)]
+    data_shrad = kb_list[process_num]
 
     arrow_folder = "data_" + str(process_num)
-    arrow_file_name = "data_" + str(process_num) + ".arrow"
+    passages_path = os.path.join(shard_dir, arrow_folder)
 
-    passages_path = os.path.join(shard_dir, arrow_folder)  # shard_dir + arrow_folder+'/'
-    cache_file_name = os.path.join(data_cache_dir, arrow_file_name)  # data_cache_dir + arrow_file_name
-
+    context_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained("facebook/dpr-ctx_encoder-multiset-base")
     ctx_encoder = ctx_encoder.to(device=device)
-    # context_tokenizer=DPRContextEncoderTokenizerFast.from_pretrained('facebook/dpr-ctx_encoder-multiset-base')
 
     def embed(
         documents: dict, ctx_encoder: DPRContextEncoder, ctx_tokenizer: DPRContextEncoderTokenizerFast, device
@@ -55,12 +61,8 @@ def embed_update(ctx_encoder, context_tokenizer, device, process_num, data_shrad
         batched=True,
         batch_size=16,
         features=new_features,
-        cache_file_name=cache_file_name,
-        load_from_cache_file=False,
     )
-
     dataset.save_to_disk(passages_path)
-    os.remove(dataset.cache_files[0]["filename"])
 
 
 def add_index(shard_dir, index_path):
@@ -76,4 +78,4 @@ def add_index(shard_dir, index_path):
     concat.add_faiss_index("embeddings", custom_index=index)
     concat.get_index("embeddings").save(
         index_path
-    )  # since we load the index in to memory,we can directly update the index
+    )  # since we load the index in to memory,we can directly update the index in the disk

@@ -1,6 +1,7 @@
 """Finetuning script for RAG models. Adapted from examples.seq2seq.finetune.py"""
 
 import argparse
+import copy
 import json
 import logging
 import multiprocessing
@@ -17,7 +18,7 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch.distributed as dist
-from datasets import concatenate_datasets, load_dataset, load_from_disk
+from datasets import concatenate_datasets, load_from_disk
 from torch.utils.data import DataLoader
 
 from transformers import (
@@ -45,10 +46,10 @@ if is_ray_available():
 from glob import glob
 
 from callbacks_rag import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
-from kb_encode_utils import add_index, embed_update, split_documents
+from kb_encode_utils import add_index, embed_update
 from lightning_base import BaseTransformer, add_generic_args, generic_train
 from pynvml import nvmlDeviceGetCount, nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo, nvmlInit
-from utils_rag import (  # flatten_list,
+from utils_rag import (
     Seq2SeqDataset,
     calculate_exact_match,
     get_git_info,
@@ -285,29 +286,16 @@ class GenerativeQAModule(BaseTransformer):
                     model_copy = type(self.model.rag.ctx_encoder)(
                         self.config_dpr
                     )  # get a new instance  #this will be load in the CPU
-                    model_copy.load_state_dict(self.model.rag.ctx_encoder.state_dict())  # copy weights and stuff
+                    model_copy.load_state_dict(self.model.rag.ctx_encoder.state_dict())  # copy weights
 
-                    model_copy.share_memory()
                     processes = []
 
                     if len(free_gpu_list) > self.custom_config.index_gpus:
-                        cuda_devices = random.sample(free_gpu_list, self.custom_config.index_gpus)  # free_gpu_list[:4]
+                        cuda_devices = random.sample(free_gpu_list, self.custom_config.index_gpus)
                     else:
                         cuda_devices = free_gpu_list
 
                     num_processes = len(cuda_devices)
-
-                    # logger.info("deleting older cache files for the csv dataset")
-                    kb_dataset = load_dataset(
-                        "csv",
-                        data_files=[self.custom_config.csv_path],
-                        split="train",
-                        delimiter="\t",
-                        column_names=["title", "text"],
-                        cache_dir=self.custom_config.cache_dir,
-                    )
-                    kb_dataset = kb_dataset.map(split_documents, batched=True, num_proc=1)
-                    kb_list = [kb_dataset.shard(num_processes, i, contiguous=True) for i in range(num_processes)]
 
                     for rank in range(num_processes):
                         logger.info("Iniitializing  embedding calculation process rank{}".format(rank))
@@ -315,13 +303,12 @@ class GenerativeQAModule(BaseTransformer):
                         p = multiprocessing.Process(
                             target=embed_update,
                             args=(
-                                model_copy,
-                                self.context_tokenizer,
+                                copy.deepcopy(model_copy),
+                                num_processes,
                                 device,
                                 rank,
-                                kb_list[rank],
                                 self.custom_config.shard_dir,
-                                self.custom_config.cache_dir,
+                                self.custom_config.csv_path,
                             ),
                         )
                         processes.append(p)
@@ -350,7 +337,7 @@ class GenerativeQAModule(BaseTransformer):
             # check when index building has started
             if isAddIndexBusy:
 
-                # check still the index_building thing is happening
+                # check still the index_building process is happening
                 if not threadHandle_index.is_alive():
 
                     logger.info("Meging the dataset shards")
@@ -363,7 +350,7 @@ class GenerativeQAModule(BaseTransformer):
                     concat.save_to_disk(self.config.passages_path)  # here we update the main passage file on the disk
                     logger.info("done updating the dataset")
 
-                    # if you load the index from the disk make sure to update the index file here, otherwise it is ok to update the index file from the worker
+                    # if you load the index from the disk make sure to update the index file here, otherwise it is ok to update the index file from the worker.
                     # logger.info("then updating the index")
                     # shutil.copy(self.custom_config.temp_index, self.config.idex_path)
 
@@ -372,9 +359,11 @@ class GenerativeQAModule(BaseTransformer):
                     self.trainer.model.module.module.model.rag.retriever.init_retrieval()
 
                     isEmUpdateBusy = False
-                    # isOtherThreadIndexBusy =False
                     isAddIndexBusy = False
-        self.trainer.accelerator_connector.accelerator.barrier("barrier")
+
+        self.trainer.accelerator_connector.accelerator.barrier(
+            "barrier"
+        )  # waint untill the index and kb get re-initialized.
 
         loss_tensors = self._step(batch)
 
@@ -503,7 +492,7 @@ class GenerativeQAModule(BaseTransformer):
     def on_save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         save_path = self.output_dir.joinpath("checkpoint{}".format(self.step_count))
         self.model.config.save_step = self.step_count
-        self.model.save_pretrained(save_path)
+        # self.model.save_pretrained(save_path)
         self.tokenizer.save_pretrained(save_path)
 
         if self.custom_config.end2end:
@@ -512,7 +501,7 @@ class GenerativeQAModule(BaseTransformer):
             for key in self.model.state_dict().keys():
                 if key.split(".")[1] == "ctx_encoder":
                     del modified_state_dict[key]
-            self.model.save_pretrained(save_directory="./my-test-check", state_dict=modified_state_dict)
+            self.model.save_pretrained(save_directory=save_path, state_dict=modified_state_dict)
 
             save_path_dpr = os.path.join(self.dpr_ctx_check_dir, "checkpoint{}".format(self.step_count))
             self.model.rag.ctx_encoder.save_pretrained(save_path_dpr)
@@ -683,7 +672,7 @@ def main(args=None, model=None) -> GenerativeQAModule:
     Path(args.output_dir + "/dpr_ctx_checkpoint").mkdir(
         exist_ok=True
     )  # save dpr_context encoder seprately for the future use
-
+    print(args.shard_dir)
     if os.path.exists(args.shard_dir):  # we do not need previous kb shards used in dataset re-conding and re-indexing
         shutil.rmtree(args.shard_dir)
     Path(args.shard_dir).mkdir(exist_ok=True)
@@ -768,7 +757,6 @@ def main(args=None, model=None) -> GenerativeQAModule:
         checkpoint_callback=get_checkpoint_callback(args.output_dir, model.val_metric),
         early_stopping_callback=es_callback,
         logger=training_logger,
-        # accelerator=CustomAccel() if args.gpus > 1 else None,
         profiler=pl.profiler.AdvancedProfiler() if args.profile else None,
     )
 

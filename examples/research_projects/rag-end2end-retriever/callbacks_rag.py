@@ -39,7 +39,7 @@ def get_checkpoint_callback(output_dir, metric):
         filename=exp,
         monitor=f"val_{metric}",
         mode="max",
-        save_top_k=2,
+        save_top_k=1,
         every_n_val_epochs=1,  # works only with PL > 1.3
     )
 

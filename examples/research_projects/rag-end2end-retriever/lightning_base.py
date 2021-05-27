@@ -270,6 +270,8 @@ class BaseTransformer(pl.LightningModule):
 
 
 class InitCallback(pl.Callback):
+    # this process can also be done with PL ddp plugging.
+    # But still it is experimental (check original RAG, I updated that with pluggin (shamanez))
     def on_sanity_check_start(self, trainer, pl_module):
         if (
             trainer.is_global_zero and trainer.global_rank == 0
@@ -400,8 +402,7 @@ def generic_train(
         callbacks=[logging_callback] + extra_callbacks + [InitCallback()] + [checkpoint_callback],
         logger=logger,
         plugins=[DDPPlugin(find_unused_parameters=True)],  # this is needed in new pytorch-lightning new version
-        val_check_interval=0.5,
-        # checkpoint_callback=checkpoint_callback, #deprivated in PL 1.3.1
+        val_check_interval=1,
         num_sanity_val_steps=2,
         **train_params,
     )
