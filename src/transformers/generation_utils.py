@@ -42,6 +42,7 @@ from .generation_logits_process import (
 )
 from .generation_stopping_criteria import (
     MaxLengthCriteria,
+    MaxNewTokensCriteria,
     MaxTimeCriteria,
     StoppingCriteriaList,
     validate_stopping_criteria,
@@ -628,15 +629,15 @@ class GenerationMixin:
         return processors
 
     def _get_stopping_criteria(
-        self,
-        max_length: Optional[int],
-        max_time: Optional[float],
+        self, max_length: Optional[int], max_time: Optional[float], max_new_tokens: Optional[int], start_length: int
     ) -> StoppingCriteriaList:
         stopping_criteria = StoppingCriteriaList()
         if max_length is not None:
             stopping_criteria.append(MaxLengthCriteria(max_length=max_length))
         if max_time is not None:
             stopping_criteria.append(MaxTimeCriteria(max_time=max_time))
+        if max_new_tokens is not None:
+            stopping_criteria.append(MaxNewTokensCriteria(start_length=start_length, max_new_tokens=max_new_tokens))
         return stopping_criteria
 
     @torch.no_grad()
@@ -661,6 +662,7 @@ class GenerationMixin:
         encoder_no_repeat_ngram_size: Optional[int] = None,
         num_return_sequences: Optional[int] = None,
         max_time: Optional[float] = None,
+        max_new_tokens: Optional[int] = None,
         decoder_start_token_id: Optional[int] = None,
         use_cache: Optional[bool] = None,
         num_beam_groups: Optional[int] = None,
@@ -692,8 +694,11 @@ class GenerationMixin:
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 The sequence used as a prompt for the generation. If :obj:`None` the method initializes it as an empty
                 :obj:`torch.LongTensor` of shape :obj:`(1,)`.
-            max_length (:obj:`int`, `optional`, defaults to 20):
+            max_length (:obj:`int`, `optional`, defaults to :obj:`model.config.max_length`):
                 The maximum length of the sequence to be generated.
+            max_new_tokens (:obj:`int`, `optional`, defaults to None):
+                The maximum numbers of tokens to generate, ignore the current number of tokens. Use either
+                :obj:`max_new_tokens` or :obj:`max_length` but not both, they serve the same purpose.
             min_length (:obj:`int`, `optional`, defaults to 10):
                 The minimum length of the sequence to be generated.
             do_sample (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -861,6 +866,15 @@ class GenerationMixin:
         """
 
         # set init values
+        if max_length is None and max_new_tokens is None:
+            # Both are None, default
+            max_length = self.config.max_length
+        elif max_length is not None and max_new_tokens is not None:
+            # Both are set, this is odd, raise a warning
+            warnings.warn(
+                "Both `max_length` and `max_new_tokens` have been set but they serve the same purpose.", UserWarning
+            )
+
         max_length = max_length if max_length is not None else self.config.max_length
         num_beams = num_beams if num_beams is not None else self.config.num_beams
         num_beam_groups = num_beam_groups if num_beam_groups is not None else self.config.num_beam_groups
@@ -960,7 +974,10 @@ class GenerationMixin:
             remove_invalid_values=remove_invalid_values,
         )
 
-        stopping_criteria = self._get_stopping_criteria(max_length=max_length, max_time=max_time)
+        cur_len = input_ids.shape[-1]
+        stopping_criteria = self._get_stopping_criteria(
+            max_length=max_length, max_time=max_time, max_new_tokens=max_new_tokens, start_length=cur_len
+        )
 
         if is_greedy_gen_mode:
             if num_return_sequences > 1:
