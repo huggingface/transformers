@@ -108,9 +108,7 @@ class FlaxBartLearnedPositionalEmbedding(nn.Module):
             dtype=self.dtype,
         )
 
-    def __call__(self, input_ids_shape: Tuple[int], past_key_values_length: int = 0) -> jnp.ndarray:
-        bsz, seq_len = input_ids_shape[:2]
-        positions = jnp.arange(past_key_values_length, past_key_values_length + seq_len, dtype=jnp.uint32)
+    def __call__(self, positions) -> jnp.ndarray:
         return self.position_embeddings(positions + self.offset)
 
 
@@ -541,7 +539,6 @@ class FlaxBartDecoderLayerCollection(nn.Module):
             if deterministic and (dropout_probability < self.layerdrop):
                 continue
 
-
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
@@ -638,6 +635,8 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
         attention_mask: Optional[jnp.ndarray] = None,
         decoder_input_ids: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
+        position_ids: Optional[jnp.ndarray] = None,
+        decoder_position_ids: Optional[jnp.ndarray] = None,
         head_mask: Optional[jnp.ndarray] = None,
         decoder_head_mask: Optional[jnp.ndarray] = None,
         cross_attn_head_mask: Optional[jnp.ndarray] = None,
@@ -656,18 +655,24 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        input_shape = input_ids.shape
-        input_ids = input_ids.reshape(-1, input_shape[-1])
-       
-
         if attention_mask is None:
-            attention_mask = jnp.ones(input_shape)
+            attention_mask = jnp.ones_like(input_ids)
         if decoder_input_ids is None:
             decoder_input_ids = shift_tokens_right(
                 input_ids, self.config.pad_token_id, decoder_start_token_id=self.config.decoder_start_token_id
             )
         if decoder_attention_mask is None:
-            decoder_attention_mask = attention_mask
+            decoder_attention_mask = jnp.ones_like(decoder_input_ids)
+
+        if position_ids is None:
+            batch_size, sequence_length = input_ids.shape
+            position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
+
+        if decoder_position_ids is None:
+            batch_size, sequence_length = decoder_input_ids.shape
+            decoder_position_ids = jnp.broadcast_to(
+                jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
+            )
 
         # Handle any PRNG if needed
         rngs = {}
@@ -676,9 +681,12 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
 
         return self.module.apply(
             {"params": params or self.params},
-            input_ids=jnp.array(input_ids, dtype="i4") if input_ids is not None else None,
-            attention_mask=jnp.array(attention_mask, dtype="i4") if attention_mask is not None else None,
-            decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4") if decoder_input_ids is not None else None,
+            input_ids=jnp.array(input_ids, dtype="i4"),
+            attention_mask=jnp.array(attention_mask, dtype="i4"),
+            decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4"),
+            decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
+            position_ids=jnp.array(position_ids, dtype="i4"),
+            decoder_position_ids=jnp.array(decoder_position_ids, dtype="i4"),
             head_mask=jnp.array(head_mask, dtype="i4") if head_mask is not None else None,
             decoder_head_mask=jnp.array(decoder_head_mask, dtype="i4") if decoder_head_mask is not None else None,
             cross_attn_head_mask=(
@@ -842,24 +850,17 @@ class FlaxBartEncoder(nn.Module):
                 dtype=self.dtype,
             )
 
-        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
-        self.offset = 2
-
-        self.embed_positions = nn.Embed(
-            self.config.max_position_embeddings + self.offset,
-            embed_dim,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-            dtype=self.dtype,
+        self.embed_positions = FlaxBartLearnedPositionalEmbedding(
+            self.config.max_position_embeddings, embed_dim, config=self.config, dtype=self.dtype
         )
-
         self.layers = FlaxBartEncoderLayerCollection(self.config, self.dtype)
         self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
 
     def __call__(
         self,
-        input_ids: jnp.ndarray,
-        attention_mask: Optional[jnp.ndarray] = None,
+        input_ids,
+        attention_mask,
+        position_ids,
         head_mask: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -909,14 +910,12 @@ class FlaxBartEncoder(nn.Module):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-      
         input_shape = input_ids.shape
         input_ids = input_ids.reshape(-1, input_shape[-1])
-       
 
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        embed_pos = self.embed_positions(jnp.arange(input_shape[1], dtype=jnp.uint32) + self.offset)
+        embed_pos = self.embed_positions(position_ids)
 
         hidden_states = inputs_embeds + embed_pos
         hidden_states = self.layernorm_embedding(hidden_states)
@@ -977,15 +976,8 @@ class FlaxBartDecoder(nn.Module):
                 dtype=self.dtype,
             )
 
-        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
-        self.offset = 2
-
-        self.embed_positions = nn.Embed(
-            self.config.max_position_embeddings + self.offset,
-            embed_dim,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-            dtype=self.dtype,
+        self.embed_positions = FlaxBartLearnedPositionalEmbedding(
+            self.config.max_position_embeddings, embed_dim, config=self.config, dtype=self.dtype
         )
 
         self.layers = FlaxBartDecoderLayerCollection(self.config, self.dtype)
@@ -1016,8 +1008,9 @@ class FlaxBartDecoder(nn.Module):
 
     def __call__(
         self,
-        input_ids: jnp.ndarray,
-        attention_mask: Optional[jnp.ndarray] = None,
+        input_ids,
+        attention_mask,
+        position_ids,
         encoder_hidden_states: Optional[jnp.ndarray] = None,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         head_mask: Optional[jnp.ndarray] = None,
@@ -1098,13 +1091,10 @@ class FlaxBartDecoder(nn.Module):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-       
         input_shape = input_ids.shape
         input_ids = input_ids.reshape(-1, input_shape[-1])
-       
 
-        # past_key_values_length
-        past_key_values_length =  0
+        past_key_values_length = 0
 
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
@@ -1118,9 +1108,7 @@ class FlaxBartDecoder(nn.Module):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # embed positions
-        positions = self.embed_positions(
-            jnp.arange(past_key_values_length, input_shape[1] + past_key_values_length, dtype=jnp.uint32) + self.offset
-        )
+        positions = self.embed_positions(position_ids)
 
         hidden_states = inputs_embeds + positions
         hidden_states = self.layernorm_embedding(hidden_states)
@@ -1179,6 +1167,8 @@ class FlaxBartModule(nn.Module):
         attention_mask: Optional[jnp.ndarray] = None,
         decoder_input_ids: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
+        position_ids: Optional[jnp.ndarray] = None,
+        decoder_position_ids: Optional[jnp.ndarray] = None,
         head_mask: Optional[jnp.ndarray] = None,
         decoder_head_mask: Optional[jnp.ndarray] = None,
         cross_attn_head_mask: Optional[jnp.ndarray] = None,
@@ -1189,10 +1179,6 @@ class FlaxBartModule(nn.Module):
         return_dict: bool = True,
         deterministic: bool = True,
     ):
-        if decoder_input_ids is None:
-            decoder_input_ids = shift_tokens_right(
-                input_ids, self.config.pad_token_id, self.config.decoder_start_token_id
-            )
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1205,6 +1191,7 @@ class FlaxBartModule(nn.Module):
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
+                position_ids=position_ids,
                 head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -1222,6 +1209,7 @@ class FlaxBartModule(nn.Module):
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
+            position_ids=decoder_position_ids,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
@@ -1274,6 +1262,8 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
         attention_mask: Optional[jnp.ndarray] = None,
         decoder_input_ids: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
+        position_ids: Optional[jnp.ndarray] = None,
+        decoder_position_ids: Optional[jnp.ndarray] = None,
         head_mask: Optional[jnp.ndarray] = None,
         decoder_head_mask: Optional[jnp.ndarray] = None,
         cross_attn_head_mask: Optional[jnp.ndarray] = None,
@@ -1289,6 +1279,8 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            position_ids=position_ids,
+            decoder_position_ids=decoder_position_ids,
             head_mask=head_mask,
             decoder_head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
