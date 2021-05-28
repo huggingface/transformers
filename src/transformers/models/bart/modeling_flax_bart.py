@@ -59,32 +59,6 @@ def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_
     return shifted_input_ids
 
 
-class FlaxBartLearnedPositionalEmbedding(nn.Module):
-    """
-    This module learns positional embeddings up to a fixed maximum size.
-    """
-
-    num_embeddings: int
-    embedding_dim: int
-    config: BartConfig
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-
-    def setup(self) -> None:
-        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
-        self.offset = 2
-
-        self.position_embeddings = nn.Embed(
-            self.num_embeddings + self.offset,
-            self.embedding_dim,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-            dtype=self.dtype,
-        )
-
-    def __call__(self, positions) -> jnp.ndarray:
-        return self.position_embeddings(positions + self.offset)
-
-
 class FlaxBartAttention(nn.Module):
     config: BartConfig
     embed_dim: int
@@ -896,7 +870,7 @@ class FlaxBartEncoder(nn.Module):
 
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        embed_pos = self.embed_positions(position_ids)
+        embed_pos = self.embed_positions(position_ids + self.offset)
 
         hidden_states = inputs_embeds + embed_pos
         hidden_states = self.layernorm_embedding(hidden_states)
@@ -1062,7 +1036,7 @@ class FlaxBartDecoder(nn.Module):
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         # embed positions
-        positions = self.embed_positions(position_ids)
+        positions = self.embed_positions(position_ids + self.offset)
 
         hidden_states = inputs_embeds + positions
         hidden_states = self.layernorm_embedding(hidden_states)
