@@ -2807,6 +2807,10 @@ class TapasModel:
         requires_backends(self, ["torch"])
 
 
+def load_tf_weights_in_tapas(*args, **kwargs):
+    requires_backends(load_tf_weights_in_tapas, ["torch"])
+
+
 TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
