@@ -214,7 +214,7 @@ class BigBirdPegasusSelfAttention(nn.Module):
 
         # Mask heads if we want to
         if head_mask is not None:
-            attention_probs = torch.einsum('ijkl, j -> ijkl', attention_probs, head_mask)
+            attention_probs = torch.einsum("ijkl, j -> ijkl", attention_probs, head_mask)
 
         context_layer = torch.matmul(attention_probs, value_layer)
 

@@ -1077,7 +1077,7 @@ class GenerationTesterMixin:
         """Test designed for encoder-decoder models to ensure the attention head masking is used."""
         attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
         for model_class in self.all_generative_model_classes:
-            config, input_ids, _, max_length = self._get_input_ids_and_config()
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
             model = model_class(config)
             # We want to test only encoder-decoder models
             if not config.is_encoder_decoder:
@@ -1101,13 +1101,15 @@ class GenerationTesterMixin:
             for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
                 out = model.generate(
                     input_ids,
+                    attention_mask=attention_mask,
                     num_beams=1,
-                    max_length=max_length,
                     output_attentions=True,
                     return_dict_in_generate=True,
+                    remove_invalid_values=True,
                     **{name: mask},
                 )
                 # We check the state of decoder_attentions and cross_attentions just from the last step
+                print(attn_name)
                 attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
                 self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
 
