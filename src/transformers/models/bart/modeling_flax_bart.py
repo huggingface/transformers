@@ -192,7 +192,7 @@ class FlaxBartAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, -1e10).astype(self.dtype),
+                jnp.full(attention_mask.shape, float("-inf")).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -269,7 +269,7 @@ class FlaxBartEncoderLayer(nn.Module):
                 returned tensors for more detail.
         """
         residual = hidden_states
-        hidden_states, attn_weights, _ = self.self_attn(
+        hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
@@ -421,9 +421,7 @@ class FlaxBartDecoderLayer(nn.Module):
         residual = hidden_states
 
         # Self Attention
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        # add present self-attn cache to positions 1,2 of present_key_value tuple
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
@@ -434,12 +432,11 @@ class FlaxBartDecoderLayer(nn.Module):
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
-        cross_attn_present_key_value = None
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
 
-            hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
+            hidden_states, cross_attn_weights = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
@@ -449,9 +446,6 @@ class FlaxBartDecoderLayer(nn.Module):
             hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
             hidden_states = residual + hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
-
-            # add cross-attn to positions 3,4 of present_key_value tuple
-            present_key_value = present_key_value + cross_attn_present_key_value
 
         # Fully Connected
         residual = hidden_states
@@ -593,10 +587,22 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
         decoder_input_ids = input_ids
         decoder_attention_mask = jnp.ones_like(input_ids)
 
+        batch_size, sequence_length = input_ids.shape
+        position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
+        decoder_position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
+
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(rngs, input_ids, attention_mask, decoder_input_ids, decoder_attention_mask)["params"]
+        return self.module.init(
+            rngs,
+            input_ids,
+            attention_mask,
+            decoder_input_ids,
+            decoder_attention_mask,
+            position_ids,
+            decoder_position_ids,
+        )["params"]
 
     def __call__(
         self,
@@ -819,8 +825,14 @@ class FlaxBartEncoder(nn.Module):
                 dtype=self.dtype,
             )
 
-        self.embed_positions = FlaxBartLearnedPositionalEmbedding(
-            self.config.max_position_embeddings, embed_dim, config=self.config, dtype=self.dtype
+        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # and adjust num_embeddings appropriately. Other models don't have this hack
+        self.offset = 2
+        self.embed_positions = nn.Embed(
+            self.config.max_position_embeddings + self.offset,
+            embed_dim,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            dtype=self.dtype,
         )
         self.layers = FlaxBartEncoderLayerCollection(self.config, self.dtype)
         self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
@@ -940,8 +952,14 @@ class FlaxBartDecoder(nn.Module):
                 dtype=self.dtype,
             )
 
-        self.embed_positions = FlaxBartLearnedPositionalEmbedding(
-            self.config.max_position_embeddings, embed_dim, config=self.config, dtype=self.dtype
+        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # and adjust num_embeddings appropriately. Other models don't have this hack
+        self.offset = 2
+        self.embed_positions = nn.Embed(
+            self.config.max_position_embeddings + self.offset,
+            embed_dim,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            dtype=self.dtype,
         )
 
         self.layers = FlaxBartDecoderLayerCollection(self.config, self.dtype)
