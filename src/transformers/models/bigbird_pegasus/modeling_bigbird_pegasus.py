@@ -214,7 +214,7 @@ class BigBirdPegasusSelfAttention(nn.Module):
 
         # Mask heads if we want to
         if head_mask is not None:
-            attention_probs = torch.einsum("ijkl, j -> ijkl", attention_probs, head_mask)
+            attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_layer)
 
@@ -1174,6 +1174,8 @@ class BigBirdPegasusEncoderAttention(nn.Module):
         from_blocked_mask=None,
         to_blocked_mask=None,
     ):
+        # Expand dims to enable multiplication in the self-attention module
+        head_mask = head_mask.reshape(1, -1, 1, 1) if head_mask is not None else None
 
         if self.config.attention_type == "original_full":
             self_outputs = self.self(
