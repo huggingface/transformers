@@ -1603,6 +1603,15 @@ class GPTNeoForCausalLM:
         requires_backends(self, ["torch"])
 
 
+class GPTNeoForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class GPTNeoModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])

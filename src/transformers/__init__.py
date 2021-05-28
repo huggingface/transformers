@@ -746,6 +746,7 @@ if is_torch_available():
         [
             "GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST",
             "GPTNeoForCausalLM",
+            "GPTNeoForSequenceClassification",
             "GPTNeoModel",
             "GPTNeoPreTrainedModel",
             "load_tf_weights_in_gpt_neo",
@@ -2129,6 +2130,7 @@ if TYPE_CHECKING:
         from .models.gpt_neo import (
             GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTNeoForCausalLM,
+            GPTNeoForSequenceClassification,
             GPTNeoModel,
             GPTNeoPreTrainedModel,
             load_tf_weights_in_gpt_neo,
