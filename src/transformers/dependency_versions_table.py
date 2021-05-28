@@ -14,7 +14,7 @@ deps = {
     "fastapi": "fastapi",
     "filelock": "filelock",
     "flake8": "flake8>=3.8.3",
-    "flax": "flax>=0.3.2",
+    "flax": "flax>=0.3.4",
     "fugashi": "fugashi>=1.0",
     "huggingface-hub": "huggingface-hub==0.0.8",
     "importlib_metadata": "importlib_metadata",
