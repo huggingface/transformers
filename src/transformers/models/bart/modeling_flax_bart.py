@@ -16,12 +16,13 @@
 
 import math
 import random
+from re import I
 from typing import Callable, Optional, Tuple
 
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.core.frozen_dict import FrozenDict
+from flax.core.frozen_dict import FrozenDict, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
 from jax import lax
@@ -641,7 +642,7 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
             cross_attn_head_mask=(
                 jnp.array(cross_attn_head_mask, dtype="i4") if cross_attn_head_mask is not None else None
             ),
-            encoder_outputs=jnp.array(encoder_outputs, dtype="fp32") if encoder_outputs is not None else None,
+            encoder_outputs=encoder_outputs,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1183,6 +1184,55 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
         self.lm_head = nn.Dense(self.model.shared.num_embeddings, use_bias=False, dtype=self.dtype)
         self.final_logits_bias = self.param("final_logits_bias", self.bias_init, (1, self.model.shared.num_embeddings))
 
+    # TODO (PS): better name ?
+    def decode(
+        self,
+        decoder_input_ids: Optional[jnp.ndarray] = None,
+        decoder_attention_mask: Optional[jnp.ndarray] = None,
+        decoder_position_ids: Optional[jnp.ndarray] = None,
+        encoder_hidden_states: Optional[jnp.ndarray] = None,
+        encoder_attention_mask: Optional[jnp.ndarray] = None,
+        decoder_head_mask: Optional[jnp.ndarray] = None,
+        cross_attn_head_mask: Optional[jnp.ndarray] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        deterministic: bool = True,
+    ):
+        outputs = self.model.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            position_ids=decoder_position_ids,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
+        )
+
+        hidden_states = outputs[0]
+
+        if self.config.tie_word_embeddings:
+            shared_embedding = self.model.variables["params"]["shared"]["embedding"]
+            lm_logits = self.lm_head.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
+        else:
+            lm_logits = self.lm_head(hidden_states)
+
+        lm_logits += self.final_logits_bias[0]
+
+        # TODO (PS): handle return_dict == False
+        # TODO (PS): what should be the output type here ?
+        return FlaxSeq2SeqLMOutput(
+            logits=lm_logits,
+            decoder_hidden_states=outputs.hidden_states,
+            decoder_attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
+        )
+
+    # TODO (PS): better name ?
     def encoder_forward(
         self,
         input_ids: jnp.ndarray,
@@ -1274,6 +1324,7 @@ class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
     module_class = FlaxBartForConditionalGenerationModule
     dtype: jnp.dtype = jnp.float32
 
+    # TODO (PS): better name ?
     def encode(
         self,
         input_ids: jnp.ndarray,
@@ -1317,6 +1368,94 @@ class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
             rngs=rngs,
             method=self.module.encoder_forward,
         )
+
+    # TODO (PS): better name ?
+    def decode(
+        self,
+        decoder_input_ids,
+        encoder_outputs,
+        encoder_attention_mask: Optional[jnp.ndarray] = None,  # TODO (PS): attention_mask ?
+        decoder_attention_mask: Optional[jnp.ndarray] = None,
+        decoder_position_ids: Optional[jnp.ndarray] = None,  # TODO (PS): position_ids ?
+        decoder_head_mask: Optional[jnp.ndarray] = None,
+        cross_attn_head_mask: Optional[jnp.ndarray] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        deterministic: bool = True,
+        params: dict = None,
+        past_key_values: dict = None,
+        dropout_rng: PRNGKey = None,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        encoder_hidden_states = encoder_outputs[0]
+        if encoder_attention_mask is None:
+            batch_size, sequence_length = encoder_hidden_states.shape[:2]
+            encoder_attention_mask = jnp.ones((batch_size, sequence_length))
+
+        batch_size, sequence_length = decoder_input_ids.shape
+        if decoder_attention_mask is None:
+            decoder_attention_mask = jnp.ones((batch_size, sequence_length))
+
+        if decoder_position_ids is None:
+            if past_key_values is not None:
+                raise ValueError("Make sure to provide `decoder_position_ids` when passing `past_key_values`.")
+
+            decoder_position_ids = jnp.broadcast_to(
+                jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
+            )
+
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
+        inputs = {"params": params or self.params}
+
+        # if past_key_values are passed then cache is already initialized a private flag init_cache has to be
+        # passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that
+        # it can be changed by FlaxGPT2Attention module
+        if past_key_values:
+            inputs["cache"] = past_key_values
+            mutable = ["cache"]
+        else:
+            mutable = False
+
+        outputs = self.module.apply(
+            inputs,
+            decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4"),
+            decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
+            decoder_position_ids=jnp.array(decoder_position_ids, dtype="i4"),
+            encoder_hidden_states=encoder_outputs[0],
+            encoder_attention_mask=jnp.array(encoder_attention_mask, dtype="i4"),
+            decoder_head_mask=jnp.array(decoder_head_mask, dtype="i4") if decoder_head_mask is not None else None,
+            cross_attn_head_mask=(
+                jnp.array(cross_attn_head_mask, dtype="i4") if cross_attn_head_mask is not None else None
+            ),
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
+            rngs=rngs,
+            mutable=mutable,
+            method=self.module.decode,
+        )
+
+        # add updated cache to model output
+        if past_key_values is not None and return_dict:
+            outputs, past_key_values = outputs
+            outputs["past_key_values"] = unfreeze(past_key_values["cache"])
+            return outputs
+        elif past_key_values is not None and not return_dict:
+            outputs, past_key_values = outputs
+            outputs = outputs[:1] + (unfreeze(past_key_values["cache"]),) + outputs[1:]
+
+        return outputs
 
 
 class FlaxBartForSequenceClassificationModule(nn.Module):
