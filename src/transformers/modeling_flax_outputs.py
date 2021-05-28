@@ -106,7 +106,7 @@ class FlaxBaseModelOutputWithPooling(ModelOutput):
     attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
 
 
-@dataclass
+@flax.struct.dataclass
 class FlaxBaseModelOutputWithPastAndCrossAttentions(ModelOutput):
     """
     Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
@@ -152,7 +152,7 @@ class FlaxBaseModelOutputWithPastAndCrossAttentions(ModelOutput):
     cross_attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
 
 
-@dataclass
+@flax.struct.dataclass
 class FlaxSeq2SeqModelOutput(ModelOutput):
     """
     Base class for model encoder's outputs that also contains : pre-computed hidden states that can speed up sequential
@@ -213,7 +213,7 @@ class FlaxSeq2SeqModelOutput(ModelOutput):
     encoder_attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
 
 
-@dataclass
+@flax.struct.dataclass
 class FlaxCausalLMOutputWithCrossAttentions(ModelOutput):
     """
     Base class for causal language model (or autoregressive) outputs.
@@ -283,7 +283,7 @@ class FlaxMaskedLMOutput(ModelOutput):
 FlaxCausalLMOutput = FlaxMaskedLMOutput
 
 
-@dataclass
+@flax.struct.dataclass
 class FlaxSeq2SeqLMOutput(ModelOutput):
     """
     Base class for sequence-to-sequence language models outputs.
@@ -393,7 +393,7 @@ class FlaxSequenceClassifierOutput(ModelOutput):
     attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
 
 
-@dataclass
+@flax.struct.dataclass
 class FlaxSeq2SeqSequenceClassifierOutput(ModelOutput):
     """
     Base class for outputs of sequence-to-sequence sentence classification models.
@@ -533,7 +533,7 @@ class FlaxQuestionAnsweringModelOutput(ModelOutput):
     attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
 
 
-@dataclass
+@flax.struct.dataclass
 class FlaxSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
     """
     Base class for outputs of sequence-to-sequence question answering models.
