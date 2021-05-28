@@ -35,6 +35,9 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+ImageInput = Union[Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]]
+
+
 # 2 functions below inspired by https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
 def center_to_corners_format(x):
     """
@@ -132,17 +135,17 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             Whether to resize the input to a certain :obj:`size`.
         size (:obj:`int`, `optional`, defaults to 800):
             Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`. If size
-            is a sequence like (:obj:`width`, :obj:`height`), output size will be matched to this. If size is an int,
-            smaller edge of the image will be matched to this number. i.e, if :obj:`height` > :obj:`width`, then image
-            will be rescaled to (:obj:`size` * :obj:`height` / :obj:`width`, :obj:`size`).
+            is a sequence like :obj:`(width, height)`, output size will be matched to this. If size is an int,
+            smaller edge of the image will be matched to this number. i.e, if :obj:`height > width`, then image
+            will be rescaled to :obj:`(size * height / width, size)`.
         max_size (:obj:`int`, `optional`, defaults to :obj:`1333`):
             The largest size an image dimension can have (otherwise it's capped). Only has an effect if
             :obj:`do_resize` is set to :obj:`True`.
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to normalize the input with mean and standard deviation.
-        image_mean (:obj:`int`, defaults to :obj:`[0.485, 0.456, 0.406]s`):
+        image_mean (:obj:`int`, `optional`, defaults to :obj:`[0.485, 0.456, 0.406]s`):
             The sequence of means for each channel, to be used when normalizing images.
-        image_std (:obj:`int`, defaults to :obj:`[0.229, 0.224, 0.225]`):
+        image_std (:obj:`int`, `optional`, defaults to :obj:`[0.229, 0.224, 0.225]`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
     """
 
@@ -399,9 +402,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     def __call__(
         self,
-        images: Union[
-            Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
-        ],
+        images: ImageInput,
         annotations: Union[List[Dict], List[List[Dict]]] = None,
         return_segmentation_masks: Optional[bool] = False,
         masks_path: Optional[pathlib.Path] = None,
@@ -428,20 +429,20 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             annotations (:obj:`Dict`, :obj:`List[Dict]`, `optional`):
                 The corresponding annotations in COCO format.
 
-                In case :obj:`format` = :obj:`"coco_detection"`, the annotations for each image should have the
+                In case :obj:`format = "coco_detection"`, the annotations for each image should have the
                 following format: {'image_id': int, 'annotations': [annotation]}, with the annotations being a list of
                 COCO object annotations.
 
-                In case :obj:`format` = :obj:`"coco_panoptic"`, the annotations for each image should have the
+                In case :obj:`format = "coco_panoptic"`, the annotations for each image should have the
                 following format: {'image_id': int, 'file_name': str, 'segments_info': [segment_info]} with
                 segments_info being a list of COCO panoptic annotations.
 
             return_segmentation_masks (:obj:`Dict`, :obj:`List[Dict]`, `optional`, defaults to :obj:`False`):
-                Whether to also return instance segmentation masks in case :obj:`format` = :obj:`"coco_detection"`.
+                Whether to also return instance segmentation masks in case :obj:`format = "coco_detection"`.
 
             masks_path (:obj:`pathlib.Path`, `optional`):
                 Path to the directory containing the PNG files that store the class-agnostic image segmentations. Only
-                relevant in case :obj:`format` = :obj:`"coco_panoptic"`.
+                relevant in case :obj:`format = "coco_panoptic"`.
 
             pad_and_return_pixel_mask (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to pad images up to the largest image in a batch and create a pixel mask.
@@ -452,9 +453,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 - 0 for pixels that are padding (i.e. **masked**).
 
             return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
-                If set, will return tensors instead of NumPy arrays. Acceptable values are:
-
-                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
+                If set, will return tensors instead of NumPy arrays. If set to :obj:`'pt'`, return PyTorch :obj:`torch.Tensor` objects.
 
         Returns:
             :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
@@ -634,9 +633,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             pixel_values_list (:obj:`List[torch.Tensor]`):
                 List of images (pixel values) to be padded. Each image should be a tensor of shape (C, H, W).
             return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
-                If set, will return tensors instead of NumPy arrays. Acceptable values are:
-
-                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
+                If set, will return tensors instead of NumPy arrays. If set to :obj:`'pt'`, return PyTorch :obj:`torch.Tensor` objects.
 
         Returns:
             :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
@@ -812,7 +809,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             cur_boxes = center_to_corners_format(cur_boxes[keep])
 
             h, w = cur_masks.shape[-2:]
-            assert len(cur_boxes) == len(cur_classes)
+            assert len(cur_boxes) == len(cur_classes), "Not as many boxes as there are classes"
 
             # It may be that we have several predicted masks for the same stuff class.
             # In the following, we track the list of masks ids for each stuff class (they are merged later on)
@@ -846,11 +843,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 seg_img = Image.fromarray(id_to_rgb(m_id.view(h, w).cpu().numpy()))
                 seg_img = seg_img.resize(size=(final_w, final_h), resample=Image.NEAREST)
 
-                np_seg_img = (
-                    torch.ByteTensor(torch.ByteStorage.from_buffer(seg_img.tobytes()))
-                    .view(final_h, final_w, 3)
-                    .numpy()
-                )
+                np_seg_img = torch.ByteTensor(torch.ByteStorage.from_buffer(seg_img.tobytes()))
+                np_seg_img = np_seg_img.view(final_h, final_w, 3)
+                np_seg_img = np_seg_img.numpy()
+
                 m_id = torch.from_numpy(rgb_to_id(np_seg_img))
 
                 area = []

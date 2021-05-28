@@ -506,7 +506,6 @@ class DetrAttention(nn.Module):
             self.head_dim * num_heads == self.embed_dim
         ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
         self.scaling = self.head_dim ** -0.5
-        self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -719,6 +718,10 @@ class DetrDecoderLayer(nn.Module):
             hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape :obj:`(seq_len, batch, embed_dim)`
             attention_mask (:obj:`torch.FloatTensor`): attention mask of size
                 :obj:`(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            position_embeddings (:obj:`torch.FloatTensor`, `optional`): position embeddings that are added to the queries and keys
+            in the cross-attention layer. 
+            query_position_embeddings (:obj:`torch.FloatTensor`, `optional`): position embeddings that are added to the queries and keys
+            in the self-attention layer.
             encoder_hidden_states (:obj:`torch.FloatTensor`): cross attention input to the layer of shape :obj:`(seq_len, batch, embed_dim)`
             encoder_attention_mask (:obj:`torch.FloatTensor`): encoder attention mask of size
                 :obj:`(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
@@ -778,13 +781,7 @@ class DetrDecoderLayer(nn.Module):
 class DetrClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
-    def __init__(
-        self,
-        input_dim: int,
-        inner_dim: int,
-        num_classes: int,
-        pooler_dropout: float,
-    ):
+    def __init__(self, input_dim: int, inner_dim: int, num_classes: int, pooler_dropout: float):
         super().__init__()
         self.dense = nn.Linear(input_dim, inner_dim)
         self.dropout = nn.Dropout(p=pooler_dropout)
@@ -889,7 +886,7 @@ class DetrEncoder(DetrPreTrainedModel):
 
     The encoder updates the flattened feature map through multiple self-attention layers.
 
-    Small tweaks for DETR:
+    Small tweak for DETR:
 
     - position_embeddings are added to the forward pass.
 
@@ -1059,8 +1056,11 @@ class DetrDecoder(DetrPreTrainedModel):
 
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
-
-                `What are attention masks? <../glossary.html#attention-mask>`__
+            
+            position_embeddings (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+                Position embeddings that are added to the queries and keys in each cross-attention layer.
+            query_position_embeddings (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, hidden_size)`):, `optional`):
+                Position embeddings that are added to the queries and keys in each self-attention layer.
             output_attentions (:obj:`bool`, `optional`):
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
                 returned tensors for more detail.
