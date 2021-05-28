@@ -333,7 +333,7 @@ class TimmBackbone(nn.Module):
 
     """
 
-    def __init__(self, name: str, train_backbone: bool, dilation: bool, return_intermediate_layers: bool):
+    def __init__(self, name: str, dilation: bool, return_intermediate_layers: bool):
         super().__init__()
 
         kwargs = {}
@@ -347,9 +347,10 @@ class TimmBackbone(nn.Module):
         self.return_intermediate_layers = return_intermediate_layers
         self.intermediate_channel_sizes = self.body.feature_info.channels()
 
-        for name, parameter in self.body.named_parameters():
-            if not train_backbone or "layer2" not in name and "layer3" not in name and "layer4" not in name:
-                parameter.requires_grad_(False)
+        if "resnet" in name:
+            for name, parameter in self.body.named_parameters():
+                if "layer2" not in name and "layer3" not in name and "layer4" not in name:
+                    parameter.requires_grad_(False)
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the body to get list of feature maps
@@ -1182,9 +1183,7 @@ class DetrModel(DetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = TimmBackbone(
-            config.backbone, config.train_backbone, config.dilation, config.return_intermediate_layers
-        )
+        backbone = TimmBackbone(config.backbone, config.dilation, config.return_intermediate_layers)
         position_embeddings = build_position_encoding(config)
         self.backbone = Joiner(backbone, position_embeddings)
 
@@ -1203,6 +1202,14 @@ class DetrModel(DetrPreTrainedModel):
 
     def get_decoder(self):
         return self.decoder
+
+    def freeze_backbone(self):
+        for name, param in self.backbone[0].body.named_parameters():
+            param.requires_grad_(False)
+
+    def unfreeze_backbone(self):
+        for name, param in self.backbone[0].body.named_parameters():
+            param.requires_grad_(True)
 
     @add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=DetrModelOutput, config_class=_CONFIG_FOR_DOC)

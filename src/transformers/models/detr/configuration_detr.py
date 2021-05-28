@@ -86,8 +86,6 @@ class DetrConfig(PretrainedConfig):
             :obj:`"learned"`.
         backbone (:obj:`str`, `optional`, defaults to :obj:`"resnet50"`):
             Name of convolutional backbone to use. Supports any convolutional backbone from the timm package.
-        train_backbone (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether to train (fine-tune) the backbone.
         dilation (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to replace stride with dilation in the last convolutional block (DC5).
         return_intermediate_layers (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -150,7 +148,6 @@ class DetrConfig(PretrainedConfig):
         auxiliary_loss=False,
         position_embedding_type="sine",
         backbone="resnet50",
-        train_backbone=True,
         dilation=False,
         return_intermediate_layers=False,
         class_cost=1,
@@ -188,7 +185,6 @@ class DetrConfig(PretrainedConfig):
         self.auxiliary_loss = auxiliary_loss
         self.position_embedding_type = position_embedding_type
         self.backbone = backbone
-        self.train_backbone = train_backbone
         self.dilation = dilation
         self.return_intermediate_layers = return_intermediate_layers
         # Hungarian matcher
