@@ -17,7 +17,7 @@ import os
 import unittest
 
 from transformers import DebertaV2Tokenizer
-from transformers.testing_utils import require_sentencepiece, require_tokenizers
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -126,57 +126,14 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer.sep_token_id
         ]
 
+    @slow
     def test_tokenizer_integration(self):
-        tokenizer_classes = [self.tokenizer_class]
-        if self.test_rust_tokenizer:
-            tokenizer_classes.append(self.rust_tokenizer_class)
+        # fmt: off
+        expected_encoding = {'input_ids': [[1, 32732, 36, 19390, 486, 27, 35052, 81436, 18, 60685, 1225, 7, 35052, 81436, 18, 9367, 16899, 18, 15937, 53, 594, 773, 18, 16287, 30465, 36, 69418, 6, 107805, 36979, 10993, 69418, 191, 6, 12692, 829, 6, 8655, 16555, 92459, 6, 12692, 9431, 20850, 14, 4184, 6369, 9875, 36, 1323, 23941, 53, 7, 4184, 6369, 11005, 36, 20582, 1186, 53, 19, 105, 3049, 1896, 1053, 16899, 1506, 11, 37978, 4243, 7, 1237, 31869, 200, 42754, 6, 19645, 45050, 3425, 7, 107535, 4, 2], [1, 448, 37132, 13, 667, 8, 1053, 18, 23611, 1237, 72356, 12820, 34, 104134, 1209, 35, 13313, 6627, 21, 202, 347, 7, 164, 2399, 11, 46, 4485, 4, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 23, 1232, 2864, 15785, 14951, 105, 5, 8581, 1250, 4, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # noqa: E501
+        # fmt: on
 
-        for tokenizer_class in tokenizer_classes:
-            tokenizer = tokenizer_class.from_pretrained("microsoft/deberta-xlarge-v2")
-
-            sequences = [
-                [
-                    "DeBERTa: Decoding-enhanced BERT with Disentangled Attention",
-                    "DeBERTa: Decoding-enhanced BERT with Disentangled Attention",
-                ],
-                [
-                    "Recent progress in pre-trained neural language models has significantly improved the performance of many natural language processing (NLP) tasks.",
-                    "DeBERTa: Decoding-enhanced BERT with Disentangled Attention",
-                ],
-                [
-                    "In this paper we propose a new model architecture DeBERTa",
-                    "DeBERTa: Decoding-enhanced BERT with Disentangled Attention",
-                ],
-            ]
-
-            encoding = tokenizer(sequences, padding=True)
-            decoded_sequences = [tokenizer.decode(seq, skip_special_tokens=True) for seq in encoding["input_ids"]]
-
-            # fmt: off
-            expected_encoding = {
-                'input_ids': [
-                    [1, 1804, 69418, 191, 43, 117056, 18, 44596, 448, 37132, 19, 8655, 10625, 69860, 21149, 2, 1804, 69418, 191, 43, 117056, 18, 44596, 448, 37132, 19, 8655, 10625, 69860, 21149, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [1, 9755, 1944, 11, 1053, 18, 16899, 12730, 1072, 1506, 45, 2497, 2510, 5, 610, 9, 127, 699, 1072, 2101, 36, 99388, 53, 2930, 4, 2, 1804, 69418, 191, 43, 117056, 18, 44596, 448, 37132, 19, 8655, 10625, 69860, 21149, 2],
-                    [1, 84, 32, 778, 42, 9441, 10, 94, 735, 3372, 1804, 69418, 191, 2, 1804, 69418, 191, 43, 117056, 18, 44596, 448, 37132, 19, 8655, 10625, 69860, 21149, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
-                'token_type_ids': [
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
-                'attention_mask': [
-                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-                ]
-            }
-
-            expected_decoded_sequences = [
-                'DeBERTa: Decoding-enhanced BERT with Disentangled Attention DeBERTa: Decoding-enhanced BERT with Disentangled Attention',
-                'Recent progress in pre-trained neural language models has significantly improved the performance of many natural language processing (NLP) tasks. DeBERTa: Decoding-enhanced BERT with Disentangled Attention',
-                'In this paper we propose a new model architecture DeBERTa DeBERTa: Decoding-enhanced BERT with Disentangled Attention'
-            ]
-            # fmt: on
-
-            self.assertDictEqual(encoding.data, expected_encoding)
-
-            for expected, decoded in zip(expected_decoded_sequences, decoded_sequences):
-                self.assertEqual(expected, decoded)
+        self.tokenizer_integration_test_util(
+            expected_encoding=expected_encoding,
+            model_name="microsoft/deberta-v2-xlarge",
+            revision="ad6e42c1532ddf3a15c39246b63f5559d558b670",
+        )

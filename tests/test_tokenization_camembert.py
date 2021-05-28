@@ -18,7 +18,7 @@ import unittest
 
 from transformers import CamembertTokenizer, CamembertTokenizerFast
 from transformers.file_utils import is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -107,3 +107,24 @@ class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ids = tokenizer.encode(sequence)
         rust_ids = rust_tokenizer.encode(sequence)
         self.assertListEqual(ids, rust_ids)
+
+    @slow
+    def test_tokenizer_integration(self):
+        # fmt: off
+        expected_encoding = {'input_ids': [[5, 27879, 10, 38, 3993, 81, 1107, 28992, 255, 33, 10, 387, 105, 2505, 751, 26, 8577, 5281, 2242, 1168, 387, 105, 2505, 751, 26, 7881, 15848, 816, 26, 2872, 53, 909, 15618, 10, 23052, 26, 16513, 15767, 7627, 10, 38, 20703, 7, 361, 9608, 5428, 7, 3425, 20703, 55, 7, 16093, 465, 7, 4194, 110, 62, 385, 3867, 7, 16093, 22285, 1276, 1782, 28854, 61, 14112, 491, 24613, 25608, 402, 38, 607, 15165, 53, 1168, 28854, 61, 14112, 491, 10452, 5250, 38, 607, 27308, 53, 1466, 14976, 2527, 1754, 3591, 15848, 816, 16320, 10, 378, 779, 1754, 13, 14112, 3169, 1168, 8, 3737, 1361, 15940, 31859, 21, 11045, 4046, 90, 121, 4653, 7, 275, 105, 412, 451, 751, 1168, 8320, 10, 451, 449, 6685, 9, 6], [5, 21, 20703, 2856, 1160, 816, 1200, 3591, 26, 15848, 8, 3737, 2008, 18574, 341, 28375, 2770, 7142, 23, 321, 3280, 816, 21, 12584, 1938, 6741, 1107, 1853, 402, 91, 15003, 133, 16, 5285, 1168, 21, 12191, 1113, 12584, 378, 6051, 13, 6239, 10, 9, 6, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [5, 908, 31, 1806, 5202, 12363, 9557, 290, 76, 12294, 10, 14976, 808, 13, 7058, 18, 4251, 9, 6, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # noqa: E501
+        # fmt: on
+
+        # camembert is a french model. So we also use french texts.
+        sequences = [
+            "Le transformeur est un modèle d'apprentissage profond introduit en 2017, "
+            "utilisé principalement dans le domaine du traitement automatique des langues (TAL).",
+            "À l'instar des réseaux de neurones récurrents (RNN), les transformeurs sont conçus "
+            "pour gérer des données séquentielles, telles que le langage naturel, pour des tâches "
+            "telles que la traduction et la synthèse de texte.",
+        ]
+
+        self.tokenizer_integration_test_util(
+            expected_encoding=expected_encoding,
+            model_name="camembert-base",
+            revision="3a0641d9a1aeb7e848a74299e7e4c4bca216b4cf",
+        )
