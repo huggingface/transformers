@@ -214,7 +214,7 @@ class BigBirdPegasusSelfAttention(nn.Module):
 
         # Mask heads if we want to
         if head_mask is not None:
-            attention_probs = attention_probs * head_mask
+            attention_probs = torch.einsum('ijkl, j -> ijkl', attention_probs, head_mask)
 
         context_layer = torch.matmul(attention_probs, value_layer)
 
@@ -1372,6 +1372,7 @@ class BigBirdPegasusEncoderLayer(nn.Module):
         self_attention_outputs = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
+            head_mask=layer_head_mask,
             output_attentions=output_attentions,
             band_mask=band_mask,
             from_mask=from_mask,
