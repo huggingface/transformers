@@ -322,8 +322,8 @@ class FlaxModelTesterMixin:
         seq_len = getattr(self.model_tester, "seq_length", None)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
-        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
-        decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
+        # decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+        # decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
         chunk_length = getattr(self.model_tester, "chunk_length", None)
         if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
             encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes

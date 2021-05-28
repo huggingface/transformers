@@ -253,7 +253,7 @@ class FlaxBertSelfAttention(nn.Module):
             precision=None,
         )
 
-        attn_output = jnp.einsum('...hqk,...khd->...qhd', attn_weights, value_states)
+        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
         attn_output = attn_output.reshape(attn_output.shape[:2] + (-1,))
 
         outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
@@ -394,7 +394,9 @@ class FlaxBertLayerCollection(nn.Module):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            layer_outputs = layer(hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions)
+            layer_outputs = layer(
+                hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
+            )
 
             hidden_states = layer_outputs[0]
 
