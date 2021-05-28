@@ -135,9 +135,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             Whether to resize the input to a certain :obj:`size`.
         size (:obj:`int`, `optional`, defaults to 800):
             Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`. If size
-            is a sequence like :obj:`(width, height)`, output size will be matched to this. If size is an int,
-            smaller edge of the image will be matched to this number. i.e, if :obj:`height > width`, then image
-            will be rescaled to :obj:`(size * height / width, size)`.
+            is a sequence like :obj:`(width, height)`, output size will be matched to this. If size is an int, smaller
+            edge of the image will be matched to this number. i.e, if :obj:`height > width`, then image will be
+            rescaled to :obj:`(size * height / width, size)`.
         max_size (:obj:`int`, `optional`, defaults to :obj:`1333`):
             The largest size an image dimension can have (otherwise it's capped). Only has an effect if
             :obj:`do_resize` is set to :obj:`True`.
@@ -429,13 +429,13 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             annotations (:obj:`Dict`, :obj:`List[Dict]`, `optional`):
                 The corresponding annotations in COCO format.
 
-                In case :obj:`format = "coco_detection"`, the annotations for each image should have the
-                following format: {'image_id': int, 'annotations': [annotation]}, with the annotations being a list of
-                COCO object annotations.
+                In case :obj:`format = "coco_detection"`, the annotations for each image should have the following
+                format: {'image_id': int, 'annotations': [annotation]}, with the annotations being a list of COCO
+                object annotations.
 
-                In case :obj:`format = "coco_panoptic"`, the annotations for each image should have the
-                following format: {'image_id': int, 'file_name': str, 'segments_info': [segment_info]} with
-                segments_info being a list of COCO panoptic annotations.
+                In case :obj:`format = "coco_panoptic"`, the annotations for each image should have the following
+                format: {'image_id': int, 'file_name': str, 'segments_info': [segment_info]} with segments_info being a
+                list of COCO panoptic annotations.
 
             return_segmentation_masks (:obj:`Dict`, :obj:`List[Dict]`, `optional`, defaults to :obj:`False`):
                 Whether to also return instance segmentation masks in case :obj:`format = "coco_detection"`.
@@ -453,7 +453,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 - 0 for pixels that are padding (i.e. **masked**).
 
             return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
-                If set, will return tensors instead of NumPy arrays. If set to :obj:`'pt'`, return PyTorch :obj:`torch.Tensor` objects.
+                If set, will return tensors instead of NumPy arrays. If set to :obj:`'pt'`, return PyTorch
+                :obj:`torch.Tensor` objects.
 
         Returns:
             :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
@@ -633,7 +634,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             pixel_values_list (:obj:`List[torch.Tensor]`):
                 List of images (pixel values) to be padded. Each image should be a tensor of shape (C, H, W).
             return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
-                If set, will return tensors instead of NumPy arrays. If set to :obj:`'pt'`, return PyTorch :obj:`torch.Tensor` objects.
+                If set, will return tensors instead of NumPy arrays. If set to :obj:`'pt'`, return PyTorch
+                :obj:`torch.Tensor` objects.
 
         Returns:
             :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:

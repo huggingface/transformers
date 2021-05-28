@@ -719,7 +719,7 @@ class DetrDecoderLayer(nn.Module):
             attention_mask (:obj:`torch.FloatTensor`): attention mask of size
                 :obj:`(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             position_embeddings (:obj:`torch.FloatTensor`, `optional`): position embeddings that are added to the queries and keys
-            in the cross-attention layer. 
+            in the cross-attention layer.
             query_position_embeddings (:obj:`torch.FloatTensor`, `optional`): position embeddings that are added to the queries and keys
             in the self-attention layer.
             encoder_hidden_states (:obj:`torch.FloatTensor`): cross attention input to the layer of shape :obj:`(seq_len, batch, embed_dim)`
@@ -1056,7 +1056,7 @@ class DetrDecoder(DetrPreTrainedModel):
 
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
-            
+
             position_embeddings (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
                 Position embeddings that are added to the queries and keys in each cross-attention layer.
             query_position_embeddings (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, hidden_size)`):, `optional`):

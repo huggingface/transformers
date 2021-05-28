@@ -21,7 +21,7 @@ import unittest
 
 from transformers import is_timm_available, is_vision_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_timm, require_vision, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
@@ -40,7 +40,7 @@ if is_vision_available():
     from transformers import DetrFeatureExtractor
 
 
-@require_torch
+@require_timm
 class DetrModelTester:
     def __init__(
         self,
@@ -152,7 +152,7 @@ class DetrModelTester:
         self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
 
-@require_torch
+@require_timm
 class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
@@ -404,7 +404,8 @@ def prepare_img():
     return image
 
 
-@require_torch
+@require_timm
+@require_vision
 @slow
 class DetrModelIntegrationTests(unittest.TestCase):
     @cached_property
