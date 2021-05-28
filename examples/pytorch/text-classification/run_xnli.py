@@ -280,6 +280,7 @@ def main():
             preprocess_function,
             batched=True,
             load_from_cache_file=not data_args.overwrite_cache,
+            desc="Running tokenizer on train dataset",
         )
         # Log a few random samples from the training set:
         for index in random.sample(range(len(train_dataset)), 3):
@@ -292,6 +293,7 @@ def main():
             preprocess_function,
             batched=True,
             load_from_cache_file=not data_args.overwrite_cache,
+            desc="Running tokenizer on validation dataset",
         )
 
     if training_args.do_predict:
@@ -301,6 +303,7 @@ def main():
             preprocess_function,
             batched=True,
             load_from_cache_file=not data_args.overwrite_cache,
+            desc="Running tokenizer on prediction dataset",
         )
 
     # Get the metric function

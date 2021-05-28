@@ -301,7 +301,10 @@ def main():
         return result
 
     processed_datasets = raw_datasets.map(
-        preprocess_function, batched=True, remove_columns=raw_datasets["train"].column_names
+        preprocess_function,
+        batched=True,
+        remove_columns=raw_datasets["train"].column_names,
+        desc="Running tokenizer on dataset",
     )
 
     train_dataset = processed_datasets["train"]
