@@ -133,6 +133,7 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
+    "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -491,6 +492,22 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
+
+    _import_structure["models.canine"].extend(
+        [
+            "CANINE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CanineForMaskedLM",
+            "CanineForCausalLM",
+            "CanineForMultipleChoice",
+            "CanineForQuestionAnswering",
+            "CanineForSequenceClassification",
+            "CanineForTokenClassification",
+            "CanineLayer",
+            "CanineModel",
+            "CaninePreTrainedModel",
+            "load_tf_weights_in_canine",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1725,6 +1742,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig, CanineTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1986,6 +2004,7 @@ if TYPE_CHECKING:
         from .utils.dummy_timm_objects import *
 
     if is_torch_available():
+
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -2155,6 +2174,17 @@ if TYPE_CHECKING:
             CamembertForSequenceClassification,
             CamembertForTokenClassification,
             CamembertModel,
+        )
+        from .models.canine import (
+            CANINE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CanineForMultipleChoice,
+            CanineForQuestionAnswering,
+            CanineForSequenceClassification,
+            CanineForTokenClassification,
+            CanineLayer,
+            CanineModel,
+            CaninePreTrainedModel,
+            load_tf_weights_in_canine,
         )
         from .models.clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
