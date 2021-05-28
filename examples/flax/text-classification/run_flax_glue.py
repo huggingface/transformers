@@ -202,7 +202,6 @@ def create_train_state(
     else:  # Classification.
 
         def cross_entropy_loss(logits, labels):
-            logits = nn.log_softmax(logits)
             xentropy = optax.softmax_cross_entropy(logits, onehot(labels, num_classes=num_labels))
             return jnp.mean(xentropy)
 
