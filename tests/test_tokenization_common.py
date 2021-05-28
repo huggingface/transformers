@@ -183,7 +183,11 @@ class TokenizerTesterMixin:
     #         "This is a test",
     #     )
 
-    def tokenizer_integration_test_util(self, expected_encoding, model_name, revision=None, sequences=None):
+    def tokenizer_integration_test_util(
+        self, expected_encoding, model_name, revision=None, sequences=None, decode_kwargs=None
+    ):
+        decode_kwargs = {} if decode_kwargs is None else decode_kwargs
+
         if sequences is None:
             sequences = [
                 "Transformers (formerly known as pytorch-transformers and pytorch-pretrained-bert) provides "
@@ -206,7 +210,9 @@ class TokenizerTesterMixin:
             )
 
             encoding = tokenizer(sequences, padding=True)
-            decoded_sequences = [tokenizer.decode(seq, skip_special_tokens=True) for seq in encoding["input_ids"]]
+            decoded_sequences = [
+                tokenizer.decode(seq, skip_special_tokens=True, **decode_kwargs) for seq in encoding["input_ids"]
+            ]
 
             encoding_data = encoding.data
             self.assertDictEqual(encoding_data, expected_encoding)
