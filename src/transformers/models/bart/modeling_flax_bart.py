@@ -22,6 +22,9 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict
+from flax.linen import combine_masks, make_causal_mask
+from flax.linen.attention import dot_product_attention_weights
+from jax import lax
 from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
@@ -56,36 +59,6 @@ def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_
     return shifted_input_ids
 
 
-def _make_causal_mask(
-    input_ids_shape: Tuple[int, int], dtype: jnp.dtype, past_key_values_length: int = 0
-) -> jnp.ndarray:
-    """
-    Make causal mask used for bi-directional self-attention.
-    """
-    bsz, tgt_len = input_ids_shape
-    mask = jnp.full((tgt_len, tgt_len), float("-inf"))
-    mask_cond = jnp.arange(mask.shape[-1])
-    mask = jnp.where(mask_cond < (mask_cond + 1).reshape(mask.shape[-1], 1), 0, mask)
-    mask = mask.astype(dtype)
-
-    if past_key_values_length > 0:
-        mask = jnp.concatenate([jnp.zeros((tgt_len, past_key_values_length), dtype=dtype), mask], axis=-1)
-    return jnp.tile(mask[None, None, :, :], (bsz, 1, 1, 1))
-
-
-def _expand_mask(mask: jnp.ndarray, dtype: jnp.dtype, tgt_len: Optional[int] = None) -> jnp.ndarray:
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.shape
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = jnp.tile(mask[:, None, None, :], (1, 1, tgt_len, 1)).astype(dtype)
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask * jnp.finfo(dtype).min
-
-
 class FlaxBartLearnedPositionalEmbedding(nn.Module):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -118,6 +91,7 @@ class FlaxBartAttention(nn.Module):
     num_heads: int
     dropout: float = 0.0
     is_decoder: bool = False
+    causal: bool = False
     bias: bool = True
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -154,8 +128,16 @@ class FlaxBartAttention(nn.Module):
 
         self.dropout_layer = nn.Dropout(rate=self.dropout)
 
-    def _shape(self, x, seq_len: int, bsz: int):
-        return x.reshape(bsz, seq_len, self.num_heads, self.head_dim).transpose((0, 2, 1, 3))
+        if self.causal:
+            self.causal_mask = make_causal_mask(
+                jnp.ones((1, self.config.max_position_embeddings), dtype="bool"), dtype="bool"
+            )
+
+    def _split_heads(self, hidden_states):
+        return hidden_states.reshape(hidden_states.shape[:2] + (self.num_heads, self.head_dim))
+
+    def _merge_heads(self, hidden_states):
+        return hidden_states.reshape(hidden_states.shape[:2] + (self.embed_dim,))
 
     def __call__(
         self,
@@ -171,94 +153,80 @@ class FlaxBartAttention(nn.Module):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        bsz, tgt_len, embed_dim = hidden_states.shape
+        batch_size, tgt_len, embed_dim = hidden_states.shape
 
         # get query proj
         query_states = self.q_proj(hidden_states)
         # get key, value proj
         if is_cross_attention:
             # cross_attentions
-            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
+            key_states = self.k_proj(key_value_states)
+            value_states = self.v_proj(key_value_states)
         else:
             # self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            key_states = self.k_proj(hidden_states)
+            value_states = self.v_proj(hidden_states)
 
-        # if self.is_decoder:
-        #     # if cross_attention save Tuple(jnp.ndarray, jnp.ndarray) of all cross attention key/value_states.
-        #     # Further calls to cross_attention layer can then reuse all cross-attention
-        #     # key/value_states (first "if" case)
-        #     # if uni-directional self-attention (decoder) save Tuple(jnp.ndarray, jnp.ndarray) of
-        #     # all previous decoder key/value_states. Further calls to uni-directional self-attention
-        #     # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-        #     # if encoder bi-directional self-attention `past_key_value` is always `None`
-        #     past_key_value = (key_states, value_states)
+        query_states = self._split_heads(query_states)
+        key_states = self._split_heads(key_states)
+        value_states = self._split_heads(value_states)
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).reshape(proj_shape)
-        key_states = key_states.reshape(proj_shape)
-        value_states = value_states.reshape(proj_shape)
+        # prepare causal attention mask
+        if self.causal:
+            query_length, key_length = query_states.shape[1], key_states.shape[1]
+            causal_mask = self.causal_mask[:, :, :query_length, :key_length]
+            causal_mask = jnp.broadcast_to(causal_mask, (batch_size,) + causal_mask.shape[1:])
 
-        src_len = key_states.shape[1]
-        attn_weights = jnp.matmul(query_states, key_states.transpose((0, 2, 1)))
+        # combine masks if needed
+        if attention_mask is not None and self.causal:
+            attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape)
+            attention_mask = combine_masks(attention_mask, causal_mask)
+        elif self.causal:
+            attention_mask = causal_mask
+        elif attention_mask is not None:
+            attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
 
-        assert attn_weights.shape == (
-            bsz * self.num_heads,
-            tgt_len,
-            src_len,
-        ), f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.shape}"
-
+        # Convert the boolean attention mask to an attention bias.
         if attention_mask is not None:
-            assert attention_mask.shape == (
-                bsz,
-                1,
-                tgt_len,
-                src_len,
-            ), f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.shape}"
-            attn_weights = attn_weights.reshape(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.reshape(bsz * self.num_heads, tgt_len, src_len)
-
-        attn_weights = jax.nn.softmax(attn_weights, axis=-1)
-
-        if layer_head_mask is not None:
-            assert layer_head_mask.shape == (
-                self.num_heads,
-            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.shape}"
-            attn_weights = layer_head_mask.reshape(1, -1, 1, 1) * attn_weights.reshape(
-                bsz, self.num_heads, tgt_len, src_len
+            # attention mask in the form of attention bias
+            attention_bias = lax.select(
+                attention_mask > 0,
+                jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
+                jnp.full(attention_mask.shape, -1e10).astype(self.dtype),
             )
-            attn_weights = attn_weights.reshape(bsz * self.num_heads, tgt_len, src_len)
-
-        if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to be reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.reshape(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.reshape(bsz * self.num_heads, tgt_len, src_len)
         else:
-            attn_weights_reshaped = None
+            attention_bias = None
 
-        attn_probs = self.dropout_layer(attn_weights, deterministic=deterministic)
+        dropout_rng = None
+        if not deterministic and self.dropout > 0.0:
+            dropout_rng = self.make_rng("dropout")
 
-        attn_output = jnp.matmul(attn_probs, value_states)
-
-        assert attn_output.shape == (
-            bsz * self.num_heads,
-            tgt_len,
-            self.head_dim,
-        ), f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.shape}"
-
-        attn_output = (
-            attn_output.reshape(bsz, self.num_heads, tgt_len, self.head_dim)
-            .transpose((0, 2, 1, 3))
-            .reshape(bsz, tgt_len, embed_dim)
+        attn_weights = dot_product_attention_weights(
+            query_states,
+            key_states,
+            bias=attention_bias,
+            dropout_rng=dropout_rng,
+            dropout_rate=self.dropout,
+            broadcast_dropout=True,
+            deterministic=deterministic,
+            dtype=self.dtype,
+            precision=None,
         )
 
+        # if layer_head_mask is not None:
+        #     assert layer_head_mask.shape == (
+        #         self.num_heads,
+        #     ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.shape}"
+        #     attn_weights = layer_head_mask.reshape(1, -1, 1, 1) * attn_weights.reshape(
+        #         bsz, self.num_heads, tgt_len, src_len
+        #     )
+        #     attn_weights = attn_weights.reshape(bsz * self.num_heads, tgt_len, src_len)
+
+        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
+        attn_output = self._merge_heads(attn_output)
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights_reshaped
+        return attn_output, attn_weights
 
 
 class FlaxBartEncoderLayer(nn.Module):
@@ -402,6 +370,7 @@ class FlaxBartDecoderLayer(nn.Module):
             num_heads=self.config.decoder_attention_heads,
             dropout=self.config.attention_dropout,
             is_decoder=True,
+            causal=True,
         )
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
         self.activation_fn = ACT2FN[self.config.activation_function]
@@ -921,11 +890,6 @@ class FlaxBartEncoder(nn.Module):
         hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
 
-        # expand attention_mask
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
-
         outputs = self.layers(
             hidden_states,
             attention_mask,
@@ -988,23 +952,6 @@ class FlaxBartDecoder(nn.Module):
 
     def set_input_embeddings(self, value):
         self.embed_tokens = value
-
-    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
-        # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(
-                input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
-            )
-
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
-            combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
-            )
-        return combined_attention_mask
 
     def __call__(
         self,
@@ -1094,18 +1041,7 @@ class FlaxBartDecoder(nn.Module):
         input_shape = input_ids.shape
         input_ids = input_ids.reshape(-1, input_shape[-1])
 
-        past_key_values_length = 0
-
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-
-        attention_mask = self._prepare_decoder_attention_mask(
-            attention_mask, input_shape, inputs_embeds, past_key_values_length
-        )
-
-        # expand encoder attention mask
-        if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # embed positions
         positions = self.embed_positions(position_ids)
