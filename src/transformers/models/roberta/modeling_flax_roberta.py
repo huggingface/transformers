@@ -617,11 +617,10 @@ class FlaxRobertaModule(nn.Module):
         token_type_ids,
         position_ids,
         deterministic: bool = True,
-        output_attentions: Optional[bool] = None,
+        output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-
         hidden_states = self.embeddings(
             input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic
         )
