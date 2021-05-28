@@ -30,14 +30,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-import numpy as np
 from datasets import load_dataset
 from tqdm import tqdm
 
 import jax
+from jax import jit
 import jax.numpy as jnp
 import optax
 from flax import jax_utils
+import flax
+import jaxlib.xla_extension as jax_xla
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
 from transformers import (
@@ -47,11 +49,8 @@ from transformers import (
     AutoTokenizer,
     FlaxAutoModelForMaskedLM,
     HfArgumentParser,
-    PreTrainedTokenizerBase,
-    TensorType,
     TrainingArguments,
     is_tensorboard_available,
-    set_seed,
 )
 
 
@@ -185,12 +184,10 @@ class DataTrainingArguments:
                 assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
 
 
-# Adapted from transformers/data/data_collator.py
-# Letting here for now, let's discuss where it should live
-@dataclass
+@flax.struct.dataclass
 class FlaxDataCollatorForLanguageModeling:
     """
-    Data collator used for language modeling. Inputs are dynamically padded to the maximum length of a batch if they
+    Data collator used for masked language modeling. Inputs are dynamically padded to the maximum length of a batch if they
     are not all of the same length.
 
     Args:
@@ -210,73 +207,53 @@ class FlaxDataCollatorForLanguageModeling:
         :class:`~transformers.PreTrainedTokenizer` or a :class:`~transformers.PreTrainedTokenizerFast` with the
         argument :obj:`return_special_tokens_mask=True`.
     """
-
-    tokenizer: PreTrainedTokenizerBase
-    mlm: bool = True
+    mask_token_id: int
     mlm_probability: float = 0.15
 
-    def __post_init__(self):
-        if self.mlm and self.tokenizer.mask_token is None:
-            raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for masked language modeling. "
-                "You should pass `mlm=False` to train on causal language modeling instead."
-            )
-
-    def __call__(self, examples: List[Dict[str, np.ndarray]], pad_to_multiple_of: int) -> Dict[str, np.ndarray]:
-        # Handle dict or lists with proper padding and conversion to tensor.
-        batch = self.tokenizer.pad(examples, pad_to_multiple_of=pad_to_multiple_of, return_tensors=TensorType.NUMPY)
-
-        # If special token mask has been preprocessed, pop it from the dict.
-        special_tokens_mask = batch.pop("special_tokens_mask", None)
-        if self.mlm:
-            batch["input_ids"], batch["labels"] = self.mask_tokens(
-                batch["input_ids"], special_tokens_mask=special_tokens_mask
-            )
-        else:
-            labels = batch["input_ids"].copy()
-            if self.tokenizer.pad_token_id is not None:
-                labels[labels == self.tokenizer.pad_token_id] = -100
-            batch["labels"] = labels
-        return batch
+    @jit
+    def __call__(self, examples: List[Dict[str, jax_xla.DeviceArray]], pad_to_multiple_of: int, rng: jax.random.PRNGKey) -> Dict[str, jax_xla.DeviceArray]:
+        batch = {k: jnp.asarray([x[k] for x in examples], dtype="i4") for k in examples[0].keys()}
+        batch["input_ids"], batch["labels"], rng = self.mask_tokens(batch["input_ids"], batch["special_tokens_mask"], rng=rng)
+        return batch, rng
 
     def mask_tokens(
-        self, inputs: np.ndarray, special_tokens_mask: Optional[np.ndarray]
-    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        self, inputs: jax_xla.DeviceArray, special_tokens_mask: jax_xla.DeviceArray, rng: jax.random.PRNGKey
+    ) -> Tuple[jax_xla.DeviceArray, jax_xla.DeviceArray]:
         """
         Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
         """
-        labels = inputs.copy()
+        # generate random seeds
+        rng, rng_replace, rng_mask, rng_replace, rng_rand_token = jax.random.split(rng, 5)
+
+        labels = jnp.asarray(inputs)
         # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
-        probability_matrix = np.full(labels.shape, self.mlm_probability)
+        probability_matrix = jnp.full(labels.shape, self.mlm_probability)
         special_tokens_mask = special_tokens_mask.astype("bool")
+        jax.ops.index_update(probability_matrix, special_tokens_mask, 0.0)
+        corrupted_indices = jax.random.bernoulli(rng_replace, p=probability_matrix).astype("bool")
+        labels = corrupted_indices * labels + (1 - corrupted_indices) * labels
 
-        probability_matrix[special_tokens_mask] = 0.0
-        masked_indices = np.random.binomial(1, probability_matrix).astype("bool")
-        labels[~masked_indices] = -100  # We only compute loss on masked tokens
+        # 80% of the time, we replace masked input tokens with mask_token ([MASK])
+        masked_indices = jax.random.bernoulli(rng_mask, p=0.8, shape=labels.shape).astype("bool") & corrupted_indices
+        inputs = (1 - masked_indices) * inputs + masked_indices * self.mask_token_id
 
-        # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-        indices_replaced = np.random.binomial(1, np.full(labels.shape, 0.8)).astype("bool") & masked_indices
-        inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
-
-        # 10% of the time, we replace masked input tokens with random word
-        indices_random = np.random.binomial(1, np.full(labels.shape, 0.5)).astype("bool")
-        indices_random &= masked_indices & ~indices_replaced
-
-        random_words = np.random.randint(self.tokenizer.vocab_size, size=labels.shape, dtype="i4")
-        inputs[indices_random] = random_words[indices_random]
+        # 10% (1 - 0.8) * 0.5 of the time, we replace masked input okens with random word
+        replaced_indices = jax.random.bernoulli(rng_replace, p=0.5, shape=labels.shape).astype("bool") & corrupted_indices & ~masked_indices
+        random_tokens = jax.random.randint(rng_rand_token, labels.shape, 0, labels.shape[-1], dtype="i4")
+        inputs = (1 - replaced_indices) * inputs + replaced_indices * random_tokens[replaced_indices]
 
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
-        return inputs, labels
+        return inputs, labels, rng
 
 
-def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndarray:
+def generate_batch_splits(samples_idx: jax_xla.DeviceArray, batch_size: int) -> jax_xla.DeviceArray:
     num_samples = len(samples_idx)
     samples_to_remove = num_samples % batch_size
 
     if samples_to_remove != 0:
         samples_idx = samples_idx[:-samples_to_remove]
     sections_split = num_samples // batch_size
-    batch_idx = np.split(samples_idx, sections_split)
+    batch_idx = jnp.split(samples_idx, sections_split)
     return batch_idx
 
 
@@ -297,8 +274,8 @@ if __name__ == "__main__":
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
-
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
@@ -333,9 +310,6 @@ if __name__ == "__main__":
 
     # Set the verbosity to info of the Transformers logger (on main process only):
     logger.info(f"Training/evaluation parameters {training_args}")
-
-    # Set seed before initializing model.
-    set_seed(training_args.seed)
 
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
@@ -487,10 +461,11 @@ if __name__ == "__main__":
 
     # Data collator
     # This one will take care of randomly masking the tokens.
-    data_collator = FlaxDataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=data_args.mlm_probability)
+    data_collator = FlaxDataCollatorForLanguageModeling(mask_token_id=tokenizer.mask_token_id, mlm_probability=data_args.mlm_probability)
 
     # Initialize our training
     rng = jax.random.PRNGKey(training_args.seed)
+    mlm_rng, rng = jax.random.split(rng)
     dropout_rngs = jax.random.split(rng, jax.local_device_count())
 
     model = FlaxAutoModelForMaskedLM.from_config(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
@@ -601,10 +576,11 @@ if __name__ == "__main__":
         # Gather the indexes for creating the batch and do a training step
         for i, batch_idx in enumerate(tqdm(train_batch_idx, desc="Training...", position=1)):
             samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
-            model_inputs = data_collator(samples, pad_to_multiple_of=16)
+            model_inputs, mlm_rng = data_collator(samples, pad_to_multiple_of=16, rng=mlm_rng)
 
             # Model forward
-            model_inputs = shard(model_inputs.data)
+#            model_inputs = shard(model_inputs.data)
+            model_inputs = shard(model_inputs)
             state, train_metric, dropout_rngs = p_train_step(state, model_inputs, dropout_rngs)
             train_metrics.append(train_metric)
 
@@ -622,10 +598,11 @@ if __name__ == "__main__":
         eval_metrics = []
         for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
             samples = [tokenized_datasets["validation"][int(idx)] for idx in batch_idx]
-            model_inputs = data_collator(samples, pad_to_multiple_of=16)
+            model_inputs, mlm_rng = data_collator(samples, pad_to_multiple_of=16, rng=mlm_rng)
 
             # Model forward
-            model_inputs = shard(model_inputs.data)
+#            model_inputs = shard(model_inputs.data)
+            model_inputs = shard(model_inputs)
             metrics = p_eval_step(state.params, model_inputs)
             eval_metrics.append(metrics)
 
