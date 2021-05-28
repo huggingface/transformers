@@ -1437,6 +1437,14 @@ else:
 
 # FLAX-backed objects
 if is_flax_available():
+    _import_structure["generation_flax_logits_process"] = [
+        "FlaxLogitsProcessor",
+        "FlaxLogitsProcessorList",
+        "FlaxLogitsWarper",
+        "FlaxTemperatureLogitsWarper",
+        "FlaxTopKLogitsWarper",
+        "FlaxTopPLogitsWarper",
+    ]
     _import_structure["modeling_flax_utils"] = ["FlaxPreTrainedModel"]
     _import_structure["models.auto"].extend(
         [
@@ -2693,6 +2701,14 @@ if TYPE_CHECKING:
         from .utils.dummy_tf_objects import *
 
     if is_flax_available():
+        from .generation_flax_logits_process import (
+            FlaxLogitsProcessor,
+            FlaxLogitsProcessorList,
+            FlaxLogitsWarper,
+            FlaxTemperatureLogitsWarper,
+            FlaxTopKLogitsWarper,
+            FlaxTopPLogitsWarper,
+        )
         from .modeling_flax_utils import FlaxPreTrainedModel
         from .models.auto import (
             FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
