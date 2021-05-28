@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. and UCLA NLP All rights reserved.
+# Copyright 2021 The UCLA NLP Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -145,7 +145,7 @@ class VisualBertEmbeddings(nn.Module):
                 # image_text_alignment = Batch x image_length x alignment_number.
                 # Each element denotes the position of the word corresponding to the image feature. -1 is the padding value.
 
-                dtype = next(self.parameters()).dtype
+                dtype = token_type_embeddings.dtype
                 image_text_alignment_mask = (image_text_alignment != -1).long()
                 # Get rid of the -1.
                 image_text_alignment = image_text_alignment_mask * image_text_alignment
@@ -160,8 +160,8 @@ class VisualBertEmbeddings(nn.Module):
 
                 if (image_text_alignment_mask == 0).sum() != 0:
                     image_text_alignment_mask[image_text_alignment_mask == 0] = 1  # Avoid divide by zero error
-                    raise Warning(
-                        "Found zero values in `image_text_alignment_mask`. Setting them to 1 to avoid divide-by-zero error."
+                    logger.warning(
+                        "Found 0 values in `image_text_alignment_mask`. Setting them to 1 to avoid divide-by-zero error."
                     )
                 visual_position_embeddings = visual_position_embeddings / image_text_alignment_mask.unsqueeze(-1)
 
@@ -431,12 +431,7 @@ class VisualBertEncoder(nn.Module):
                     layer_head_mask,
                 )
             else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                )
+                layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -1375,7 +1370,7 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
         )
 
 
-class RegionToPhraseAttention(nn.Module):
+class VisualBertRegionToPhraseAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0:
@@ -1399,7 +1394,7 @@ class RegionToPhraseAttention(nn.Module):
         return x.permute(0, 2, 1, 3)
 
     def forward(self, query, key, attention_mask):
-        attention_mask = attention_mask.to(dtype=next(self.parameters()).dtype)
+        attention_mask = attention_mask.to(query.dtype)
         attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
         attention_mask = (1.0 - attention_mask) * -10000.0
 

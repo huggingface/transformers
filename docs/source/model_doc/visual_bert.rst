@@ -42,9 +42,6 @@ Tips:
    We do not provide the detector and its weights as a part of the package, but it will be available in the research
    projects, and the states can be loaded directly into the detector provided.
 
-Note: More tips will be added, and a demo notebook on how to use a detector to generate your own visual embeddings, and
-use the VisualBERT model for fine-tuning on your task.
-
 Usage
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
