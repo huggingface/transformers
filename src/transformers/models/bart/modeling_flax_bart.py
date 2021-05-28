@@ -1183,6 +1183,28 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
         self.lm_head = nn.Dense(self.model.shared.num_embeddings, use_bias=False, dtype=self.dtype)
         self.final_logits_bias = self.param("final_logits_bias", self.bias_init, (1, self.model.shared.num_embeddings))
 
+    def encoder_forward(
+        self,
+        input_ids: jnp.ndarray,
+        attention_mask: Optional[jnp.ndarray] = None,
+        position_ids: Optional[jnp.ndarray] = None,
+        head_mask: Optional[jnp.ndarray] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: bool = True,
+        deterministic: bool = True,
+    ):
+        return self.model.encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
+        )
+
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     def __call__(
         self,
@@ -1251,6 +1273,50 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
 class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
     module_class = FlaxBartForConditionalGenerationModule
     dtype: jnp.dtype = jnp.float32
+
+    def encode(
+        self,
+        input_ids: jnp.ndarray,
+        attention_mask: Optional[jnp.ndarray] = None,
+        position_ids: Optional[jnp.ndarray] = None,
+        head_mask: Optional[jnp.ndarray] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: bool = True,
+        deterministic: bool = True,
+        params: dict = None,
+        dropout_rng: PRNGKey = None,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        if attention_mask is None:
+            attention_mask = jnp.ones_like(input_ids)
+        if position_ids is None:
+            batch_size, sequence_length = input_ids.shape
+            position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
+
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
+        return self.module.apply(
+            {"params": params or self.params},
+            input_ids=jnp.array(input_ids, dtype="i4"),
+            attention_mask=jnp.array(attention_mask, dtype="i4"),
+            position_ids=jnp.array(position_ids, dtype="i4"),
+            head_mask=jnp.array(head_mask, dtype="i4") if head_mask is not None else None,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
+            rngs=rngs,
+            method=self.module.encoder_forward,
+        )
 
 
 class FlaxBartForSequenceClassificationModule(nn.Module):
