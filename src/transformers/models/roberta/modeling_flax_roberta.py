@@ -622,7 +622,6 @@ class FlaxRobertaModule(nn.Module):
         return_dict: bool = True,
     ):
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         hidden_states = self.embeddings(
             input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic
         )
