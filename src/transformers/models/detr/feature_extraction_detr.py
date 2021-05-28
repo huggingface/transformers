@@ -625,7 +625,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         return maxes
 
     def pad_and_create_pixel_mask(
-        self, pixel_values_list: List[torch.Tensor], return_tensors: Optional[Union[str, TensorType]] = None
+        self, pixel_values_list: List["torch.Tensor"], return_tensors: Optional[Union[str, TensorType]] = None
     ):
         """
         Pad images up to the largest image in a batch and create a corresponding :obj:`pixel_mask`.
