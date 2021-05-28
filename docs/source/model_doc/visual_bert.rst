@@ -67,7 +67,7 @@ how to get the last hidden state using :class:`~transformers.VisualBertModel`:
         >>> import torch
         >>> from transformers import BertTokenizer, VisualBertModel
 
-        >>> model = VisualBertModel.from_pretrained("gchhablani/visualbert-vqa-coco-pre")
+        >>> model = VisualBertModel.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
         >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
         >>> inputs = tokenizer("What is the man eating?", return_tensors="pt")
