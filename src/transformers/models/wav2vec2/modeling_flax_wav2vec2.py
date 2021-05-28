@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Wav2Vec2 model. """
+""" Flax Wav2Vec2 model. """
 
 from dataclasses import dataclass
 from re import M
@@ -24,12 +24,9 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import jaxlib.xla_extension as jax_xla
-from flax.core.frozen_dict import FrozenDict
-from flax.linen import combine_masks, dot_product_attention, make_causal_mask
+from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
-from jax import config, lax
-from jax.dtypes import dtype
-from jax.random import PRNGKey
+from jax import lax
 
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
@@ -395,23 +392,74 @@ class FlaxWav2Vec2FeedForward(nn.Module):
         return hidden_states
 
 
-class FlaxWav2Vec2Output(nn.Module):
+class FlaxWav2Vec2EncoderLayer(nn.Module):
     config: Wav2Vec2Config
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        config = self.config
+        self.attention = FlaxWav2Vec2Attention(
+            embed_dim=self.config.hidden_size,
+            num_heads=self.config.num_attention_heads,
+            dropout=self.config.attention_dropout,
+            is_decoder=False,
+        )
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout)
+        self.layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.feed_forward = FlaxWav2Vec2FeedForward(self.config)
+        self.final_layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+    
+    def __call__(self, hidden_states, attention_mask=None, output_attentions=False):
+        attn_residual = hidden_states
+        hidden_states, attn_weights, _ = self.attention(
+            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+        )
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = attn_residual + hidden_states
 
-    def __call__(self, hidden_states, input_tensor):
-        return hidden_states
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = hidden_states + self.feed_forward(hidden_states)
+        hidden_states = self.final_layer_norm(hidden_states)
 
+        outputs = (hidden_states,)
 
-class FlaxWav2Vec2EncoderLayer(nn.Module):
-    pass
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
 
 
 class FlaxWav2Vec2EncoderLayerStableLayerNorm(nn.Module):
-    pass
+    config: Wav2Vec2Config
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.attention = FlaxWav2Vec2Attention(
+            embed_dim=self.config.hidden_size,
+            num_heads=self.config.num_attention_heads,
+            dropout=self.config.attention_dropout,
+            is_decoder=False,
+        )
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout)
+        self.layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps)
+        self.feed_forward = FlaxWav2Vec2FeedForward(self.config)
+        self.final_layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps)
+
+    def __call__(self, hidden_states, attention_mask=None, output_attentions=False):
+        attn_residual = hidden_states
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states, attn_weights, _ = self.attention(
+            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+        )
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = attn_residual + hidden_states
+        hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
 
 
 class FlaxWav2Vec2Encoder(nn.Module):
