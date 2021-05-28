@@ -163,7 +163,6 @@ class FlaxBartAttention(nn.Module):
         self,
         hidden_states: jnp.ndarray,
         key_value_states: Optional[jnp.ndarray] = None,
-        past_key_value: Optional[Tuple[jnp.ndarray]] = None,
         attention_mask: Optional[jnp.ndarray] = None,
         layer_head_mask: Optional[jnp.ndarray] = None,
         output_attentions: bool = False,
@@ -179,34 +178,24 @@ class FlaxBartAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states)
         # get key, value proj
-        if is_cross_attention and past_key_value is not None:
-            # reuse k,v, cross_attentions
-            key_states = past_key_value[0]
-            value_states = past_key_value[1]
-        elif is_cross_attention:
+        if is_cross_attention:
             # cross_attentions
             key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
             value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
-        elif past_key_value is not None:
-            # reuse k, v, self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-            key_states = jnp.concatenate([past_key_value[0], key_states], dim=2)
-            value_states = jnp.concatenate([past_key_value[1], value_states], dim=2)
         else:
             # self_attention
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
             value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
-        if self.is_decoder:
-            # if cross_attention save Tuple(jnp.ndarray, jnp.ndarray) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(jnp.ndarray, jnp.ndarray) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_states, value_states)
+        # if self.is_decoder:
+        #     # if cross_attention save Tuple(jnp.ndarray, jnp.ndarray) of all cross attention key/value_states.
+        #     # Further calls to cross_attention layer can then reuse all cross-attention
+        #     # key/value_states (first "if" case)
+        #     # if uni-directional self-attention (decoder) save Tuple(jnp.ndarray, jnp.ndarray) of
+        #     # all previous decoder key/value_states. Further calls to uni-directional self-attention
+        #     # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+        #     # if encoder bi-directional self-attention `past_key_value` is always `None`
+        #     past_key_value = (key_states, value_states)
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).reshape(proj_shape)
@@ -271,7 +260,7 @@ class FlaxBartAttention(nn.Module):
 
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights_reshaped, past_key_value
+        return attn_output, attn_weights_reshaped
 
 
 class FlaxBartEncoderLayer(nn.Module):
@@ -441,7 +430,6 @@ class FlaxBartDecoderLayer(nn.Module):
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         layer_head_mask: Optional[jnp.ndarray] = None,
         cross_attn_layer_head_mask: Optional[jnp.ndarray] = None,
-        past_key_value: Optional[Tuple[jnp.ndarray]] = None,
         output_attentions: bool = True,
         use_cache: bool = True,
         deterministic: bool = True,
@@ -467,11 +455,9 @@ class FlaxBartDecoderLayer(nn.Module):
 
         # Self Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         # add present self-attn cache to positions 1,2 of present_key_value tuple
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
-            past_key_value=self_attn_past_key_value,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
@@ -486,14 +472,11 @@ class FlaxBartDecoderLayer(nn.Module):
         if encoder_hidden_states is not None:
             residual = hidden_states
 
-            # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
             hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=cross_attn_past_key_value,
                 output_attentions=output_attentions,
             )
             hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
@@ -517,9 +500,6 @@ class FlaxBartDecoderLayer(nn.Module):
         if output_attentions:
             outputs += (self_attn_weights, cross_attn_weights)
 
-        if use_cache:
-            outputs += (present_key_value,)
-
         return outputs
 
 
@@ -542,7 +522,6 @@ class FlaxBartDecoderLayerCollection(nn.Module):
         encoder_attention_mask,
         head_mask,
         cross_attn_head_mask,
-        past_key_values,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -553,7 +532,6 @@ class FlaxBartDecoderLayerCollection(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
-        next_decoder_cache = () if use_cache else None
 
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -563,7 +541,6 @@ class FlaxBartDecoderLayerCollection(nn.Module):
             if deterministic and (dropout_probability < self.layerdrop):
                 continue
 
-            past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             layer_outputs = decoder_layer(
                 hidden_states,
@@ -572,15 +549,11 @@ class FlaxBartDecoderLayerCollection(nn.Module):
                 encoder_attention_mask=encoder_attention_mask,
                 layer_head_mask=head_mask[idx] if head_mask is not None else None,
                 cross_attn_layer_head_mask=cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                past_key_value=past_key_value,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 deterministic=deterministic,
             )
             hidden_states = layer_outputs[0]
-
-            if use_cache:
-                next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -592,14 +565,13 @@ class FlaxBartDecoderLayerCollection(nn.Module):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        outputs = [hidden_states, next_decoder_cache, all_hidden_states, all_self_attns, all_cross_attentions]
+        outputs = [hidden_states, all_hidden_states, all_self_attns, all_cross_attentions]
 
         if not return_dict:
             return tuple(v for v in outputs if v is not None)
 
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=next_decoder_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
@@ -670,7 +642,6 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
         decoder_head_mask: Optional[jnp.ndarray] = None,
         cross_attn_head_mask: Optional[jnp.ndarray] = None,
         encoder_outputs: Optional[jnp.ndarray] = None,
-        past_key_values: Optional[jnp.ndarray] = None,
         inputs_embeds: Optional[jnp.ndarray] = None,
         decoder_inputs_embeds: Optional[jnp.ndarray] = None,
         use_cache: Optional[bool] = None,
@@ -723,7 +694,6 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
                 jnp.array(cross_attn_head_mask, dtype="i4") if cross_attn_head_mask is not None else None
             ),
             encoder_outputs=jnp.array(encoder_outputs, dtype="fp32") if encoder_outputs is not None else None,
-            past_key_values=jnp.array(past_key_values, dtype="fp32") if past_key_values is not None else None,
             inputs_embeds=jnp.array(inputs_embeds, dtype="fp32") if inputs_embeds is not None else None,
             decoder_inputs_embeds=(
                 jnp.array(decoder_inputs_embeds, dtype="fp32") if decoder_inputs_embeds is not None else None
@@ -1073,7 +1043,6 @@ class FlaxBartDecoder(nn.Module):
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         head_mask: Optional[jnp.ndarray] = None,
         cross_attn_head_mask: Optional[jnp.ndarray] = None,
-        past_key_values: Optional[jnp.ndarray] = None,
         inputs_embeds: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = None,
         use_cache: Optional[bool] = None,
@@ -1163,7 +1132,7 @@ class FlaxBartDecoder(nn.Module):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        past_key_values_length =  0
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
@@ -1194,7 +1163,6 @@ class FlaxBartDecoder(nn.Module):
             encoder_attention_mask,
             head_mask=head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
-            past_key_values=past_key_values,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1207,7 +1175,6 @@ class FlaxBartDecoder(nn.Module):
 
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
@@ -1245,7 +1212,6 @@ class FlaxBartModule(nn.Module):
         decoder_head_mask: Optional[jnp.ndarray] = None,
         cross_attn_head_mask: Optional[jnp.ndarray] = None,
         encoder_outputs: Optional[jnp.ndarray] = None,
-        past_key_values: Optional[jnp.ndarray] = None,
         inputs_embeds: Optional[jnp.ndarray] = None,
         decoder_inputs_embeds: Optional[jnp.ndarray] = None,
         use_cache: Optional[bool] = None,
@@ -1292,7 +1258,6 @@ class FlaxBartModule(nn.Module):
             encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
-            past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1306,7 +1271,6 @@ class FlaxBartModule(nn.Module):
 
         return FlaxSeq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
@@ -1347,7 +1311,6 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
         decoder_head_mask: Optional[jnp.ndarray] = None,
         cross_attn_head_mask: Optional[jnp.ndarray] = None,
         encoder_outputs: Optional[jnp.ndarray] = None,
-        past_key_values: Optional[jnp.ndarray] = None,
         inputs_embeds: Optional[jnp.ndarray] = None,
         decoder_inputs_embeds: Optional[jnp.ndarray] = None,
         use_cache: Optional[bool] = None,
@@ -1365,7 +1328,6 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
             decoder_head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
-            past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
@@ -1391,7 +1353,6 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
 
         return FlaxSeq2SeqLMOutput(
             logits=lm_logits,
-            past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,
@@ -1434,7 +1395,6 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
         decoder_head_mask: Optional[jnp.ndarray] = None,
         cross_attn_head_mask: Optional[jnp.ndarray] = None,
         encoder_outputs: Optional[jnp.ndarray] = None,
-        past_key_values: Optional[jnp.ndarray] = None,
         inputs_embeds: Optional[jnp.ndarray] = None,
         decoder_inputs_embeds: Optional[jnp.ndarray] = None,
         use_cache: Optional[bool] = None,
@@ -1452,7 +1412,6 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
             decoder_head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
-            past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
@@ -1487,7 +1446,6 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
 
         return FlaxSeq2SeqSequenceClassifierOutput(
             logits=logits,
-            past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,
@@ -1529,7 +1487,6 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
         decoder_head_mask: Optional[jnp.ndarray] = None,
         cross_attn_head_mask: Optional[jnp.ndarray] = None,
         encoder_outputs: Optional[jnp.ndarray] = None,
-        past_key_values: Optional[jnp.ndarray] = None,
         inputs_embeds: Optional[jnp.ndarray] = None,
         decoder_inputs_embeds: Optional[jnp.ndarray] = None,
         use_cache: Optional[bool] = None,
@@ -1547,7 +1504,6 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
             decoder_head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
-            past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
@@ -1574,7 +1530,6 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
         return FlaxSeq2SeqQuestionAnsweringModelOutput(
             start_logits=start_logits,
             end_logits=end_logits,
-            past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,
