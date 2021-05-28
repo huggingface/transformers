@@ -29,7 +29,6 @@ import jax
 import jax.numpy as jnp
 import optax
 import transformers
-from flax import linen as nn
 from flax import struct, traverse_util
 from flax.jax_utils import replicate, unreplicate
 from flax.metrics import tensorboard
