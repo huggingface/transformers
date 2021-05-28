@@ -112,6 +112,7 @@ _deps = [
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
+    "optuna",
     "packaging",
     "parameterized",
     "protobuf",
@@ -121,6 +122,7 @@ _deps = [
     "pytest-sugar",
     "pytest-xdist",
     "python>=3.6.0",
+    "ray",
     "recommonmark",
     "regex!=2019.12.17",
     "requests",
@@ -239,6 +241,10 @@ extras["modelcreation"] = deps_list("cookiecutter")
 extras["sagemaker"] = deps_list("sagemaker")
 extras["deepspeed"] = deps_list("deepspeed")
 extras["fairscale"] = deps_list("fairscale")
+extras["optuna"] = deps_list("optuna")
+extras["ray"] = deps_list("ray")
+
+extras["integrations"] = extras["optuna"] + extras["ray"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["speech"] = deps_list("soundfile", "torchaudio")
@@ -263,6 +269,7 @@ extras["all"] = (
     + extras["tokenizers"]
     + extras["speech"]
     + extras["vision"]
+    + extras["integrations"]
 )
 
 extras["docs_specific"] = deps_list(
