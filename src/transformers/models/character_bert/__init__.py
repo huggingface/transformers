@@ -28,7 +28,6 @@ _import_structure = {
 if is_torch_available():
     _import_structure["modeling_character_bert"] = [
         "CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "CharacterCnn",
         "CharacterBertForMaskedLM",
         "CharacterBertForMultipleChoice",
         "CharacterBertForNextSentencePrediction",
@@ -36,11 +35,7 @@ if is_torch_available():
         "CharacterBertForQuestionAnswering",
         "CharacterBertForSequenceClassification",
         "CharacterBertForTokenClassification",
-        "CharacterBertLayer",
-        "CharacterBertLMHeadModel",
         "CharacterBertModel",
-        "CharacterBertPreTrainedModel",
-        "load_tf_weights_in_character_bert",
     ]
 
 if TYPE_CHECKING:

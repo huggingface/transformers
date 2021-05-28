@@ -776,7 +776,6 @@ if is_torch_available():
     _import_structure["models.character_bert"].extend(
         [
             "CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "CharacterCnn",
             "CharacterBertForMaskedLM",
             "CharacterBertForMultipleChoice",
             "CharacterBertForNextSentencePrediction",
@@ -784,11 +783,7 @@ if is_torch_available():
             "CharacterBertForQuestionAnswering",
             "CharacterBertForSequenceClassification",
             "CharacterBertForTokenClassification",
-            "CharacterBertLayer",
-            "CharacterBertLMHeadModel",
             "CharacterBertModel",
-            "CharacterBertPreTrainedModel",
-            "load_tf_weights_in_character_bert",
         ]
     )
     _import_structure["models.clip"].extend(
@@ -2684,12 +2679,7 @@ if TYPE_CHECKING:
             CharacterBertForQuestionAnswering,
             CharacterBertForSequenceClassification,
             CharacterBertForTokenClassification,
-            CharacterBertLayer,
-            CharacterBertLMHeadModel,
             CharacterBertModel,
-            CharacterBertPreTrainedModel,
-            CharacterCnn,
-            load_tf_weights_in_character_bert,
         )
         from .models.clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
