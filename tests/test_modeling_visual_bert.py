@@ -562,7 +562,7 @@ class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
 class VisualBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_vqa_coco_pre(self):
-        model = VisualBertForPreTraining.from_pretrained("gchhablani/visualbert-vqa-coco-pre")
+        model = VisualBertForPreTraining.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
 
         input_ids = torch.tensor([1, 2, 3, 4, 5, 6]).reshape(1, -1)
         token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1]).reshape(1, -1)
@@ -600,7 +600,7 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_vqa(self):
-        model = VisualBertForQuestionAnswering.from_pretrained("gchhablani/visualbert-vqa")
+        model = VisualBertForQuestionAnswering.from_pretrained("uclanlp/visualbert-vqa")
 
         input_ids = torch.tensor([1, 2, 3, 4, 5, 6]).reshape(1, -1)
         token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1]).reshape(1, -1)
@@ -631,7 +631,7 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_nlvr(self):
-        model = VisualBertForVisualReasoning.from_pretrained("gchhablani/visualbert-nlvr2")
+        model = VisualBertForVisualReasoning.from_pretrained("uclanlp/visualbert-nlvr2")
 
         input_ids = torch.tensor([1, 2, 3, 4, 5, 6]).reshape(1, -1)
         token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1]).reshape(1, -1)
@@ -660,7 +660,7 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_vcr(self):
-        model = VisualBertForMultipleChoice.from_pretrained("gchhablani/visualbert-vcr")
+        model = VisualBertForMultipleChoice.from_pretrained("uclanlp/visualbert-vcr")
 
         input_ids = torch.tensor([[[1, 2, 3, 4, 5, 6] for i in range(4)]])
         attention_mask = torch.ones_like(input_ids)

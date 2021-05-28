@@ -52,15 +52,15 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "VisualBertConfig"
 
 VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "gchhablani/visualbert-vqa",
-    "gchhablani/visualbert-vqa-pre",
-    "gchhablani/visualbert-vqa-coco-pre",
-    "gchhablani/visualbert-vcr",
-    "gchhablani/visualbert-vcr-pre",
-    "gchhablani/visualbert-vcr-coco-pre",
-    "gchhablani/visualbert-nlvr2",
-    "gchhablani/visualbert-nlvr2-pre",
-    "gchhablani/visualbert-nlvr2-coco-pre"
+    "uclanlp/visualbert-vqa",
+    "uclanlp/visualbert-vqa-pre",
+    "uclanlp/visualbert-vqa-coco-pre",
+    "uclanlp/visualbert-vcr",
+    "uclanlp/visualbert-vcr-pre",
+    "uclanlp/visualbert-vcr-coco-pre",
+    "uclanlp/visualbert-nlvr2",
+    "uclanlp/visualbert-nlvr2-pre",
+    "uclanlp/visualbert-nlvr2-coco-pre"
     # See all VisualBERT models at https://huggingface.co/models?filter=visual_bert
 ]
 
@@ -735,7 +735,7 @@ class VisualBertModel(VisualBertPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            >>> model = VisualBertModel.from_pretrained('gchhablani/visualbert-vqa-coco-pre')
+            >>> model = VisualBertModel.from_pretrained('uclanlp/visualbert-vqa-coco-pre')
 
             >>> inputs = tokenizer("The capital of France is Paris.", return_tensors="pt")
             >>> visual_embeds = get_visual_embeddings(image).unsqueeze(0)
@@ -915,7 +915,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
             >>> from transformers import BertTokenizer, VisualBertForPreTraining
 
             >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            >>> model = VisualBertForPreTraining.from_pretrained('gchhablani/visualbert-vqa-coco-pre')
+            >>> model = VisualBertForPreTraining.from_pretrained('uclanlp/visualbert-vqa-coco-pre')
 
             >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="pt")
             >>> visual_embeds = get_visual_embeddings(image).unsqueeze(0)
@@ -1045,7 +1045,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            >>> model = VisualBertForMultipleChoice.from_pretrained('gchhablani/visualbert-vcr')
+            >>> model = VisualBertForMultipleChoice.from_pretrained('uclanlp/visualbert-vcr')
 
             >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
             >>> choice0 = "It is eaten with a fork and a knife."
@@ -1190,7 +1190,7 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            >>> model = VisualBertForQuestionAnswering.from_pretrained('gchhablani/visualbert-vqa')
+            >>> model = VisualBertForQuestionAnswering.from_pretrained('uclanlp/visualbert-vqa')
 
             >>> text = "Who is eating the apple?"
             >>> inputs = tokenizer(text, return_tensors='pt')
@@ -1309,7 +1309,7 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            >>> model = VisualBertForVisualReasoning.from_pretrained('gchhablani/visualbert-nlvr2')
+            >>> model = VisualBertForVisualReasoning.from_pretrained('uclanlp/visualbert-nlvr2')
 
             >>> text = "Who is eating the apple?"
             >>> inputs = tokenizer(text, return_tensors='pt')
@@ -1428,7 +1428,7 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         self.visual_bert = VisualBertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.cls = VisualBertPreTrainingHeads(config)
-        self.attention = RegionToPhraseAttention(config)
+        self.attention = VisualBertRegionToPhraseAttention(config)
 
         self.init_weights()
 
@@ -1466,7 +1466,7 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            >>> model = VisualBertForRegionToPhraseAlignment.from_pretrained('gchhablani/visualbert-vqa-coco-pre')
+            >>> model = VisualBertForRegionToPhraseAlignment.from_pretrained('uclanlp/visualbert-vqa-coco-pre')
 
             >>> text = "Who is eating the apple?"
             >>> inputs = tokenizer(text, return_tensors='pt')
