@@ -1,19 +1,24 @@
 """Finetuning script for RAG models. Adapted from examples.seq2seq.finetune.py"""
 
 import argparse
+import copy
+import json
 import logging
+import multiprocessing
 import os
+import random
+import shutil
 import sys
 import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
-import json
 
 import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch.distributed as dist
+from datasets import concatenate_datasets, load_from_disk
 from torch.utils.data import DataLoader
 
 from transformers import (
@@ -21,40 +26,32 @@ from transformers import (
     AutoTokenizer,
     BartForConditionalGeneration,
     BatchEncoding,
+    DPRConfig,
+    DPRContextEncoder,
+    DPRContextEncoderTokenizerFast,
     RagConfig,
     RagSequenceForGeneration,
     RagTokenForGeneration,
     RagTokenizer,
     T5ForConditionalGeneration,
-    DPRContextEncoder,
-    DPRContextEncoderTokenizerFast,
-    DPRConfig
 )
 from transformers import logging as transformers_logging
 from transformers.integrations import is_ray_available
-
-
-import shutil
-from datasets import Features, Sequence, Value, load_dataset,load_from_disk,concatenate_datasets
-import random
-import multiprocessing
 
 
 if is_ray_available():
     import ray
     from distributed_ray_retriever import RagRayDistributedRetriever, RayRetriever
 
+from glob import glob
 
-
-from callbacks_rag import (  # noqa: E402 # isort:skipq
-    get_checkpoint_callback,
-    get_early_stopping_callback,
-    Seq2SeqLoggingCallback,
-)
-
-from utils_rag import (  # noqa: E402 # isort:skip
+from callbacks_rag import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
+from kb_encode_utils import add_index, embed_update
+from lightning_base import BaseTransformer, add_generic_args, generic_train
+from pynvml import nvmlDeviceGetCount, nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo, nvmlInit
+from utils_rag import (
+    Seq2SeqDataset,
     calculate_exact_match,
-    flatten_list,
     get_git_info,
     is_rag_model,
     lmap,
@@ -62,35 +59,26 @@ from utils_rag import (  # noqa: E402 # isort:skip
     save_git_info,
     save_json,
     set_extra_model_params,
-    Seq2SeqDataset,
 )
-
-# need the parent dir module
-sys.path.insert(2, str(Path(__file__).resolve().parents[1]))
-from lightning_base import BaseTransformer, add_generic_args, generic_train  #noqa
 
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 transformers_logging.set_verbosity_info()
-from glob import glob
-from pynvml import *
 
-from kb_encode_utils import *
+
+sys.path.insert(2, str(Path(__file__).resolve().parents[1]))
+isEmUpdateBusy = False
+isAddIndexBusy = False
+processes = []
+threadHandle_index = None
 
 
 class AttrDict(dict):
     def __init__(self, *args, **kwargs):
         super(AttrDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
-
-
-# In PTL >v1.0, `init_ddp_connection` method in the `LightningModule`
-# is no longer used, and is moved into DDPAccelerator instead.
-# We override DDPAccelerator to add our custom logic for initializing the
-# retriever.
-# https://github.com/PyTorchLightning/pytorch-lightning/blob/master/tests/backends/test_accelerator_connector.py
 
 
 class GenerativeQAModule(BaseTransformer):
@@ -136,14 +124,16 @@ class GenerativeQAModule(BaseTransformer):
                 )
 
                 if hparams.end2end:
-                    ctx_encoder_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained('facebook/dpr-ctx_encoder-multiset-base')
+                    ctx_encoder_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained(
+                        "facebook/dpr-ctx_encoder-multiset-base"
+                    )
                     retriever.set_ctx_encoder_tokenizer(ctx_encoder_tokenizer)
             else:
                 logger.info("please use RAY as the distributed retrieval method")
-                
+
             model = self.model_class.from_pretrained(hparams.model_name_or_path, config=config, retriever=retriever)
             if hparams.end2end:
-                ctx_encoder=DPRContextEncoder.from_pretrained(hparams.context_encoder_name)
+                ctx_encoder = DPRContextEncoder.from_pretrained(hparams.context_encoder_name)
                 model.set_context_encoder_for_training(ctx_encoder)
             prefix = config.question_encoder.prefix
         else:
@@ -159,16 +149,15 @@ class GenerativeQAModule(BaseTransformer):
             else AutoTokenizer.from_pretrained(hparams.model_name_or_path)
         )
 
-        self.config_dpr=DPRConfig.from_pretrained(hparams.context_encoder_name)#used in the re-encode process
-        self.custom_config=hparams
-        self.context_tokenizer=DPRContextEncoderTokenizerFast.from_pretrained(hparams.context_encoder_name)
-
+        self.config_dpr = DPRConfig.from_pretrained(hparams.context_encoder_name)
+        self.custom_config = hparams
+        self.context_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained(hparams.context_encoder_name)
 
         super().__init__(hparams, config=config, tokenizer=tokenizer, model=model)
 
         save_git_info(self.hparams.output_dir)
         self.output_dir = Path(self.hparams.output_dir)
-        self.dpr_ctx_check_dir = str(Path(self.hparams.output_dir)) +'/dpr_ctx_checkpoint' 
+        self.dpr_ctx_check_dir = str(Path(self.hparams.output_dir)) + "/dpr_ctx_checkpoint"
         self.metrics_save_path = Path(self.output_dir) / "metrics.json"
         self.hparams_save_path = Path(self.output_dir) / "hparams.pkl"
         pickle_save(self.hparams, self.hparams_save_path)
@@ -207,8 +196,7 @@ class GenerativeQAModule(BaseTransformer):
                 logger.info("please use RAY as the distributed retrieval method")
 
         self.distributed_retriever = hparams.distributed_retriever
-     
-    
+
     def forward(self, input_ids, **kwargs):
         return self.model(input_ids, **kwargs)
 
@@ -264,115 +252,118 @@ class GenerativeQAModule(BaseTransformer):
         raise NotImplementedError("pad not implemented")
 
     def training_step(self, batch, batch_idx) -> Dict:
-  
 
-        global isEmUpdateBusy #use to check whether the entire embedding update process is finished or not
-        global isAddIndexBusy #use to check whether the entire indexing process  is finished or not
-        global processes #use to keep threads embedding update processes
-        global threadHandle_index #use to keep thread in embedding indexing processes
+        global isEmUpdateBusy  # use to check whether the entire embedding update process is finished or not
+        global isAddIndexBusy  # use to check whether the entire indexing process  is finished or not
+        global processes  # use to keep threads embedding update processes
+        global threadHandle_index  # use to keep thread in embedding indexing processes
 
+        if (self.trainer.global_rank == 0) and (self.custom_config.end2end):
 
-        if ((self.trainer.global_rank==0) and (self.custom_config.end2end)):
-
-            if (not batch_idx==0) and (batch_idx%self.custom_config.indexing_freq==0):
-                free_gpu_list=[]
+            if (not batch_idx == 0) and (batch_idx % self.custom_config.indexing_freq == 0):
+                free_gpu_list = []
                 nvmlInit()
                 deviceCount = nvmlDeviceGetCount()
 
-                my_list=json.loads(self.custom_config.gpu_order)
-            
-       
+                my_list = json.loads(self.custom_config.gpu_order)
+
                 for i in range(deviceCount):
                     handle = nvmlDeviceGetHandleByIndex(i)
                     info = nvmlDeviceGetMemoryInfo(handle)
-                 
-                    if  info.used/1e+6 < 15:
-                        position=my_list.index(i)
-                        free_gpu_list.append("cuda:"+str(position))
 
-                if len(free_gpu_list)>=self.custom_config.index_gpus:
-                    has_free_gpus=True
-                
+                    if info.used / 1e6 < 15:
+                        position = my_list.index(i)
+                        free_gpu_list.append("cuda:" + str(position))
+
+                if len(free_gpu_list) >= self.custom_config.index_gpus:
+                    has_free_gpus = True
+
                 else:
-                    has_free_gpus=False
+                    has_free_gpus = False
 
                 if (not isEmUpdateBusy) and has_free_gpus:
 
+                    model_copy = type(self.model.rag.ctx_encoder)(
+                        self.config_dpr
+                    )  # get a new instance  #this will be load in the CPU
+                    model_copy.load_state_dict(self.model.rag.ctx_encoder.state_dict())  # copy weights
 
-                    model_copy =type(self.model.rag.ctx_encoder)(self.config_dpr) # get a new instance  #this will be load in the CPU
-                    model_copy.load_state_dict(self.model.rag.ctx_encoder.state_dict()) # copy weights and stuff
-
-                 
-                    # ############using multi-gpus#################################
-                    model_copy.share_memory()
                     processes = []
 
-                    if len(free_gpu_list)>self.custom_config.index_gpus:
-                        cuda_devices=random.sample(free_gpu_list, self.custom_config.index_gpus)#free_gpu_list[:4]
+                    if len(free_gpu_list) > self.custom_config.index_gpus:
+                        cuda_devices = random.sample(free_gpu_list, self.custom_config.index_gpus)
                     else:
-                        cuda_devices=free_gpu_list
+                        cuda_devices = free_gpu_list
 
-                    num_processes=len(cuda_devices)
-            
-                    #logger.info("deleting older cache files for the csv dataset")
-                    kb_dataset = load_dataset("csv", data_files=[self.custom_config.csv_path], split="train", delimiter="\t",   \
-                                            column_names=["title", "text"],cache_dir=self.custom_config.cache_dir) 
-                    kb_dataset = kb_dataset.map(split_documents, batched=True, num_proc=1)
-                    kb_list=[kb_dataset.shard(num_processes, i, contiguous=True) for i in range(num_processes)]
-
-                  
+                    num_processes = len(cuda_devices)
 
                     for rank in range(num_processes):
                         logger.info("Iniitializing  embedding calculation process rank{}".format(rank))
-                        device=cuda_devices[rank]#'cuda:'+str(2+rank)
-                        p = multiprocessing.Process(target=embed_update, args=(model_copy,self.context_tokenizer,device,rank,kb_list[rank],self.custom_config.shard_dir,self.custom_config.cache_dir))
+                        device = cuda_devices[rank]
+                        p = multiprocessing.Process(
+                            target=embed_update,
+                            args=(
+                                copy.deepcopy(model_copy),
+                                num_processes,
+                                device,
+                                rank,
+                                self.custom_config.shard_dir,
+                                self.custom_config.csv_path,
+                            ),
+                        )
                         processes.append(p)
- 
+
                     for p in processes:
                         p.start()
-                    
+
                     isEmUpdateBusy = True
 
-
-            if isEmUpdateBusy and (not isAddIndexBusy) :
-                index_process_list=[processes[k].is_alive() for k in range(self.custom_config.index_gpus)]
-                #index_process_list=[False,False,False,False]
-                if sum(index_process_list)==0: #If entire list is false, we can say all embedding calculation process has finished 
+            if isEmUpdateBusy and (not isAddIndexBusy):
+                index_process_list = [processes[k].is_alive() for k in range(self.custom_config.index_gpus)]
+                if (
+                    sum(index_process_list) == 0
+                ):  # If entire list is false, we can say all embedding calculation process has finished
                     logger.info("Start adding the index")
-                    threadHandle_index=multiprocessing.Process(target=add_index,args=(self.custom_config.shard_dir,self.config.index_path,))
+                    threadHandle_index = multiprocessing.Process(
+                        target=add_index,
+                        args=(
+                            self.custom_config.shard_dir,
+                            self.config.index_path,
+                        ),
+                    )
                     threadHandle_index.start()
                     isAddIndexBusy = True
-                   
 
-
-            #check when index building has started
+            # check when index building has started
             if isAddIndexBusy:
 
-                #check still the index_building thing is happening
+                # check still the index_building process is happening
                 if not threadHandle_index.is_alive():
 
                     logger.info("Meging the dataset shards")
-                    saved_dataset_shards=[]
+                    saved_dataset_shards = []
 
-                    for address in glob(str(self.custom_config.shard_dir) + '/*/'):
+                    for address in glob(str(self.custom_config.shard_dir) + "/*/"):
                         saved_dataset_shards.append(load_from_disk(address))
 
-                    concat=concatenate_datasets(saved_dataset_shards)
-                    concat.save_to_disk(self.config.passages_path) #here we update the main passage file on the disk
+                    concat = concatenate_datasets(saved_dataset_shards)
+                    concat.save_to_disk(self.config.passages_path)  # here we update the main passage file on the disk
                     logger.info("done updating the dataset")
 
-                    #if you load the index from the disk make sure to update the index file here, otherwise it is ok to update the index file from the worker
-                    #logger.info("then updating the index")
-                    #shutil.copy(self.custom_config.temp_index, self.config.idex_path)
+                    # if you load the index from the disk make sure to update the index file here, otherwise it is ok to update the index file from the worker.
+                    # logger.info("then updating the index")
+                    # shutil.copy(self.custom_config.temp_index, self.config.idex_path)
 
                     logger.info("Loading new passages and iniitalzing new index")
                     self.trainer.model.module.module.model.rag.retriever.re_load()
                     self.trainer.model.module.module.model.rag.retriever.init_retrieval()
-                 
+
                     isEmUpdateBusy = False
-                    #isOtherThreadIndexBusy =False
-                    isAddIndexBusy=False
-        self.trainer.accelerator_connector.accelerator.barrier("barrier")
+                    isAddIndexBusy = False
+
+        self.trainer.accelerator_connector.accelerator.barrier(
+            "barrier"
+        )  # waint untill the index and kb get re-initialized.
 
         loss_tensors = self._step(batch)
 
@@ -394,7 +385,7 @@ class GenerativeQAModule(BaseTransformer):
         self.log("loss", loss_tensors[0])
         return loss_tensors[0]
 
-    def validation_step(self, batch, batch_idx) -> Dict:      
+    def validation_step(self, batch, batch_idx) -> Dict:
         return self._generative_step(batch)
 
     def validation_epoch_end(self, outputs, prefix="val") -> Dict:
@@ -417,11 +408,15 @@ class GenerativeQAModule(BaseTransformer):
         metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
         metrics["step_count"] = self.step_count
         self.save_metrics(metrics, prefix)  # writes to self.metrics_save_path
-        preds = flatten_list([x["preds"] for x in outputs])
-  
-        log_dict={'val_avg_em': metrics['val_avg_em'], 'step_count':metrics['step_count'],'val_avg_loss':metrics['val_avg_loss'],'val_loss':loss,'val_em':metrics_tensor }
+
+        log_dict = {
+            "val_avg_em": metrics["val_avg_em"],
+            "step_count": metrics["step_count"],
+            "val_avg_loss": metrics["val_avg_loss"],
+            "val_loss": loss,
+            "val_em": metrics_tensor,
+        }
         self.log_dict(log_dict)
- 
 
     def save_metrics(self, latest_metrics, type_path) -> None:
         self.metrics[type_path].append(latest_metrics)
@@ -497,18 +492,18 @@ class GenerativeQAModule(BaseTransformer):
     def on_save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         save_path = self.output_dir.joinpath("checkpoint{}".format(self.step_count))
         self.model.config.save_step = self.step_count
-        self.model.save_pretrained(save_path)
+        # self.model.save_pretrained(save_path)
         self.tokenizer.save_pretrained(save_path)
 
         if self.custom_config.end2end:
 
-            ##### we also can save only the RAG checkpoint####################################
-            # modified_state_dict= model.state_dict()
-            # for key in model.state_dict().keys():
-            #     if key.split('.')[1]=='ctx_encoder':
-            #         del modified_state_dict[key]
-            # model.save_pretrained(save_directory='./my-test-check',state_dict=modified_state_dict)  
-            save_path_dpr = os.path.join(self.dpr_ctx_check_dir,"checkpoint{}".format(self.step_count))
+            modified_state_dict = self.model.state_dict()
+            for key in self.model.state_dict().keys():
+                if key.split(".")[1] == "ctx_encoder":
+                    del modified_state_dict[key]
+            self.model.save_pretrained(save_directory=save_path, state_dict=modified_state_dict)
+
+            save_path_dpr = os.path.join(self.dpr_ctx_check_dir, "checkpoint{}".format(self.step_count))
             self.model.rag.ctx_encoder.save_pretrained(save_path_dpr)
             self.context_tokenizer.save_pretrained(save_path_dpr)
 
@@ -573,44 +568,32 @@ class GenerativeQAModule(BaseTransformer):
         )
         parser.add_argument(
             "--context_encoder_name",
-            default='facebook/dpr-ctx_encoder-multiset-base',
+            default="facebook/dpr-ctx_encoder-multiset-base",
             type=str,
             help="Name of the pre-trained context encoder checkpoint from the DPR",
         )
         parser.add_argument(
             "--csv_path",
-            default = str(Path(__file__).parent / "test_run" /"dummy-kb" /"my_knowledge_dataset.csv"),
+            default=str(Path(__file__).parent / "test_run" / "dummy-kb" / "my_knowledge_dataset.csv"),
             type=str,
             help="path of the raw KB csv",
         )
+        parser.add_argument("--end2end", action="store_true", help="whether to train the system end2end or not")
+        parser.add_argument("--index_gpus", type=int, help="how many GPUs used in re-encoding process")
         parser.add_argument(
-            '--end2end', 
-            action='store_true',        
-            help='whether to train the system end2end or not'
-        ) 
-        parser.add_argument(
-            '--index_gpus', 
-            type=int,     
-            help='how many GPUs used in re-encoding process'
-        )  
-        parser.add_argument(
-            '--shard_dir', 
-            type=str, 
-            default=str(Path(__file__).parent /"test_run"/ "kb-shards"),    
-            help='directory used to keep temporary shards during the re-encode process'
-        )  
+            "--shard_dir",
+            type=str,
+            default=str(Path(__file__).parent / "test_run" / "kb-shards"),
+            help="directory used to keep temporary shards during the re-encode process",
+        )
 
         parser.add_argument(
-            '--gpu_order', 
-            type=str,     
-            help='order of the GPU used during the fine-tuning.  Used to finding free GPUs during the re-encode process. I do not have many GPUs :)'
-        )  
+            "--gpu_order",
+            type=str,
+            help="order of the GPU used during the fine-tuning.  Used to finding free GPUs during the re-encode process. I do not have many GPUs :)",
+        )
 
-        parser.add_argument(
-            '--indexing_freq', 
-            type=int,     
-            help='frequency of re-encode process'
-        )  
+        parser.add_argument("--indexing_freq", type=int, help="frequency of re-encode process")
         return parser
 
     @staticmethod
@@ -624,13 +607,13 @@ class GenerativeQAModule(BaseTransformer):
         parser.add_argument(
             "--passages_path",
             type=str,
-            default=str(Path(__file__).parent /  "test_run" /"dummy-kb"/ "my_knowledge_dataset"),
+            default=str(Path(__file__).parent / "test_run" / "dummy-kb" / "my_knowledge_dataset"),
             help="Path to the dataset of passages for custom index. More info about custom indexes in the RagRetriever documentation as well as in `examples/rag/use_own_knowledge_dataset.py`",
         )
         parser.add_argument(
             "--index_path",
             type=str,
-            default=str(Path(__file__).parent  / "test_run" /"dummy-kb" / "my_knowledge_dataset_hnsw_index.faiss"),
+            default=str(Path(__file__).parent / "test_run" / "dummy-kb" / "my_knowledge_dataset_hnsw_index.faiss"),
             help="Path to the faiss index for custom index. More info about custom indexes in the RagRetriever documentation as well as in `examples/rag/use_own_knowledge_dataset.py`",
         )
         parser.add_argument(
@@ -685,15 +668,18 @@ def main(args=None, model=None) -> GenerativeQAModule:
     parser = GenerativeQAModule.add_retriever_specific_args(parser)
     args = args or parser.parse_args()
 
-
     Path(args.output_dir).mkdir(exist_ok=True)
-    Path(args.output_dir+'/dpr_ctx_checkpoint').mkdir(exist_ok=True) #save dpr_context encoder seprately for the future use
-
-    if os.path.exists(args.shard_dir): #we do not need previous kb shards used in dataset re-conding and re-indexing
+    Path(args.output_dir + "/dpr_ctx_checkpoint").mkdir(
+        exist_ok=True
+    )  # save dpr_context encoder seprately for the future use
+    print(args.shard_dir)
+    if os.path.exists(args.shard_dir):  # we do not need previous kb shards used in dataset re-conding and re-indexing
         shutil.rmtree(args.shard_dir)
     Path(args.shard_dir).mkdir(exist_ok=True)
 
-    if os.path.exists(args.cache_dir): #we do not need previous cache files used in dataset re-conding and re-indexing
+    if os.path.exists(
+        args.cache_dir
+    ):  # we do not need previous cache files used in dataset re-conding and re-indexing
         shutil.rmtree(args.cache_dir)
     Path(args.cache_dir).mkdir(exist_ok=True)
 
@@ -736,7 +722,6 @@ def main(args=None, model=None) -> GenerativeQAModule:
     args.actor_handles = named_actors
     assert args.actor_handles == named_actors
 
-
     if model is None:
         model: GenerativeQAModule = GenerativeQAModule(args)
 
@@ -765,7 +750,6 @@ def main(args=None, model=None) -> GenerativeQAModule:
         else False
     )
 
-   
     trainer: pl.Trainer = generic_train(
         model,
         args,
@@ -773,7 +757,6 @@ def main(args=None, model=None) -> GenerativeQAModule:
         checkpoint_callback=get_checkpoint_callback(args.output_dir, model.val_metric),
         early_stopping_callback=es_callback,
         logger=training_logger,
-        #accelerator=CustomAccel() if args.gpus > 1 else None,
         profiler=pl.profiler.AdvancedProfiler() if args.profile else None,
     )
 
@@ -788,7 +771,7 @@ def main(args=None, model=None) -> GenerativeQAModule:
 
 if __name__ == "__main__":
 
-    multiprocessing.set_start_method('spawn')
+    multiprocessing.set_start_method("spawn")
     parser = argparse.ArgumentParser()
     parser = pl.Trainer.add_argparse_args(parser)
     parser = GenerativeQAModule.add_model_specific_args(parser, os.getcwd())

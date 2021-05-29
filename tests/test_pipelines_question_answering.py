@@ -70,25 +70,16 @@ class QAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
         valid_inputs = [
             {"question": "Where was HuggingFace founded ?", "context": "Paris"},
         ]
-
-        nlps = self.get_pipelines()
-        output_keys = {"score", "answer", "start", "end"}
-        for nlp in nlps:
-            result = nlp(valid_inputs, **self.pipeline_running_kwargs)
-
         question_answering_pipelines = self.get_pipelines()
         output_keys = {"score", "answer", "start", "end"}
         for question_answering_pipeline in question_answering_pipelines:
             result = question_answering_pipeline(valid_inputs, **self.pipeline_running_kwargs)
-
             self.assertIsInstance(result, dict)
 
             for key in output_keys:
                 self.assertIn(key, result)
 
-
     def _test_pipeline(self, question_answering_pipeline: Pipeline):
-
         output_keys = {"score", "answer", "start", "end"}
         valid_inputs = [
             {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."},

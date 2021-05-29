@@ -603,11 +603,9 @@ class ModelTesterMixin:
                     input_names = ["input_ids", "attention_mask", "decoder_input_ids", "decoder_attention_mask"]
                     if labels is not None:
                         input_names.append("labels")
-
                     filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
 
                     model_output = model(**filtered_inputs)
-
 
                     batch_size = input_ids.shape[0]
                     encoder_sequence_length = input_ids.shape[1]
@@ -663,7 +661,6 @@ class ModelTesterMixin:
 
             except RuntimeError:
                 self.fail("Couldn't trace module.")
-
 
             def flatten_output(output):
                 flatten = []

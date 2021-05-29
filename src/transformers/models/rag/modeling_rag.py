@@ -523,8 +523,8 @@ class RagModel(RagPreTrainedModel):
         self.question_encoder = question_encoder
         self.generator = generator
 
-        self.ctx_encoder=None
-        self.context_encoder_training=False
+        self.ctx_encoder = None
+        self.context_encoder_training = False
 
     @add_start_docstrings_to_model_forward(RAG_FORWARD_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=RetrievAugLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -593,9 +593,14 @@ class RagModel(RagPreTrainedModel):
                 )
                 if self.context_encoder_training:
 
-                    context_input_ids, context_attention_mask, retrieved_doc_embeds,\
-                    retrived_doc_input_ids, retrived_doc_attention_mask, \
-                    retrieved_doc_ids=(
+                    (
+                        context_input_ids,
+                        context_attention_mask,
+                        retrieved_doc_embeds,
+                        retrived_doc_input_ids,
+                        retrived_doc_attention_mask,
+                        retrieved_doc_ids,
+                    ) = (
                         retriever_outputs["context_input_ids"],
                         retriever_outputs["context_attention_mask"],
                         retriever_outputs["retrieved_doc_embeds"],
@@ -604,21 +609,23 @@ class RagModel(RagPreTrainedModel):
                         retriever_outputs["doc_ids"],
                     )
 
-
                     context_input_ids = context_input_ids.to(input_ids)
                     context_attention_mask = context_attention_mask.to(input_ids)
 
-                    retrived_doc_input_ids=retrived_doc_input_ids.to(input_ids)
-                    retrived_doc_attention_mask=retrived_doc_attention_mask.to(input_ids)
-                    retrieved_doc_embeds=self.ctx_encoder(retrived_doc_input_ids,attention_mask=retrived_doc_attention_mask,return_dict=True).pooler_output
-                    retrieved_doc_embeds=retrieved_doc_embeds.view(-1,n_docs,question_encoder_last_hidden_state.shape[1]) #reshaping
+                    retrived_doc_input_ids = retrived_doc_input_ids.to(input_ids)
+                    retrived_doc_attention_mask = retrived_doc_attention_mask.to(input_ids)
+                    retrieved_doc_embeds = self.ctx_encoder(
+                        retrived_doc_input_ids, attention_mask=retrived_doc_attention_mask, return_dict=True
+                    ).pooler_output
+                    retrieved_doc_embeds = retrieved_doc_embeds.view(
+                        -1, n_docs, question_encoder_last_hidden_state.shape[1]
+                    )  # reshaping
 
-                    #compute doc_scores involving ctx_encoder 
+                    # compute doc_scores involving ctx_encoder
                     doc_scores = torch.bmm(
                         question_encoder_last_hidden_state.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)
                     ).squeeze(1)
 
-    
                 else:
                     context_input_ids, context_attention_mask, retrieved_doc_embeds, retrieved_doc_ids = (
                         retriever_outputs["context_input_ids"],
@@ -743,7 +750,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         self.rag.retriever = retriever
 
     def set_context_encoder_for_training(self, ctx_encoder: PreTrainedModel):
-        self.rag.context_encoder_training=True
+        self.rag.context_encoder_training = True
         self.rag.ctx_encoder = ctx_encoder
 
     @add_start_docstrings_to_model_forward(RAG_FORWARD_INPUTS_DOCSTRING)
@@ -1132,7 +1139,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         self.rag.retriever = retriever
 
     def set_context_encoder_for_training(self, ctx_encoder: PreTrainedModel):
-        self.rag.context_encoder_training=True
+        self.rag.context_encoder_training = True
         self.rag.ctx_encoder = ctx_encoder
 
     def prepare_inputs_for_generation(

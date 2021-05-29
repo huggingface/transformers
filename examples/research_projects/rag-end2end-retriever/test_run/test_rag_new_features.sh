@@ -14,6 +14,3 @@ python finetune_rag.py \
     --index_name custom
 
 ray stop
-
-
-    #--output_dir /hpc/gsir059/git-testing/transformers/examples/research_projects/rag-end2end-retriever/model_checkpoints \

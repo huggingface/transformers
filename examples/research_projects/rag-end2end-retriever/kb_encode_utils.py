@@ -1,20 +1,11 @@
 import os
-from glob import glob
-from datasets import Features, Sequence, Value, load_dataset,load_from_disk,concatenate_datasets
-import faiss
-import numpy as np
 from functools import partial
+from glob import glob
 
-from transformers import (
-    DPRContextEncoder,
-    DPRContextEncoderTokenizerFast,
-)
+from datasets import Features, Sequence, Value, concatenate_datasets, load_dataset, load_from_disk
 
-
-isEmUpdateBusy=False
-isAddIndexBusy=False
-processes=[]
-threadHandle_index=None
+import faiss
+from transformers import DPRContextEncoder, DPRContextEncoderTokenizerFast
 
 
 def split_text(text, n=100, character=" "):
@@ -34,55 +25,57 @@ def split_documents(documents):
     return {"title": titles, "text": texts}
 
 
+def embed_update(ctx_encoder, total_processes, device, process_num, shard_dir, csv_path):
 
-def embed_update(ctx_encoder,context_tokenizer,device,process_num,data_shrad,shard_dir,data_cache_dir):
+    kb_dataset = load_dataset(
+        "csv", data_files=[csv_path], split="train", delimiter="\t", column_names=["title", "text"]
+    )
+    kb_dataset = kb_dataset.map(
+        split_documents, batched=True, num_proc=1
+    )  # if you want you can load already splitted csv.
+    kb_list = [kb_dataset.shard(total_processes, i, contiguous=True) for i in range(total_processes)]
+    data_shrad = kb_list[process_num]
 
-    arrow_folder='data_'+str(process_num)
-    arrow_file_name= 'data_'+str(process_num)+'.arrow'
+    arrow_folder = "data_" + str(process_num)
+    passages_path = os.path.join(shard_dir, arrow_folder)
 
-    passages_path=os.path.join(shard_dir,arrow_folder) #shard_dir + arrow_folder+'/'
-    cache_file_name=os.path.join(data_cache_dir,arrow_file_name)#data_cache_dir + arrow_file_name
+    context_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained("facebook/dpr-ctx_encoder-multiset-base")
+    ctx_encoder = ctx_encoder.to(device=device)
 
-    
-    ctx_encoder =ctx_encoder.to(device=device)
-    #context_tokenizer=DPRContextEncoderTokenizerFast.from_pretrained('facebook/dpr-ctx_encoder-multiset-base')
+    def embed(
+        documents: dict, ctx_encoder: DPRContextEncoder, ctx_tokenizer: DPRContextEncoderTokenizerFast, device
+    ) -> dict:
+        """Compute the DPR embeddings of document passages"""
+        input_ids = ctx_tokenizer(
+            documents["title"], documents["text"], truncation=True, padding="longest", return_tensors="pt"
+        )["input_ids"]
+        embeddings = ctx_encoder(input_ids.to(device=device), return_dict=True).pooler_output
+        return {"embeddings": embeddings.detach().cpu().numpy()}
 
-
-    def embed(documents: dict, ctx_encoder: DPRContextEncoder, ctx_tokenizer: DPRContextEncoderTokenizerFast,device) -> dict:
-            """Compute the DPR embeddings of document passages"""
-            input_ids = ctx_tokenizer(
-                documents["title"], documents["text"], truncation=True, padding="longest", return_tensors="pt"
-            )["input_ids"]
-            embeddings = ctx_encoder(input_ids.to(device=device), return_dict=True).pooler_output
-            return {"embeddings": embeddings.detach().cpu().numpy()}
-
- 
     new_features = Features(
         {"text": Value("string"), "title": Value("string"), "embeddings": Sequence(Value("float32"))}
     )  # optional, save as float32 instead of float64 to save space
 
-
-    dataset =data_shrad.map(
-        partial(embed, ctx_encoder=ctx_encoder, ctx_tokenizer=context_tokenizer,device=device),
+    dataset = data_shrad.map(
+        partial(embed, ctx_encoder=ctx_encoder, ctx_tokenizer=context_tokenizer, device=device),
         batched=True,
         batch_size=16,
         features=new_features,
-        cache_file_name=cache_file_name,
-        load_from_cache_file=False
     )
-
     dataset.save_to_disk(passages_path)
-    os.remove(dataset.cache_files[0]['filename'])
-      
-def add_index(shard_dir,index_path):
-    data_shard_list=[]
- 
-    for shard_address in glob(str(shard_dir) + '/*/'):
+
+
+def add_index(shard_dir, index_path):
+    data_shard_list = []
+
+    for shard_address in glob(str(shard_dir) + "/*/"):
         data_shard_list.append(load_from_disk(shard_address))
-        
-    concat=concatenate_datasets(data_shard_list)
+
+    concat = concatenate_datasets(data_shard_list)
     faiss.omp_set_num_threads(96)
 
     index = faiss.IndexHNSWFlat(768, 128, faiss.METRIC_INNER_PRODUCT)
     concat.add_faiss_index("embeddings", custom_index=index)
-    concat.get_index("embeddings").save(index_path)#since we load the index in to memory,we can directly update the index
+    concat.get_index("embeddings").save(
+        index_path
+    )  # since we load the index in to memory,we can directly update the index in the disk

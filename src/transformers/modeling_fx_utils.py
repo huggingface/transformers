@@ -147,7 +147,6 @@ class HFTracer(Tracer):
         decoder_sequence_length = (
             sequence_length[1] if isinstance(sequence_length, (list, tuple)) else encoder_sequence_length
         )
-
         self.encoder_shape = [batch_size, encoder_sequence_length]
         self.decoder_shape = (
             [batch_size, decoder_sequence_length] if decoder_sequence_length > 0 else list(self.encoder_shape)
@@ -310,6 +309,12 @@ class HFTracer(Tracer):
             self.prev_module = path
             return path
 
+    def create_arg(self, a: Any) -> Argument:
+        if isinstance(a, range):
+            return super().create_arg(list(a))
+        return super().create_arg(a)
+
+
 def symbolic_trace(
     model: PreTrainedModel,
     input_names: Optional[List[str]] = None,
@@ -356,6 +361,7 @@ def symbolic_trace(
     concrete_args = {p.name: p.default for p in sig.parameters.values() if p.name not in input_names}
 
     tracer = HFTracer(batch_size=batch_size, sequence_length=sequence_length, num_choices=num_choices)
+
     traced_graph = tracer.trace(model, concrete_args=concrete_args)
     traced = torch.fx.GraphModule(model, traced_graph)
 

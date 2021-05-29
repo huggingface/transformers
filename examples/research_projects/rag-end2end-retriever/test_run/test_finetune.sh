@@ -45,8 +45,8 @@ python finetune_rag.py \
     --index_name custom \
     --context_encoder_name facebook/dpr-ctx_encoder-multiset-base \
     --index_gpus 1 \
-    --gpu_order [4,5,7,8,9,0,1,2,3,6] \
-    --indexing_freq 25
+    --gpu_order [6,7,8,9,0,1,2,3,5,4] \
+    --indexing_freq 5
    
     
 
