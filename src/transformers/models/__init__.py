@@ -48,6 +48,7 @@ from . import (
     gpt_neo,
     herbert,
     layoutlm,
+    layoutlmv2,
     led,
     longformer,
     luke,

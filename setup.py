@@ -149,6 +149,7 @@ _deps = [
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "uvicorn",
+    "detectron2==0.4"
 ]
 
 
