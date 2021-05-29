@@ -24,7 +24,7 @@ import tempfile
 import unittest
 from collections import OrderedDict
 from itertools import takewhile
-from typing import TYPE_CHECKING, Dict, List, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
 from huggingface_hub import HfApi
 from requests.exceptions import HTTPError
@@ -185,13 +185,37 @@ class TokenizerTesterMixin:
 
     def tokenizer_integration_test_util(
         self,
-        expected_encoding,
-        model_name,
-        revision=None,
-        sequences=None,
-        decode_kwargs=None,
-        padding=True,
+        expected_encoding: Dict,
+        model_name: str,
+        revision: str = None,
+        sequences: List[str] = None,
+        decode_kwargs: Dict[str, Any] = None,
+        padding: bool = True,
     ):
+        """
+        Util for integration test.
+
+        Text is tokenized and then reverted back to text. Both results are then checked.
+
+        Args:
+            expected_encoding:
+                The expected result of the tokenizer output.
+            model_name:
+                The model name of the tokenizer to load and use.
+            revision:
+                The full git revision number of the model. This is to pin the
+                tokenizer config and to avoid that tests start to fail if the
+                config gets changed upstream.
+            sequences:
+                Can overwrite the texts that are used to check the tokenizer.
+                This is useful if the tokenizer supports non english languages
+                like france.
+            decode_kwargs:
+                Additional args for the ``decode`` function which reverts the
+                tokenized text back to a string.
+            padding:
+                Activates and controls padding of the tokenizer.
+        """
         decode_kwargs = {} if decode_kwargs is None else decode_kwargs
 
         if sequences is None:
