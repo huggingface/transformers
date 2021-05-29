@@ -66,4 +66,5 @@ deps = {
     "unidic": "unidic>=1.0.2",
     "unidic_lite": "unidic_lite>=1.0.7",
     "uvicorn": "uvicorn",
+    "detectron2" : "detectron2==0.4",
 }
