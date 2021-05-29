@@ -184,7 +184,13 @@ class TokenizerTesterMixin:
     #     )
 
     def tokenizer_integration_test_util(
-        self, expected_encoding, model_name, revision=None, sequences=None, decode_kwargs=None
+        self,
+        expected_encoding,
+        model_name,
+        revision=None,
+        sequences=None,
+        decode_kwargs=None,
+        padding=True,
     ):
         decode_kwargs = {} if decode_kwargs is None else decode_kwargs
 
@@ -209,7 +215,7 @@ class TokenizerTesterMixin:
                 revision=revision,  # to pin the tokenizer version
             )
 
-            encoding = tokenizer(sequences, padding=True)
+            encoding = tokenizer(sequences, padding=padding)
             decoded_sequences = [
                 tokenizer.decode(seq, skip_special_tokens=True, **decode_kwargs) for seq in encoding["input_ids"]
             ]
