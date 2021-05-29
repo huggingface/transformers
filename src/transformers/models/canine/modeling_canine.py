@@ -19,6 +19,7 @@
 
 import math
 import os
+import copy
 
 import torch
 import torch.utils.checkpoint
@@ -240,6 +241,79 @@ class CanineEmbeddings(nn.Module):
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
+
+
+class CharactersToMolecules(nn.Module):
+    """Convert character sequence to initial molecule sequence (i.e. downsample)."""
+    
+    def __init__(self, config):
+        super().__init__()
+
+        self.conv = nn.Conv1d(in_channels=config.hidden_size, out_channels=config.hidden_size, 
+                                        kernel_size=config.downsampling_rate, stride=config.downsampling_rate)
+        self.activation = ACT2FN[config.hidden_act]
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) 
+    
+    def forward(self, char_encoding: torch.Tensor) -> torch.Tensor:
+        
+        # `cls_encoding`: [batch, 1, hidden_size]
+        cls_encoding = char_encoding[:, 0:1, :]
+        
+        # char_encoding has shape [batch, char_seq, hidden_size]
+        # we tranpose it to be [batch, hidden_size, char_seq]
+        char_encoding = torch.transpose(char_encoding, 1, 2)
+        downsampled = self.conv(char_encoding)
+        downsampled = torch.transpose(downsampled, 1, 2)
+        downsampled = self.activation(downsampled)
+
+        # Truncate the last molecule in order to reserve a position for [CLS].
+        # Often, the last position is never used (unless we completely fill the
+        # text buffer). This is important in order to maintain alignment on TPUs
+        # (i.e. a multiple of 128).
+        downsampled_truncated = downsampled[:, 0:-1, :]
+
+        # We also keep [CLS] as a separate sequence position since we always
+        # want to reserve a position (and the model capacity that goes along
+        # with that) in the deep BERT stack.
+        # `result`: [batch, molecule_seq, molecule_dim]
+        result = torch.cat([cls_encoding, downsampled_truncated], dim=1)
+
+        return self.layernorm(result)
+    
+
+class MoleculesToCharacters(nn.Module):
+    """Convert molecule sequence to character sequence (i.e. upsample)."""
+    
+    def __init__(self, config):
+        super().__init__()
+        self.conv = nn.Conv1d(in_channels=config.hidden_size, out_channels=config.hidden_size, 
+                                        kernel_size=config.upsampling_kernel_size, stride=1)
+        self.activation = ACT2FN[config.hidden_act]
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) 
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, inputs, final_seq_char_positions):
+        # `result`: [batch_size, char_seq_len, hidden_size]
+        result = self.conv(inputs)
+        result = self.layernorm(result)
+        final_char_seq = result
+
+        # if final_seq_char_positions is not None:
+        #     # Limit transformer query seq and attention mask to these character
+        #     # positions to greatly reduce the compute cost. Typically, this is just
+        #     # done for the MLM training task.
+
+        #     # `query_seq`: [batch, final_char_seq, char_dim]
+        #     query_seq = tf.gather(
+        #         final_char_seq, final_seq_char_positions, batch_dims=1)
+        #     char_attention_mask = tf.gather(
+        #         char_attention_mask,
+        #         final_seq_char_positions,
+        #         batch_dims=1)
+        # else:
+        #     query_seq = final_char_seq
+
+        return final_char_seq
 
 
 class CanineSelfAttention(nn.Module):
@@ -800,8 +874,14 @@ class CanineModel(CaninePreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = CanineEmbeddings(config)
+        self.char_embeddings = CanineEmbeddings(config)
+        self.chars_to_molecules = CharactersToMolecules(config)
         self.encoder = CanineEncoder(config)
+        self.molecules_to_chars = MoleculesToCharacters(config)
+        # shallow/low-dim transformer to get a final character encoding
+        final_chars_encoder_config = copy.deepcopy(config)
+        final_chars_encoder_config.num_hidden_layers = 1
+        self.final_chars_encoder = CanineEncoder(final_chars_encoder_config)
 
         self.init_weights()
 
@@ -818,7 +898,46 @@ class CanineModel(CaninePreTrainedModel):
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
+    
+    def _downsample_attention_mask(self, char_attention_mask: torch.Tensor, downsampling_rate: int):
+        """Downsample 2D character attention mask to 2D molecule attention mask using MaxPool1d layer."""
 
+        # first, make char_attention_mask 3D by adding a channel dim
+        batch_size, char_seq_len = char_attention_mask.shape
+        poolable_char_mask = torch.reshape(char_attention_mask, (batch_size, 1, char_seq_len))
+
+        # next, apply MaxPool1d to get pooled_molecule_mask of shape (batch_size, 1, mol_seq_len)
+        pooled_molecule_mask = torch.nn.MaxPool1d(kernel_size=downsampling_rate, stride=downsampling_rate)(poolable_char_mask)
+
+        # finally, squeeze to get tensor of shape (batch_size, mol_seq_len)
+        molecule_attention_mask = torch.squeeze(pooled_molecule_mask, dim=-1)
+
+        return molecule_attention_mask
+    
+    def _repeat_molecules(self, molecules: torch.Tensor, char_seq_length: torch.Tensor) -> torch.Tensor:
+        """Repeats molecules to make them the same length as the char sequence."""
+
+        rate = self.config.downsampling_rate
+
+        molecules_without_extra_cls = molecules[:, 1:, :]
+        # `repeated`: [batch_size, almost_char_seq_len, molecule_hidden_size]
+        repeated = torch.repeat_interleave(molecules_without_extra_cls, repeats=rate, dim=-2)
+
+        # So far, we've repeated the elements sufficient for any `char_seq_length`
+        # that's a multiple of `downsampling_rate`. Now we account for the last
+        # n elements (n < `downsampling_rate`), i.e. the remainder of floor
+        # division. We do this by repeating the last molecule a few extra times.
+        last_molecule = molecules[:, -1:, :]
+        remainder_length = torch.fmod(torch.tensor(char_seq_length), torch.tensor(rate)).float().floor().long()
+        remainder_repeated = torch.repeat_interleave(
+            last_molecule,
+            # +1 molecule to compensate for truncation.
+            repeats=remainder_length + rate,
+            dim=-2)
+
+        # `repeated`: [batch_size, char_seq_len, molecule_hidden_size]
+        return torch.cat([repeated, remainder_repeated], dim=-2)
+    
     @add_start_docstrings_to_model_forward(CANINE_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -888,8 +1007,7 @@ class CanineModel(CaninePreTrainedModel):
 
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-
-
+        
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
         if token_type_ids is None:
@@ -897,8 +1015,10 @@ class CanineModel(CaninePreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
-
+        molecule_attention_mask = self._downsample_attention_mask(attention_mask, downsampling_rate=self.config.downsampling_rate)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(molecule_attention_mask, 
+                                                    (batch_size, molecule_attention_mask.shape[-1]), device)
+        
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.is_decoder and encoder_hidden_states is not None:
@@ -917,8 +1037,8 @@ class CanineModel(CaninePreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        # The following lines have dimensions: [batch_size, char_seq, char_dim].
-        embedding_output = self.embeddings(
+        # input_char_embeddings: shape (batch_size, char_seq, char_dim)
+        input_char_embeddings = self.char_embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
@@ -926,10 +1046,14 @@ class CanineModel(CaninePreTrainedModel):
             past_key_values_length=past_key_values_length,
         )
         
-        # TODO: contextualize + downsample character embeddings to molecule embeddings
+        # TODO: contextualize character embeddings. Shape (batch_size, char_seq_len, char_dim)
+        input_char_encoding = input_char_embeddings
+        
+        # Molecule embeddings: shape (batch_size, mol_seq_len, mol_dim)
+        init_molecule_encoding = self.chars_to_molecules(input_char_encoding) 
         
         encoder_outputs = self.encoder(
-            embedding_output,
+            init_molecule_encoding,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
@@ -942,6 +1066,17 @@ class CanineModel(CaninePreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
 
+        # `repeated_molecules`: [batch_size, char_seq_len, molecule_hidden_size]
+        repeated_molecules = self._repeat_molecules(sequence_output, char_seq_length=input_shape[-1])
+
+        print(repeated_molecules.shape)
+
+        # concatenate contextualized char embeddings with repeated molecules: 
+        # shape [batch_size, char_seq_len, molecule_hidden_size+char_hidden_final]
+        concat = torch.cat([input_char_encoding, repeated_molecules], dim=-1)
+
+        #final_char_encoding = self.final_chars_encoder(init_output_char_encoding, char_attention_mask=char_attention_mask)
+        
         if not return_dict:
             return (sequence_output,) + encoder_outputs[1:]
 
