@@ -348,7 +348,8 @@ class CanineSelfAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states,
+        from_tensor,
+        to_tensor,
         attention_mask=None,
         head_mask=None,
         encoder_hidden_states=None,
@@ -356,7 +357,7 @@ class CanineSelfAttention(nn.Module):
         past_key_value=None,
         output_attentions=False,
     ):
-        mixed_query_layer = self.query(hidden_states)
+        mixed_query_layer = self.query(from_tensor)
 
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
@@ -373,13 +374,13 @@ class CanineSelfAttention(nn.Module):
             value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
             attention_mask = encoder_attention_mask
         elif past_key_value is not None:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
+            key_layer = self.transpose_for_scores(self.key(to_tensor))
+            value_layer = self.transpose_for_scores(self.value(to_tensor))
             key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
             value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
         else:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
+            key_layer = self.transpose_for_scores(self.key(to_tensor))
+            value_layer = self.transpose_for_scores(self.value(to_tensor))
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
@@ -397,9 +398,9 @@ class CanineSelfAttention(nn.Module):
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            seq_length = hidden_states.size()[1]
-            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
+            seq_length = from_tensor.size()[1]
+            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=from_tensor.device).view(-1, 1)
+            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=from_tensor.device).view(1, -1)
             distance = position_ids_l - position_ids_r
             positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
             positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
@@ -456,11 +457,47 @@ class CanineSelfOutput(nn.Module):
 
 
 class CanineAttention(nn.Module):
-    def __init__(self, config):
+    """
+    Additional arguments related to local attention:
+
+        always_attend_to_first_position: 
+            Should all blocks be able to attend to the `to_tensor`'s first position (e.g. a [CLS] position)?
+        first_position_attends_to_all: 
+            Should the `from_tensor`'s first position be able to attend to all positions within the `from_tensor`?
+        attend_from_chunk_width: 
+            The width of each block-wise chunk in `from_tensor`.
+        attend_from_chunk_stride: 
+            The number of elements to skip when moving to the next block in `from_tensor`.
+        attend_to_chunk_width: 
+            The width of each block-wise chunk in `to_tensor`.
+        attend_to_chunk_stride: 
+            The number of elements to skip when moving to the next block in `to_tensor`.
+    """
+    def __init__(self, config, local=False, always_attend_to_first_position: bool = True,
+                          first_position_attends_to_all: bool = True,
+                          attend_from_chunk_width: int = 128,
+                          attend_from_chunk_stride: int = 128,
+                          attend_to_chunk_width: int = 128,
+                          attend_to_chunk_stride: int = 128):
         super().__init__()
         self.self = CanineSelfAttention(config)
         self.output = CanineSelfOutput(config)
         self.pruned_heads = set()
+        
+        # additional arguments related to local attention
+        self.local = local
+        if attend_from_chunk_width < attend_from_chunk_stride:
+            raise ValueError("`attend_from_chunk_width` < `attend_from_chunk_stride`"
+                     "would cause sequence positions to get skipped.")
+        if attend_to_chunk_width < attend_to_chunk_stride:
+            raise ValueError("`attend_to_chunk_width` < `attend_to_chunk_stride`"
+                     "would cause sequence positions to get skipped.")
+        self.always_attend_to_first_position = always_attend_to_first_position
+        self.first_position_attends_to_all = first_position_attends_to_all
+        self.attend_from_chunk_width = attend_from_chunk_width
+        self.attend_from_chunk_stride = attend_from_chunk_stride
+        self.attend_to_chunk_width = attend_to_chunk_width
+        self.attend_from_chunk_stride = attend_from_chunk_stride
 
     def prune_heads(self, heads):
         if len(heads) == 0:
@@ -490,16 +527,80 @@ class CanineAttention(nn.Module):
         past_key_value=None,
         output_attentions=False,
     ):
-        self_outputs = self.self(
-            hidden_states,
-            attention_mask,
-            head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            past_key_value,
-            output_attentions,
-        )
-        attention_output = self.output(self_outputs[0], hidden_states)
+        if not self.local:
+            self_outputs = self.self(
+                hidden_states,
+                hidden_states,
+                attention_mask,
+                head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                past_key_value,
+                output_attentions,
+            )
+            attention_output = self_outputs[0]
+        else:
+            from_seq_length = to_seq_length = hidden_states.shape[1]
+            from_tensor = to_tensor = hidden_states
+            
+            # Create chunks (windows) that we will attend *from* and then concatenate them.
+            from_chunks = []
+            if self.first_position_attends_to_all:
+                from_chunks.append((0, 1))
+                # We must skip this first position so that our output sequence is the
+                # correct length (this matters in the *from* sequence only).
+                from_start = 1
+            else:
+                from_start = 0
+            for chunk_start in range(from_start, from_seq_length,
+                                    self.attend_from_chunk_stride):
+                chunk_end = min(from_seq_length, chunk_start + self.attend_from_chunk_width)
+                from_chunks.append((chunk_start, chunk_end))
+
+            # Determine the chunks (windows) that will will attend *to*.
+            to_chunks = []
+            if self.first_position_attends_to_all:
+                to_chunks.append((0, to_seq_length))
+            for chunk_start in range(0, to_seq_length, self.attend_to_chunk_stride):
+                chunk_end = min(to_seq_length, chunk_start + self.attend_to_chunk_width)
+                to_chunks.append((chunk_start, chunk_end))
+
+            if len(from_chunks) != len(to_chunks):
+                raise ValueError(
+                    f"Expected to have same number of `from_chunks` ({from_chunks}) and "
+                    f"`to_chunks` ({from_chunks}). Check strides.")
+
+            # next, compute attention scores for each pair of windows and concatenate 
+            attention_output_chunks = []
+            for (from_start, from_end), (to_start, to_end) in zip(from_chunks, to_chunks):
+                from_tensor_chunk = from_tensor[:, from_start:from_end, :]
+                to_tensor_chunk = to_tensor[:, to_start:to_end, :]
+                # `attention_mask`: <float>[batch_size, from_seq, to_seq]
+                # `attention_mask_chunk`: <float>[batch_size, from_seq_chunk, to_seq_chunk]
+                attention_mask_chunk = (
+                    attention_mask[:, from_start:from_end, to_start:to_end])
+                if self.always_attend_to_first_position:
+                    cls_attention_mask = attention_mask[:, from_start:from_end, 0:1]
+                    attention_mask_chunk = torch.cat([cls_attention_mask, attention_mask_chunk], dim=2)
+
+                    cls_position = to_tensor[:, 0:1, :]
+                    to_tensor_chunk = torch.cat([cls_position, to_tensor_chunk], dim=1)
+                
+                attention_outputs_chunk = self.self(
+                    from_tensor_chunk,
+                    to_tensor_chunk,
+                    attention_mask_chunk,
+                    head_mask,
+                    encoder_hidden_states,
+                    encoder_attention_mask,
+                    past_key_value,
+                    output_attentions,
+                )
+                attention_output_chunks.append(attention_outputs_chunk[0])
+
+            attention_output = torch.cat(attention_output_chunks, dim=1)
+
+        attention_output = self.output(attention_output, hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
@@ -534,11 +635,11 @@ class CanineOutput(nn.Module):
 
 
 class CanineLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, local=False):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = CanineAttention(config)
+        self.attention = CanineAttention(config, local)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
@@ -617,10 +718,10 @@ class CanineLayer(nn.Module):
 
 
 class CanineEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, local=False):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([CanineLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([CanineLayer(config, local) for _ in range(config.num_hidden_layers)])
 
     def forward(
         self,
@@ -1068,8 +1169,6 @@ class CanineModel(CaninePreTrainedModel):
 
         # `repeated_molecules`: [batch_size, char_seq_len, molecule_hidden_size]
         repeated_molecules = self._repeat_molecules(sequence_output, char_seq_length=input_shape[-1])
-
-        print(repeated_molecules.shape)
 
         # concatenate contextualized char embeddings with repeated molecules: 
         # shape [batch_size, char_seq_len, molecule_hidden_size+char_hidden_final]
