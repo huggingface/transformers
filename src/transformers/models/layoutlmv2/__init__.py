@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from typing import TYPE_CHECKING
-TYPE_CHECKING = True
 
 from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_available, is_torch_available
 from .configuration_layoutlmv2 import LAYOUTLMv2_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv2Config
