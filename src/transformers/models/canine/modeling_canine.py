@@ -25,6 +25,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
+import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -286,34 +287,46 @@ class MoleculesToCharacters(nn.Module):
     
     def __init__(self, config):
         super().__init__()
-        self.conv = nn.Conv1d(in_channels=config.hidden_size, out_channels=config.hidden_size, 
+        self.conv = nn.Conv1d(in_channels=config.hidden_size*2, out_channels=config.hidden_size, 
                                         kernel_size=config.upsampling_kernel_size, stride=1)
         self.activation = ACT2FN[config.hidden_act]
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) 
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, inputs, final_seq_char_positions):
+    def forward(self, inputs, final_seq_char_positions=None):
+        # PyTorch < 1.9 does not support padding="same" (which is used in the original implementation),
+        # so we pad the tensor manually before passing it to the conv layer
+        #inputs = F.pad(inputs, (2, 1, 2, 1),)
+        
+        # inputs has shape [batch, mol_seq, molecule_hidden_size+char_hidden_final]
+        # we tranpose it to be [batch, molecule_hidden_size+char_hidden_final, mol_seq]
+        inputs = torch.transpose(inputs, 1, 2)
+        
         # `result`: [batch_size, char_seq_len, hidden_size]
         result = self.conv(inputs)
+        result = torch.transpose(result, 1, 2)
+        result = self.activation(result)
         result = self.layernorm(result)
+        result = self.dropout(result)
         final_char_seq = result
 
-        # if final_seq_char_positions is not None:
-        #     # Limit transformer query seq and attention mask to these character
-        #     # positions to greatly reduce the compute cost. Typically, this is just
-        #     # done for the MLM training task.
+        if final_seq_char_positions is not None:
+            # Limit transformer query seq and attention mask to these character
+            # positions to greatly reduce the compute cost. Typically, this is just
+            # done for the MLM training task.
 
-        #     # `query_seq`: [batch, final_char_seq, char_dim]
-        #     query_seq = tf.gather(
-        #         final_char_seq, final_seq_char_positions, batch_dims=1)
-        #     char_attention_mask = tf.gather(
-        #         char_attention_mask,
-        #         final_seq_char_positions,
-        #         batch_dims=1)
-        # else:
-        #     query_seq = final_char_seq
+            # `query_seq`: [batch, final_char_seq, char_dim]
+            # query_seq = tf.gather(
+            #     final_char_seq, final_seq_char_positions, batch_dims=1)
+            # char_attention_mask = tf.gather(
+            #     char_attention_mask,
+            #     final_seq_char_positions,
+            #     batch_dims=1)
+            raise NotImplementedError("To do: add support for MLM")
+        else:
+            query_seq = final_char_seq
 
-        return final_char_seq
+        return query_seq
 
 
 class CanineSelfAttention(nn.Module):
@@ -415,7 +428,14 @@ class CanineSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in CanineModel forward() function)
+            if attention_mask.ndim == 3:
+                # if attention_mask is 3D, do the following:
+                attention_mask = torch.unsqueeze(attention_mask, dim=1)
+                # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
+                # masked positions, this operation will create a tensor which is 0.0 for
+                # positions we want to attend and -10000.0 for masked positions.
+                attention_mask = (1.0 - attention_mask.float()) * -10000.0
+            # Apply the attention mask (precomputed for all layers in CanineModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -473,8 +493,8 @@ class CanineAttention(nn.Module):
         attend_to_chunk_stride: 
             The number of elements to skip when moving to the next block in `to_tensor`.
     """
-    def __init__(self, config, local=False, always_attend_to_first_position: bool = True,
-                          first_position_attends_to_all: bool = True,
+    def __init__(self, config, local=False, always_attend_to_first_position: bool = False,
+                          first_position_attends_to_all: bool = False,
                           attend_from_chunk_width: int = 128,
                           attend_from_chunk_stride: int = 128,
                           attend_to_chunk_width: int = 128,
@@ -497,7 +517,7 @@ class CanineAttention(nn.Module):
         self.attend_from_chunk_width = attend_from_chunk_width
         self.attend_from_chunk_stride = attend_from_chunk_stride
         self.attend_to_chunk_width = attend_to_chunk_width
-        self.attend_from_chunk_stride = attend_from_chunk_stride
+        self.attend_to_chunk_stride = attend_to_chunk_stride
 
     def prune_heads(self, heads):
         if len(heads) == 0:
@@ -601,7 +621,9 @@ class CanineAttention(nn.Module):
             attention_output = torch.cat(attention_output_chunks, dim=1)
 
         attention_output = self.output(attention_output, hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        outputs = (attention_output,) 
+        if not self.local:
+            outputs = outputs + self_outputs[1:]  # add attentions if we output them
         return outputs
 
 
@@ -635,16 +657,19 @@ class CanineOutput(nn.Module):
 
 
 class CanineLayer(nn.Module):
-    def __init__(self, config, local=False):
+    def __init__(self, config, local, always_attend_to_first_position, first_position_attends_to_all,
+                    attend_from_chunk_width, attend_from_chunk_stride, attend_to_chunk_width, attend_to_chunk_stride):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = CanineAttention(config, local)
+        self.attention = CanineAttention(config, local, always_attend_to_first_position, first_position_attends_to_all,
+                    attend_from_chunk_width, attend_from_chunk_stride, attend_to_chunk_width, attend_to_chunk_stride)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
-            self.crossattention = CanineAttention(config)
+            self.crossattention = CanineAttention(config, local, always_attend_to_first_position, first_position_attends_to_all,
+                                    attend_from_chunk_width, attend_from_chunk_stride, attend_to_chunk_width, attend_to_chunk_stride)
         self.intermediate = CanineIntermediate(config)
         self.output = CanineOutput(config)
 
@@ -718,10 +743,12 @@ class CanineLayer(nn.Module):
 
 
 class CanineEncoder(nn.Module):
-    def __init__(self, config, local=False):
+    def __init__(self, config, local=False, always_attend_to_first_position=False, first_position_attends_to_all=128,
+          attend_from_chunk_width=128, attend_from_chunk_stride=128, attend_to_chunk_width=128, attend_to_chunk_stride=128):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([CanineLayer(config, local) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([CanineLayer(config, local, always_attend_to_first_position, first_position_attends_to_all,
+          attend_from_chunk_width, attend_from_chunk_stride, attend_to_chunk_width, attend_to_chunk_stride) for _ in range(config.num_hidden_layers)])
 
     def forward(
         self,
@@ -974,15 +1001,22 @@ class CanineModel(CaninePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-
+        shallow_config = copy.deepcopy(config)
+        shallow_config.num_hidden_layers = 1
+        
         self.char_embeddings = CanineEmbeddings(config)
+        # shallow/low-dim transformer to get a initial character encoding
+        self.init_chars_encoder = CanineEncoder(shallow_config, local=True, always_attend_to_first_position=False,
+                          first_position_attends_to_all=False,
+                          attend_from_chunk_width=config.local_transformer_stride,
+                          attend_from_chunk_stride=config.local_transformer_stride,
+                          attend_to_chunk_width=config.local_transformer_stride,
+                          attend_to_chunk_stride=config.local_transformer_stride)
         self.chars_to_molecules = CharactersToMolecules(config)
         self.encoder = CanineEncoder(config)
         self.molecules_to_chars = MoleculesToCharacters(config)
         # shallow/low-dim transformer to get a final character encoding
-        final_chars_encoder_config = copy.deepcopy(config)
-        final_chars_encoder_config.num_hidden_layers = 1
-        self.final_chars_encoder = CanineEncoder(final_chars_encoder_config)
+        self.final_chars_encoder = CanineEncoder(shallow_config)
 
         self.init_weights()
 
@@ -999,6 +1033,32 @@ class CanineModel(CaninePreTrainedModel):
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
+    
+    def _create_attention_mask_from_input_mask(self, from_tensor, to_mask):
+        """Create 3D attention mask from a 2D tensor mask.
+        Args:
+            from_tensor: 2D or 3D Tensor of shape [batch_size, from_seq_length, ...].
+            to_mask: int32 Tensor of shape [batch_size, to_seq_length].
+        Returns:
+            float Tensor of shape [batch_size, from_seq_length, to_seq_length].
+        """
+        batch_size, from_seq_length = from_tensor.shape[0], from_tensor.shape[1]
+
+        to_seq_length = to_mask.shape[1]
+
+        to_mask = torch.reshape(to_mask, (batch_size, 1, to_seq_length)).float()
+
+        # We don't assume that `from_tensor` is a mask (although it could be). We
+        # don't actually care if we attend *from* padding tokens (only *to* padding)
+        # tokens so we create a tensor of all ones.
+        #
+        # `broadcast_ones` = [batch_size, from_seq_length, 1]
+        broadcast_ones = torch.ones(size=(batch_size, from_seq_length, 1), dtype=torch.float32)
+
+        # Here we broadcast along two dimensions to create the mask.
+        mask = broadcast_ones * to_mask
+
+        return mask
     
     def _downsample_attention_mask(self, char_attention_mask: torch.Tensor, downsampling_rate: int):
         """Downsample 2D character attention mask to 2D molecule attention mask using MaxPool1d layer."""
@@ -1117,7 +1177,7 @@ class CanineModel(CaninePreTrainedModel):
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         molecule_attention_mask = self._downsample_attention_mask(attention_mask, downsampling_rate=self.config.downsampling_rate)
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(molecule_attention_mask, 
+        extended_molecule_attention_mask: torch.Tensor = self.get_extended_attention_mask(molecule_attention_mask, 
                                                     (batch_size, molecule_attention_mask.shape[-1]), device)
         
         # If a 2D or 3D attention mask is provided for the cross-attention
@@ -1147,15 +1207,17 @@ class CanineModel(CaninePreTrainedModel):
             past_key_values_length=past_key_values_length,
         )
         
-        # TODO: contextualize character embeddings. Shape (batch_size, char_seq_len, char_dim)
-        input_char_encoding = input_char_embeddings
+        # Contextualize character embeddings using shallow Transformer. Shape (batch_size, char_seq_len, char_dim)
+        char_attention_mask = self._create_attention_mask_from_input_mask(input_ids, attention_mask)
+        shallow_encoder_outputs = self.init_chars_encoder(input_char_embeddings, char_attention_mask)
+        input_char_encoding = shallow_encoder_outputs.last_hidden_state
         
         # Molecule embeddings: shape (batch_size, mol_seq_len, mol_dim)
         init_molecule_encoding = self.chars_to_molecules(input_char_encoding) 
         
         encoder_outputs = self.encoder(
             init_molecule_encoding,
-            attention_mask=extended_attention_mask,
+            attention_mask=extended_molecule_attention_mask,
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
@@ -1165,15 +1227,20 @@ class CanineModel(CaninePreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        sequence_output = encoder_outputs[0]
+        molecule_sequence_output = encoder_outputs[0]
 
+        # upsample back to characters
         # `repeated_molecules`: [batch_size, char_seq_len, molecule_hidden_size]
-        repeated_molecules = self._repeat_molecules(sequence_output, char_seq_length=input_shape[-1])
+        repeated_molecules = self._repeat_molecules(molecule_sequence_output, char_seq_length=input_shape[-1])
 
         # concatenate contextualized char embeddings with repeated molecules: 
         # shape [batch_size, char_seq_len, molecule_hidden_size+char_hidden_final]
         concat = torch.cat([input_char_encoding, repeated_molecules], dim=-1)
 
+        # `query_seq`: [batch_size, char_seq_len, hidden_size]
+        sequence_output = self.molecules_to_chars(concat)
+
+        # TODO apply shallow Transformer
         #final_char_encoding = self.final_chars_encoder(init_output_char_encoding, char_attention_mask=char_attention_mask)
         
         if not return_dict:
