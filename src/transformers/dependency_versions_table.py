@@ -66,5 +66,5 @@ deps = {
     "unidic": "unidic>=1.0.2",
     "unidic_lite": "unidic_lite>=1.0.7",
     "uvicorn": "uvicorn",
-    "detectron2" : "detectron2==0.4",
+    "detectron2" : "git+https://github.com/facebookresearch/detectron2.git@v0.4#egg=detectron2",
 }
