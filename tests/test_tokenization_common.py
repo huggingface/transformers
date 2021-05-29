@@ -313,9 +313,9 @@ class TokenizerTesterMixin:
         reverse_text = tokenizer.convert_tokens_to_string(tokens)
 
         if self.test_sentencepiece_ignore_case:
-            self.assertEqual(reverse_text.lower(), text)
-        else:
-            self.assertEqual(reverse_text, text)
+            reverse_text = reverse_text.lower()
+
+        self.assertEqual(reverse_text, text)
 
     def test_subword_regularization_tokenizer(self) -> None:
         if not self.test_sentencepiece:
