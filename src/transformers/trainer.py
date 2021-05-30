@@ -1751,7 +1751,6 @@ class Trainer:
                 scaled_loss.backward()
         elif self.deepspeed:
             # loss gets scaled under gradient_accumulation_steps in deepspeed
-            # loss = self.deepspeed.backward(loss)
             loss = self.deepspeed.backward(loss)
         else:
             loss.backward()
