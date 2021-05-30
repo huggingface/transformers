@@ -292,6 +292,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 b=b,
                 local_rank=0,
                 train_len=train_len,
+                logging_steps=1,
                 deepspeed=self.get_config_dict(stage),
                 per_device_train_batch_size=8,
                 gradient_accumulation_steps=1,
@@ -309,9 +310,10 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 b=b,
                 local_rank=0,
                 train_len=train_len,
+                logging_steps=1,
                 deepspeed=self.get_config_dict(stage),
-                per_device_train_batch_size=4,
-                gradient_accumulation_steps=2,
+                per_device_train_batch_size=1,
+                gradient_accumulation_steps=8,
             )
             yes_grad_accum_result = yes_grad_accum_trainer.train()
             yes_grad_accum_loss = yes_grad_accum_result.training_loss
