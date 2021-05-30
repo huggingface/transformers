@@ -282,8 +282,8 @@ class CharactersToMolecules(nn.Module):
         return self.layernorm(result)
     
 
-class MoleculesToCharacters(nn.Module):
-    """Convert molecule sequence to character sequence (i.e. upsample)."""
+class ConvProjection(nn.Module):
+    """Project representations from hidden_size*2 back to hidden_size across a window of w = config.upsampling_kernel_size characters."""
     
     def __init__(self, config):
         super().__init__()
@@ -294,22 +294,21 @@ class MoleculesToCharacters(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, inputs, final_seq_char_positions=None):
+        # inputs has shape [batch, mol_seq, molecule_hidden_size+char_hidden_final]
+        # we transpose it to be [batch, molecule_hidden_size+char_hidden_final, mol_seq]
+        inputs = torch.transpose(inputs, 1, 2)
+        pad = nn.ConstantPad1d((1, 2), 0)
+        
         # PyTorch < 1.9 does not support padding="same" (which is used in the original implementation),
         # so we pad the tensor manually before passing it to the conv layer
-        #inputs = F.pad(inputs, (2, 1, 2, 1),)
-        
-        # inputs has shape [batch, mol_seq, molecule_hidden_size+char_hidden_final]
-        # we tranpose it to be [batch, molecule_hidden_size+char_hidden_final, mol_seq]
-        inputs = torch.transpose(inputs, 1, 2)
-        
-        # `result`: [batch_size, char_seq_len, hidden_size]
-        result = self.conv(inputs)
+        # `result`: shape (batch_size, char_seq_len, hidden_size)
+        result = self.conv(pad(inputs))
         result = torch.transpose(result, 1, 2)
         result = self.activation(result)
         result = self.layernorm(result)
         result = self.dropout(result)
         final_char_seq = result
-
+    
         if final_seq_char_positions is not None:
             # Limit transformer query seq and attention mask to these character
             # positions to greatly reduce the compute cost. Typically, this is just
@@ -1005,7 +1004,7 @@ class CanineModel(CaninePreTrainedModel):
         shallow_config.num_hidden_layers = 1
         
         self.char_embeddings = CanineEmbeddings(config)
-        # shallow/low-dim transformer to get a initial character encoding
+        # shallow/low-dim transformer encoder to get a initial character encoding
         self.init_chars_encoder = CanineEncoder(shallow_config, local=True, always_attend_to_first_position=False,
                           first_position_attends_to_all=False,
                           attend_from_chunk_width=config.local_transformer_stride,
@@ -1013,9 +1012,10 @@ class CanineModel(CaninePreTrainedModel):
                           attend_to_chunk_width=config.local_transformer_stride,
                           attend_to_chunk_stride=config.local_transformer_stride)
         self.chars_to_molecules = CharactersToMolecules(config)
+        # deep transformer encoder
         self.encoder = CanineEncoder(config)
-        self.molecules_to_chars = MoleculesToCharacters(config)
-        # shallow/low-dim transformer to get a final character encoding
+        self.projection = ConvProjection(config)
+        # shallow/low-dim transformer encoder to get a final character encoding
         self.final_chars_encoder = CanineEncoder(shallow_config)
 
         self.init_weights()
@@ -1176,6 +1176,7 @@ class CanineModel(CaninePreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
         molecule_attention_mask = self._downsample_attention_mask(attention_mask, downsampling_rate=self.config.downsampling_rate)
         extended_molecule_attention_mask: torch.Tensor = self.get_extended_attention_mask(molecule_attention_mask, 
                                                     (batch_size, molecule_attention_mask.shape[-1]), device)
@@ -1208,13 +1209,28 @@ class CanineModel(CaninePreTrainedModel):
         )
         
         # Contextualize character embeddings using shallow Transformer. Shape (batch_size, char_seq_len, char_dim)
+        # We use a 3D attention mask for the local attention
         char_attention_mask = self._create_attention_mask_from_input_mask(input_ids, attention_mask)
-        shallow_encoder_outputs = self.init_chars_encoder(input_char_embeddings, char_attention_mask)
-        input_char_encoding = shallow_encoder_outputs.last_hidden_state
+        init_chars_encoder_outputs = self.init_chars_encoder(input_char_embeddings, char_attention_mask)
+        input_char_encoding = init_chars_encoder_outputs.last_hidden_state
         
-        # Molecule embeddings: shape (batch_size, mol_seq_len, mol_dim)
+        # Downsample chars to molecules.
+        # The following lines have dimensions: [batch, molecule_seq, molecule_dim].
+        # In this transformation, we change the dimensionality from `char_dim` to
+        # `molecule_dim`, but do *NOT* add a resnet connection. Instead, we rely on
+        # the resnet connections (a) from the final char transformer stack back into
+        # the original char transformer stack and (b) the resnet connections from
+        # the final char transformer stack back into the deep BERT stack of
+        # molecules.
+        #
+        # Empirically, it is critical to use a powerful enough transformation here:
+        # mean pooling causes training to diverge with huge gradient norms in this
+        # region of the model; using a convolution here resolves this issue. From
+        # this, it seems that molecules and characters require a very different
+        # feature space; intuitively, this makes sense.
         init_molecule_encoding = self.chars_to_molecules(input_char_encoding) 
         
+        # Deep BERT encoder
         encoder_outputs = self.encoder(
             init_molecule_encoding,
             attention_mask=extended_molecule_attention_mask,
@@ -1229,29 +1245,32 @@ class CanineModel(CaninePreTrainedModel):
         )
         molecule_sequence_output = encoder_outputs[0]
 
-        # upsample back to characters
-        # `repeated_molecules`: [batch_size, char_seq_len, molecule_hidden_size]
+        # Upsample molecules back to characters.
+        # `repeated_molecules`: shape (batch_size, char_seq_len, molecule_hidden_size)
         repeated_molecules = self._repeat_molecules(molecule_sequence_output, char_seq_length=input_shape[-1])
 
-        # concatenate contextualized char embeddings with repeated molecules: 
-        # shape [batch_size, char_seq_len, molecule_hidden_size+char_hidden_final]
+        # Concatenate representations (contextualized char embeddings and repeated molecules): 
+        # `concat`: shape [batch_size, char_seq_len, molecule_hidden_size+char_hidden_final]
         concat = torch.cat([input_char_encoding, repeated_molecules], dim=-1)
 
-        # `query_seq`: [batch_size, char_seq_len, hidden_size]
-        sequence_output = self.molecules_to_chars(concat)
+        # Project representation dim back to hidden_size 
+        # `sequence_output`: shape (batch_size, char_seq_len, hidden_size])
+        sequence_output = self.projection(concat)
 
-        # TODO apply shallow Transformer
-        #final_char_encoding = self.final_chars_encoder(init_output_char_encoding, char_attention_mask=char_attention_mask)
+        # Apply final shallow Transformer
+        # `sequence_output`: shape (batch_size, char_seq_len, hidden_size])
+        final_chars_encoder_outputs = self.final_chars_encoder(sequence_output, extended_attention_mask)
+        sequence_output = final_chars_encoder_outputs.last_hidden_state
         
         if not return_dict:
             return (sequence_output,) + encoder_outputs[1:]
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=sequence_output,
-            past_key_values=encoder_outputs.past_key_values,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-            cross_attentions=encoder_outputs.cross_attentions,
+            past_key_values=final_chars_encoder_outputs.past_key_values,
+            hidden_states=final_chars_encoder_outputs.hidden_states,
+            attentions=final_chars_encoder_outputs.attentions,
+            cross_attentions=final_chars_encoder_outputs.cross_attentions,
         )
 
 
