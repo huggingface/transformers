@@ -130,6 +130,7 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
+    "models.splinter": ["SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SplinterConfig", "SplinterTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -323,6 +324,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.splinter"].append("SplinterTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
@@ -465,6 +467,22 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
+
+    _import_structure["models.splinter"].extend(
+        [
+            "SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SplinterForMaskedLM",
+            "SplinterForCausalLM",
+            "SplinterForMultipleChoice",
+            "SplinterForQuestionAnswering",
+            "SplinterForSequenceClassification",
+            "SplinterForTokenClassification",
+            "SplinterLayer",
+            "SplinterModel",
+            "SplinterPreTrainedModel",
+            "load_tf_weights_in_splinter",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1599,6 +1617,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.splinter import SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, SplinterConfig, SplinterTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1780,6 +1799,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
+        from .models.splinter import SplinterTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -1844,6 +1864,20 @@ if TYPE_CHECKING:
 
     # Modeling
     if is_torch_available():
+
+        from .models.splinter import (
+            SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SplinterForMaskedLM,
+            SplinterForCausalLM,
+            SplinterForMultipleChoice,
+            SplinterForQuestionAnswering,
+            SplinterForSequenceClassification,
+            SplinterForTokenClassification,
+            SplinterLayer,
+            SplinterModel,
+            SplinterPreTrainedModel,
+            load_tf_weights_in_splinter,
+        )
 
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
