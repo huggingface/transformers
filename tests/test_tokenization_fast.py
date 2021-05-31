@@ -23,14 +23,19 @@ from .test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
-    tokenizer_class = PreTrainedTokenizerFast
+    rust_tokenizer_class = PreTrainedTokenizerFast
+    test_rust_tokenizer = True
+    from_pretrained_vocab_key = "tokenizer_file"
 
     def setUp(self):
+        self.test_rust_tokenizer = False  # because we don't have pretrained_vocab_files_map
         super().setUp()
+        self.test_rust_tokenizer = True
+
+        self.tokenizers_list = [(PreTrainedTokenizerFast, "robot-test/dummy-tokenizer-fast", {})]
 
         tokenizer = PreTrainedTokenizerFast.from_pretrained("robot-test/dummy-tokenizer-fast")
         tokenizer.save_pretrained(self.tmpdirname)
-        self.tokenizer = tokenizer
 
     def test_pretrained_model_lists(self):
         # We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any
@@ -42,7 +47,6 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
         # model
         pass
 
-    def test_added_tokens_do_lower_case(self):
-        # We disable this test for PreTrainedTokenizerFast because it is a Fast tokenizer and according to the TODO
-        # comment into test_tokenization_common.py, we need Rust tokenizers accepting white spaces in added tokens
+    def test_rust_tokenizer_signature(self):
+        # PreTrainedTokenizerFast doesn't have tokenizer_file in its signature
         pass
