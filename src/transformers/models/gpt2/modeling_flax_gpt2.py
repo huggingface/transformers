@@ -19,7 +19,8 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, unfreeze
-from flax.linen import combine_masks, dot_product_attention, make_causal_mask
+from flax.linen import combine_masks, make_causal_mask
+from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
@@ -215,10 +216,9 @@ class FlaxGPT2Attention(nn.Module):
         )
 
         # usual dot product attention
-        attn_output = dot_product_attention(
+        attn_weights = dot_product_attention_weights(
             query,
             key,
-            value,
             bias=attention_bias,
             dropout_rng=dropout_rng,
             dropout_rate=self.config.attn_pdrop,
@@ -227,14 +227,13 @@ class FlaxGPT2Attention(nn.Module):
             precision=None,
         )
 
+        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value)
         attn_output = self._merge_heads(attn_output)
         attn_output = self.c_proj(attn_output)
         attn_output = self.resid_dropout(attn_output, deterministic=deterministic)
 
-        # TODO: at the moment it's not possible to retrieve attn_weights from
-        # dot_product_attention, but should be in the future -> add functionality then
-
-        return (attn_output,)
+        outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
+        return outputs
 
 
 class FlaxGPT2MLP(nn.Module):
@@ -447,7 +446,13 @@ class FlaxGPT2BlockCollection(nn.Module):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            layer_outputs = block(hidden_states, attention_mask, deterministic=deterministic, init_cache=init_cache)
+            layer_outputs = block(
+                hidden_states,
+                attention_mask,
+                deterministic=deterministic,
+                init_cache=init_cache,
+                output_attentions=output_attentions,
+            )
             hidden_states = layer_outputs[0]
 
             if output_attentions:
