@@ -37,7 +37,7 @@ jobs:
         run: |
           apt -y update && apt install -y libsndfile1-dev
           pip install --upgrade pip
-          pip install .[sklearn,testing,onnxruntime,sentencepiece,speech]
+          pip install .[sklearn,testing,onnxruntime,sentencepiece,speech,integrations]
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
