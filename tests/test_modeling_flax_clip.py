@@ -128,14 +128,6 @@ class FlaxCLIPVisionModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 for jitted_output, output in zip(jitted_outputs, outputs):
                     self.assertEqual(jitted_output.shape, output.shape)
 
-                @jax.jit
-                def model_jitted_return_dict(pixel_values, **kwargs):
-                    return model(pixel_values=pixel_values, **kwargs)
-
-                # jitted function cannot return OrderedDict
-                with self.assertRaises(TypeError):
-                    model_jitted_return_dict(**prepared_inputs_dict)
-
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
@@ -167,6 +159,55 @@ class FlaxCLIPVisionModelTest(FlaxModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        # in CLIP, the seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
+        image_size = (self.model_tester.image_size, self.model_tester.image_size)
+        patch_size = (self.model_tester.patch_size, self.model_tester.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        seq_length = num_patches + 1
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            model = model_class(config)
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, seq_length, seq_length],
+            )
+            out_len = len(outputs)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            added_hidden_states = 1
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, seq_length, seq_length],
+            )
 
     @slow
     def test_model_from_pretrained(self):
@@ -292,6 +333,7 @@ class FlaxCLIPModelTester:
 @require_flax
 class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
     all_model_classes = (FlaxCLIPModel,) if is_flax_available() else ()
+    test_attention_outputs = False
 
     def setUp(self):
         self.model_tester = FlaxCLIPModelTester(self)
@@ -322,14 +364,6 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs[:4], outputs[:4]):
                     self.assertEqual(jitted_output.shape, output.shape)
-
-                @jax.jit
-                def model_jitted_return_dict(input_ids, pixel_values, **kwargs):
-                    return model(input_ids=input_ids, pixel_values=pixel_values, **kwargs)
-
-                # jitted function cannot return OrderedDict
-                with self.assertRaises(TypeError):
-                    model_jitted_return_dict(**prepared_inputs_dict)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

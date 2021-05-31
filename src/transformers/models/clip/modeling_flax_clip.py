@@ -15,12 +15,14 @@
 
 from typing import Any, Optional, Tuple, Union
 
+import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import jaxlib.xla_extension as jax_xla
 from flax.core.frozen_dict import FrozenDict
-from flax.linen import combine_masks, dot_product_attention, make_causal_mask
+from flax.linen import combine_masks, make_causal_mask
+from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 
 from ...file_utils import ModelOutput, add_start_docstrings
@@ -149,7 +151,7 @@ CLIP_INPUTS_DOCSTRING = r"""
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
-
+@flax.struct.dataclass
 class FlaxCLIPOutput(ModelOutput):
     """
     Args:
@@ -325,10 +327,9 @@ class FlaxCLIPAttention(nn.Module):
         if not deterministic and self.dropout > 0.0:
             dropout_rng = self.make_rng("dropout")
 
-        attn_output = dot_product_attention(
+        attn_weights = dot_product_attention_weights(
             query,
             key,
-            value,
             bias=attention_bias,
             dropout_rng=dropout_rng,
             dropout_rate=self.dropout,
@@ -337,13 +338,12 @@ class FlaxCLIPAttention(nn.Module):
             precision=None,
         )
 
+        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value)
         attn_output = self._merge_heads(attn_output)
         attn_output = self.out_proj(attn_output)
 
-        # TODO: at the moment it's not possible to retrieve attn_weights from
-        # dot_product_attention, but should be in the future -> add functionality then
-
-        return (attn_output,)
+        outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
+        return outputs
 
 
 class FlaxCLIPMLP(nn.Module):
@@ -626,11 +626,6 @@ class FlaxCLIPTextPreTrainedModel(FlaxPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        if output_attentions:
-            raise NotImplementedError(
-                "Currently attention scores cannot be returned. Please set `output_attentions` to False for now."
-            )
-
         if position_ids is None:
             position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
 
@@ -688,11 +683,6 @@ class FlaxCLIPVisionPreTrainedModel(FlaxPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        if output_attentions:
-            raise NotImplementedError(
-                "Currently attention scores cannot be returned. Please set `output_attentions` to False for now."
-            )
 
         pixel_values = jnp.transpose(pixel_values, (0, 2, 3, 1))
 
@@ -752,11 +742,6 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        if output_attentions:
-            raise NotImplementedError(
-                "Currently attention scores cannot be returned. Please set `output_attentions` to False for now."
-            )
 
         if position_ids is None:
             position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
