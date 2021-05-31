@@ -39,9 +39,6 @@ class CanineConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (:obj:`int`, `optional`, defaults to 30522):
-            Vocabulary size of the CANINE model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.CanineModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimension of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
@@ -97,7 +94,6 @@ class CanineConfig(PretrainedConfig):
     model_type = "canine"
     def __init__(
         self,
-        vocab_size=30522,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -128,7 +124,6 @@ class CanineConfig(PretrainedConfig):
             **kwargs
         )
 
-        self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers

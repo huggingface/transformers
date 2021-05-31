@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for CANINE."""
 from ...utils import logging
-from ..bert.tokenization_bert import BertTokenizer
+from ...tokenization_utils import PreTrainedTokenizer
 
 
 logger = logging.get_logger(__name__)
@@ -28,27 +28,18 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/canine-s": 512,
+    "google/canine-s": 16384,
 }
 
 
-PRETRAINED_INIT_CONFIGURATION = {
-    "google/canine-s": {"do_lower_case": False},
-}
-
-
-class CanineTokenizer(BertTokenizer):
+class CanineTokenizer(PreTrainedTokenizer):
     r"""
     Construct a CANINE tokenizer.
 
-    :class:`~transformers.CanineTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
-    tokenization: punctuation splitting and wordpiece.
+    :class:`~transformers.CanineTokenizer` inherits from :class:`~transformers.PreTrainedTokenizer`.
 
-    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
+    Refer to superclass :class:`~transformers.PreTrainedTokenizer` for usage examples and documentation concerning
     parameters.
     """
 
-    vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
