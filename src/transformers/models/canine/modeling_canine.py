@@ -1308,12 +1308,22 @@ class CanineModel(CaninePreTrainedModel):
             past_key_values_length=past_key_values_length,
         )
 
+        print("Input char embeddings:")
+        print(input_char_embeddings)
+        print("Sum of input char embeddings:")
+        print(input_char_embeddings.sum())
+
         # Contextualize character embeddings using shallow Transformer.
         # We use a 3D attention mask for the local attention.
         # `input_char_encoding`: shape (batch_size, char_seq_len, char_dim)
         char_attention_mask = self._create_3d_attention_mask_from_input_mask(input_ids, attention_mask)
         init_chars_encoder_outputs = self.initial_char_encoder(input_char_embeddings, char_attention_mask)
         input_char_encoding = init_chars_encoder_outputs.last_hidden_state
+
+        print("Input char encoding:")
+        print(input_char_encoding)
+        print("Sum of input char encoding:")
+        print(input_char_encoding.sum())
 
         # Downsample chars to molecules.
         # The following lines have dimensions: [batch, molecule_seq, molecule_dim].
@@ -1424,9 +1434,7 @@ class CanineForMaskedLM(CaninePreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
-            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
-            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
+            Labels for computing the masked language modeling loss. Tokens with indices set to ``-100`` are ignored.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
