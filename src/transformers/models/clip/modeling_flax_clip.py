@@ -215,10 +215,9 @@ class FlaxCLIPVisionEmbeddings(nn.Module):
         self.position_ids = jnp.expand_dims(jnp.arange(0, num_positions, dtype="i4"), axis=0)
 
     def __call__(self, pixel_values):
-        batch_size = pixel_values.shape[0]
         patch_embeds = self.patch_embedding(pixel_values)
-        n, h, w, c = patch_embeds.shape
-        patch_embeds = jnp.reshape(patch_embeds, (n, h * w, c))
+        batch_size, height, width, channels = patch_embeds.shape
+        patch_embeds = jnp.reshape(patch_embeds, (batch_size, height * width, channels))
 
         class_embeds = jnp.expand_dims(self.class_embedding, axis=(0, 1))
         class_embeds = jnp.tile(class_embeds, (batch_size, 1, 1))
@@ -524,7 +523,7 @@ class FlaxCLIPTextTransformer(nn.Module):
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
         # text_embeds.shape = [batch_size, n_ctx, transformer.width]
-        # take features from the eot embedding (eot_token is the highest number in each sequence)
+        # take features from the EOS embedding (eos_token_id is the highest number in each sequence)
         pooled_output = last_hidden_state[jnp.arange(last_hidden_state.shape[0]), input_ids.argmax(axis=-1)]
 
         if not return_dict:
@@ -771,10 +770,7 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
         )
 
     def get_text_features(
-        self,
-        input_ids,
-        attention_mask=None,
-        position_ids=None,
+        self, input_ids, attention_mask=None, position_ids=None, dropout_rng: jax.random.PRNGKey = None, train=False
     ):
         r"""
         Args:
@@ -798,11 +794,17 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
         if attention_mask is None:
             attention_mask = jnp.ones_like(input_ids)
 
-        def _get_features(module, input_ids, attention_mask, position_ids):
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
+        def _get_features(module, input_ids, attention_mask, position_ids, deterministic):
             text_outputs = module.text_model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
+                deterministic=deterministic,
             )
             pooled_output = text_outputs[1]
             text_features = module.text_projection(pooled_output)
@@ -813,10 +815,12 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
             jnp.array(input_ids, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
+            not train,
             method=_get_features,
+            rngs=rngs,
         )
 
-    def get_image_features(self, pixel_values):
+    def get_image_features(self, pixel_values, dropout_rng: jax.random.PRNGKey = None, train=False):
         r"""
         Args:
             pixel_values (:obj:`numpy.ndarray` of shape :obj:`(batch_size, num_channels, height, width)`):
@@ -831,8 +835,13 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
         """
         pixel_values = jnp.transpose(pixel_values, (0, 2, 3, 1))
 
-        def _get_features(module, pixel_values):
-            vision_outputs = module.vision_model(pixel_values=pixel_values)
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
+        def _get_features(module, pixel_values, deterministic):
+            vision_outputs = module.vision_model(pixel_values=pixel_values, deterministic=deterministic)
             pooled_output = vision_outputs[1]  # pooled_output
             image_features = module.visual_projection(pooled_output)
             return image_features
@@ -840,7 +849,9 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
         return self.module.apply(
             {"params": self.params},
             jnp.array(pixel_values, dtype=jnp.float32),
+            not train,
             method=_get_features,
+            rngs=rngs,
         )
 
 
