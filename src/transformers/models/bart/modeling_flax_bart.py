@@ -268,7 +268,6 @@ class FlaxBartAttention(nn.Module):
         hidden_states: jnp.ndarray,
         key_value_states: Optional[jnp.ndarray] = None,
         attention_mask: Optional[jnp.ndarray] = None,
-        layer_head_mask: Optional[jnp.ndarray] = None,
         output_attentions: bool = False,
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
@@ -344,15 +343,6 @@ class FlaxBartAttention(nn.Module):
             precision=None,
         )
 
-        # if layer_head_mask is not None:
-        #     assert layer_head_mask.shape == (
-        #         self.num_heads,
-        #     ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.shape}"
-        #     attn_weights = layer_head_mask.reshape(1, -1, 1, 1) * attn_weights.reshape(
-        #         bsz, self.num_heads, tgt_len, src_len
-        #     )
-        #     attn_weights = attn_weights.reshape(bsz * self.num_heads, tgt_len, src_len)
-
         attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
         attn_output = self._merge_heads(attn_output)
         attn_output = self.out_proj(attn_output)
@@ -384,7 +374,6 @@ class FlaxBartEncoderLayer(nn.Module):
         self,
         hidden_states: jnp.ndarray,
         attention_mask: jnp.ndarray,
-        layer_head_mask: jnp.ndarray,
         output_attentions: bool = True,
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
@@ -403,7 +392,6 @@ class FlaxBartEncoderLayer(nn.Module):
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
 
@@ -442,7 +430,6 @@ class FlaxBartEncoderLayerCollection(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -450,12 +437,6 @@ class FlaxBartEncoderLayerCollection(nn.Module):
     ):
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
-
-        # check if head_mask has a correct number of layers specified if desired
-        if head_mask is not None:
-            assert head_mask.shape[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.shape[0]}."
 
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -468,7 +449,6 @@ class FlaxBartEncoderLayerCollection(nn.Module):
             hidden_states, attn = encoder_layer(
                 hidden_states,
                 attention_mask,
-                head_mask[idx] if head_mask is not None else None,
                 True,  # we want to always output attentions at this step (at least so far for debugging purposes :) )
                 deterministic,
             )
@@ -526,8 +506,6 @@ class FlaxBartDecoderLayer(nn.Module):
         attention_mask: Optional[jnp.ndarray] = None,
         encoder_hidden_states: Optional[jnp.ndarray] = None,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
-        layer_head_mask: Optional[jnp.ndarray] = None,
-        cross_attn_layer_head_mask: Optional[jnp.ndarray] = None,
         output_attentions: bool = True,
         use_cache: bool = True,
         deterministic: bool = True,
@@ -555,7 +533,6 @@ class FlaxBartDecoderLayer(nn.Module):
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
@@ -571,7 +548,6 @@ class FlaxBartDecoderLayer(nn.Module):
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                layer_head_mask=cross_attn_layer_head_mask,
                 output_attentions=output_attentions,
             )
             hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
@@ -612,8 +588,6 @@ class FlaxBartDecoderLayerCollection(nn.Module):
         attention_mask,
         encoder_hidden_states,
         encoder_attention_mask,
-        head_mask,
-        cross_attn_head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -638,8 +612,6 @@ class FlaxBartDecoderLayerCollection(nn.Module):
                 attention_mask=attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
-                layer_head_mask=head_mask[idx] if head_mask is not None else None,
-                cross_attn_layer_head_mask=cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 deterministic=deterministic,
@@ -743,9 +715,6 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
         decoder_attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
         decoder_position_ids: Optional[jnp.ndarray] = None,
-        head_mask: Optional[jnp.ndarray] = None,
-        decoder_head_mask: Optional[jnp.ndarray] = None,
-        cross_attn_head_mask: Optional[jnp.ndarray] = None,
         encoder_outputs: Optional[jnp.ndarray] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -793,11 +762,6 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
             decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
             position_ids=jnp.array(position_ids, dtype="i4"),
             decoder_position_ids=jnp.array(decoder_position_ids, dtype="i4"),
-            head_mask=jnp.array(head_mask, dtype="i4") if head_mask is not None else None,
-            decoder_head_mask=jnp.array(decoder_head_mask, dtype="i4") if decoder_head_mask is not None else None,
-            cross_attn_head_mask=(
-                jnp.array(cross_attn_head_mask, dtype="i4") if cross_attn_head_mask is not None else None
-            ),
             encoder_outputs=encoder_outputs,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -856,7 +820,6 @@ class FlaxBartEncoder(nn.Module):
         input_ids,
         attention_mask,
         position_ids,
-        head_mask: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: bool = True,
@@ -919,7 +882,6 @@ class FlaxBartEncoder(nn.Module):
         outputs = self.layers(
             hidden_states,
             attention_mask,
-            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -992,8 +954,6 @@ class FlaxBartDecoder(nn.Module):
         position_ids,
         encoder_hidden_states: Optional[jnp.ndarray] = None,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
-        head_mask: Optional[jnp.ndarray] = None,
-        cross_attn_head_mask: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1088,8 +1048,6 @@ class FlaxBartDecoder(nn.Module):
             attention_mask,
             encoder_hidden_states,
             encoder_attention_mask,
-            head_mask=head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1137,9 +1095,6 @@ class FlaxBartModule(nn.Module):
         decoder_attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
         decoder_position_ids: Optional[jnp.ndarray] = None,
-        head_mask: Optional[jnp.ndarray] = None,
-        decoder_head_mask: Optional[jnp.ndarray] = None,
-        cross_attn_head_mask: Optional[jnp.ndarray] = None,
         encoder_outputs: Optional[jnp.ndarray] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1160,7 +1115,6 @@ class FlaxBartModule(nn.Module):
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -1180,8 +1134,6 @@ class FlaxBartModule(nn.Module):
             position_ids=decoder_position_ids,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
-            head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1231,8 +1183,6 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
         decoder_position_ids: Optional[jnp.ndarray] = None,
         encoder_hidden_states: Optional[jnp.ndarray] = None,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
-        decoder_head_mask: Optional[jnp.ndarray] = None,
-        cross_attn_head_mask: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1244,8 +1194,6 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
             position_ids=decoder_position_ids,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1277,7 +1225,6 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
         input_ids: jnp.ndarray,
         attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
-        head_mask: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: bool = True,
@@ -1287,7 +1234,6 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1303,9 +1249,6 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
         decoder_attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
         decoder_position_ids: Optional[jnp.ndarray] = None,
-        head_mask: Optional[jnp.ndarray] = None,
-        decoder_head_mask: Optional[jnp.ndarray] = None,
-        cross_attn_head_mask: Optional[jnp.ndarray] = None,
         encoder_outputs: Optional[jnp.ndarray] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1320,9 +1263,6 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
             decoder_attention_mask=decoder_attention_mask,
             position_ids=position_ids,
             decoder_position_ids=decoder_position_ids,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1369,7 +1309,6 @@ class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
         input_ids: jnp.ndarray,
         attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
-        head_mask: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: bool = True,
@@ -1399,7 +1338,6 @@ class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
             input_ids=jnp.array(input_ids, dtype="i4"),
             attention_mask=jnp.array(attention_mask, dtype="i4"),
             position_ids=jnp.array(position_ids, dtype="i4"),
-            head_mask=jnp.array(head_mask, dtype="i4") if head_mask is not None else None,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1416,8 +1354,6 @@ class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
         encoder_attention_mask: Optional[jnp.ndarray] = None,  # TODO (PS): attention_mask ?
         decoder_attention_mask: Optional[jnp.ndarray] = None,
         decoder_position_ids: Optional[jnp.ndarray] = None,  # TODO (PS): position_ids ?
-        decoder_head_mask: Optional[jnp.ndarray] = None,
-        cross_attn_head_mask: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1472,10 +1408,6 @@ class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
             decoder_position_ids=jnp.array(decoder_position_ids, dtype="i4"),
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=jnp.array(encoder_attention_mask, dtype="i4"),
-            decoder_head_mask=jnp.array(decoder_head_mask, dtype="i4") if decoder_head_mask is not None else None,
-            cross_attn_head_mask=(
-                jnp.array(cross_attn_head_mask, dtype="i4") if cross_attn_head_mask is not None else None
-            ),
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1551,9 +1483,6 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
         attention_mask: Optional[jnp.ndarray] = None,
         decoder_input_ids: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
-        head_mask: Optional[jnp.ndarray] = None,
-        decoder_head_mask: Optional[jnp.ndarray] = None,
-        cross_attn_head_mask: Optional[jnp.ndarray] = None,
         encoder_outputs: Optional[jnp.ndarray] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1566,9 +1495,6 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1639,9 +1565,6 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
         attention_mask: Optional[jnp.ndarray] = None,
         decoder_input_ids: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
-        head_mask: Optional[jnp.ndarray] = None,
-        decoder_head_mask: Optional[jnp.ndarray] = None,
-        cross_attn_head_mask: Optional[jnp.ndarray] = None,
         encoder_outputs: Optional[jnp.ndarray] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1654,9 +1577,6 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
             use_cache=use_cache,
             output_attentions=output_attentions,
