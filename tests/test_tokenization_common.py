@@ -175,14 +175,6 @@ class TokenizerTesterMixin:
     def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
         return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
-    # def get_input_output_texts(self) -> Tuple[str, str]:
-    #     """Feel free to overwrite"""
-    #     # TODO: @property
-    #     return (
-    #         "This is a test",
-    #         "This is a test",
-    #     )
-
     def tokenizer_integration_test_util(
         self,
         expected_encoding: Dict,
