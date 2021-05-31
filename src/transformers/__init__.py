@@ -133,7 +133,6 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -171,6 +170,7 @@ _import_structure = {
     ],
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
+    "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
     "models.clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPConfig",
@@ -491,21 +491,6 @@ if is_torch_available():
 
     # PyTorch models structure
 
-    _import_structure["models.canine"].extend(
-        [
-            "CANINE_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "CanineForMaskedLM",
-            "CanineForCausalLM",
-            "CanineForMultipleChoice",
-            "CanineForQuestionAnswering",
-            "CanineForSequenceClassification",
-            "CanineForTokenClassification",
-            "CanineLayer",
-            "CanineModel",
-            "CaninePreTrainedModel",
-            "load_tf_weights_in_canine",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -520,7 +505,6 @@ if is_torch_available():
             "load_tf_weights_in_albert",
         ]
     )
-
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_CAUSAL_LM_MAPPING",
@@ -565,6 +549,7 @@ if is_torch_available():
             "PretrainedBartModel",
         ]
     )
+
     _import_structure["models.bert"].extend(
         [
             "BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -641,6 +626,21 @@ if is_torch_available():
             "CamembertForSequenceClassification",
             "CamembertForTokenClassification",
             "CamembertModel",
+        ]
+    )
+    _import_structure["models.canine"].extend(
+        [
+            "CANINE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CanineForCausalLM",
+            "CanineForMaskedLM",
+            "CanineForMultipleChoice",
+            "CanineForQuestionAnswering",
+            "CanineForSequenceClassification",
+            "CanineForTokenClassification",
+            "CanineLayer",
+            "CanineModel",
+            "CaninePreTrainedModel",
+            "load_tf_weights_in_canine",
         ]
     )
     _import_structure["models.clip"].extend(
@@ -1674,7 +1674,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig, CanineTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1706,6 +1705,7 @@ if TYPE_CHECKING:
     )
     from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
+    from .models.canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig, CanineTokenizer
     from .models.clip import (
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPConfig,
@@ -1865,6 +1865,7 @@ if TYPE_CHECKING:
         from .models.bert import BertTokenizerFast
         from .models.big_bird import BigBirdTokenizerFast
         from .models.camembert import CamembertTokenizerFast
+        from .models.canine import CanineTokenizerFast
         from .models.clip import CLIPTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.deberta import DebertaTokenizerFast
