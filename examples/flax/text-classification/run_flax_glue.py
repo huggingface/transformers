@@ -167,16 +167,16 @@ def create_train_state(
 
     # We use Optax's "masking" functionality to not apply weight decay
     # to bias and LayerNorm scale parameters. decay_mask_fn returns a
-    # mask boolean with the same structure as the parameters. 
+    # mask boolean with the same structure as the parameters.
     # The mask is True for parameters that should be decayed.
     def decay_mask_fn(params):
         flat_params = traverse_util.flatten_dict(params)
-        flat_mask = {path: (path[-1] != "bias" and path[-2:] != ("LayerNorm", "scale"))
-                     for path in flat_params.keys()}
+        flat_mask = {path: (path[-1] != "bias" and path[-2:] != ("LayerNorm", "scale")) for path in flat_params}
         return traverse_util.unflatten_dict(flat_mask)
 
-    tx = optax.adamw(learning_rate=learning_rate_fn, b1=0.9, b2=0.999, eps=1e-6, 
-                     weight_decay=weight_decay, mask=decay_mask_fn)
+    tx = optax.adamw(
+        learning_rate=learning_rate_fn, b1=0.9, b2=0.999, eps=1e-6, weight_decay=weight_decay, mask=decay_mask_fn
+    )
 
     if is_regression:
 
