@@ -1418,6 +1418,80 @@ class SplinterForTokenClassification(SplinterPreTrainedModel):
         )
 
 
+def gather_positions(input_tensor, positions):
+    """
+    :param input_tensor: shape [batch_size, seq_length, dim]
+    :param positions: shape [batch_size, num_positions]
+    :return: [batch_size, num_positions, dim]
+    # TODO(Ori/Yuval): document
+    """
+    _, _, dim = input_tensor.size()
+    index = positions.unsqueeze(-1).repeat(1, 1, dim)  # [batch_size, num_positions, dim]
+    gathered_output = torch.gather(input_tensor, dim=1, index=index)  # [batch_size, num_positions, dim]
+    return gathered_output
+
+
+class FullyConnectedLayer(nn.Module):
+    # TODO(Ori/Yuval): document
+    def __init__(self, input_dim, output_dim, hidden_act="gelu"):
+        super(FullyConnectedLayer, self).__init__()
+
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+
+        self.dense = nn.Linear(self.input_dim, self.output_dim)
+        self.act_fn = ACT2FN[hidden_act]
+        self.LayerNorm = nn.LayerNorm(self.output_dim)
+
+    def forward(self, inputs):
+        temp = self.dense(inputs)
+        temp = self.act_fn(temp)
+        temp = self.LayerNorm(temp)
+        return temp
+
+
+class QuestionAwareSpanSelectionHead(nn.Module):
+    # TODO(Ori/Yuval): document
+    def __init__(self, config):
+        super().__init__()
+
+        self.query_start_transform = FullyConnectedLayer(config.hidden_size, config.hidden_size)
+        self.query_end_transform = FullyConnectedLayer(config.hidden_size, config.hidden_size)
+        self.start_transform = FullyConnectedLayer(config.hidden_size, config.hidden_size)
+        self.end_transform = FullyConnectedLayer(config.hidden_size, config.hidden_size)
+
+        self.start_classifier = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        self.end_classifier = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+
+    def forward(self, inputs, positions):
+        gathered_reps = gather_positions(inputs, positions)
+
+        query_start_reps = self.query_start_transform(gathered_reps)  # [batch_size, num_positions, dim]
+        query_end_reps = self.query_end_transform(gathered_reps)  # [batch_size, num_positions, dim]
+        start_reps = self.start_transform(inputs)  # [batch_size, seq_length, dim]
+        end_reps = self.end_transform(inputs)  # [batch_size, seq_length, dim]
+
+        temp = self.start_classifier(query_start_reps)  # [batch_size, num_positions, dim]
+        start_reps = start_reps.permute(0, 2, 1)  # [batch_size, dim, seq_length]
+        start_logits = torch.matmul(temp, start_reps)
+
+        temp = self.start_classifier(query_end_reps)
+        end_reps = end_reps.permute(0, 2, 1)
+        end_logits = torch.matmul(temp, end_reps)
+
+        return start_logits, end_logits
+
+
+class ClassificationHead(nn.Module):
+    # TODO(Ori/Yuval): document
+    def __init__(self, config):
+        super().__init__()
+        self.span_predictions = QuestionAwareSpanSelectionHead(config)
+
+    def forward(self, inputs, positions):
+        return self.span_predictions(inputs, positions)
+
+
 @add_start_docstrings(
     """Splinter Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
@@ -1427,13 +1501,17 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        config.num_labels = 2
-        self.num_labels = config.num_labels
-
         self.splinter = SplinterModel(config)
-        self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
+        self.initialize_new_qass = config.initialize_new_qass
+        self.cls = ClassificationHead(config) if not self.initialize_new_qass else None
+        self.new_cls = ClassificationHead(config) if self.initialize_new_qass else None
+        self.question_token_id = config.question_token_id
 
         self.init_weights()
+
+    def get_cls(self):
+        # TODO(Ori/Yuval): document
+        return self.cls if not self.initialize_new_qass else self.new_cls
 
     @add_start_docstrings_to_model_forward(SPLINTER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
@@ -1455,6 +1533,7 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        masked_positions=None
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1465,8 +1544,19 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (:obj:`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
+        TODO(Ori/Yuval): document masked positions
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        mask_positions_were_none = False
+        if masked_positions is None:
+            if input_ids is not None:
+                masked_position_for_each_example = torch.argmax((torch.eq(input_ids, self.question_token_id)).int(), dim=-1)
+            else:
+                masked_position_for_each_example = torch.zeros(inputs_embeds.size(0), dtype=torch.int64,
+                                                               layout=inputs_embeds.layout, device=inputs_embeds.device)
+            masked_positions = masked_position_for_each_example.unsqueeze(-1)
+            mask_positions_were_none = True
 
         outputs = self.splinter(
             input_ids,
@@ -1481,11 +1571,15 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         )
 
         sequence_output = outputs[0]
+        cls = self.get_cls()
+        start_logits, end_logits = cls(sequence_output, masked_positions)
 
-        logits = self.qa_outputs(sequence_output)
-        start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
+        if mask_positions_were_none:
+            start_logits, end_logits = start_logits.squeeze(1), end_logits.squeeze(1)
+
+        if attention_mask is not None:
+            start_logits = start_logits + (1 - attention_mask) * -10000.0
+            end_logits = end_logits + (1 - attention_mask) * -10000.0
 
         total_loss = None
         if start_positions is not None and end_positions is not None:
