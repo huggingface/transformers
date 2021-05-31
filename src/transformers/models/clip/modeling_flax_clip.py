@@ -151,6 +151,7 @@ CLIP_INPUTS_DOCSTRING = r"""
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
+
 @flax.struct.dataclass
 class FlaxCLIPOutput(ModelOutput):
     """
@@ -163,14 +164,14 @@ class FlaxCLIPOutput(ModelOutput):
             text-image similarity scores.
         text_embeds(:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of
-            :class:`~transformers.CLIPTextModel`.
+            :class:`~transformers.FlaxCLIPTextModel`.
         image_embeds(:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, output_dim`):
             The image embeddings obtained by applying the projection layer to the pooled output of
-            :class:`~transformers.CLIPVisionModel`.
+            :class:`~transformers.FlaxCLIPVisionModel`.
         text_model_output(:obj:`FlaxBaseModelOutputWithPooling`):
-            The output of the :class:`~transformers.CLIPTextModel`.
+            The output of the :class:`~transformers.FlaxCLIPTextModel`.
         vision_model_output(:obj:`FlaxBaseModelOutputWithPooling`):
-            The output of the :class:`~transformers.CLIPVisionModel`.
+            The output of the :class:`~transformers.FlaxCLIPVisionModel`.
     """
 
     logits_per_image: jax_xla.DeviceArray = None
@@ -789,7 +790,7 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
 
         Returns:
             text_features (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, output_dim`): The text embeddings
-            obtained by applying the projection layer to the pooled output of :class:`~transformers.CLIPTextModel`.
+            obtained by applying the projection layer to the pooled output of :class:`~transformers.FlaxCLIPTextModel`.
         """
         if position_ids is None:
             position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
@@ -825,7 +826,8 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
 
         Returns:
             image_features (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, output_dim`): The image embeddings
-            obtained by applying the projection layer to the pooled output of :class:`~transformers.CLIPVisionModel`
+            obtained by applying the projection layer to the pooled output of
+            :class:`~transformers.FlaxCLIPVisionModel`
         """
         pixel_values = jnp.transpose(pixel_values, (0, 2, 3, 1))
 
