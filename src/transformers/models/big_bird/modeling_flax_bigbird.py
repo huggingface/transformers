@@ -1,4 +1,5 @@
 # coding=utf-8
+# coding=utf-8
 # Copyright 2021 The Google Flax Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -272,23 +273,16 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
     block_sparse_seed: int = None
     dtype: jnp.dtype = jnp.float32
 
-    def __post_init__(self):
-        super().__post_init__()
-        self.num_attention_heads = self.config.num_attention_heads
-        self.attention_head_size = self.hidden_size // self.num_attention_heads
-        self.num_random_blocks = self.config.num_random_blocks
-        self.block_size = self.config.block_size
-        self.max_seqlen = self.config.max_position_embeddings
-
     def setup(self):
         self.query = nn.Dense(self.config.hidden_size, dtype=self.dtype, use_bias=self.config.use_bias, kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype))
         self.key = nn.Dense(self.config.hidden_size, dtype=self.dtype, use_bias=self.config.use_bias, kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype))
         self.value = nn.Dense(self.config.hidden_size, dtype=self.dtype, use_bias=self.config.use_bias, kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype))
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.shape[:-1] + (self.num_attention_heads + self.attention_head_size)
+    @staticmethod
+    def transpose_for_scores(x, n_heads, head_size):
+        new_x_shape = x.shape[:-1] + (n_heads, head_size)
         x = x.reshape(*new_x_shape)
-        return x.transpose(1, 2)
+        return jnp.transpose(x, axes=(0, 2, 1, 3))
 
     def __call__(
         self,
@@ -297,11 +291,14 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         deterministic=True,
         output_attentions=False,
     ):
+        n_heads = self.config.num_attention_heads
+        head_size = self.config.hidden_size // n_heads
 
-        blocked_encoder_mask, band_mask, from_mask, to_mask = self.create_masks_for_block_sparse_attn(attention_mask, self.block_size)
-        query_layer = self.transpose_for_scores(self.query(hidden_states))
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        blocked_encoder_mask, band_mask, from_mask, to_mask = self.create_masks_for_block_sparse_attn(attention_mask, self.config.block_size)
+        
+        query_layer = self.transpose_for_scores(self.query(hidden_states), n_heads, head_size)
+        key_layer = self.transpose_for_scores(self.key(hidden_states), n_heads, head_size)
+        value_layer = self.transpose_for_scores(self.value(hidden_states), n_heads, head_size)
 
         attn_output, attn_weights = self.bigbird_block_sparse_attention(
             query_layer,
@@ -312,6 +309,8 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             to_mask,
             blocked_encoder_mask,
             blocked_encoder_mask,
+            n_heads,
+            head_size,
             plan_from_length=None,
             plan_num_rand_blocks=None,
             output_attentions=output_attentions,
@@ -323,7 +322,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
     @staticmethod
     def create_masks_for_block_sparse_attn(attention_mask, block_size: int):
 
-        batch_size, seq_length = attention_mask.size()
+        batch_size, seq_length = attention_mask.shape
         assert (
             seq_length % block_size == 0
         ), f"Sequence length must be multiple of block size, but sequence length is {seq_length}, while block size is {block_size}."
@@ -349,11 +348,11 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             band_mask = jnp.expand_dims(band_mask, 1)
             return band_mask
 
-        blocked_encoder_mask = attention_mask.view(batch_size, seq_length // block_size, block_size)
+        blocked_encoder_mask = attention_mask.reshape(batch_size, seq_length // block_size, block_size)
         band_mask = create_band_mask_from_inputs(blocked_encoder_mask, blocked_encoder_mask)
 
-        from_mask = attention_mask.view(batch_size, 1, seq_length, 1)
-        to_mask = attention_mask.view(batch_size, 1, 1, seq_length)
+        from_mask = attention_mask.reshape(batch_size, 1, seq_length, 1)
+        to_mask = attention_mask.reshape(batch_size, 1, 1, seq_length)
 
         return blocked_encoder_mask, band_mask, from_mask, to_mask
 
@@ -367,6 +366,8 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         to_mask,
         from_blocked_mask,
         to_blocked_mask,
+        n_heads,
+        head_size,
         plan_from_length=None,
         plan_num_rand_blocks=None,
         output_attentions=None,
@@ -395,27 +396,24 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
 
         bsz, _, from_seq_len, _ = query_layer.shape
         to_seq_len = key_layer.shape[2]
-        from_block_size = to_block_size = self.block_size
+        from_block_size = to_block_size = self.config.block_size
 
         assert from_seq_len % from_block_size == 0, "Query sided sequence length must be multiple of block size"
         assert to_seq_len % to_block_size == 0, "Key/Value sided sequence length must be multiple of block size"
         if from_seq_len // from_block_size != to_seq_len // to_block_size:
             raise ValueError("Error the number of blocks needs to be same!")
 
-        n_heads = self.num_attention_heads
-        n_rand_blocks = self.num_random_blocks
-        attention_head_size = self.attention_head_size
-        block_sparse_seed = self.block_sparse_seed
-
-        rsqrt_d = 1 / jnp.sqrt(attention_head_size)
+        n_rand_blocks = self.config.num_random_blocks
+        rsqrt_d = 1 / jnp.sqrt(head_size)
         attn_mask_penalty = -10000.0
 
-        np.random.seed(block_sparse_seed)
+        np.random.seed(self.block_sparse_seed)
         if from_seq_len in [1024, 3072, 4096]:  # old plans used in paper
-            rand_attn = self._bigbird_block_rand_mask(
-                    self.max_seqlen, self.max_seqlen, from_block_size, to_block_size, n_rand_blocks, last_idx=1024
-                )[: (from_seq_len // from_block_size - 2)]
-            broadcasted_rand_attn = [rand_attn for _ in range(n_heads)]
+            max_seqlen = self.config.max_position_embeddings
+            rand_attn = [self._bigbird_block_rand_mask(
+                    max_seqlen, max_seqlen, from_block_size, to_block_size, n_rand_blocks, last_idx=1024
+                )[: (from_seq_len // from_block_size - 2)] for _ in range(n_heads)]
+            # rand_attn = jnp.broadcast_to(rand_attn, (n_heads,) + rand_attn.shape)
         else:
             if plan_from_length is None:
                 plan_from_length, plan_num_rand_blocks = self._get_rand_attn_plan(
@@ -431,14 +429,12 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
                 plan_from_length=plan_from_length,
                 plan_num_rand_blocks=plan_num_rand_blocks,
             )
-            # THIS is not supported currently
-            raise NotImplementedError
 
-        broadcasted_rand_attn = jnp.stack(rand_attn, axis=0)
-        broadcasted_rand_attn = jnp.broadcast_to(broadcasted_rand_attn, (bsz,) + rand_attn.shape)
+        rand_attn = jnp.stack(rand_attn, axis=0)
+        rand_attn = jnp.broadcast_to(rand_attn, (bsz,) + rand_attn.shape)
 
         rand_mask = self._create_rand_mask_from_inputs(
-            from_blocked_mask, to_blocked_mask, broadcasted_rand_attn, n_heads, n_rand_blocks, bsz, from_seq_len, from_block_size
+            from_blocked_mask, to_blocked_mask, rand_attn, n_heads, n_rand_blocks, bsz, from_seq_len, from_block_size
         )
 
         blocked_query_matrix = query_layer.reshape(bsz, n_heads, from_seq_len // from_block_size, from_block_size, -1)
@@ -632,13 +628,13 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             [
                 to_mask[:, :, :, :to_block_size],
                 to_mask[:, :, :, -3 * to_block_size :],
-                to_mask.new_ones([bsz, 1, 1, n_rand_blocks * to_block_size]),
+                jnp.ones([bsz, 1, 1, n_rand_blocks * to_block_size], dtype=to_mask.dtype),
             ],
             axis=3,
         )
         second_last_rand_pad = jnp.concatenate(
             [
-                rand_mask.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]),
+                jnp.ones([bsz, n_heads, from_block_size, 4 * to_block_size], dtype=rand_mask.dtype),
                 rand_mask[:, :, -1],
             ],
             axis=3,
@@ -673,7 +669,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             axis=2,
         )
         context_layer = context_layer.reshape(bsz, n_heads, from_seq_len, -1) * from_mask
-        context_layer = jnp.transpose(context_layer, (1, 2)).reshape(bsz, from_seq_len, -1)
+        context_layer = jnp.transpose(context_layer, axes=(0, 2, 1, 3)).reshape(bsz, from_seq_len, -1)
 
         attention_probs = None
 
@@ -692,7 +688,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             return params[indices]
 
         for _ in range(batch_dims):
-            _jax_gather = jax.vmap(_jax_gather, in_axes=(0, None))
+            _jax_gather = jax.vmap(_jax_gather, in_axes=(0, 0))
 
         return _jax_gather(params, indices) # params.shape[:batch_dims] + indices.shape + params.shape[batch_dims+1:]
 
@@ -727,7 +723,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         num_windows = from_seq_length // from_block_size - 2
         rand_mask = self.jax_gather(to_blocked_mask, broadcasted_rand_attn, batch_dims=1)
         rand_mask = rand_mask.reshape(batch_size, num_attention_heads, num_windows, num_random_blocks * from_block_size)
-        rand_mask = jnp.einsum("bhlq,bhlk->bhlqk", from_blocked_mask[:, 1:-1], rand_mask)
+        rand_mask = jnp.einsum("blq,bhlk->bhlqk", from_blocked_mask[:, 1:-1], rand_mask)
         return rand_mask
 
     @staticmethod
@@ -1045,7 +1041,7 @@ class FlaxBigBirdAttention(nn.Module):
         elif self.config.attention_type == "block_sparse":
             self.self = FlaxBigBirdBlockSparseAttention(self.config, block_sparse_seed=self.layer_id, dtype=self.dtype)
         else:
-            raise ValueError("Your `config.attention_type` is {self.config.attention_type} but it can either be `original_full` or `block_sparse`")
+            raise ValueError(f"Your `config.attention_type` is {self.config.attention_type} but it can either be `original_full` or `block_sparse`")
 
         self.output = FlaxBigBirdSelfOutput(self.config, dtype=self.dtype)
 
@@ -1285,7 +1281,6 @@ class FlaxBigBirdPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPreTrainedModel with Bert->BigBird, BERT->BIG_BIRD
 class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1305,6 +1300,8 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         **kwargs
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
+        if config.attention_type == "block_sparse":
+            input_shape = (1, 12*config.block_size)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
@@ -1890,13 +1887,35 @@ append_call_sample_docstring(
     _CONFIG_FOR_DOC,
 )
 
+class FlaxBigBirdForQuestionAnsweringHead(nn.Module):
+    config: BigBirdConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        # flax dropout layer
+        # self.dropout = 
+        self.intermediate = FlaxBigBirdIntermediate(self.config)
+        self.output = FlaxBigBirdOutput(self.config)
+        self.qa_outputs = nn.Dense(self.config.num_labels, dtype=self.dtype)
+
+    def __call__(self, encoder_output):
+        hidden_states = self.dropout(encoder_output)
+        hidden_states = self.intermediate(hidden_states)
+        hidden_states = self.output(hidden_states, encoder_output)
+        hidden_states = self.qa_outputs(hidden_states)
+        return hidden_states
+
 
 class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
 
+    def __post_init__(self):
+        super().__post_init__()
+        self.config.num_labels = 2
+
     def setup(self):
-        self.bert = FlaxBigBirdModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
+        self.bert = FlaxBigBirdModule(config=self.config, dtype=self.dtype, add_pooling_layer=self.config.add_pooling_layer)
         self.qa_outputs = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
     def __call__(
@@ -1905,11 +1924,13 @@ class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
+        question_lengths=None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
+    
         # Model
         outputs = self.bert(
             input_ids,
