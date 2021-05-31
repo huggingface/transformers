@@ -889,7 +889,7 @@ class TFWav2Vec2EncoderStableLayerNorm(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.config = config
         self.pos_conv_embed = TFWav2Vec2PositionalConvEmbedding(config, name="pos_conv_embed")
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps)
+        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout)
         self.layer = [
             TFWav2Vec2EncoderLayerStableLayerNorm(config, name=f"layers.{i}") for i in range(config.num_hidden_layers)
