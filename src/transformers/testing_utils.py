@@ -26,6 +26,8 @@ from io import StringIO
 from pathlib import Path
 from typing import Iterator, Union
 
+from transformers import logging as transformers_logging
+
 from .file_utils import (
     is_datasets_available,
     is_faiss_available,
@@ -646,6 +648,24 @@ class CaptureLogger:
 
     def __repr__(self):
         return f"captured: {self.out}\n"
+
+
+@contextlib.contextmanager
+def LoggingLevel(level):
+    """
+
+    This is a context manager to temporarily change transformers modules logging level to the desired value and have it
+    restored to the original setting at the end of the scope. For example ::
+
+       with LoggingLevel(logging.INFO): # run some core function that calls logger.info() and it should be logged
+
+    """
+    orig_level = transformers_logging.get_verbosity()
+    try:
+        transformers_logging.set_verbosity(level)
+        yield
+    finally:
+        transformers_logging.set_verbosity(orig_level)
 
 
 @contextlib.contextmanager
