@@ -348,17 +348,19 @@ class GroupNorm(tf.keras.layers.Layer):
 
 
 class WeightNormConv1D(tf.keras.layers.Conv1D):
-    def __init__(self, config, **kwargs):
+    """Adapted from https://www.tensorflow.org/probability/api_docs/python/tfp/layers/weight_norm/WeightNorm"""
+
+    def __init__(self, filters, kernel_size, groups, padding, **kwargs):
         super().__init__(
-            filters=config.hidden_size,
-            kernel_size=config.num_conv_pos_embeddings,
-            groups=config.num_conv_pos_embedding_groups,
+            filters=filters,
+            kernel_size=kernel_size,
+            groups=groups,
             padding="valid",
             use_bias=True,
             bias_initializer="he_normal",
             **kwargs,
         )
-        self._padding = config.num_conv_pos_embeddings // 2
+        self._padding = padding
         self.filter_axis = 0
         self.initialized = False
 
@@ -369,14 +371,12 @@ class WeightNormConv1D(tf.keras.layers.Conv1D):
 
     def _compute_weights(self):
         """Generate weights with normalization."""
-
         # `self.kernel_norm_axes` is determined by `self.filter_axis` and the rank
         # of the layer kernel, and is thus statically known.
         self.kernel = tf.nn.l2_normalize(self.weight_v, axis=self.kernel_norm_axes) * self.weight_g
 
     def build(self, input_shape):
-        batch_size, seq_length, channels = tf.TensorShape(input_shape).as_list()
-        self.input_spec = tf.keras.layers.InputSpec(shape=(batch_size, seq_length, channels))
+        self.input_spec = tf.keras.layers.InputSpec(shape=input_shape)
 
         if not self.built:
             super().build(input_shape)
@@ -385,8 +385,7 @@ class WeightNormConv1D(tf.keras.layers.Conv1D):
             # Convert `kernel_norm_axes` from a list to a constant Tensor to allow
             # TF checkpoint saving.
             self.kernel_norm_axes = tf.constant(kernel_norm_axes)
-            self.kernel = tf.Variable(self.kernel, name="weight_v", trainable=True)
-            self.weight_v = self.kernel
+            self.weight_v = tf.Variable(self.kernel, name="weight_v", trainable=True)
 
             self.weight_g = self.add_weight(
                 name="weight_g",
@@ -396,12 +395,9 @@ class WeightNormConv1D(tf.keras.layers.Conv1D):
                 trainable=True,
             )
             self.bias = self.add_weight(name="bias", shape=(self.filters,), initializer="zeros", trainable=True)
+            self._init_norm()
 
     def call(self, inputs):
-        if not self.initialized:
-            self._init_norm()
-            self.initialized = True
-
         self._compute_weights()
         output = tf.pad(inputs, ((0, 0), (self._padding, self._padding), (0, 0)))
         output = super().call(output)
@@ -419,7 +415,6 @@ class TFWav2Vec2NoLayerNormConvLayer(tf.keras.layers.Layer):
             kernel_size=config.conv_kernel[layer_id],
             strides=config.conv_stride[layer_id],
             use_bias=config.conv_bias,
-            kernel_initializer=tf.keras.initializers.VarianceScaling(scale=1.0, distribution="uniform"),
             name="conv",
         )
         self.activation = get_tf_activation(config.feat_extract_activation)
@@ -441,12 +436,12 @@ class TFWav2Vec2LayerNormConvLayer(tf.keras.layers.Layer):
             kernel_size=config.conv_kernel[layer_id],
             strides=config.conv_stride[layer_id],
             use_bias=config.conv_bias,
-            kernel_initializer=tf.keras.initializers.VarianceScaling(scale=1.0, distribution="uniform"),
             name="conv",
         )
         self.layer_norm = tf.keras.layers.LayerNormalization(name="layer_norm", epsilon=config.layer_norm_eps)
         self.activation = get_tf_activation(config.feat_extract_activation)
 
+    @tf.function
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.conv(hidden_states)
         hidden_states = self.layer_norm(hidden_states)
@@ -465,7 +460,6 @@ class TFWav2Vec2GroupNormConvLayer(tf.keras.layers.Layer):
             kernel_size=config.conv_kernel[layer_id],
             strides=config.conv_stride[layer_id],
             use_bias=config.conv_bias,
-            kernel_initializer=tf.keras.initializers.VarianceScaling(scale=1.0, distribution="uniform"),
             name="conv",
         )
         self.activation = get_tf_activation(config.feat_extract_activation)
@@ -481,7 +475,13 @@ class TFWav2Vec2GroupNormConvLayer(tf.keras.layers.Layer):
 class TFWav2Vec2PositionalConvEmbedding(tf.keras.layers.Layer):
     def __init__(self, config: Wav2Vec2Config, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.conv = WeightNormConv1D(config, name="conv")
+        self.conv = WeightNormConv1D(
+            filters=config.hidden_size,
+            kernel_size=config.num_conv_pos_embeddings,
+            groups=config.num_conv_pos_embedding_groups,
+            padding=config.num_conv_pos_embeddings // 2,
+            name="conv",
+        )
         self.padding = TFWav2Vec2SamePadLayer(config.num_conv_pos_embeddings)
         self.activation = get_tf_activation(config.feat_extract_activation)
 
@@ -493,8 +493,8 @@ class TFWav2Vec2PositionalConvEmbedding(tf.keras.layers.Layer):
 
 
 class TFWav2Vec2SamePadLayer(tf.keras.layers.Layer):
-    def __init__(self, num_conv_pos_embeddings):
-        super().__init__()
+    def __init__(self, num_conv_pos_embeddings, **kwargs):
+        super().__init__(**kwargs)
         self.num_pad_remove = 1 if num_conv_pos_embeddings % 2 == 0 else 0
 
     def call(self, hidden_states):
@@ -712,7 +712,7 @@ class TFWav2Vec2FeedForward(tf.keras.layers.Layer):
             bias_initializer="zeros",
             name="intermediate_dense",
         )
-        self.intermediate_act_fn = tf.keras.layers.Activation(config.hidden_act)
+        self.intermediate_act_fn = get_tf_activation(config.hidden_act)
 
         self.output_dense = tf.keras.layers.Dense(
             units=config.hidden_size,
@@ -978,7 +978,7 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
 
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor,
         attention_mask: Optional[tf.Tensor] = None,
         token_type_ids: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
@@ -1010,8 +1010,8 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
         if inputs["attention_mask"] is not None:
             # compute real output lengths according to convolution formula
             output_lengths = self._get_feat_extract_output_lengths(tf.reduce_sum(inputs["attention_mask"]))
-            batch_size, seq_length, _ = tf.shape(hidden_states)
-            attention_mask = tf.ones((batch_size, seq_length), dtype=tf.int32)
+            tensor_shape = shape_list(hidden_states)
+            attention_mask = tf.ones((tensor_shape[0], tensor_shape[1]), dtype=tf.int32)
             attention_mask = _expand_mask(attention_mask, output_lengths)
 
         hidden_states = self.feature_projection(hidden_states, training=inputs["training"])
@@ -1054,6 +1054,12 @@ class TFWav2Vec2PreTrainedModel(TFPreTrainedModel):
             "attention_mask": tf.cast(tf.not_equal(input_ids, pad_token), tf.float32),
         }
         return dummy_inputs
+
+    @tf.function
+    def serving(self, inputs):
+        output = self.call(input_ids=inputs, training=False)
+
+        return self.serving_output(output)
 
 
 WAV_2_VEC_2_START_DOCSTRING = r"""
@@ -1163,7 +1169,7 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
     @replace_return_docstrings(output_type=TFBaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor,
         attention_mask: Optional[tf.Tensor] = None,
         token_type_ids: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
@@ -1239,10 +1245,11 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
 
         return outputs
 
-    @tf.function
-    def serving_output(self, input_ids: tf.Tensor) -> tf.Tensor:
-        hidden_states = self.wav2vec2(input_ids, training=False)[0]
-        return hidden_states
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1382,8 +1389,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    @tf.function
-    def serving_output(self, input_ids: tf.Tensor) -> tf.Tensor:
-        hidden_states = self.wav2vec2(input_ids, training=False)[0]
-        logits = self.lm_head(hidden_states)
-        return logits
+    def serving_output(self, output: TFCausalLMOutput) -> TFCausalLMOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        return TFCausalLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
