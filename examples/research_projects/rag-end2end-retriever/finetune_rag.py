@@ -340,7 +340,7 @@ class GenerativeQAModule(BaseTransformer):
                 # check still the index_building process is happening
                 if not threadHandle_index.is_alive():
 
-                    logger.info("Meging the dataset shards")
+                    logger.info("Merging the dataset shards")
                     saved_dataset_shards = []
 
                     for address in glob(str(self.custom_config.shard_dir) + "/*/"):
