@@ -31,7 +31,7 @@ The following two bash scripts can be used to quickly test the implementation.
 
 We conducted a simple experiment to investigate the effectiveness of this end2end training extension using the SQuAD dataset. Please execute the following steps to reproduce the results.
 
--   Create a knowledge-base using all the context passages in the SQuAD dataset with their repective titles.
+-   Create a knowledge-base using all the context passages in the SQuAD dataset with their respective titles.
 -   Use the question-answer pairs as training data.
 -   Train the system for 10 epochs.
 -   Test the Exact Match (EM) score with the SQuAD dataset's validation set. 
