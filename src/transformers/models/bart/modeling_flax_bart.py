@@ -25,6 +25,7 @@ import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
+from flax.linen.module import init
 from jax import lax
 from jax.random import PRNGKey
 
@@ -268,6 +269,7 @@ class FlaxBartAttention(nn.Module):
         hidden_states: jnp.ndarray,
         key_value_states: Optional[jnp.ndarray] = None,
         attention_mask: Optional[jnp.ndarray] = None,
+        init_cache: bool = False,
         output_attentions: bool = False,
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
@@ -315,6 +317,13 @@ class FlaxBartAttention(nn.Module):
             attention_mask = causal_mask
         elif attention_mask is not None:
             attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
+
+        # During fast autoregressive decoding, we feed one position at a time,
+        # and cache the keys and values step by step.
+        if self.causal and (self.has_variable("cache", "cached_key") or init_cache):
+            key, value, attention_mask = self._concatenate_to_cache(
+                key_states, value_states, query_states, attention_mask
+            )
 
         # Convert the boolean attention mask to an attention bias.
         if attention_mask is not None:
@@ -506,6 +515,7 @@ class FlaxBartDecoderLayer(nn.Module):
         attention_mask: Optional[jnp.ndarray] = None,
         encoder_hidden_states: Optional[jnp.ndarray] = None,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
+        init_cache: bool = False,
         output_attentions: bool = True,
         use_cache: bool = True,
         deterministic: bool = True,
@@ -533,6 +543,7 @@ class FlaxBartDecoderLayer(nn.Module):
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
+            init_cache=init_cache,
             output_attentions=output_attentions,
         )
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
@@ -589,6 +600,7 @@ class FlaxBartDecoderLayerCollection(nn.Module):
         encoder_hidden_states,
         encoder_attention_mask,
         deterministic: bool = True,
+        init_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         use_cache: bool = True,
@@ -612,6 +624,7 @@ class FlaxBartDecoderLayerCollection(nn.Module):
                 attention_mask=attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
+                init_cache=init_cache,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 deterministic=deterministic,
@@ -706,6 +719,38 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
             position_ids,
             decoder_position_ids,
         )["params"]
+
+    def init_cache(self, batch_size, max_length, encoder_outputs):
+        r"""
+        Args:
+            batch_size (:obj:`int`):
+                batch_size used for fast auto-regressive decoding. Defines the batch size of the initialized cache.
+            max_length (:obj:`int`):
+                maximum possible length for auto-regressive decoding. Defines the sequence length of the initialized
+                cache.
+        """
+        # init input variables to retrieve cache
+        decoder_input_ids = jnp.ones((batch_size, max_length), dtype="i4")
+        decoder_attention_mask = jnp.ones_like(decoder_input_ids)
+        decoder_position_ids = jnp.broadcast_to(
+            jnp.arange(jnp.atleast_2d(decoder_input_ids).shape[-1]), decoder_input_ids.shape
+        )
+
+        encoder_hidden_states = encoder_outputs[0]
+        batch_size, seq_length, _ = encoder_hidden_states.shape
+        encoder_attention_mask = jnp.ones((batch_size, seq_length), dtype="i4")
+
+        init_variables = self.module.init(
+            jax.random.PRNGKey(0),
+            decoder_input_ids,
+            decoder_attention_mask,
+            decoder_position_ids,
+            encoder_hidden_states,
+            encoder_attention_mask,
+            init_cache=True,
+            method=self.module.decode,  # we just need to run the decoder, expects the module to have decode method defined
+        )
+        return unfreeze(init_variables["cache"])
 
     def __call__(
         self,
@@ -956,6 +1001,7 @@ class FlaxBartDecoder(nn.Module):
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = None,
         use_cache: Optional[bool] = None,
+        init_cache: bool = False,
         output_hidden_states: Optional[bool] = None,
         return_dict: bool = True,
         deterministic: bool = True,
@@ -1049,6 +1095,7 @@ class FlaxBartDecoder(nn.Module):
             encoder_hidden_states,
             encoder_attention_mask,
             deterministic=deterministic,
+            init_cache=init_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
@@ -1097,6 +1144,7 @@ class FlaxBartModule(nn.Module):
         decoder_position_ids: Optional[jnp.ndarray] = None,
         encoder_outputs: Optional[jnp.ndarray] = None,
         use_cache: Optional[bool] = None,
+        init_cache: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: bool = True,
@@ -1135,6 +1183,7 @@ class FlaxBartModule(nn.Module):
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
             use_cache=use_cache,
+            init_cache=init_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1183,6 +1232,7 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
         decoder_position_ids: Optional[jnp.ndarray] = None,
         encoder_hidden_states: Optional[jnp.ndarray] = None,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
+        init_cache: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1194,6 +1244,7 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
             position_ids=decoder_position_ids,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
+            init_cache=init_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1433,18 +1484,19 @@ class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
         decoder_input_ids,
         max_length,
         attention_mask: Optional[jnp.DeviceArray] = None,
+        decoder_attention_mask: Optional[jnp.DeviceArray] = None,
         encoder_outputs=None,
         **kwargs
     ):
         # initializing the cache
         batch_size, seq_length = decoder_input_ids.shape
 
-        past_key_values = self.init_cache(batch_size, max_length)
+        past_key_values = self.init_cache(batch_size, max_length, encoder_outputs)
         # Note that usually one would have to put 0's in the attention_mask for x > input_ids.shape[-1] and x < cache_length.
         # But since GPT2 uses a causal mask, those positions are masked anyways.
         # Thus we can create a single static attention_mask here, which is more efficient for compilation
         extended_attention_mask = jnp.ones((batch_size, max_length), dtype="i4")
-        if attention_mask is not None:
+        if decoder_attention_mask is not None:
             position_ids = attention_mask.cumsum(axis=-1) - 1
             extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, attention_mask, (0, 0))
         else:
@@ -1452,13 +1504,15 @@ class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
 
         return {
             "past_key_values": past_key_values,
-            "attention_mask": extended_attention_mask,
-            "position_ids": position_ids,
+            "encoder_outputs": encoder_outputs,
+            "encoder_attention_mask": attention_mask,
+            "decoder_attention_mask": extended_attention_mask,
+            "decoder_position_ids": position_ids,
         }
 
     def update_inputs_for_generation(self, model_outputs, model_kwargs):
         model_kwargs["past_key_values"] = model_outputs.past_key_values
-        model_kwargs["position_ids"] = model_kwargs["position_ids"][:, -1:] + 1
+        model_kwargs["decoder_position_ids"] = model_kwargs["decoder_position_ids"][:, -1:] + 1
         return model_kwargs
 
 

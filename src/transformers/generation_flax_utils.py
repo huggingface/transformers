@@ -101,12 +101,56 @@ class FlaxGenerationMixin:
             state = body_fn(state)
         return state
 
+    def _prepare_encoder_decoder_kwargs_for_generation(self, input_ids, model_kwargs):
+        encoder_kwargs = {
+            argument: value
+            for argument, value in model_kwargs.items()
+            if not (argument.startswith("decoder_") or argument.startswith("cross_attn"))
+        }
+        model_kwargs["encoder_outputs"] = self.encoder(input_ids, return_dict=True, **encoder_kwargs)
+        return model_kwargs
+
+    def _prepare_decoder_input_ids_for_generation(
+        self, input_ids, decoder_start_token_id: int = None, bos_token_id: int = None
+    ):
+        decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
+        decoder_input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+        return decoder_input_ids
+
+    def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
+        decoder_start_token_id = (
+            decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
+        )
+        bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
+
+        if decoder_start_token_id is not None:
+            return decoder_start_token_id
+        elif (
+            hasattr(self.config, "decoder")
+            and hasattr(self.config.decoder, "decoder_start_token_id")
+            and self.config.decoder.decoder_start_token_id is not None
+        ):
+            return self.config.decoder.decoder_start_token_id
+        elif bos_token_id is not None:
+            return bos_token_id
+        elif (
+            hasattr(self.config, "decoder")
+            and hasattr(self.config.decoder, "bos_token_id")
+            and self.config.decoder.bos_token_id is not None
+        ):
+            return self.config.decoder.bos_token_id
+        raise ValueError(
+            "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
+        )
+
     def generate(
         self,
         input_ids: jax_xla.DeviceArray,
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        decoder_start_token_id: Optional[int] = None,
         do_sample: Optional[bool] = None,
         prng_key: Optional[jax_xla.DeviceArray] = None,
         top_k: Optional[int] = None,
@@ -147,6 +191,8 @@ class FlaxGenerationMixin:
                 The id of the `beginning-of-sequence` token.
             eos_token_id (:obj:`int`, `optional`):
                 The id of the `end-of-sequence` token.
+            decoder_start_token_id (:obj:`int`, `optional`):
+                If an encoder-decoder model starts decoding with a different token than `bos`, the id of that token.
             trace (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether to trace generation. Setting ``trace=False`` should only be used for debugging and will lead to
                 a considerably slower runtime.
@@ -170,9 +216,20 @@ class FlaxGenerationMixin:
         """
         # set init values
         max_length = max_length if max_length is not None else self.config.max_length
+        bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
         prng_key = prng_key if prng_key is not None else jax.random.PRNGKey(0)
+
+        # Storing encoder_input_ids for logits_processor that could use them
+        encoder_input_ids = input_ids if self.config.is_encoder_decoder else None
+
+        if self.config.is_encoder_decoder:
+            # add encoder_outputs to model_kwargs
+            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
+            input_ids = self._prepare_decoder_input_ids_for_generation(
+                input_ids, decoder_start_token_id=decoder_start_token_id, bos_token_id=bos_token_id
+            )
 
         do_sample = do_sample if do_sample is not None else self.config.do_sample
 
@@ -246,10 +303,10 @@ class FlaxGenerationMixin:
         # per batch-item state bit indicating if sentence has finished.
         is_sent_finished = jnp.zeros((batch_size,), dtype=jnp.bool_)
 
-        model = self
+        model = self.decoder if self.config.is_encoder_decoder else self
 
         # initialize model specific kwargs
-        model_kwargs = model.prepare_inputs_for_generation(input_ids, max_length, **model_kwargs)
+        model_kwargs = self.prepare_inputs_for_generation(input_ids, max_length, **model_kwargs)
 
         # initialize state
         state = GreedyState(
@@ -277,7 +334,7 @@ class FlaxGenerationMixin:
             next_token = next_token[:, None]
 
             next_sequences = lax.dynamic_update_slice(state.sequences, next_token, (0, state.cur_len))
-            next_model_kwargs = model.update_inputs_for_generation(model_outputs, model_kwargs)
+            next_model_kwargs = self.update_inputs_for_generation(model_outputs, model_kwargs)
 
             return GreedyState(
                 cur_len=state.cur_len + 1,
@@ -287,8 +344,10 @@ class FlaxGenerationMixin:
                 model_kwargs=next_model_kwargs,
             )
 
-        # The very first prompt often has sequence length > 1, so run outside of `lax.while_loop` to comply with TPU
-        state = greedy_search_body_fn(state)
+        # for now, not accepting decoder_input_ids for seq2seq models, so we should only run the for causal models
+        if not self.config.is_encoder_decoder:
+            # The very first prompt often has sequence length > 1, so run outside of `lax.while_loop` to comply with TPU
+            state = greedy_search_body_fn(state)
 
         if not trace:
             state = self._run_loop_in_debug(greedy_search_cond_fn, greedy_search_body_fn, state)
