@@ -340,7 +340,9 @@ class RagPreTrainedModel(PreTrainedModel):
                 from ..auto.configuration_auto import AutoConfig
 
                 question_encoder_config, kwargs_question_encoder = AutoConfig.from_pretrained(
-                    generator_pretrained_model_name_or_path, **kwargs_question_encoder, return_unused_kwargs=True
+                    question_encoder_pretrained_model_name_or_path,
+                    **kwargs_question_encoder,
+                    return_unused_kwargs=True,
                 )
                 kwargs_question_encoder["config"] = question_encoder_config
 
