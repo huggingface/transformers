@@ -203,16 +203,19 @@ class FlaxBigBirdSelfAttention(nn.Module):
             self.config.hidden_size,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            use_bias=self.config.use_bias,
         )
         self.key = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            use_bias=self.config.use_bias,
         )
         self.value = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            use_bias=self.config.use_bias,
         )
 
     def __call__(self, hidden_states, attention_mask, deterministic=True, output_attentions: bool = False):
@@ -261,6 +264,466 @@ class FlaxBigBirdSelfAttention(nn.Module):
 
         outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
         return outputs
+
+
+class FlaxBigBirdBlockSparseAttention(nn.Module):
+    config: BigBirdConfig
+    seed: int = None
+
+    def setup(self):
+        self.query = nn.Dense(self.config.hidden_size, use_bias=self.config.use_bias)
+        self.key = nn.Dense(self.config.hidden_size, use_bias=self.config.use_bias)
+        self.value = nn.Dense(self.config.hidden_size, use_bias=self.config.use_bias)
+
+    def transpose_for_scores(self, x):
+        new_x_shape = x.shape[:-1] + (self.num_attention_heads + self.attention_head_size)
+        x = x.reshape(*new_x_shape)
+        return x.transpose(1, 2)
+
+    def _configure_config_values(self):
+        self.num_attention_heads = self.config.num_attention_heads
+        self.attention_head_size = self.hidden_size // self.num_attention_heads
+        self.num_random_blocks = self.config.num_random_blocks
+        self.block_size = self.config.block_size
+        self.max_seqlen = self.config.max_position_embeddings
+
+    def __call__(self, hidden_states, band_mask=None, from_mask=None, to_mask=None, from_blocked_mask=None, to_blocked_mask=None, output_attentions=None):
+
+        query_layer = self.transpose_for_scores(self.query(hidden_states))
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+
+        attn_output, attn_weights = self.bigbird_block_sparse_attention(
+            query_layer,
+            key_layer,
+            value_layer,
+            band_mask,
+            from_mask,
+            to_mask,
+            from_blocked_mask,
+            to_blocked_mask,
+            plan_from_length=None,
+            plan_num_rand_blocks=None,
+            output_attentions=output_attentions,
+        )
+
+        outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
+        return outputs
+
+    def bigbird_block_sparse_attention(
+        self,
+        query_layer,
+        key_layer,
+        value_layer,
+        band_mask,
+        from_mask,
+        to_mask,
+        from_blocked_mask,
+        to_blocked_mask,
+        plan_from_length=None,
+        plan_num_rand_blocks=None,
+        output_attentions=None,
+    ):
+        # BigBird block-sparse attention as suggested in paper
+
+        # ITC:
+        #     global tokens: 2 x block_size
+        #     window tokens: 3 x block_size
+        #     random tokens: num_rand_tokens x block_size
+
+        # ETC:
+        #     global tokens: extra_globals_tokens + 2 x block_size
+        #     window tokens: 3 x block_size
+        #     random tokens: num_rand_tokens x block_size
+
+        # Note:
+        #     1) Currently, ETC is not supported.
+        #     2) Window size is fixed to 3 blocks & it can be changed only by
+        #     changing `block_size`.
+        #     3) Number of global blocks are fixed (2 blocks here) & global tokens can be
+        #     controlled only by `block_size`.
+
+        # attention is calculated separately for q[0], q[1], q[2:-2], q[-2], q[-1] in order to use special trick of shifting tokens (for calculating sliding attention)
+        # hence following code can be divided into 5 parts.
+
+        self._configure_config_values() # TODO: confirm if: can call after __post_init__ 
+        bsz, _, from_seq_len, _ = query_layer.shape
+        to_seq_len = key_layer.shape[2]
+        from_block_size = to_block_size = self.block_size
+
+        assert from_seq_len % from_block_size == 0, "Query sided sequence length must be multiple of block size"
+        assert to_seq_len % to_block_size == 0, "Key/Value sided sequence length must be multiple of block size"
+        if from_seq_len // from_block_size != to_seq_len // to_block_size:
+            raise ValueError("Error the number of blocks needs to be same!")
+
+        n_heads = self.num_attention_heads
+        n_rand_blocks = self.num_random_blocks
+        attention_head_size = self.attention_head_size
+        seed = self.seed
+
+        rsqrt_d = 1 / np.sqrt(attention_head_size)
+        attn_mask_penalty = -10000.0
+
+        np.random.seed(seed)
+        if from_seq_len in [1024, 3072, 4096]:  # old plans used in paper
+            rand_attn = [
+                self._bigbird_block_rand_mask(
+                    self.max_seqlen, self.max_seqlen, from_block_size, to_block_size, n_rand_blocks, last_idx=1024
+                )[: (from_seq_len // from_block_size - 2)]
+                for _ in range(n_heads)
+            ]
+        else:
+            if plan_from_length is None:
+                plan_from_length, plan_num_rand_blocks = self._get_rand_attn_plan(
+                    from_seq_len, from_block_size, n_rand_blocks
+                )
+
+            rand_attn = self._bigbird_block_rand_mask_with_head(
+                from_seq_length=from_seq_len,
+                to_seq_length=to_seq_len,
+                from_block_size=from_block_size,
+                to_block_size=to_block_size,
+                num_heads=n_heads,
+                plan_from_length=plan_from_length,
+                plan_num_rand_blocks=plan_num_rand_blocks,
+            )
+
+        rand_attn = jnp.stack(rand_attn, axis=0)
+        rand_attn = jnp.broadcast_to(rand_attn, (bsz, )+rand_attn.shape)
+
+        rand_mask = self._create_rand_mask_from_inputs(
+            from_blocked_mask, to_blocked_mask, rand_attn, n_heads, n_rand_blocks, bsz, from_seq_len, from_block_size
+        )
+
+        blocked_query_matrix = query_layer.reshape(bsz, n_heads, from_seq_len // from_block_size, from_block_size, -1)
+        blocked_key_matrix = key_layer.reshape(bsz, n_heads, to_seq_len // to_block_size, to_block_size, -1)
+        blocked_value_matrix = value_layer.reshape(bsz, n_heads, to_seq_len // to_block_size, to_block_size, -1)
+
+        # TODO: complete below
+
+        context_layer = None
+        attention_probs = None
+        return context_layer, attention_probs
+
+    @staticmethod
+    def _create_rand_mask_from_inputs(
+        from_blocked_mask,
+        to_blocked_mask,
+        rand_attn,
+        num_attention_heads,
+        num_random_blocks,
+        batch_size,
+        from_seq_length,
+        from_block_size,
+    ):
+        """
+        Create 3D attention mask from a 2D tensor mask.
+
+        Args:
+            from_blocked_mask: 2D Tensor of shape [batch_size,
+            from_seq_length//from_block_size, from_block_size].
+            to_blocked_mask: int32 Tensor of shape [batch_size,
+            to_seq_length//to_block_size, to_block_size].
+            rand_attn: [batch_size, num_attention_heads,
+            from_seq_length//from_block_size-2, num_rand_blocks]
+            num_attention_heads: int. Number of attention heads.
+            num_random_blocks: int. Number of random chunks per row.
+            batch_size: int. Batch size for computation.
+            from_seq_length: int. length of from sequence.
+            from_block_size: int. size of block in from sequence.
+
+        Returns:
+            float Tensor of shape [batch_size, num_attention_heads, from_seq_length//from_block_size-2,
+            from_block_size, num_rand_blocks*to_block_size].
+        """
+        # TODO: implement it
+        num_windows = from_seq_length // from_block_size - 2
+        # rand_mask = torch.stack([p1[i1.flatten()] for p1, i1 in zip(to_blocked_mask, rand_attn)])
+        # rand_mask = rand_mask.view(batch_size, num_attention_heads, num_windows, num_random_blocks * from_block_size)
+        # rand_mask = torch.einsum("blq,bhlk->bhlqk", from_blocked_mask[:, 1:-1], rand_mask)
+        # return rand_mask
+
+    @staticmethod
+    def _get_rand_attn_plan(from_seq_length, from_block_size, num_rand_blocks):
+        """
+        Gives the plan of where to put random attention.
+
+        Args:
+            from_seq_length: int. length of from sequence.
+            from_block_size: int. size of block in from sequence.
+            num_rand_blocks: int. Number of random chunks per row.
+
+        Returns:
+            plan_from_length: ending location of from block plan_num_rand_blocks: number of random ending location for
+            each block
+        """
+
+        plan_from_length = []
+        plan_num_rand_blocks = []
+        if (2 * num_rand_blocks + 5) < (from_seq_length // from_block_size):
+            plan_from_length.append(int((2 * num_rand_blocks + 5) * from_block_size))
+            plan_num_rand_blocks.append(num_rand_blocks)
+            plan_from_length.append(from_seq_length)
+            plan_num_rand_blocks.append(0)
+        elif (num_rand_blocks + 5) < (from_seq_length // from_block_size):
+            plan_from_length.append(int((num_rand_blocks + 5) * from_block_size))
+            plan_num_rand_blocks.append(num_rand_blocks // 2)
+            plan_from_length.append(from_seq_length)
+            plan_num_rand_blocks.append(num_rand_blocks - (num_rand_blocks // 2))
+        else:
+            plan_from_length.append(from_seq_length)
+            plan_num_rand_blocks.append(num_rand_blocks)
+
+        return plan_from_length, plan_num_rand_blocks
+
+    # TODO: can we replace all below methods with jax version instead (should speed up)
+    # TODO: also let's define them only once as discussed in torch PR
+
+    @staticmethod
+    def _bigbird_block_rand_mask(
+        from_seq_length, to_seq_length, from_block_size, to_block_size, num_rand_blocks, last_idx=-1
+    ):
+        """
+        Create adjacency list of random attention.
+
+        Args:
+            from_seq_length: int. length of from sequence.
+            to_seq_length: int. length of to sequence.
+            from_block_size: int. size of block in from sequence.
+            to_block_size: int. size of block in to sequence.
+            num_rand_blocks: int. Number of random chunks per row.
+            last_idx: if -1 then num_rand_blocks blocks chosen anywhere in to sequence,
+            if positive then num_rand_blocks blocks chosen only up to last_idx.
+
+        Returns:
+            adjacency list of size from_seq_length//from_block_size-2 by num_rand_blocks
+        """
+        # using this method when from_seq_length in [1024, 3072, 4096]
+
+        assert (
+            from_seq_length // from_block_size == to_seq_length // to_block_size
+        ), "Error the number of blocks needs to be same!"
+
+        rand_attn = np.zeros((from_seq_length // from_block_size - 2, num_rand_blocks), dtype=np.int32)
+        middle_seq = np.arange(1, to_seq_length // to_block_size - 1, dtype=np.int32)
+        last = to_seq_length // to_block_size - 1
+        if last_idx > (2 * to_block_size):
+            last = (last_idx // to_block_size) - 1
+
+        r = num_rand_blocks  # shorthand
+        for i in range(1, from_seq_length // from_block_size - 1):
+            start = i - 2
+            end = i
+            if i == 1:
+                rand_attn[i - 1, :] = np.random.permutation(middle_seq[2:last])[:r]
+            elif i == 2:
+                rand_attn[i - 1, :] = np.random.permutation(middle_seq[3:last])[:r]
+            elif i == from_seq_length // from_block_size - 3:
+                rand_attn[i - 1, :] = np.random.permutation(middle_seq[:last])[:r]
+            # Missing -3: should have been sliced till last-3
+            elif i == from_seq_length // from_block_size - 2:
+                rand_attn[i - 1, :] = np.random.permutation(middle_seq[:last])[:r]
+            # Missing -4: should have been sliced till last-4
+            else:
+                if start > last:
+                    start = last
+                    rand_attn[i - 1, :] = np.random.permutation(middle_seq[:start])[:r]
+                elif (end + 1) == last:
+                    rand_attn[i - 1, :] = np.random.permutation(middle_seq[:start])[:r]
+                else:
+                    rand_attn[i - 1, :] = np.random.permutation(
+                        np.concatenate((middle_seq[:start], middle_seq[end + 1 : last]))
+                    )[:r]
+        return rand_attn
+
+    def _bigbird_block_rand_mask_with_head(
+        self,
+        from_seq_length,
+        to_seq_length,
+        from_block_size,
+        to_block_size,
+        num_heads,
+        plan_from_length,
+        plan_num_rand_blocks,
+        window_block_left=1,
+        window_block_right=1,
+        global_block_top=1,
+        global_block_bottom=1,
+        global_block_left=1,
+        global_block_right=1,
+    ):
+        """
+        Create adjacency list of random attention.
+
+        Args:
+            from_seq_length: int. length of from sequence.
+            to_seq_length: int. length of to sequence.
+            from_block_size: int. size of block in from sequence.
+            to_block_size: int. size of block in to sequence.
+            num_heads: int. total number of heads.
+            plan_from_length: list. plan from length where num_random_blocks are choosen from.
+            plan_num_rand_blocks: list. number of rand blocks within the plan.
+            window_block_left: int. number of blocks of window to left of a block.
+            window_block_right: int. number of blocks of window to right of a block.
+            global_block_top: int. number of blocks at the top.
+            global_block_bottom: int. number of blocks at the bottom.
+            global_block_left: int. Number of blocks globally used to the left.
+            global_block_right: int. Number of blocks globally used to the right.
+
+        Returns:
+            adjacency list of size num_head where each element is of size from_seq_length//from_block_size-2 by
+            num_rand_blocks
+        """
+        # using this method when from_seq_length not in [1024, 3072, 4096]
+
+        assert (
+            from_seq_length // from_block_size == to_seq_length // to_block_size
+        ), "Error the number of blocks needs to be same!"
+
+        assert from_seq_length in plan_from_length, "Error from sequence length not in plan!"
+
+        # Total number of blocks in the mmask
+        num_blocks = from_seq_length // from_block_size
+        # Number of blocks per plan
+        plan_block_length = np.array(plan_from_length) // from_block_size
+        # till when to follow plan
+        max_plan_idx = plan_from_length.index(from_seq_length)
+        # Random Attention adjacency list
+        rand_attn = [
+            np.zeros((num_blocks, np.sum(plan_num_rand_blocks[: max_plan_idx + 1])), dtype=np.int32)
+            for i in range(num_heads)
+        ]
+
+        # We will go iteratively over the plan blocks and pick random number of
+        # Attention blocks from the legally allowed blocks
+        for plan_idx in range(max_plan_idx + 1):
+            rnd_r_cnt = 0
+            if plan_idx > 0:
+                # set the row for all from_blocks starting from 0 to
+                # plan_block_length[plan_idx-1]
+                # column indx start fromm plan_block_length[plan_idx-1] and ends at
+                # plan_block_length[plan_idx]
+                if plan_num_rand_blocks[plan_idx] > 0:
+                    rnd_r_cnt = int(np.sum(plan_num_rand_blocks[:plan_idx]))
+                    curr_r_cnt = int(np.sum(plan_num_rand_blocks[: plan_idx + 1]))
+                    for blk_rw_idx in range(global_block_top, plan_block_length[plan_idx - 1]):
+                        for h in range(num_heads):
+                            rand_attn[h][blk_rw_idx, rnd_r_cnt:curr_r_cnt] = self._get_single_block_row_attention(
+                                block_id=blk_rw_idx,
+                                to_start_block_id=plan_block_length[plan_idx - 1],
+                                to_end_block_id=plan_block_length[plan_idx],
+                                num_rand_blocks=plan_num_rand_blocks[plan_idx],
+                                window_block_left=window_block_left,
+                                window_block_right=window_block_right,
+                                global_block_left=global_block_left,
+                                global_block_right=global_block_right,
+                            )
+
+                for pl_id in range(plan_idx):
+                    if plan_num_rand_blocks[pl_id] == 0:
+                        continue
+                    for blk_rw_idx in range(plan_block_length[plan_idx - 1], plan_block_length[plan_idx]):
+                        rnd_r_cnt = 0
+                        to_start_block_id = 0
+                        if pl_id > 0:
+                            rnd_r_cnt = int(np.sum(plan_num_rand_blocks[:pl_id]))
+                            to_start_block_id = plan_block_length[pl_id - 1]
+                        curr_r_cnt = int(np.sum(plan_num_rand_blocks[: pl_id + 1]))
+                        for h in range(num_heads):
+                            rand_attn[h][blk_rw_idx, rnd_r_cnt:curr_r_cnt] = self._get_single_block_row_attention(
+                                block_id=blk_rw_idx,
+                                to_start_block_id=to_start_block_id,
+                                to_end_block_id=plan_block_length[pl_id],
+                                num_rand_blocks=plan_num_rand_blocks[pl_id],
+                                window_block_left=window_block_left,
+                                window_block_right=window_block_right,
+                                global_block_left=global_block_left,
+                                global_block_right=global_block_right,
+                            )
+
+            if plan_num_rand_blocks[plan_idx] == 0:
+                continue
+            curr_r_cnt = int(np.sum(plan_num_rand_blocks[: plan_idx + 1]))
+            from_start_block_id = global_block_top
+            to_start_block_id = 0
+            if plan_idx > 0:
+                rnd_r_cnt = int(np.sum(plan_num_rand_blocks[:plan_idx]))
+                from_start_block_id = plan_block_length[plan_idx - 1]
+                to_start_block_id = plan_block_length[plan_idx - 1]
+
+            for blk_rw_idx in range(from_start_block_id, plan_block_length[plan_idx]):
+                for h in range(num_heads):
+                    rand_attn[h][blk_rw_idx, rnd_r_cnt:curr_r_cnt] = self._get_single_block_row_attention(
+                        block_id=blk_rw_idx,
+                        to_start_block_id=to_start_block_id,
+                        to_end_block_id=plan_block_length[plan_idx],
+                        num_rand_blocks=plan_num_rand_blocks[plan_idx],
+                        window_block_left=window_block_left,
+                        window_block_right=window_block_right,
+                        global_block_left=global_block_left,
+                        global_block_right=global_block_right,
+                    )
+
+        for nh in range(num_heads):
+            rand_attn[nh] = rand_attn[nh][global_block_top : num_blocks - global_block_bottom, :]
+
+        return rand_attn
+
+    @staticmethod
+    def _get_single_block_row_attention(
+        block_id,
+        to_start_block_id,
+        to_end_block_id,
+        num_rand_blocks,
+        window_block_left=1,
+        window_block_right=1,
+        global_block_left=1,
+        global_block_right=1,
+    ):
+        """
+        For a single row block get random row attention.
+
+        Args:
+            block_id: int. block id of row.
+            to_start_block_id: int. random attention column start id.
+            to_end_block_id: int. random attention column end id.
+            num_rand_blocks: int. number of random blocks to be selected.
+            window_block_left: int. number of blocks of window to left of a block.
+            window_block_right: int. number of blocks of window to right of a block.
+            global_block_left: int. Number of blocks globally used to the left.
+            global_block_right: int. Number of blocks globally used to the right.
+
+        Returns:
+            row containing the random attention vector of size num_rand_blocks.
+        """
+        # list of to_blocks from which to choose random attention
+        to_block_list = np.arange(to_start_block_id, to_end_block_id, dtype=np.int32)
+        # permute the blocks
+        perm_block = np.random.permutation(to_block_list)
+
+        # illegal blocks for the current block id, using window
+        illegal_blocks = list(range(block_id - window_block_left, block_id + window_block_right + 1))
+
+        # Add blocks at the start and at the end
+        illegal_blocks.extend(list(range(global_block_left)))
+        illegal_blocks.extend(list(range(to_end_block_id - global_block_right, to_end_block_id)))
+
+        # The second from_block cannot choose random attention on second last to_block
+        if block_id == 1:
+            illegal_blocks.append(to_end_block_id - 2)
+
+        # The second last from_block cannot choose random attention on second to_block
+        if block_id == to_end_block_id - 2:
+            illegal_blocks.append(1)
+
+        selected_random_blokcs = []
+
+        for i in range(to_end_block_id - to_start_block_id):
+            if perm_block[i] not in illegal_blocks:
+                selected_random_blokcs.append(perm_block[i])
+            if len(selected_random_blokcs) == num_rand_blocks:
+                break
+        return np.array(selected_random_blokcs, dtype=np.int32)
 
 
 class FlaxBigBirdSelfOutput(nn.Module):
