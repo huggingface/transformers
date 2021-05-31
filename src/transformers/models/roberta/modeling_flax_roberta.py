@@ -977,8 +977,8 @@ class FlaxRobertaForQuestionAnsweringModule(nn.Module):
 
         logits = self.qa_outputs(hidden_states)
         start_logits, end_logits = logits.split(self.config.num_labels, axis=-1)
-        start_logits = start_logits.squeeze(-1).contiguous()
-        end_logits = end_logits.squeeze(-1).contiguous()
+        start_logits = start_logits.squeeze(-1)
+        end_logits = end_logits.squeeze(-1)
 
         if not return_dict:
             return (start_logits, end_logits) + outputs[1:]
