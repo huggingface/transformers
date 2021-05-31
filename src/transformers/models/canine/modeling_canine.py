@@ -36,6 +36,7 @@ from ...file_utils import (
 )
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
@@ -72,7 +73,9 @@ _PRIMES = [
 
 
 def load_tf_weights_in_canine(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch model."""
+    """Load tf checkpoints in a pytorch model.
+
+    """
     try:
         import re
 
@@ -100,16 +103,32 @@ def load_tf_weights_in_canine(model, config, tf_checkpoint_path):
         name = name.split("/")
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
         # which are not required for using pretrained model
+        # also discard the cls weights (which were used for the next sentence prediction pre-training task) 
         if any(
-            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
+            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step", "cls"]
             for n in name
         ):
             logger.info(f"Skipping {'/'.join(name)}")
             continue
+        # if first scope name starts with "bert", change it to "encoder"
+        if name[0] == "bert":
+            name[0] = "encoder"
+        # remove "embeddings" middle name of HashBucketCodepointEmbedders
+        elif name[1] == "embeddings":
+            name.remove(name[1])
+        # rename segment_embeddings to token_type_embeddings
+        elif name[1] == "segment_embeddings":
+            name[1] = "token_type_embeddings"
+        # rename initial convolutional projection layer
+        elif name[1] == "initial_char_encoder":
+            name = ["chars_to_molecules"] + name[-2:]
+        # rename final convolutional projection layer
+        elif name[0] == "final_char_encoder" and name[1] in ["LayerNorm", "conv"]:
+            name = ["projection"] + name[1:]
         pointer = model
         for m_name in name:
-            if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
-                scope_names = re.split(r"_(\d+)", m_name)
+            if re.fullmatch(r"[A-Za-z]+_\d+", m_name) and not "Embedder" in m_name:
+                    scope_names = re.split(r"_(\d+)", m_name)
             else:
                 scope_names = [m_name]
             if scope_names[0] == "kernel" or scope_names[0] == "gamma":
@@ -118,8 +137,6 @@ def load_tf_weights_in_canine(model, config, tf_checkpoint_path):
                 pointer = getattr(pointer, "bias")
             elif scope_names[0] == "output_weights":
                 pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "squad":
-                pointer = getattr(pointer, "classifier")
             else:
                 try:
                     pointer = getattr(pointer, scope_names[0])
@@ -130,6 +147,8 @@ def load_tf_weights_in_canine(model, config, tf_checkpoint_path):
                 num = int(scope_names[1])
                 pointer = pointer[num]
         if m_name[-11:] == "_embeddings":
+            pointer = getattr(pointer, "weight")
+        elif m_name[-10:] in [f"Embedder_{i}" for i in range(8)]:
             pointer = getattr(pointer, "weight")
         elif m_name == "kernel":
             array = np.transpose(array)
@@ -145,10 +164,6 @@ def load_tf_weights_in_canine(model, config, tf_checkpoint_path):
     return model
 
 
-def mish(x):
-    return x * torch.tanh(nn.functional.softplus(x))
-
-
 class CanineEmbeddings(nn.Module):
     """Construct the character, position and token_type embeddings."""
 
@@ -162,7 +177,7 @@ class CanineEmbeddings(nn.Module):
         for i in range(config.num_hash_functions):
             name = f"HashBucketCodepointEmbedder_{i}"
             setattr(self, name, nn.Embedding(config.num_hash_buckets, shard_embedding_size))
-        self.position_embeddings = nn.Embedding(config.num_hash_buckets, config.hidden_size)
+        self.char_position_embeddings = nn.Embedding(config.num_hash_buckets, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
@@ -237,7 +252,7 @@ class CanineEmbeddings(nn.Module):
 
         embeddings = inputs_embeds + token_type_embeddings
         if self.position_embedding_type == "absolute":
-            position_embeddings = self.position_embeddings(position_ids)
+            position_embeddings = self.char_position_embeddings(position_ids)
             embeddings += position_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
@@ -245,7 +260,7 @@ class CanineEmbeddings(nn.Module):
 
 
 class CharactersToMolecules(nn.Module):
-    """Convert character sequence to initial molecule sequence (i.e. downsample)."""
+    """Convert character sequence to initial molecule sequence (i.e. downsample) using strided convolutions."""
     
     def __init__(self, config):
         super().__init__()
@@ -253,7 +268,7 @@ class CharactersToMolecules(nn.Module):
         self.conv = nn.Conv1d(in_channels=config.hidden_size, out_channels=config.hidden_size, 
                                         kernel_size=config.downsampling_rate, stride=config.downsampling_rate)
         self.activation = ACT2FN[config.hidden_act]
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) 
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) 
     
     def forward(self, char_encoding: torch.Tensor) -> torch.Tensor:
         
@@ -261,7 +276,7 @@ class CharactersToMolecules(nn.Module):
         cls_encoding = char_encoding[:, 0:1, :]
         
         # char_encoding has shape [batch, char_seq, hidden_size]
-        # we tranpose it to be [batch, hidden_size, char_seq]
+        # We transpose it to be [batch, hidden_size, char_seq]
         char_encoding = torch.transpose(char_encoding, 1, 2)
         downsampled = self.conv(char_encoding)
         downsampled = torch.transpose(downsampled, 1, 2)
@@ -279,7 +294,9 @@ class CharactersToMolecules(nn.Module):
         # `result`: [batch, molecule_seq, molecule_dim]
         result = torch.cat([cls_encoding, downsampled_truncated], dim=1)
 
-        return self.layernorm(result)
+        result = self.layernorm(result)
+
+        return result
     
 
 class ConvProjection(nn.Module):
@@ -290,18 +307,19 @@ class ConvProjection(nn.Module):
         self.conv = nn.Conv1d(in_channels=config.hidden_size*2, out_channels=config.hidden_size, 
                                         kernel_size=config.upsampling_kernel_size, stride=1)
         self.activation = ACT2FN[config.hidden_act]
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) 
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) 
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, inputs, final_seq_char_positions=None):
         # inputs has shape [batch, mol_seq, molecule_hidden_size+char_hidden_final]
         # we transpose it to be [batch, molecule_hidden_size+char_hidden_final, mol_seq]
         inputs = torch.transpose(inputs, 1, 2)
-        pad = nn.ConstantPad1d((1, 2), 0)
         
         # PyTorch < 1.9 does not support padding="same" (which is used in the original implementation),
         # so we pad the tensor manually before passing it to the conv layer
+        # based on https://github.com/google-research/big_transfer/blob/49afe42338b62af9fbe18f0258197a33ee578a6b/bit_tf2/models.py#L36-L38
         # `result`: shape (batch_size, char_seq_len, hidden_size)
+        pad = nn.ConstantPad1d((1, 2), 0)
         result = self.conv(pad(inputs))
         result = torch.transpose(result, 1, 2)
         result = self.activation(result)
@@ -479,6 +497,8 @@ class CanineAttention(nn.Module):
     """
     Additional arguments related to local attention:
 
+        local:
+            Whether to apply local attention.
         always_attend_to_first_position: 
             Should all blocks be able to attend to the `to_tensor`'s first position (e.g. a [CLS] position)?
         first_position_attends_to_all: 
@@ -742,7 +762,7 @@ class CanineLayer(nn.Module):
 
 
 class CanineEncoder(nn.Module):
-    def __init__(self, config, local=False, always_attend_to_first_position=False, first_position_attends_to_all=128,
+    def __init__(self, config, local=False, always_attend_to_first_position=False, first_position_attends_to_all=False,
           attend_from_chunk_width=128, attend_from_chunk_stride=128, attend_to_chunk_width=128, attend_to_chunk_stride=128):
         super().__init__()
         self.config = config
@@ -838,6 +858,21 @@ class CanineEncoder(nn.Module):
             attentions=all_self_attentions,
             cross_attentions=all_cross_attentions,
         )
+
+
+class CaninePooler(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.activation = nn.Tanh()
+
+    def forward(self, hidden_states):
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
 
 
 class CaninePredictionHeadTransform(nn.Module):
@@ -997,7 +1032,7 @@ class CanineModel(CaninePreTrainedModel):
     :obj:`encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
         shallow_config = copy.deepcopy(config)
@@ -1005,7 +1040,7 @@ class CanineModel(CaninePreTrainedModel):
         
         self.char_embeddings = CanineEmbeddings(config)
         # shallow/low-dim transformer encoder to get a initial character encoding
-        self.init_chars_encoder = CanineEncoder(shallow_config, local=True, always_attend_to_first_position=False,
+        self.initial_char_encoder = CanineEncoder(shallow_config, local=True, always_attend_to_first_position=False,
                           first_position_attends_to_all=False,
                           attend_from_chunk_width=config.local_transformer_stride,
                           attend_from_chunk_stride=config.local_transformer_stride,
@@ -1016,15 +1051,11 @@ class CanineModel(CaninePreTrainedModel):
         self.encoder = CanineEncoder(config)
         self.projection = ConvProjection(config)
         # shallow/low-dim transformer encoder to get a final character encoding
-        self.final_chars_encoder = CanineEncoder(shallow_config)
+        self.final_char_encoder = CanineEncoder(shallow_config)
+
+        self.pooler = CaninePooler(config) if add_pooling_layer else None
 
         self.init_weights()
-
-    def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
-
-    def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
 
     def _prune_heads(self, heads_to_prune):
         """Prunes heads of the model.
@@ -1034,8 +1065,9 @@ class CanineModel(CaninePreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
     
-    def _create_attention_mask_from_input_mask(self, from_tensor, to_mask):
+    def _create_3d_attention_mask_from_input_mask(self, from_tensor, to_mask):
         """Create 3D attention mask from a 2D tensor mask.
+        
         Args:
             from_tensor: 2D or 3D Tensor of shape [batch_size, from_seq_length, ...].
             to_mask: int32 Tensor of shape [batch_size, to_seq_length].
@@ -1199,7 +1231,7 @@ class CanineModel(CaninePreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        # input_char_embeddings: shape (batch_size, char_seq, char_dim)
+        # `input_char_embeddings`: shape (batch_size, char_seq, char_dim)
         input_char_embeddings = self.char_embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
@@ -1208,10 +1240,11 @@ class CanineModel(CaninePreTrainedModel):
             past_key_values_length=past_key_values_length,
         )
         
-        # Contextualize character embeddings using shallow Transformer. Shape (batch_size, char_seq_len, char_dim)
-        # We use a 3D attention mask for the local attention
-        char_attention_mask = self._create_attention_mask_from_input_mask(input_ids, attention_mask)
-        init_chars_encoder_outputs = self.init_chars_encoder(input_char_embeddings, char_attention_mask)
+        # Contextualize character embeddings using shallow Transformer. 
+        # We use a 3D attention mask for the local attention.
+        # `input_char_encoding`: shape (batch_size, char_seq_len, char_dim)
+        char_attention_mask = self._create_3d_attention_mask_from_input_mask(input_ids, attention_mask)
+        init_chars_encoder_outputs = self.initial_char_encoder(input_char_embeddings, char_attention_mask)
         input_char_encoding = init_chars_encoder_outputs.last_hidden_state
         
         # Downsample chars to molecules.
@@ -1231,6 +1264,7 @@ class CanineModel(CaninePreTrainedModel):
         init_molecule_encoding = self.chars_to_molecules(input_char_encoding) 
         
         # Deep BERT encoder
+        # `molecule_sequence_output`: shape (batch_size, mol_seq_len, mol_dim)
         encoder_outputs = self.encoder(
             init_molecule_encoding,
             attention_mask=extended_molecule_attention_mask,
@@ -1244,29 +1278,31 @@ class CanineModel(CaninePreTrainedModel):
             return_dict=return_dict,
         )
         molecule_sequence_output = encoder_outputs[0]
+        pooled_output = self.pooler(molecule_sequence_output) if self.pooler is not None else None
 
         # Upsample molecules back to characters.
-        # `repeated_molecules`: shape (batch_size, char_seq_len, molecule_hidden_size)
+        # `repeated_molecules`: shape (batch_size, char_seq_len, mol_hidden_size)
         repeated_molecules = self._repeat_molecules(molecule_sequence_output, char_seq_length=input_shape[-1])
 
         # Concatenate representations (contextualized char embeddings and repeated molecules): 
         # `concat`: shape [batch_size, char_seq_len, molecule_hidden_size+char_hidden_final]
         concat = torch.cat([input_char_encoding, repeated_molecules], dim=-1)
 
-        # Project representation dim back to hidden_size 
+        # Project representation dimension back to hidden_size 
         # `sequence_output`: shape (batch_size, char_seq_len, hidden_size])
         sequence_output = self.projection(concat)
 
         # Apply final shallow Transformer
         # `sequence_output`: shape (batch_size, char_seq_len, hidden_size])
-        final_chars_encoder_outputs = self.final_chars_encoder(sequence_output, extended_attention_mask)
+        final_chars_encoder_outputs = self.final_char_encoder(sequence_output, extended_attention_mask)
         sequence_output = final_chars_encoder_outputs.last_hidden_state
         
         if not return_dict:
             return (sequence_output,) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPastAndCrossAttentions(
+        return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
             past_key_values=final_chars_encoder_outputs.past_key_values,
             hidden_states=final_chars_encoder_outputs.hidden_states,
             attentions=final_chars_encoder_outputs.attentions,
@@ -1520,26 +1556,6 @@ class CanineForCausalLM(CaninePreTrainedModel):
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],)
         return reordered_past
 
-class CanineClassificationHead(nn.Module):
-    """Head for sentence-level classification tasks."""
-
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
-
-        self.config = config
-
-    def forward(self, features, **kwargs):
-        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
-        x = self.dropout(x)
-        x = self.dense(x)
-        x = ACT2FN[self.config.hidden_act](x)
-        x = self.dropout(x)
-        x = self.out_proj(x)
-        return x
-
 
 @add_start_docstrings(
     """CANINE Model transformer with a sequence classification/regression head on top (a linear layer on top of
@@ -1550,8 +1566,10 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
+        
         self.canine = CanineModel(config)
-        self.classifier = CanineClassificationHead(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
 
@@ -1596,8 +1614,10 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
-        logits = self.classifier(sequence_output)
+        pooled_output = outputs[1]
+
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier(pooled_output)
 
         loss = None
         if labels is not None:
