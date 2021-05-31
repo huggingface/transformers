@@ -268,6 +268,9 @@ class CharactersToMolecules(nn.Module):
         self.conv = nn.Conv1d(in_channels=config.hidden_size, out_channels=config.hidden_size, 
                                         kernel_size=config.downsampling_rate, stride=config.downsampling_rate)
         self.activation = ACT2FN[config.hidden_act]
+        
+        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
+        # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) 
     
     def forward(self, char_encoding: torch.Tensor) -> torch.Tensor:
@@ -294,7 +297,7 @@ class CharactersToMolecules(nn.Module):
         # `result`: [batch, molecule_seq, molecule_dim]
         result = torch.cat([cls_encoding, downsampled_truncated], dim=1)
 
-        result = self.layernorm(result)
+        result = self.LayerNorm(result)
 
         return result
     
@@ -307,6 +310,8 @@ class ConvProjection(nn.Module):
         self.conv = nn.Conv1d(in_channels=config.hidden_size*2, out_channels=config.hidden_size, 
                                         kernel_size=config.upsampling_kernel_size, stride=1)
         self.activation = ACT2FN[config.hidden_act]
+        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
+        # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) 
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -323,7 +328,7 @@ class ConvProjection(nn.Module):
         result = self.conv(pad(inputs))
         result = torch.transpose(result, 1, 2)
         result = self.activation(result)
-        result = self.layernorm(result)
+        result = self.LayerNorm(result)
         result = self.dropout(result)
         final_char_seq = result
     
@@ -1100,7 +1105,7 @@ class CanineModel(CaninePreTrainedModel):
         poolable_char_mask = torch.reshape(char_attention_mask, (batch_size, 1, char_seq_len))
 
         # next, apply MaxPool1d to get pooled_molecule_mask of shape (batch_size, 1, mol_seq_len)
-        pooled_molecule_mask = torch.nn.MaxPool1d(kernel_size=downsampling_rate, stride=downsampling_rate)(poolable_char_mask)
+        pooled_molecule_mask = torch.nn.MaxPool1d(kernel_size=downsampling_rate, stride=downsampling_rate)(poolable_char_mask.float())
 
         # finally, squeeze to get tensor of shape (batch_size, mol_seq_len)
         molecule_attention_mask = torch.squeeze(pooled_molecule_mask, dim=-1)

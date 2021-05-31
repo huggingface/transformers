@@ -38,17 +38,17 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, pytorch_dump_path):
 
     print(f"Building PyTorch model from configuration: {config}")
 
-    # Load weights of deep encoder from tf checkpoint
+    # Load weights from tf checkpoint
     load_tf_weights_in_canine(model, config, tf_checkpoint_path)
 
     # Save pytorch-model (weights and configuration)
     print(f"Save PyTorch model to {pytorch_dump_path}")
-    model.save_pretrained(pytorch_dump_path[:-17])
+    model.save_pretrained(pytorch_dump_path)
 
-    # TODO: Save tokenizer files
+    # Save tokenizer files
     tokenizer = CanineTokenizer()
-    #print(f"Save tokenizer files to {pytorch_dump_path}")
-    #tokenizer.save_pretrained(pytorch_dump_path[:-17])
+    print(f"Save tokenizer files to {pytorch_dump_path}")
+    tokenizer.save_pretrained(pytorch_dump_path)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
