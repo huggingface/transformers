@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    canine,
     albert,
     auto,
     bart,
@@ -31,6 +30,7 @@ from . import (
     blenderbot,
     blenderbot_small,
     camembert,
+    canine,
     clip,
     convbert,
     cpm,

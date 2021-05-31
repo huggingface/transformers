@@ -15,17 +15,15 @@
 """ PyTorch CANINE model. """
 
 
-
-
+import copy
 import math
 import os
-import copy
 
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
-import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -67,15 +65,11 @@ CANINE_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 # Support up to 16 hash functions.
-_PRIMES = [
-    31, 43, 59, 61, 73, 97, 103, 113, 137, 149, 157, 173, 181, 193, 211, 223
-]
+_PRIMES = [31, 43, 59, 61, 73, 97, 103, 113, 137, 149, 157, 173, 181, 193, 211, 223]
 
 
 def load_tf_weights_in_canine(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch model.
-
-    """
+    """Load tf checkpoints in a pytorch model."""
     try:
         import re
 
@@ -103,7 +97,7 @@ def load_tf_weights_in_canine(model, config, tf_checkpoint_path):
         name = name.split("/")
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
         # which are not required for using pretrained model
-        # also discard the cls weights (which were used for the next sentence prediction pre-training task) 
+        # also discard the cls weights (which were used for the next sentence prediction pre-training task)
         if any(
             n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step", "cls"]
             for n in name
@@ -128,7 +122,7 @@ def load_tf_weights_in_canine(model, config, tf_checkpoint_path):
         pointer = model
         for m_name in name:
             if re.fullmatch(r"[A-Za-z]+_\d+", m_name) and not "Embedder" in m_name:
-                    scope_names = re.split(r"_(\d+)", m_name)
+                scope_names = re.split(r"_(\d+)", m_name)
             else:
                 scope_names = [m_name]
             if scope_names[0] == "kernel" or scope_names[0] == "gamma":
@@ -169,9 +163,9 @@ class CanineEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        
+
         self.config = config
-        
+
         # character embeddings
         shard_embedding_size = config.hidden_size // config.num_hash_functions
         for i in range(config.num_hash_functions):
@@ -192,11 +186,12 @@ class CanineEmbeddings(nn.Module):
     def _hash_bucket_tensors(self, input_ids, num_hashes: int, num_buckets: int):
         """
         Converts ids to hash bucket ids via multiple hashing.
+
         Args:
             input_ids: The codepoints or other IDs to be hashed.
             num_hashes: The number of hash functions to use.
             num_buckets: The number of hash buckets (i.e. embeddings in each table).
-        
+
         Returns:
             A list of tensors, each of which is the hash bucket IDs from one hash function.
         """
@@ -210,16 +205,14 @@ class CanineEmbeddings(nn.Module):
             hashed = ((input_ids + 1) * prime) % num_buckets
             result_tensors.append(hashed)
         return result_tensors
-    
+
     def _embed_hash_buckets(self, input_ids, embedding_size: int, num_hashes: int, num_buckets: int):
-        """Converts IDs (e.g. codepoints) into embeddings via multiple hashing.
-        """
+        """Converts IDs (e.g. codepoints) into embeddings via multiple hashing."""
         if embedding_size % num_hashes != 0:
-            raise ValueError(f"Expected `embedding_size` ({embedding_size}) % "
-                       f"`num_hashes` ({num_hashes}) == 0")
+            raise ValueError(f"Expected `embedding_size` ({embedding_size}) % " f"`num_hashes` ({num_hashes}) == 0")
 
         shard_embedding_size = embedding_size // num_hashes
-        
+
         hash_bucket_tensors = self._hash_bucket_tensors(input_ids, num_hashes=num_hashes, num_buckets=num_buckets)
         embedding_shards = []
         for i, hash_bucket_ids in enumerate(hash_bucket_tensors):
@@ -228,7 +221,7 @@ class CanineEmbeddings(nn.Module):
             embedding_shards.append(shard_embeddings)
 
         return torch.cat(embedding_shards, dim=-1)
-    
+
     def forward(
         self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
     ):
@@ -246,8 +239,9 @@ class CanineEmbeddings(nn.Module):
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
         if inputs_embeds is None:
-            inputs_embeds = self._embed_hash_buckets(input_ids, self.config.hidden_size, self.config.num_hash_functions,
-                                self.config.num_hash_buckets)
+            inputs_embeds = self._embed_hash_buckets(
+                input_ids, self.config.hidden_size, self.config.num_hash_functions, self.config.num_hash_buckets
+            )
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = inputs_embeds + token_type_embeddings
@@ -261,23 +255,27 @@ class CanineEmbeddings(nn.Module):
 
 class CharactersToMolecules(nn.Module):
     """Convert character sequence to initial molecule sequence (i.e. downsample) using strided convolutions."""
-    
+
     def __init__(self, config):
         super().__init__()
 
-        self.conv = nn.Conv1d(in_channels=config.hidden_size, out_channels=config.hidden_size, 
-                                        kernel_size=config.downsampling_rate, stride=config.downsampling_rate)
+        self.conv = nn.Conv1d(
+            in_channels=config.hidden_size,
+            out_channels=config.hidden_size,
+            kernel_size=config.downsampling_rate,
+            stride=config.downsampling_rate,
+        )
         self.activation = ACT2FN[config.hidden_act]
-        
+
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) 
-    
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
     def forward(self, char_encoding: torch.Tensor) -> torch.Tensor:
-        
+
         # `cls_encoding`: [batch, 1, hidden_size]
         cls_encoding = char_encoding[:, 0:1, :]
-        
+
         # char_encoding has shape [batch, char_seq, hidden_size]
         # We transpose it to be [batch, hidden_size, char_seq]
         char_encoding = torch.transpose(char_encoding, 1, 2)
@@ -300,26 +298,33 @@ class CharactersToMolecules(nn.Module):
         result = self.LayerNorm(result)
 
         return result
-    
+
 
 class ConvProjection(nn.Module):
-    """Project representations from hidden_size*2 back to hidden_size across a window of w = config.upsampling_kernel_size characters."""
-    
+    """
+Project representations from hidden_size*2 back to hidden_size across a window of w = config.upsampling_kernel_size
+characters.
+"""
+
     def __init__(self, config):
         super().__init__()
-        self.conv = nn.Conv1d(in_channels=config.hidden_size*2, out_channels=config.hidden_size, 
-                                        kernel_size=config.upsampling_kernel_size, stride=1)
+        self.conv = nn.Conv1d(
+            in_channels=config.hidden_size * 2,
+            out_channels=config.hidden_size,
+            kernel_size=config.upsampling_kernel_size,
+            stride=1,
+        )
         self.activation = ACT2FN[config.hidden_act]
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) 
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, inputs, final_seq_char_positions=None):
         # inputs has shape [batch, mol_seq, molecule_hidden_size+char_hidden_final]
         # we transpose it to be [batch, molecule_hidden_size+char_hidden_final, mol_seq]
         inputs = torch.transpose(inputs, 1, 2)
-        
+
         # PyTorch < 1.9 does not support padding="same" (which is used in the original implementation),
         # so we pad the tensor manually before passing it to the conv layer
         # based on https://github.com/google-research/big_transfer/blob/49afe42338b62af9fbe18f0258197a33ee578a6b/bit_tf2/models.py#L36-L38
@@ -331,7 +336,7 @@ class ConvProjection(nn.Module):
         result = self.LayerNorm(result)
         result = self.dropout(result)
         final_char_seq = result
-    
+
         if final_seq_char_positions is not None:
             # Limit transformer query seq and attention mask to these character
             # positions to greatly reduce the compute cost. Typically, this is just
@@ -502,40 +507,42 @@ class CanineAttention(nn.Module):
     """
     Additional arguments related to local attention:
 
-        local:
-            Whether to apply local attention.
-        always_attend_to_first_position: 
-            Should all blocks be able to attend to the `to_tensor`'s first position (e.g. a [CLS] position)?
-        first_position_attends_to_all: 
-            Should the `from_tensor`'s first position be able to attend to all positions within the `from_tensor`?
-        attend_from_chunk_width: 
-            The width of each block-wise chunk in `from_tensor`.
-        attend_from_chunk_stride: 
-            The number of elements to skip when moving to the next block in `from_tensor`.
-        attend_to_chunk_width: 
-            The width of each block-wise chunk in `to_tensor`.
-        attend_to_chunk_stride: 
-            The number of elements to skip when moving to the next block in `to_tensor`.
+        local: Whether to apply local attention. always_attend_to_first_position: Should all blocks be able to attend
+        to the `to_tensor`'s first position (e.g. a [CLS] position)? first_position_attends_to_all: Should the
+        `from_tensor`'s first position be able to attend to all positions within the `from_tensor`?
+        attend_from_chunk_width: The width of each block-wise chunk in `from_tensor`. attend_from_chunk_stride: The
+        number of elements to skip when moving to the next block in `from_tensor`. attend_to_chunk_width: The width of
+        each block-wise chunk in `to_tensor`. attend_to_chunk_stride: The number of elements to skip when moving to the
+        next block in `to_tensor`.
     """
-    def __init__(self, config, local=False, always_attend_to_first_position: bool = False,
-                          first_position_attends_to_all: bool = False,
-                          attend_from_chunk_width: int = 128,
-                          attend_from_chunk_stride: int = 128,
-                          attend_to_chunk_width: int = 128,
-                          attend_to_chunk_stride: int = 128):
+
+    def __init__(
+        self,
+        config,
+        local=False,
+        always_attend_to_first_position: bool = False,
+        first_position_attends_to_all: bool = False,
+        attend_from_chunk_width: int = 128,
+        attend_from_chunk_stride: int = 128,
+        attend_to_chunk_width: int = 128,
+        attend_to_chunk_stride: int = 128,
+    ):
         super().__init__()
         self.self = CanineSelfAttention(config)
         self.output = CanineSelfOutput(config)
         self.pruned_heads = set()
-        
+
         # additional arguments related to local attention
         self.local = local
         if attend_from_chunk_width < attend_from_chunk_stride:
-            raise ValueError("`attend_from_chunk_width` < `attend_from_chunk_stride`"
-                     "would cause sequence positions to get skipped.")
+            raise ValueError(
+                "`attend_from_chunk_width` < `attend_from_chunk_stride`"
+                "would cause sequence positions to get skipped."
+            )
         if attend_to_chunk_width < attend_to_chunk_stride:
-            raise ValueError("`attend_to_chunk_width` < `attend_to_chunk_stride`"
-                     "would cause sequence positions to get skipped.")
+            raise ValueError(
+                "`attend_to_chunk_width` < `attend_to_chunk_stride`" "would cause sequence positions to get skipped."
+            )
         self.always_attend_to_first_position = always_attend_to_first_position
         self.first_position_attends_to_all = first_position_attends_to_all
         self.attend_from_chunk_width = attend_from_chunk_width
@@ -586,7 +593,7 @@ class CanineAttention(nn.Module):
         else:
             from_seq_length = to_seq_length = hidden_states.shape[1]
             from_tensor = to_tensor = hidden_states
-            
+
             # Create chunks (windows) that we will attend *from* and then concatenate them.
             from_chunks = []
             if self.first_position_attends_to_all:
@@ -596,8 +603,7 @@ class CanineAttention(nn.Module):
                 from_start = 1
             else:
                 from_start = 0
-            for chunk_start in range(from_start, from_seq_length,
-                                    self.attend_from_chunk_stride):
+            for chunk_start in range(from_start, from_seq_length, self.attend_from_chunk_stride):
                 chunk_end = min(from_seq_length, chunk_start + self.attend_from_chunk_width)
                 from_chunks.append((chunk_start, chunk_end))
 
@@ -612,24 +618,24 @@ class CanineAttention(nn.Module):
             if len(from_chunks) != len(to_chunks):
                 raise ValueError(
                     f"Expected to have same number of `from_chunks` ({from_chunks}) and "
-                    f"`to_chunks` ({from_chunks}). Check strides.")
+                    f"`to_chunks` ({from_chunks}). Check strides."
+                )
 
-            # next, compute attention scores for each pair of windows and concatenate 
+            # next, compute attention scores for each pair of windows and concatenate
             attention_output_chunks = []
             for (from_start, from_end), (to_start, to_end) in zip(from_chunks, to_chunks):
                 from_tensor_chunk = from_tensor[:, from_start:from_end, :]
                 to_tensor_chunk = to_tensor[:, to_start:to_end, :]
                 # `attention_mask`: <float>[batch_size, from_seq, to_seq]
                 # `attention_mask_chunk`: <float>[batch_size, from_seq_chunk, to_seq_chunk]
-                attention_mask_chunk = (
-                    attention_mask[:, from_start:from_end, to_start:to_end])
+                attention_mask_chunk = attention_mask[:, from_start:from_end, to_start:to_end]
                 if self.always_attend_to_first_position:
                     cls_attention_mask = attention_mask[:, from_start:from_end, 0:1]
                     attention_mask_chunk = torch.cat([cls_attention_mask, attention_mask_chunk], dim=2)
 
                     cls_position = to_tensor[:, 0:1, :]
                     to_tensor_chunk = torch.cat([cls_position, to_tensor_chunk], dim=1)
-                
+
                 attention_outputs_chunk = self.self(
                     from_tensor_chunk,
                     to_tensor_chunk,
@@ -645,7 +651,7 @@ class CanineAttention(nn.Module):
             attention_output = torch.cat(attention_output_chunks, dim=1)
 
         attention_output = self.output(attention_output, hidden_states)
-        outputs = (attention_output,) 
+        outputs = (attention_output,)
         if not self.local:
             outputs = outputs + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -681,19 +687,44 @@ class CanineOutput(nn.Module):
 
 
 class CanineLayer(nn.Module):
-    def __init__(self, config, local, always_attend_to_first_position, first_position_attends_to_all,
-                    attend_from_chunk_width, attend_from_chunk_stride, attend_to_chunk_width, attend_to_chunk_stride):
+    def __init__(
+        self,
+        config,
+        local,
+        always_attend_to_first_position,
+        first_position_attends_to_all,
+        attend_from_chunk_width,
+        attend_from_chunk_stride,
+        attend_to_chunk_width,
+        attend_to_chunk_stride,
+    ):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = CanineAttention(config, local, always_attend_to_first_position, first_position_attends_to_all,
-                    attend_from_chunk_width, attend_from_chunk_stride, attend_to_chunk_width, attend_to_chunk_stride)
+        self.attention = CanineAttention(
+            config,
+            local,
+            always_attend_to_first_position,
+            first_position_attends_to_all,
+            attend_from_chunk_width,
+            attend_from_chunk_stride,
+            attend_to_chunk_width,
+            attend_to_chunk_stride,
+        )
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
-            self.crossattention = CanineAttention(config, local, always_attend_to_first_position, first_position_attends_to_all,
-                                    attend_from_chunk_width, attend_from_chunk_stride, attend_to_chunk_width, attend_to_chunk_stride)
+            self.crossattention = CanineAttention(
+                config,
+                local,
+                always_attend_to_first_position,
+                first_position_attends_to_all,
+                attend_from_chunk_width,
+                attend_from_chunk_stride,
+                attend_to_chunk_width,
+                attend_to_chunk_stride,
+            )
         self.intermediate = CanineIntermediate(config)
         self.output = CanineOutput(config)
 
@@ -767,12 +798,34 @@ class CanineLayer(nn.Module):
 
 
 class CanineEncoder(nn.Module):
-    def __init__(self, config, local=False, always_attend_to_first_position=False, first_position_attends_to_all=False,
-          attend_from_chunk_width=128, attend_from_chunk_stride=128, attend_to_chunk_width=128, attend_to_chunk_stride=128):
+    def __init__(
+        self,
+        config,
+        local=False,
+        always_attend_to_first_position=False,
+        first_position_attends_to_all=False,
+        attend_from_chunk_width=128,
+        attend_from_chunk_stride=128,
+        attend_to_chunk_width=128,
+        attend_to_chunk_stride=128,
+    ):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([CanineLayer(config, local, always_attend_to_first_position, first_position_attends_to_all,
-          attend_from_chunk_width, attend_from_chunk_stride, attend_to_chunk_width, attend_to_chunk_stride) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList(
+            [
+                CanineLayer(
+                    config,
+                    local,
+                    always_attend_to_first_position,
+                    first_position_attends_to_all,
+                    attend_from_chunk_width,
+                    attend_from_chunk_stride,
+                    attend_to_chunk_width,
+                    attend_to_chunk_stride,
+                )
+                for _ in range(config.num_hidden_layers)
+            ]
+        )
 
     def forward(
         self,
@@ -929,8 +982,8 @@ class CanineOnlyMLMHead(nn.Module):
 
 class CaninePreTrainedModel(PreTrainedModel):
     """
-    An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = CanineConfig
@@ -939,7 +992,7 @@ class CaninePreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -956,14 +1009,15 @@ class CaninePreTrainedModel(PreTrainedModel):
 
 
 CANINE_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config (:class:`~transformers.CanineConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 CANINE_INPUTS_DOCSTRING = r"""
@@ -971,9 +1025,9 @@ CANINE_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.CanineTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`transformers.CanineTokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`):
@@ -992,8 +1046,8 @@ CANINE_INPUTS_DOCSTRING = r"""
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
@@ -1024,17 +1078,15 @@ CANINE_INPUTS_DOCSTRING = r"""
 class CanineModel(CaninePreTrainedModel):
     """
 
-    The model can behave as an encoder (with only self-attention) as well
-    as a decoder, in which case a layer of cross-attention is added between
-    the self-attention layers, following the architecture described in `Attention is
-    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani,
-    Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
+    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
+    cross-attention is added between the self-attention layers, following the architecture described in `Attention is
+    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
-    To behave as an decoder the model needs to be initialized with the
-    :obj:`is_decoder` argument of the configuration set to :obj:`True`.
-    To be used in a Seq2Seq model, the model needs to initialized with both :obj:`is_decoder`
-    argument and :obj:`add_cross_attention` set to :obj:`True`; an
-    :obj:`encoder_hidden_states` is then expected as an input to the forward pass.
+    To behave as an decoder the model needs to be initialized with the :obj:`is_decoder` argument of the configuration
+    set to :obj:`True`. To be used in a Seq2Seq model, the model needs to initialized with both :obj:`is_decoder`
+    argument and :obj:`add_cross_attention` set to :obj:`True`; an :obj:`encoder_hidden_states` is then expected as an
+    input to the forward pass.
     """
 
     def __init__(self, config, add_pooling_layer=True):
@@ -1042,15 +1094,19 @@ class CanineModel(CaninePreTrainedModel):
         self.config = config
         shallow_config = copy.deepcopy(config)
         shallow_config.num_hidden_layers = 1
-        
+
         self.char_embeddings = CanineEmbeddings(config)
         # shallow/low-dim transformer encoder to get a initial character encoding
-        self.initial_char_encoder = CanineEncoder(shallow_config, local=True, always_attend_to_first_position=False,
-                          first_position_attends_to_all=False,
-                          attend_from_chunk_width=config.local_transformer_stride,
-                          attend_from_chunk_stride=config.local_transformer_stride,
-                          attend_to_chunk_width=config.local_transformer_stride,
-                          attend_to_chunk_stride=config.local_transformer_stride)
+        self.initial_char_encoder = CanineEncoder(
+            shallow_config,
+            local=True,
+            always_attend_to_first_position=False,
+            first_position_attends_to_all=False,
+            attend_from_chunk_width=config.local_transformer_stride,
+            attend_from_chunk_stride=config.local_transformer_stride,
+            attend_to_chunk_width=config.local_transformer_stride,
+            attend_to_chunk_stride=config.local_transformer_stride,
+        )
         self.chars_to_molecules = CharactersToMolecules(config)
         # deep transformer encoder
         self.encoder = CanineEncoder(config)
@@ -1063,19 +1119,21 @@ class CanineModel(CaninePreTrainedModel):
         self.init_weights()
 
     def _prune_heads(self, heads_to_prune):
-        """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-        See base class PreTrainedModel
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
-    
+
     def _create_3d_attention_mask_from_input_mask(self, from_tensor, to_mask):
-        """Create 3D attention mask from a 2D tensor mask.
-        
+        """
+        Create 3D attention mask from a 2D tensor mask.
+
         Args:
             from_tensor: 2D or 3D Tensor of shape [batch_size, from_seq_length, ...].
             to_mask: int32 Tensor of shape [batch_size, to_seq_length].
+
         Returns:
             float Tensor of shape [batch_size, from_seq_length, to_seq_length].
         """
@@ -1096,7 +1154,7 @@ class CanineModel(CaninePreTrainedModel):
         mask = broadcast_ones * to_mask
 
         return mask
-    
+
     def _downsample_attention_mask(self, char_attention_mask: torch.Tensor, downsampling_rate: int):
         """Downsample 2D character attention mask to 2D molecule attention mask using MaxPool1d layer."""
 
@@ -1105,13 +1163,15 @@ class CanineModel(CaninePreTrainedModel):
         poolable_char_mask = torch.reshape(char_attention_mask, (batch_size, 1, char_seq_len))
 
         # next, apply MaxPool1d to get pooled_molecule_mask of shape (batch_size, 1, mol_seq_len)
-        pooled_molecule_mask = torch.nn.MaxPool1d(kernel_size=downsampling_rate, stride=downsampling_rate)(poolable_char_mask.float())
+        pooled_molecule_mask = torch.nn.MaxPool1d(kernel_size=downsampling_rate, stride=downsampling_rate)(
+            poolable_char_mask.float()
+        )
 
         # finally, squeeze to get tensor of shape (batch_size, mol_seq_len)
         molecule_attention_mask = torch.squeeze(pooled_molecule_mask, dim=-1)
 
         return molecule_attention_mask
-    
+
     def _repeat_molecules(self, molecules: torch.Tensor, char_seq_length: torch.Tensor) -> torch.Tensor:
         """Repeats molecules to make them the same length as the char sequence."""
 
@@ -1131,11 +1191,12 @@ class CanineModel(CaninePreTrainedModel):
             last_molecule,
             # +1 molecule to compensate for truncation.
             repeats=remainder_length + rate,
-            dim=-2)
+            dim=-2,
+        )
 
         # `repeated`: [batch_size, char_seq_len, molecule_hidden_size]
         return torch.cat([repeated, remainder_repeated], dim=-2)
-    
+
     @add_start_docstrings_to_model_forward(CANINE_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -1161,12 +1222,11 @@ class CanineModel(CaninePreTrainedModel):
     ):
         r"""
         encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-            if the model is configured as a decoder.
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
         encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask
-            is used in the cross-attention if the model is configured as a decoder.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -1205,7 +1265,7 @@ class CanineModel(CaninePreTrainedModel):
 
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-        
+
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
         if token_type_ids is None:
@@ -1214,10 +1274,13 @@ class CanineModel(CaninePreTrainedModel):
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
-        molecule_attention_mask = self._downsample_attention_mask(attention_mask, downsampling_rate=self.config.downsampling_rate)
-        extended_molecule_attention_mask: torch.Tensor = self.get_extended_attention_mask(molecule_attention_mask, 
-                                                    (batch_size, molecule_attention_mask.shape[-1]), device)
-        
+        molecule_attention_mask = self._downsample_attention_mask(
+            attention_mask, downsampling_rate=self.config.downsampling_rate
+        )
+        extended_molecule_attention_mask: torch.Tensor = self.get_extended_attention_mask(
+            molecule_attention_mask, (batch_size, molecule_attention_mask.shape[-1]), device
+        )
+
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.is_decoder and encoder_hidden_states is not None:
@@ -1244,14 +1307,14 @@ class CanineModel(CaninePreTrainedModel):
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
-        
-        # Contextualize character embeddings using shallow Transformer. 
+
+        # Contextualize character embeddings using shallow Transformer.
         # We use a 3D attention mask for the local attention.
         # `input_char_encoding`: shape (batch_size, char_seq_len, char_dim)
         char_attention_mask = self._create_3d_attention_mask_from_input_mask(input_ids, attention_mask)
         init_chars_encoder_outputs = self.initial_char_encoder(input_char_embeddings, char_attention_mask)
         input_char_encoding = init_chars_encoder_outputs.last_hidden_state
-        
+
         # Downsample chars to molecules.
         # The following lines have dimensions: [batch, molecule_seq, molecule_dim].
         # In this transformation, we change the dimensionality from `char_dim` to
@@ -1266,8 +1329,8 @@ class CanineModel(CaninePreTrainedModel):
         # region of the model; using a convolution here resolves this issue. From
         # this, it seems that molecules and characters require a very different
         # feature space; intuitively, this makes sense.
-        init_molecule_encoding = self.chars_to_molecules(input_char_encoding) 
-        
+        init_molecule_encoding = self.chars_to_molecules(input_char_encoding)
+
         # Deep BERT encoder
         # `molecule_sequence_output`: shape (batch_size, mol_seq_len, mol_dim)
         encoder_outputs = self.encoder(
@@ -1289,11 +1352,11 @@ class CanineModel(CaninePreTrainedModel):
         # `repeated_molecules`: shape (batch_size, char_seq_len, mol_hidden_size)
         repeated_molecules = self._repeat_molecules(molecule_sequence_output, char_seq_length=input_shape[-1])
 
-        # Concatenate representations (contextualized char embeddings and repeated molecules): 
+        # Concatenate representations (contextualized char embeddings and repeated molecules):
         # `concat`: shape [batch_size, char_seq_len, molecule_hidden_size+char_hidden_final]
         concat = torch.cat([input_char_encoding, repeated_molecules], dim=-1)
 
-        # Project representation dimension back to hidden_size 
+        # Project representation dimension back to hidden_size
         # `sequence_output`: shape (batch_size, char_seq_len, hidden_size])
         sequence_output = self.projection(concat)
 
@@ -1301,7 +1364,7 @@ class CanineModel(CaninePreTrainedModel):
         # `sequence_output`: shape (batch_size, char_seq_len, hidden_size])
         final_chars_encoder_outputs = self.final_char_encoder(sequence_output, extended_attention_mask)
         sequence_output = final_chars_encoder_outputs.last_hidden_state
-        
+
         if not return_dict:
             return (sequence_output,) + encoder_outputs[1:]
 
@@ -1361,10 +1424,9 @@ class CanineForMaskedLM(CaninePreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss.
-            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-            in ``[0, ..., config.vocab_size]``.
+            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
+            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1443,22 +1505,22 @@ class CanineForCausalLM(CaninePreTrainedModel):
     @add_start_docstrings_to_model_forward(CANINE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            inputs_embeds=None,
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            head_mask=None,
-            cross_attn_head_mask=None,
-            past_key_values=None,
-            labels=None,
-            use_cache=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        inputs_embeds=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        head_mask=None,
+        cross_attn_head_mask=None,
+        past_key_values=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
@@ -1558,20 +1620,24 @@ class CanineForCausalLM(CaninePreTrainedModel):
     def _reorder_cache(self, past, beam_idx):
         reordered_past = ()
         for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],)
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+            )
         return reordered_past
 
 
 @add_start_docstrings(
-    """CANINE Model transformer with a sequence classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for GLUE tasks. """,
+    """
+    CANINE Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    output) e.g. for GLUE tasks.
+    """,
     CANINE_START_DOCSTRING,
 )
 class CanineForSequenceClassification(CaninePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        
+
         self.canine = CanineModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
@@ -1586,23 +1652,22 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
-            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1645,9 +1710,12 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 @add_start_docstrings(
-    """CANINE Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    """
+    CANINE Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    softmax) e.g. for RocStories/SWAG tasks.
+    """,
     CANINE_START_DOCSTRING,
 )
 class CanineForMultipleChoice(CaninePreTrainedModel):
@@ -1668,23 +1736,23 @@ class CanineForMultipleChoice(CaninePreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices-1]`` where :obj:`num_choices` is the size of the second dimension
-            of the input tensors. (See :obj:`input_ids` above)
+            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
+            num_choices-1]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
+            :obj:`input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -1735,8 +1803,10 @@ class CanineForMultipleChoice(CaninePreTrainedModel):
 
 
 @add_start_docstrings(
-    """CANINE Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    """
+    CANINE Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """,
     CANINE_START_DOCSTRING,
 )
 class CanineForTokenClassification(CaninePreTrainedModel):
@@ -1772,8 +1842,8 @@ class CanineForTokenClassification(CaninePreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1821,8 +1891,10 @@ class CanineForTokenClassification(CaninePreTrainedModel):
 
 
 @add_start_docstrings(
-    """CANINE Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """
+    CANINE Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
     CANINE_START_DOCSTRING,
 )
 class CanineForQuestionAnswering(CaninePreTrainedModel):
@@ -1861,12 +1933,12 @@ class CanineForQuestionAnswering(CaninePreTrainedModel):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

@@ -12,7 +12,8 @@
 
 # #print(outputs.last_hidden_state.shape)
 
-from transformers import CanineTokenizer, CanineModel
+from transformers import CanineModel, CanineTokenizer
+
 
 tokenizer = CanineTokenizer()
 
