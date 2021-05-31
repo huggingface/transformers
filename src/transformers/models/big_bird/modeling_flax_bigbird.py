@@ -371,17 +371,15 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         attention_head_size = self.attention_head_size
         seed = self.seed
 
-        rsqrt_d = 1 / np.sqrt(attention_head_size)
+        rsqrt_d = 1 / jnp.sqrt(attention_head_size)
         attn_mask_penalty = -10000.0
 
         np.random.seed(seed)
         if from_seq_len in [1024, 3072, 4096]:  # old plans used in paper
-            rand_attn = [
-                self._bigbird_block_rand_mask(
+            rand_attn = self._bigbird_block_rand_mask(
                     self.max_seqlen, self.max_seqlen, from_block_size, to_block_size, n_rand_blocks, last_idx=1024
                 )[: (from_seq_len // from_block_size - 2)]
-                for _ in range(n_heads)
-            ]
+            broadcasted_rand_attn = [rand_attn for _ in range(n_heads)]
         else:
             if plan_from_length is None:
                 plan_from_length, plan_num_rand_blocks = self._get_rand_attn_plan(
@@ -397,29 +395,276 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
                 plan_from_length=plan_from_length,
                 plan_num_rand_blocks=plan_num_rand_blocks,
             )
+            # THIS is not supported currently
+            raise NotImplementedError
 
-        rand_attn = jnp.stack(rand_attn, axis=0)
-        rand_attn = jnp.broadcast_to(rand_attn, (bsz,) + rand_attn.shape)
+        broadcasted_rand_attn = jnp.stack(rand_attn, axis=0)
+        broadcasted_rand_attn = jnp.broadcast_to(broadcasted_rand_attn, (bsz,) + rand_attn.shape)
 
         rand_mask = self._create_rand_mask_from_inputs(
-            from_blocked_mask, to_blocked_mask, rand_attn, n_heads, n_rand_blocks, bsz, from_seq_len, from_block_size
+            from_blocked_mask, to_blocked_mask, broadcasted_rand_attn, n_heads, n_rand_blocks, bsz, from_seq_len, from_block_size
         )
 
         blocked_query_matrix = query_layer.reshape(bsz, n_heads, from_seq_len // from_block_size, from_block_size, -1)
         blocked_key_matrix = key_layer.reshape(bsz, n_heads, to_seq_len // to_block_size, to_block_size, -1)
         blocked_value_matrix = value_layer.reshape(bsz, n_heads, to_seq_len // to_block_size, to_block_size, -1)
 
-        # TODO: complete below
+        shape = (bsz, n_heads, to_seq_len // to_block_size - 2, n_rand_blocks * to_block_size, -1)
+        gathered_key = self.jax_gather(blocked_key_matrix, rand_attn, batch_dims=2).reshape(*shape)
+        gathered_value = self.jax_gather(blocked_value_matrix, rand_attn, batch_dims=2).reshape(*shape)
 
-        context_layer = None
+        # 1st PART
+        # 1st block (global block) attention scores
+        # q[0] x (k[0], k[1], k[2], k[3], k[4] .... )
+
+        # [bsz, n_heads, from_block_size, -1] x [bsz, n_heads, to_seq_len, -1] ==> [bsz, n_heads, from_block_size, to_seq_len]
+        first_product = jnp.einsum("bhqd,bhkd->bhqk", blocked_query_matrix[:, :, 0], key_layer)
+
+        first_product = first_product * rsqrt_d
+        first_product += (1.0 - to_mask) * attn_mask_penalty
+        first_attn_weights = jax.nn.softmax(first_product, axis=-1)  # [bsz, n_heads, from_block_size, to_seq_len]
+
+        # [bsz, n_heads, from_block_size, to_seq_len] x [bsz, n_heads, to_seq_len, -1] ==> [bsz, n_heads, from_block_size, -1]
+        first_context_layer = jnp.einsum("bhqk,bhkd->bhqd", first_attn_weights, value_layer)
+        first_context_layer = jnp.expand_dims(first_context_layer, 2)
+
+        # 2nd PART
+        # 2nd block attention scores
+        # q[1] x (sliding_keys, random_keys, global_keys)
+        # sliding key blocks -> 2nd, 3rd blocks
+        # global key blocks -> 1st block
+
+        second_key_mat = jnp.concatenate(
+            [
+                blocked_key_matrix[:, :, 0],
+                blocked_key_matrix[:, :, 1],
+                blocked_key_matrix[:, :, 2],
+                blocked_key_matrix[:, :, -1],
+                gathered_key[:, :, 0],
+            ],
+            axis=2,
+        )  # [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1]
+        second_value_mat = jnp.concatenate(
+            [
+                blocked_value_matrix[:, :, 0],
+                blocked_value_matrix[:, :, 1],
+                blocked_value_matrix[:, :, 2],
+                blocked_value_matrix[:, :, -1],
+                gathered_value[:, :, 0],
+            ],
+            axis=2,
+        )  # [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1]
+
+        # [bsz, n_heads, from_block_size, -1] x [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1] ==> [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size]
+        second_product = jnp.einsum("bhqd,bhkd->bhqk", blocked_query_matrix[:, :, 1], second_key_mat)
+        second_seq_pad = jnp.concatenate(
+            [
+                to_mask[:, :, :, : 3 * to_block_size],
+                to_mask[:, :, :, -to_block_size:],
+                jnp.ones([bsz, 1, 1, n_rand_blocks * to_block_size], dtype=to_mask.dtype),
+            ],
+            axis=3,
+        )
+        second_rand_pad = jnp.concatenate(
+            [
+                jnp.ones([bsz, n_heads, from_block_size, 4 * to_block_size], dtype=rand_mask.dtype),
+                rand_mask[:, :, 0],
+            ],
+            axis=3,
+        )
+        second_product = second_product * rsqrt_d
+        second_product += (1.0 - jnp.minimum(second_seq_pad, second_rand_pad)) * attn_mask_penalty
+        second_attn_weights = jax.nn.softmax(
+            second_product, axis=-1
+        )  # [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size]
+
+        # [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size] x [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1] ==> [bsz, n_heads, from_block_size, -1]
+        second_context_layer = jnp.einsum("bhqk,bhkd->bhqd", second_attn_weights, second_value_mat)
+        second_context_layer = jnp.expand_dims(second_context_layer, 2)
+
+        # 3rd PART
+        # Middle blocks attention scores
+        # q[-2:2] x (sliding_keys, random_keys, global_keys)
+        # sliding attn is calculated using special trick of shifting tokens as discussed in paper
+        # random keys are generated by taking random indices as per `rand_attn`
+        # global keys -> 1st & last block
+
+        exp_blocked_key_matrix = jnp.concatenate(
+            [blocked_key_matrix[:, :, 1:-3], blocked_key_matrix[:, :, 2:-2], blocked_key_matrix[:, :, 3:-1]], axis=3
+        )  # [bsz, n_heads, from_seq_len//from_block_size-4, 3*to_block_size, -1]
+        exp_blocked_value_matrix = jnp.concatenate(
+            [blocked_value_matrix[:, :, 1:-3], blocked_value_matrix[:, :, 2:-2], blocked_value_matrix[:, :, 3:-1]],
+            axis=3,
+        )  # [bsz, n_heads, from_seq_len//from_block_size-4, 3*to_block_size, -1]
+        middle_query_matrix = blocked_query_matrix[:, :, 2:-2]
+
+        # sliding attention scores for q[-2:2]
+        # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1] x [b, n_heads, from_seq_len//from_block_size-4, 3*to_block_size, -1]
+        inner_band_product = jnp.einsum("bhlqd,bhlkd->bhlqk", middle_query_matrix, exp_blocked_key_matrix)
+        #     ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, 3*to_block_size]
+        inner_band_product = inner_band_product * rsqrt_d
+
+        # randn attention scores for q[-2:2]
+        # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1] x [bsz, n_heads, from_seq_len//from_block_size-4, n_rand_blocks*to_block_size, -1]
+        rand_band_product = jnp.einsum("bhlqd,bhlkd->bhlqk", middle_query_matrix, gathered_key[:, :, 1:-1])
+        #     ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, n_rand_blocks*to_block_size]
+        rand_band_product = rand_band_product * rsqrt_d
+
+        # Including 1st block (since it's global)
+        first_band_product = jnp.einsum(
+            "bhlqd,bhkd->bhlqk", middle_query_matrix, blocked_key_matrix[:, :, 0]
+        )  # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1] x [bsz, n_heads, to_block_size, -1] ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, to_block_size]
+        first_band_product = first_band_product * rsqrt_d
+
+        # Including last block (since it's global)
+        last_band_product = jnp.einsum(
+            "bhlqd,bhkd->bhlqk", middle_query_matrix, blocked_key_matrix[:, :, -1]
+        )  # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1] x [bsz, n_heads, to_block_size, -1] ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, to_block_size]
+        last_band_product = last_band_product * rsqrt_d
+
+        # masking padded tokens
+        inner_band_product += (1.0 - band_mask) * attn_mask_penalty
+        first_band_product += (1.0 - jnp.expand_dims(to_mask[:, :, :, :to_block_size], 3)) * attn_mask_penalty
+        last_band_product += (1.0 - jnp.expand_dims(to_mask[:, :, :, -to_block_size:], 3)) * attn_mask_penalty
+        rand_band_product += (1.0 - rand_mask[:, :, 1:-1]) * attn_mask_penalty
+
+        # completing attention scores matrix for all q[-2:2]
+        band_product = jnp.concatenate(
+            [first_band_product, inner_band_product, rand_band_product, last_band_product], axis=-1
+        )  # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, (5+n_rand_blocks)*to_block_size]
+
+        # safely doing softmax since attention matrix is completed
+        attn_weights = jax.nn.softmax(
+            band_product, axis=-1
+        )  # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, (5+n_rand_blocks)*to_block_size]
+
+        # contribution of sliding keys
+        # [bsz, n_heads, m//from_block_size-4, from_block_size, 3*to_block_size] x [bsz, n_heads, from_seq_len//from_block_size-4, 3*to_block_size, -1]
+        context_layer = jnp.einsum(
+            "bhlqk,bhlkd->bhlqd",
+            attn_weights[:, :, :, :, to_block_size : 4 * to_block_size], exp_blocked_value_matrix
+        )
+        #     ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1]
+
+        # adding contribution of random keys
+        # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, n_rand_blocks*to_block_size] x [bsz, n_heads, from_seq_len//from_block_size-4, n_rand_blocks*to_block_size, -1]
+        context_layer += jnp.einsum(
+            "bhlqk,bhlkd->bhlqd",
+            attn_weights[:, :, :, :, 4 * to_block_size : -to_block_size], gathered_value[:, :, 1:-1]
+        )
+        #     ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1]
+
+        # adding contribution of global keys
+        context_layer += jnp.einsum(
+            "bhlqk,bhkd->bhlqd", attn_weights[:, :, :, :, :to_block_size], blocked_value_matrix[:, :, 0]
+        )  # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, to_block_size] x [bsz, n_heads, to_block_size, -1] ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1]
+        context_layer += jnp.einsum(
+            "bhlqk,bhkd->bhlqd", attn_weights[:, :, :, :, -to_block_size:], blocked_value_matrix[:, :, -1]
+        )  # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, to_block_size] x [bsz, n_heads, to_block_size, -1] ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1]
+
+        # 4th PART
+        # last 2nd token attention scores
+        # q[-2] x (sliding_keys, random_keys, global_keys)
+        # sliding key blocks -> last 3 blocks
+        # global key block -> 1st block
+        # random key block -> based on indices stored in `randn_attn`
+
+        second_last_key_mat = jnp.concatenate(
+            [
+                blocked_key_matrix[:, :, 0],
+                blocked_key_matrix[:, :, -3],
+                blocked_key_matrix[:, :, -2],
+                blocked_key_matrix[:, :, -1],
+                gathered_key[:, :, -1],
+            ],
+            axis=2,
+        )  # [bsz, n_heads, (4+n_random_blocks)*to_block_size, -1]
+        second_last_value_mat = jnp.concatenate(
+            [
+                blocked_value_matrix[:, :, 0],
+                blocked_value_matrix[:, :, -3],
+                blocked_value_matrix[:, :, -2],
+                blocked_value_matrix[:, :, -1],
+                gathered_value[:, :, -1],
+            ],
+            axis=2,
+        )  # [bsz, n_heads, (4+r)*to_block_size, -1]
+
+        # [bsz, n_heads, from_block_size, -1] x [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1] ==> [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size]
+        second_last_product = jnp.einsum("bhqd,bhkd->bhqk", blocked_query_matrix[:, :, -2], second_last_key_mat)
+        second_last_seq_pad = jnp.concatenate(
+            [
+                to_mask[:, :, :, :to_block_size],
+                to_mask[:, :, :, -3 * to_block_size :],
+                to_mask.new_ones([bsz, 1, 1, n_rand_blocks * to_block_size]),
+            ],
+            axis=3,
+        )
+        second_last_rand_pad = jnp.concatenate(
+            [
+                rand_mask.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]),
+                rand_mask[:, :, -1],
+            ],
+            axis=3,
+        )
+        second_last_product = second_last_product * rsqrt_d
+        second_last_product += (1.0 - jnp.minimum(second_last_seq_pad, second_last_rand_pad)) * attn_mask_penalty
+        second_last_attn_weights = jax.nn.softmax(
+            second_last_product, axis=-1
+        )  # [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size]
+
+        # [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size] x [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1] ==> [bsz, n_heads, from_block_size, -1]
+        second_last_context_layer = jnp.einsum("bhqk,bhkd->bhqd", second_last_attn_weights, second_last_value_mat)
+        second_last_context_layer = jnp.expand_dims(second_last_context_layer, 2)
+
+        # 5th PART
+        # last block (global) attention scores
+        # q[-1] x (k[0], k[1], k[2], k[3], .... )
+
+        # [bsz, n_heads, from_block_size, -1] x [bsz, n_heads, to_seq_len, -1] ==> [bsz, n_heads, from_block_size, to_seq_len]
+        last_product = jnp.einsum("bhqd,bhkd->bhqk", blocked_query_matrix[:, :, -1], key_layer)
+        last_product = last_product * rsqrt_d
+        last_product += (1.0 - to_mask) * attn_mask_penalty
+        last_attn_weights = jax.nn.softmax(last_product, axis=-1)  # [bsz, n_heads, from_block_size, n]
+
+        # [bsz, n_heads, from_block_size, to_seq_len] x [bsz, n_heads, to_seq_len, -1] ==> [bsz, n_heads, from_block_size, -1]
+        last_context_layer = jnp.einsum("bhqk,bhkd->bhqd", last_attn_weights, value_layer)
+        last_context_layer = jnp.expand_dims(last_context_layer, 2)
+
+        # combining representations of all tokens
+        context_layer = jnp.concatenate(
+            [first_context_layer, second_context_layer, context_layer, second_last_context_layer, last_context_layer],
+            axis=2,
+        )
+        context_layer = context_layer.reshape(bsz, n_heads, from_seq_len, -1) * from_mask
+        context_layer = jnp.transpose(context_layer, (1, 2)).reshape(bsz, from_seq_len, -1)
+
         attention_probs = None
+
         return context_layer, attention_probs
 
     @staticmethod
+    def jax_gather(params, indices, batch_dims=2):
+        """
+        Gather the indices from params correctly (equivalent to tf.gather but with modifications)
+
+        Args:
+            params: (bsz, n_heads, num_blocks, block_size, head_dim)
+            indices: (<num_blocks, 1)
+        """
+        def _jax_gather(params, indices):
+            return params[indices]
+
+        for _ in range(batch_dims):
+            _jax_gather = jax.vmap(_jax_gather, in_axes=(0, None))
+
+        return _jax_gather(params, indices) # params.shape[:batch_dims] + indices.shape + params.shape[batch_dims+1:]
+
     def _create_rand_mask_from_inputs(
+        self,
         from_blocked_mask,
         to_blocked_mask,
-        rand_attn,
+        broadcasted_rand_attn,
         num_attention_heads,
         num_random_blocks,
         batch_size,
@@ -430,12 +675,9 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         Create 3D attention mask from a 2D tensor mask.
 
         Args:
-            from_blocked_mask: 2D Tensor of shape [batch_size,
-            from_seq_length//from_block_size, from_block_size].
-            to_blocked_mask: int32 Tensor of shape [batch_size,
-            to_seq_length//to_block_size, to_block_size].
-            rand_attn: [batch_size, num_attention_heads,
-            from_seq_length//from_block_size-2, num_rand_blocks]
+            from_blocked_mask: 2D Tensor of shape [batch_size, from_seq_length//from_block_size, from_block_size].
+            to_blocked_mask: int32 Tensor of shape [batch_size, to_seq_length//to_block_size, to_block_size].
+            broadcasted_rand_attn: [batch_size, num_attention_heads, from_seq_length//from_block_size-2, num_rand_blocks]
             num_attention_heads: int. Number of attention heads.
             num_random_blocks: int. Number of random chunks per row.
             batch_size: int. Batch size for computation.
@@ -446,12 +688,11 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             float Tensor of shape [batch_size, num_attention_heads, from_seq_length//from_block_size-2,
             from_block_size, num_rand_blocks*to_block_size].
         """
-        # TODO: implement it
         num_windows = from_seq_length // from_block_size - 2
-        # rand_mask = torch.stack([p1[i1.flatten()] for p1, i1 in zip(to_blocked_mask, rand_attn)])
-        # rand_mask = rand_mask.view(batch_size, num_attention_heads, num_windows, num_random_blocks * from_block_size)
-        # rand_mask = torch.einsum("blq,bhlk->bhlqk", from_blocked_mask[:, 1:-1], rand_mask)
-        # return rand_mask
+        rand_mask = self.jax_gather(to_blocked_mask, broadcasted_rand_attn, batch_size=1)
+        rand_mask = rand_mask.reshape(batch_size, num_attention_heads, num_windows, num_random_blocks * from_block_size)
+        rand_mask = jnp.einsum("bhlq,bhlk->bhlqk", from_blocked_mask[:, 1:-1], rand_mask)
+        return rand_mask
 
     @staticmethod
     def _get_rand_attn_plan(from_seq_length, from_block_size, num_rand_blocks):
