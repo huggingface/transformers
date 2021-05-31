@@ -564,10 +564,10 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
     def test_inference_vqa_coco_pre(self):
         model = VisualBertForPreTraining.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
 
-        input_ids = torch.tensor([1, 2, 3, 4, 5, 6]).reshape(1, -1)
-        token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1]).reshape(1, -1)
+        input_ids = torch.tensor([1, 2, 3, 4, 5, 6], dtype=torch.long).reshape(1, -1)
+        token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1], dtype=torch.long).reshape(1, -1)
         visual_embeds = torch.ones(size=(1, 10, 2048), dtype=torch.float32) * 0.5
-        visual_token_type_ids = torch.ones(size=(1, 10), dtype=torch.int32)
+        visual_token_type_ids = torch.ones(size=(1, 10), dtype=torch.long)
         attention_mask = torch.tensor([1] * 6).reshape(1, -1)
         visual_attention_mask = torch.tensor([1] * 10).reshape(1, -1)
 
@@ -602,10 +602,10 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
     def test_inference_vqa(self):
         model = VisualBertForQuestionAnswering.from_pretrained("uclanlp/visualbert-vqa")
 
-        input_ids = torch.tensor([1, 2, 3, 4, 5, 6]).reshape(1, -1)
-        token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1]).reshape(1, -1)
+        input_ids = torch.tensor([1, 2, 3, 4, 5, 6], dtype=torch.long).reshape(1, -1)
+        token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1], dtype=torch.long).reshape(1, -1)
         visual_embeds = torch.ones(size=(1, 10, 2048), dtype=torch.float32) * 0.5
-        visual_token_type_ids = torch.ones(size=(1, 10), dtype=torch.int32)
+        visual_token_type_ids = torch.ones(size=(1, 10), dtype=torch.long)
         attention_mask = torch.tensor([1] * 6).reshape(1, -1)
         visual_attention_mask = torch.tensor([1] * 10).reshape(1, -1)
 
@@ -633,10 +633,10 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
     def test_inference_nlvr(self):
         model = VisualBertForVisualReasoning.from_pretrained("uclanlp/visualbert-nlvr2")
 
-        input_ids = torch.tensor([1, 2, 3, 4, 5, 6]).reshape(1, -1)
-        token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1]).reshape(1, -1)
+        input_ids = torch.tensor([1, 2, 3, 4, 5, 6], dtype=torch.long).reshape(1, -1)
+        token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1], dtype=torch.long).reshape(1, -1)
         visual_embeds = torch.ones(size=(1, 10, 1024), dtype=torch.float32) * 0.5
-        visual_token_type_ids = torch.ones(size=(1, 10), dtype=torch.int32)
+        visual_token_type_ids = torch.ones(size=(1, 10), dtype=torch.long)
         attention_mask = torch.tensor([1] * 6).reshape(1, -1)
         visual_attention_mask = torch.tensor([1] * 10).reshape(1, -1)
 
@@ -662,12 +662,12 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
     def test_inference_vcr(self):
         model = VisualBertForMultipleChoice.from_pretrained("uclanlp/visualbert-vcr")
 
-        input_ids = torch.tensor([[[1, 2, 3, 4, 5, 6] for i in range(4)]])
+        input_ids = torch.tensor([[[1, 2, 3, 4, 5, 6] for i in range(4)]], dtype=torch.long)
         attention_mask = torch.ones_like(input_ids)
         token_type_ids = torch.ones_like(input_ids)
 
         visual_embeds = torch.ones(size=(1, 4, 10, 512), dtype=torch.float32) * 0.5
-        visual_token_type_ids = torch.ones(size=(1, 4, 10), dtype=torch.int32)
+        visual_token_type_ids = torch.ones(size=(1, 4, 10), dtype=torch.long)
         visual_attention_mask = torch.ones_like(visual_token_type_ids)
 
         output = model(
