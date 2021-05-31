@@ -13,33 +13,217 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for CANINE."""
+
+from typing import Dict, List, Text, Optional
+
 from ...utils import logging
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "google/canine-s": "https://huggingface.co/google/canine-s/resolve/main/vocab.txt",
-    }
-}
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/canine-s": 16384,
+    "nielsr/canine-s": 2048,
+}
+
+# Below: Constants defining canonical codepoints for special, pseudo-characters.
+# Copied from https://github.com/google-research/language/blob/master/language/canine/special_codepoints.py
+PAD = 0
+
+CLS = 0xE000
+SEP = 0xE001
+BOS = 0xE002
+MASK = 0xE003
+RESERVED = 0xE004
+
+# Maps special codepoints to human-readable names.
+SPECIAL_CODEPOINTS: Dict[int, Text] = {
+    # Special symbols are represented using codepoints values that are valid,
+    # but designated as "Private Use", meaning that they will never by assigned
+    # characters by the Unicode Consortium, and are thus safe for use here.
+    #
+    # NOTE: Do *NOT* add any sort of [UNK_CHAR] here. They are explicitly
+    # excluded and should fail with a hard error.
+    CLS: "[CLS]",
+    SEP: "[SEP]",
+    BOS: "[BOS]",
+    MASK: "[MASK]",
+    PAD: "[PAD]",
+    RESERVED: "[RESERVED]",
+}
+
+# Maps special codepoint human-readable names to their codepoint values.
+SPECIAL_CODEPOINTS_BY_NAME: Dict[Text, int] = {
+    name: codepoint for codepoint, name in SPECIAL_CODEPOINTS.items()
 }
 
 
 class CanineTokenizer(PreTrainedTokenizer):
     r"""
-    Construct a CANINE tokenizer.
+    Construct a CANINE tokenizer (i.e. a character splitter).
 
     :class:`~transformers.CanineTokenizer` inherits from :class:`~transformers.PreTrainedTokenizer`.
 
     Refer to superclass :class:`~transformers.PreTrainedTokenizer` for usage examples and documentation concerning
     parameters.
+
+    Args: 
+        model_max_length (:obj:`int`, `optional`, defaults to 2048):
+                The maximum sentence length the model accepts.
     """
 
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+
+    def __init__(
+        self,
+        bos_token="[CLS]",
+        eos_token="[SEP]",
+        sep_token="[SEP]",
+        cls_token="[CLS]",
+        pad_token="[PAD]",
+        mask_token="[MASK]",
+        add_prefix_space=False,
+        model_max_length=2048,
+        **kwargs
+    ):
+        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
+        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
+        sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
+        cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
+        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+
+        # Mask token behave like a normal word, i.e. include the space before it
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
+            model_max_length=model_max_length,
+            **kwargs,
+        )
+
+        # Creates a mapping for looking up the IDs of special symbols.
+        self._special_codepoints: Dict[Text, int] = {}
+        for codepoint, name in SPECIAL_CODEPOINTS.items():
+            self._special_codepoints[name] = codepoint
+
+        # Creates a mapping for looking up the string forms of special symbol IDs.
+        self._special_codepoint_strings: Dict[int, Text] = {
+            codepoint: name for name, codepoint in self._special_codepoints.items()
+        }
+
+    def _tokenize(self, text: str) -> List[str]:
+        """Tokenize a string (i.e. perform character splitting)."""
+        
+        pieces = [x for x in text]
+
+        return pieces
+
+    def _convert_token_to_id(self, token: str):
+        """Converts a token (i.e. a Unicode character) in an id (i.e. its integer Unicode code point value)."""
+        
+        if token in self._special_codepoints:
+            return self._special_codepoints[token]
+        try:
+            return ord(token)
+        except TypeError:
+            raise ValueError(f"invalid token: '{token}'")
+
+    def _convert_id_to_token(self, index: int):
+        """Converts an integer Unicode code point (integer) in a token (str)."""
+        
+        if index in self._special_codepoint_strings:
+            return self._special_codepoint_strings[index]
+        try:
+            return chr(index)
+        except TypeError:
+            raise ValueError(f"invalid id: {index}")
+        
+    def convert_tokens_to_string(self, tokens):
+        out_string = "".join(tokens).strip()
+        return out_string
+
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. A CANINE sequence has the following format:
+        - single sequence: ``[CLS] X [SEP]``
+        - pair of sequences: ``[CLS] A [SEP] B [SEP]``
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Optional second list of IDs for sequence pairs.
+        Returns:
+            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+        """
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
+        if token_ids_1 is None:
+            return cls + token_ids_0 + sep
+        return cls + token_ids_0 + sep + token_ids_1 + sep
+
+    def get_special_tokens_mask(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+    ) -> List[int]:
+        """
+        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
+        special tokens using the tokenizer ``prepare_for_model`` method.
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs.
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Optional second list of IDs for sequence pairs.
+            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not the token list is already formatted with special tokens for the model.
+        Returns:
+            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+        """
+
+        if already_has_special_tokens:
+            return super().get_special_tokens_mask(
+                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+            )
+
+        if token_ids_1 is not None:
+            return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
+        return [1] + ([0] * len(token_ids_0)) + [1]
+
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A CANINE
+        sequence pair mask has the following format:
+        ::
+            0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+            | first sequence    | second sequence |
+        If :obj:`token_ids_1` is :obj:`None`, this method only returns the first portion of the mask (0s).
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs.
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Optional second list of IDs for sequence pairs.
+        Returns:
+            :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
+            sequence(s).
+        """
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
+
+        if token_ids_1 is None:
+            return len(cls + token_ids_0 + sep) * [0]
+        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
+
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None):
+        """CANINE does not require a vocabulary.
+        """
+        return ("", )
