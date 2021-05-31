@@ -284,26 +284,50 @@ def _set_if_auto(config, key, val):
 
 class DeepSpeedConfigHF:
     """
-    This object contains Deepspeed configuration and can be quickly queried for things like zero stage.
+    This object contains DeepSpeed configuration and can be quickly queried for things like zero stage.
 
-    We store a ``weakref`` of this object in the module's global to be able to access the config from areas where the
-    Trainer is not available (e.g. `from_pretrained` and `_get_resized_embeddings`).
+    We store a ``weakref`` of this object in the module's global to be able to access the config from areas where
+    things like the Trainer object is not available (e.g. `from_pretrained` and `_get_resized_embeddings`).
 
-    The ``DeepSpeedConfigHF`` object is meant to be created during ``TrainingArguments`` object creation and has the
-    same lifespan as the latter.
+    Args:
+        config_file_or_dict (:obj:`Union[str, Dict]`) - path to DeepSpeed config file or dict of the same.
+
     """
 
-    def __init__(self, args):
-        self.config = None
-        self.stage = 0
-        self.offload = False
+    def __init__(self, config_file_or_dict):
+        # set global weakref object
+        deepspeed_config_hf_set(self)
 
         dep_version_check("deepspeed")
 
-        self.config_process(args)
+        if isinstance(config_file_or_dict, dict):
+            # Don't modify user's data should they want to reuse it (e.g. in tests), because once we
+            # modified it, it will not be accepted here again, since `auto` values would have been overriden
+            config = deepcopy(config_file_or_dict)
+        elif isinstance(config_file_or_dict, str):
+            with io.open(config_file_or_dict, "r", encoding="utf-8") as f:
+                config = json.load(f)
+        else:
+            raise ValueError("expecting either a path to a DeepSpeed config file or a pre-populated dict")
+        self.config = config
 
-        # set global weakref object
-        deepspeed_config_hf_set(self)
+        # zero stage - this is done as early as possible, before model is created, to allow
+        # ``is_deepspeed_zero3_enabled`` query and getting to the early deepspeed config object
+        # during ``zero.Init()`` which needs whether fp16 is enabled, dtype, etc.
+        config_zero = config.get("zero_optimization", {})
+        self.stage = config_zero.get("stage", 0)
+
+        # offload
+        self.offload = False
+        config_zero = config.get("zero_optimization", {})
+        if self.is_zero2():
+            self.offload = _is_true(config_zero, "cpu_offload")
+        elif self.is_zero3():
+            offload_devices = ["cpu", "nvme"]
+            if config_zero.get("offload_optimizer", {}).get("device") in offload_devices:
+                self.offload = True
+            if config_zero.get("offload_param", {}).get("device") in offload_devices:
+                self.offload = True
 
     def is_zero2(self):
         return self.stage == 2
@@ -314,28 +338,23 @@ class DeepSpeedConfigHF:
     def is_offload(self):
         return self.offload
 
-    def config_process(self, args):
+
+class DeepSpeedConfigHFTrainer(DeepSpeedConfigHF):
+    """
+    The ``DeepSpeedConfigHFTrainer`` object is meant to be created during ``TrainingArguments`` object creation and has
+    the same lifespan as the latter.
+
+    """
+
+    def __init__(self, config_file_or_dict):
+        super().__init__(config_file_or_dict)
+
+    def trainer_config_process(self, args):
         """
-        1. load json if the ``args.deepspeed`` is a path
-        2. replace any ``auto`` values in the config with the correct or recommended value
-
-        This is done as early as possible, before model is created, to allow ``is_deepspeed_zero3_enabled`` query and
-        getting to the early deepspeed config object during ``zero.Init()`` which needs whether fp16 is enabled, dtype,
-        etc.
-
+        Adjust the config with ``TrainingArguments`` values. This stage is run during ``TrainingArguments`` object
+        creation.
         """
-        config_file_or_dict = args.deepspeed
-        if isinstance(config_file_or_dict, dict):
-            # Don't modify user's data should they want to reuse it (e.g. in tests), because once we
-            # modified it, it will not be accepted here again, since `auto` values would have been overriden
-            config = deepcopy(config_file_or_dict)
-        elif isinstance(config_file_or_dict, str):
-            with io.open(config_file_or_dict, "r", encoding="utf-8") as f:
-                config = json.load(f)
-        else:
-            raise ValueError("expecting either a path to a config file or a pre-populated dict")
-
-        self.config = config
+        config = self.config
 
         # DeepSpeed does:
         # train_batch_size = world_size * train_micro_batch_size_per_gpu * gradient_accumulation_steps
@@ -344,10 +363,6 @@ class DeepSpeedConfigHF:
         _set_if_auto(config, "gradient_accumulation_steps", args.gradient_accumulation_steps)
         _set_if_auto(config, "train_batch_size", train_batch_size)
         _set_if_auto(config, "gradient_clipping", args.max_grad_norm)
-
-        # zero
-        config_zero = config.get("zero_optimization", {})
-        self.stage = config_zero.get("stage", 0)
 
         config_optim = config.get("optimizer", {})
         if config_optim != {}:
@@ -363,7 +378,7 @@ class DeepSpeedConfigHF:
             _set_if_auto(config_sched_params, "warmup_min_lr", 0)
             _set_if_auto(config_sched_params, "warmup_max_lr", args.learning_rate)
             _set_if_auto(config_sched_params, "warmup_num_steps", args.warmup_steps)
-            # total_num_steps - will get set in deepspeed_init
+            # total_num_steps - will get set in trainer_config_finalize
 
         # fp16
         if args.fp16:
@@ -377,27 +392,16 @@ class DeepSpeedConfigHF:
         _set_if_auto(config_fp16, "enabled", fp16_backend == "amp")
 
         # apex: delegates amp work to apex (which needs to be available), but it cannot be used with any
-        # ZeRO features, so probably best to be avoided.
+        # ZeRO features
         config_amp = config.get("amp")
         _set_if_auto(config_amp, "enabled", fp16_backend == "apex")
         _set_if_auto(config_amp, "opt_level", args.fp16_opt_level)
 
-        config_zero = config.get("zero_optimization", {})
-        if self.is_zero2():
-            self.offload = _is_true(config_zero, "cpu_offload")
-        elif self.is_zero3():
-            offload_devices = ["cpu", "nvme"]
-            if config_zero.get("offload_optimizer", {}).get("device") in offload_devices:
-                self.offload = True
-            if config_zero.get("offload_param", {}).get("device") in offload_devices:
-                self.offload = True
-
-    def config_finalize(self, args, model, num_training_steps):
+    def trainer_config_finalize(self, args, model, num_training_steps):
         """
         This stage is run after we have the model and know num_training_steps.
 
         Now we we can complete the configuration process.
-
         """
         config = self.config
 
@@ -461,7 +465,7 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
     model = trainer.model
 
     deepspeed_config_hf = trainer.args.deepspeed_config_hf
-    deepspeed_config_hf.config_finalize(trainer.args, model, num_training_steps)
+    deepspeed_config_hf.trainer_config_finalize(trainer.args, model, num_training_steps)
 
     # resume config update - some bits like `model` and `num_training_steps` only become available during train
     config = deepspeed_config_hf.config
