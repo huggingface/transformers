@@ -203,8 +203,8 @@ SUPPORTED_TASKS = {
     },
     "conversational": {
         "impl": ConversationalPipeline,
-        "tf": TFAutoModelForCausalLM if is_tf_available() else None,
-        "pt": AutoModelForCausalLM if is_torch_available() else None,
+        "tf": (TFAutoModelForCausalLM, TFAutoModelForSeq2SeqLM) if is_tf_available() else None,
+        "pt": (AutoModelForCausalLM, AutoModelForSeq2SeqLM) if is_torch_available() else None,
         "default": {"model": {"pt": "microsoft/DialoGPT-medium", "tf": "microsoft/DialoGPT-medium"}},
     },
     "image-classification": {
@@ -389,18 +389,73 @@ def pipeline(
 
     model_name = model if isinstance(model, str) else None
 
-    # Infer the framework form the model
-    if framework is None:
-        framework, model = infer_framework_from_model(model, targeted_task, revision=revision, task=task)
-
-    task_class, model_class = targeted_task["impl"], targeted_task[framework]
-
     # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
     model_kwargs["use_auth_token"] = model_kwargs.get("use_auth_token", use_auth_token)
 
     # Instantiate config if needed
     if isinstance(config, str):
         config = AutoConfig.from_pretrained(config, revision=revision, _from_pipeline=task, **model_kwargs)
+
+    # Some pipelines can map to multiple AutoModelFor... classes
+    if (
+        isinstance(targeted_task.get("pt"), tuple)
+        or isinstance(targeted_task.get("tf"), tuple)
+        and isinstance(model, str)
+    ):
+        # we are overwriting `targeted_task` so let's make a copy first
+        # to avoid strange errors
+        targeted_task = targeted_task.copy()
+        config = AutoConfig.from_pretrained(model, revision=revision, _from_pipeline=task, **model_kwargs)
+
+        if config.architectures is None or len(config.architectures) == 0:
+            raise ValueError(
+                f"Cannot guess correct architecture from {model}. Please consider directly passing a model instance to `pipeline(...)`"
+            )
+
+        # architecture classes are always PyTorch
+        # and correct class should be in first spot
+        pt_model_class_name = config.architectures[0]
+
+        # extract correct PyTorch auto model class
+        if isinstance(targeted_task.get("pt"), tuple):
+            pt_model_class = None
+            for pt_model_class_candidate in targeted_task["pt"]:
+                if pt_model_class_name in set(
+                    cls.__name__ for cls in pt_model_class_candidate._model_mapping.values()
+                ):
+                    pt_model_class = pt_model_class_candidate
+                    break
+
+            if pt_model_class is None:
+                raise ValueError(
+                    f"{model} expects to be loaded by {pt_model_class_name}, but {pt_model_class_name} is not supported by possible auto models {targeted_task.get('pt')}"
+                )
+
+            targeted_task["pt"] = pt_model_class
+
+        # extract correct TensorFlow auto model class
+        if isinstance(targeted_task.get("tf"), tuple):
+            tf_model_class = None
+            tf_model_class_name = "TF" + pt_model_class_name
+            for tf_model_class_candidate in targeted_task["tf"]:
+                if tf_model_class_name in set(
+                    cls.__name__ for cls in tf_model_class_candidate._model_mapping.values()
+                ):
+                    tf_model_class = tf_model_class_candidate
+                    break
+
+            if tf_model_class is None:
+                raise ValueError(
+                    f"{model} expects to be loaded by {tf_model_class_name}, but {tf_model_class_name} is not supported by possible auto models {targeted_task.get('tf')}"
+                )
+
+            targeted_task["tf"] = tf_model_class
+
+    # Infer the framework form the model
+    if framework is None:
+        framework, model = infer_framework_from_model(model, targeted_task, revision=revision, task=task)
+
+    task_class, model_class = targeted_task["impl"], targeted_task[framework]
 
     # Instantiate model if needed
     if isinstance(model, str):
