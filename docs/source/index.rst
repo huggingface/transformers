@@ -465,6 +465,7 @@ Flax), PyTorch, and/or TensorFlow.
     main_classes/processors
     main_classes/tokenizer
     main_classes/trainer
+    main_classes/deepspeed
     main_classes/feature_extractor
 
 .. toctree::
