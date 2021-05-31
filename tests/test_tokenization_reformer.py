@@ -351,14 +351,15 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @slow
     def test_tokenizer_integration(self):
         # fmt: off
-        expected_encoding = {'input_ids': [[108, 265, 24, 111, 4, 258, 156, 7, 51, 279, 58, 7, 76, 25, 69, 278, 292, 5, 243, 264, 134, 17, 267, 77, 263, 22, 262, 297, 258, 304, 177, 279, 266, 14, 89, 13, 35, 261, 299, 272, 137, 275, 278]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # noqa: E501
+        expected_encoding = {'input_ids': [[108, 265, 24, 111, 4, 258, 156, 7, 51, 279, 58, 7, 76, 25, 69, 278], [140, 243, 264, 134, 17, 267, 77, 263, 22, 262, 297, 258, 304, 177, 279, 266, 14, 89, 13, 35, 261, 299, 272, 137, 275, 278]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # noqa: E501
         # fmt: on
 
         # This tokenizer does not know some characters like ")".
         # That is the reason why we use very simple texts here.
         # Also see https://github.com/huggingface/transformers/pull/11737#issuecomment-850769064
         sequences = [
-            "This is a very simple sentence." "The quick brown fox jumps over the lazy dog.",
+            "This is a very simple sentence.",
+            "The quick brown fox jumps over the lazy dog.",
         ]
 
         self.tokenizer_integration_test_util(
