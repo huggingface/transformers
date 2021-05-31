@@ -105,7 +105,7 @@ def convert_tf_checkpoint_to_pytorch(
         tokenizer.save_pretrained(f"{pytorch_dump_path}/question_encoder")
 
         print(f"Save tokenizer files to {pytorch_dump_path}/table_encoder")
-        tokenizer.save_pretrained(f"{pytorch_dump_path}/question_encoder")
+        tokenizer.save_pretrained(f"{pytorch_dump_path}/table_encoder")
     else:
         # Load weights from tf checkpoint
         load_tf_weights_in_tapas(model, config, tf_checkpoint_path)
