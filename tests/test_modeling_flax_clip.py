@@ -377,6 +377,42 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["input_ids", "pixel_values", "attention_mask", "position_ids"]
             self.assertListEqual(arg_names[:4], expected_arg_names)
 
+    def test_get_image_features(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = FlaxCLIPModel(config)
+
+        @jax.jit
+        def model_jitted(pixel_values):
+            return model.get_image_features(pixel_values=pixel_values).to_tuple()
+
+        with self.subTest("JIT Enabled"):
+            jitted_output = model_jitted(inputs_dict["pixel_values"])
+
+        with self.subTest("JIT Disabled"):
+            with jax.disable_jit():
+                output = model_jitted(inputs_dict["pixel_values"])
+
+        self.assertEqual(jitted_output.shape, output.shape)
+        self.assertTrue(np.all(jitted_output == output))
+
+    def test_get_text_features(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = FlaxCLIPModel(config)
+
+        @jax.jit
+        def model_jitted(input_ids, attention_mask, **kwargs):
+            return model.get_text_features(input_ids=input_ids, attention_mask=attention_mask).to_tuple()
+
+        with self.subTest("JIT Enabled"):
+            jitted_output = model_jitted(inputs_dict["pixel_values"])
+
+        with self.subTest("JIT Disabled"):
+            with jax.disable_jit():
+                output = model_jitted(inputs_dict["pixel_values"])
+
+        self.assertEqual(jitted_output.shape, output.shape)
+        self.assertTrue(np.all(jitted_output == output))
+
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
