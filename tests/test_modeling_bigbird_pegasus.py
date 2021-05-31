@@ -361,9 +361,11 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         model.generate(**input_dict)
         model.generate(**input_dict, do_sample=True, early_stopping=False, num_return_sequences=3)
 
+    @slow
     def test_batched_forward_original_full(self):
         self._check_batched_forward(attn_type="original_full")
 
+    @slow
     def test_batched_forward_block_sparse(self):
         self._check_batched_forward(attn_type="block_sparse", tolerance=1e-1)
 

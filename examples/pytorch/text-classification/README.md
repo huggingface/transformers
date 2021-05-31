@@ -45,7 +45,7 @@ python run_glue.py \
 where task name can be one of cola, sst2, mrpc, stsb, qqp, mnli, qnli, rte, wnli.
 
 We get the following results on the dev set of the benchmark with the previous commands (with an exception for MRPC and
-WNLI which are tiny and where we used 5 epochs isntead of 3). Trainings are seeded so you should obtain the same
+WNLI which are tiny and where we used 5 epochs instead of 3). Trainings are seeded so you should obtain the same
 results with PyTorch 1.6.0 (and close results with different versions), training times are given for information (a
 single Titan RTX was used):
 

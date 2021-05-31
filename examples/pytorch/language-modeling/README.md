@@ -161,3 +161,21 @@ concatenates all texts and then splits them in blocks of the same length).
 
 **Note:** On TPU, you should use the flag `--pad_to_max_length` in conjunction with the `--line_by_line` flag to make
 sure all your batches have the same length.
+
+
+## Creating a model on the fly
+
+When training a model from scratch, configuration values may be overridden with the help of `--config_overrides`:
+
+
+```bash
+python run_clm.py --model_type gpt2 --tokenizer_name gpt2 \ --config_overrides="n_embd=1024,n_head=16,n_layer=48,n_positions=102" \
+[...]
+```
+
+At the moment this is only available in `run_clm.py` but eventually should be copied to all other LM examples.
+
+This feature can also be used to activate gradient checkpointing by passing:
+```
+--config_overrides "gradient_checkpointing=true,use_cache=False"
+```
