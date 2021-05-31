@@ -149,6 +149,7 @@ class FlaxBigBirdEmbeddings(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
+    # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEmbeddings.setup
     def setup(self):
         self.word_embeddings = nn.Embed(
             self.config.vocab_size,
@@ -178,7 +179,7 @@ class FlaxBigBirdEmbeddings(nn.Module):
         token_type_embeddings = self.token_type_embeddings(token_type_ids.astype("i4"))
 
         if self.config.rescale_embeddings:
-            inputs_embeds *= self.config.hidden_size**.5
+            inputs_embeds *= self.config.hidden_size ** 0.5
 
         # Sum all embeddings
         hidden_states = inputs_embeds + token_type_embeddings + position_embeds
@@ -189,6 +190,9 @@ class FlaxBigBirdEmbeddings(nn.Module):
         return hidden_states
 
 
+# TODO: can't we add config.use_bias in FlaxBert to this copy
+
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertSelfAttention with Bert->BigBird
 class FlaxBigBirdSelfAttention(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -203,19 +207,16 @@ class FlaxBigBirdSelfAttention(nn.Module):
             self.config.hidden_size,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
-            use_bias=self.config.use_bias,
         )
         self.key = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
-            use_bias=self.config.use_bias,
         )
         self.value = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
-            use_bias=self.config.use_bias,
         )
 
     def __call__(self, hidden_states, attention_mask, deterministic=True, output_attentions: bool = False):
@@ -287,7 +288,16 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         self.block_size = self.config.block_size
         self.max_seqlen = self.config.max_position_embeddings
 
-    def __call__(self, hidden_states, band_mask=None, from_mask=None, to_mask=None, from_blocked_mask=None, to_blocked_mask=None, output_attentions=None):
+    def __call__(
+        self,
+        hidden_states,
+        band_mask=None,
+        from_mask=None,
+        to_mask=None,
+        from_blocked_mask=None,
+        to_blocked_mask=None,
+        output_attentions=None,
+    ):
 
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -346,7 +356,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         # attention is calculated separately for q[0], q[1], q[2:-2], q[-2], q[-1] in order to use special trick of shifting tokens (for calculating sliding attention)
         # hence following code can be divided into 5 parts.
 
-        self._configure_config_values() # TODO: confirm if: can call after __post_init__ 
+        self._configure_config_values()  # TODO: confirm if: can call after __post_init__
         bsz, _, from_seq_len, _ = query_layer.shape
         to_seq_len = key_layer.shape[2]
         from_block_size = to_block_size = self.block_size
@@ -389,7 +399,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             )
 
         rand_attn = jnp.stack(rand_attn, axis=0)
-        rand_attn = jnp.broadcast_to(rand_attn, (bsz, )+rand_attn.shape)
+        rand_attn = jnp.broadcast_to(rand_attn, (bsz,) + rand_attn.shape)
 
         rand_mask = self._create_rand_mask_from_inputs(
             from_blocked_mask, to_blocked_mask, rand_attn, n_heads, n_rand_blocks, bsz, from_seq_len, from_block_size
@@ -726,6 +736,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         return np.array(selected_random_blokcs, dtype=np.int32)
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertSelfOutput with Bert->BigBird
 class FlaxBigBirdSelfOutput(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -773,6 +784,7 @@ class FlaxBigBirdAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertIntermediate with Bert->BigBird
 class FlaxBigBirdIntermediate(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -791,6 +803,7 @@ class FlaxBigBirdIntermediate(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertOutput with Bert->BigBird
 class FlaxBigBirdOutput(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -843,7 +856,8 @@ class FlaxBigBirdLayerCollection(nn.Module):
 
     def setup(self):
         self.layers = [
-            FlaxBigBirdLayer(self.config, layer_id=i, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
+            FlaxBigBirdLayer(self.config, layer_id=i, name=str(i), dtype=self.dtype)
+            for i in range(self.config.num_hidden_layers)
         ]
 
     def __call__(
@@ -910,6 +924,7 @@ class FlaxBigBirdEncoder(nn.Module):
         )
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPredictionHeadTransform with Bert->BigBird
 class FlaxBigBirdPredictionHeadTransform(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
@@ -925,6 +940,7 @@ class FlaxBigBirdPredictionHeadTransform(nn.Module):
         return self.LayerNorm(hidden_states)
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLMPredictionHead with Bert->BigBird
 class FlaxBigBirdLMPredictionHead(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
@@ -947,6 +963,7 @@ class FlaxBigBirdLMPredictionHead(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertOnlyMLMHead with Bert->BigBird
 class FlaxBigBirdOnlyMLMHead(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
@@ -959,6 +976,7 @@ class FlaxBigBirdOnlyMLMHead(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertOnlyNSPHead with Bert->BigBird
 class FlaxBigBirdOnlyNSPHead(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
@@ -983,6 +1001,7 @@ class FlaxBigBirdPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPreTrainedModel with Bert->BigBird, BERT->BIG_BIRD
 class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -994,7 +1013,12 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
     module_class: nn.Module = None
 
     def __init__(
-        self, config: BigBirdConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
+        self,
+        config: BigBirdConfig,
+        input_shape: Tuple = (1, 1),
+        seed: int = 0,
+        dtype: jnp.dtype = jnp.float32,
+        **kwargs
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
@@ -1069,13 +1093,13 @@ class FlaxBigBirdModule(nn.Module):
 
     def setup(self):
         self.embeddings = FlaxBigBirdEmbeddings(self.config, dtype=self.dtype)
-        self.encoder = FlaxBigBirdEncoder(self.config, dtype=self.dtype)        
+        self.encoder = FlaxBigBirdEncoder(self.config, dtype=self.dtype)
         # TODO: figure out more on 👇
         if self.add_pooling_layer:
             self.pooler = nn.Dense(
                 self.config.hidden_size,
                 kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
-                dtype=self.dtype
+                dtype=self.dtype,
             )
         else:
             self.pooler = None
@@ -1127,6 +1151,7 @@ class FlaxBigBirdModule(nn.Module):
     "The bare BigBird Model transformer outputting raw hidden-states without any specific head on top.",
     BIG_BIRD_START_DOCSTRING,
 )
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertModel with Bert->BigBird
 class FlaxBigBirdModel(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdModule
 
@@ -1135,7 +1160,7 @@ append_call_sample_docstring(
     FlaxBigBirdModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
 )
 
-
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForPreTrainingModule with Bert->BigBird
 class FlaxBigBirdForPreTrainingModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
@@ -1198,6 +1223,7 @@ class FlaxBigBirdForPreTrainingModule(nn.Module):
     """,
     BIG_BIRD_START_DOCSTRING,
 )
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForPreTraining with Bert->BigBird
 class FlaxBigBirdForPreTraining(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdForPreTrainingModule
 
@@ -1227,7 +1253,7 @@ append_replace_return_docstrings(
     FlaxBigBirdForPreTraining, output_type=FlaxBigBirdForPreTrainingOutput, config_class=_CONFIG_FOR_DOC
 )
 
-
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForMaskedLMModule with Bert->BigBird
 class FlaxBigBirdForMaskedLMModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
@@ -1279,6 +1305,7 @@ class FlaxBigBirdForMaskedLMModule(nn.Module):
 
 
 @add_start_docstrings("""BigBird Model with a `language modeling` head on top. """, BIG_BIRD_START_DOCSTRING)
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForMaskedLM with Bert->BigBird
 class FlaxBigBirdForMaskedLM(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdForMaskedLMModule
 
@@ -1287,7 +1314,7 @@ append_call_sample_docstring(
     FlaxBigBirdForMaskedLM, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
 )
 
-
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForNextSentencePredictionModule with Bert->BigBird
 class FlaxBigBirdForNextSentencePredictionModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
@@ -1338,6 +1365,7 @@ class FlaxBigBirdForNextSentencePredictionModule(nn.Module):
     """BigBird Model with a `next sentence prediction (classification)` head on top. """,
     BIG_BIRD_START_DOCSTRING,
 )
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForNextSentencePrediction with Bert->BigBird
 class FlaxBigBirdForNextSentencePrediction(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdForNextSentencePredictionModule
 
@@ -1370,7 +1398,7 @@ append_replace_return_docstrings(
     FlaxBigBirdForNextSentencePrediction, output_type=FlaxNextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC
 )
 
-
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForSequenceClassificationModule with Bert->BigBird
 class FlaxBigBirdForSequenceClassificationModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
@@ -1422,11 +1450,12 @@ class FlaxBigBirdForSequenceClassificationModule(nn.Module):
 
 @add_start_docstrings(
     """
-    BigBird Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
-    output) e.g. for GLUE tasks.
+    BigBird Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
     """,
     BIG_BIRD_START_DOCSTRING,
 )
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForSequenceClassification with Bert->BigBird
 class FlaxBigBirdForSequenceClassification(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdForSequenceClassificationModule
 
@@ -1439,7 +1468,7 @@ append_call_sample_docstring(
     _CONFIG_FOR_DOC,
 )
 
-
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForMultipleChoiceModule with Bert->BigBird
 class FlaxBigBirdForMultipleChoiceModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
@@ -1501,6 +1530,7 @@ class FlaxBigBirdForMultipleChoiceModule(nn.Module):
     """,
     BIG_BIRD_START_DOCSTRING,
 )
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForMultipleChoice with Bert->BigBird
 class FlaxBigBirdForMultipleChoice(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdForMultipleChoiceModule
 
@@ -1509,10 +1539,14 @@ overwrite_call_docstring(
     FlaxBigBirdForMultipleChoice, BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
 )
 append_call_sample_docstring(
-    FlaxBigBirdForMultipleChoice, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxMultipleChoiceModelOutput, _CONFIG_FOR_DOC
+    FlaxBigBirdForMultipleChoice,
+    _TOKENIZER_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
+    FlaxMultipleChoiceModelOutput,
+    _CONFIG_FOR_DOC,
 )
 
-
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForTokenClassificationModule with Bert->BigBird
 class FlaxBigBirdForTokenClassificationModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
@@ -1566,12 +1600,17 @@ class FlaxBigBirdForTokenClassificationModule(nn.Module):
     """,
     BIG_BIRD_START_DOCSTRING,
 )
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForTokenClassification with Bert->BigBird
 class FlaxBigBirdForTokenClassification(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdForTokenClassificationModule
 
 
 append_call_sample_docstring(
-    FlaxBigBirdForTokenClassification, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxTokenClassifierOutput, _CONFIG_FOR_DOC
+    FlaxBigBirdForTokenClassification,
+    _TOKENIZER_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
+    FlaxTokenClassifierOutput,
+    _CONFIG_FOR_DOC,
 )
 
 
@@ -1631,6 +1670,7 @@ class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
     """,
     BIG_BIRD_START_DOCSTRING,
 )
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForQuestionAnswering with Bert->BigBird
 class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdForQuestionAnsweringModule
 
