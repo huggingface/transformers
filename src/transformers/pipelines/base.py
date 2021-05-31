@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
+from ..models.auto.configuration_auto import AutoConfig
 from ..tokenization_utils import PreTrainedTokenizer, TruncationStrategy
 from ..utils import logging
 
@@ -133,6 +134,85 @@ def get_framework(model, revision: Optional[str] = None):
 
     framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
     return framework
+
+
+def set_model_class_from_tuple(
+    pretrained_model_name_or_path: str,
+    targeted_task: Dict,
+    revision: Optional[str],
+    task_options: Optional[Any],
+    **model_kwargs
+) -> Dict:
+    """
+    Overwrite tuple of model classes by single model class in :obj:`targeted_task`.
+
+    Args:
+        pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`, `optional`):
+            Can be either:
+
+                - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co. Valid
+                  model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under a user or
+                  organization name, like ``dbmdz/bert-base-german-cased``.
+                - A path to a `directory` containing model weights saved using
+                  :func:`~transformers.PreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
+        targeted_task (:obj:`Dict`):
+           Dictionary representing the given task, that should contain default models
+        revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+            When passing a task name or a string model identifier: The specific model version to use. It can be a
+            branch name, a tag name, or a commit id, since we use a git-based system for storing models and other
+            artifacts on huggingface.co, so ``revision`` can be any identifier allowed by git.
+        task_options (:obj:`Any`, None)
+           Any further value required by the task to get fully specified, for instance (SRC, TGT) languages for
+           translation task.
+    """
+    # we are overwriting `targeted_task` so let's make a copy first
+    # to avoid strange errors
+    targeted_task = targeted_task.copy()
+    config = AutoConfig.from_pretrained(
+        pretrained_model_name_or_path, revision=revision, _from_pipeline=task_options, **model_kwargs
+    )
+
+    if config.architectures is None or len(config.architectures) == 0:
+        raise ValueError(
+            f"Cannot guess correct architecture from {pretrained_model_name_or_path}. Please consider directly passing a model instance to `pipeline(...)`"
+        )
+
+    # architecture classes are always PyTorch
+    # and correct class should be in first spot
+    pt_model_class_name = config.architectures[0]
+
+    # extract correct PyTorch auto model class
+    if isinstance(targeted_task.get("pt"), tuple):
+        pt_model_class = None
+        for pt_model_class_candidate in targeted_task["pt"]:
+            if pt_model_class_name in set(cls.__name__ for cls in pt_model_class_candidate._model_mapping.values()):
+                pt_model_class = pt_model_class_candidate
+                break
+
+        if pt_model_class is None:
+            raise ValueError(
+                f"{pretrained_model_name_or_path} expects to be loaded by {pt_model_class_name}, but {pt_model_class_name} is not supported by possible auto models {targeted_task.get('pt')}"
+            )
+
+        targeted_task["pt"] = pt_model_class
+
+    # extract correct TensorFlow auto model class
+    if isinstance(targeted_task.get("tf"), tuple):
+        tf_model_class = None
+        tf_model_class_name = "TF" + pt_model_class_name
+        for tf_model_class_candidate in targeted_task["tf"]:
+            if tf_model_class_name in set(cls.__name__ for cls in tf_model_class_candidate._model_mapping.values()):
+                tf_model_class = tf_model_class_candidate
+                break
+
+        if tf_model_class is None:
+            raise ValueError(
+                f"{pretrained_model_name_or_path} expects to be loaded by {tf_model_class_name}, but {tf_model_class_name} is not supported by possible auto models {targeted_task.get('tf')}"
+            )
+
+        targeted_task["tf"] = tf_model_class
+
+    return targeted_task
 
 
 def get_default_model(targeted_task: Dict, framework: Optional[str], task_options: Optional[Any]) -> str:
