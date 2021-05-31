@@ -613,7 +613,7 @@ class RagRetriever:
                     retrived_doc_title.append(docs[b_idx]["title"][doc_idx])
 
             tokenized_docs = self.ctx_encoder_tokenizer(
-                retrived_doc_title, retrived_doc_text, truncation=True, padding="longest", return_tensors="pt"
+                retrived_doc_title, retrived_doc_text, truncation=True, padding="longest", return_tensors= return_tensors
             )
 
             return BatchEncoding(
