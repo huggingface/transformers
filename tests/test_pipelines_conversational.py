@@ -413,10 +413,10 @@ class ConversationalPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCas
 
         # check for equality
         self.assertEqual(
-            result_model_id[0].generated_responses[0],
+            result_model_id.generated_responses[0],
             "hi sarah, i live in london as well. do you have any plans for the weekend?",
         )
         self.assertEqual(
-            result_model_id[0].generated_responses[0],
-            result_model[0].generated_responses[0],
+            result_model_id.generated_responses[0],
+            result_model.generated_responses[0],
         )
