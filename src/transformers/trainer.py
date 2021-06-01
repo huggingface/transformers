@@ -1752,7 +1752,8 @@ class Trainer:
         elif self.deepspeed:
             self.deepspeed.backward(loss)
             # to report the proper loss, we do the scaling here, after the `backward` pass
-            loss = loss / self.args.gradient_accumulation_steps
+            if self.args.gradient_accumulation_steps > 1:
+                loss = loss / self.args.gradient_accumulation_steps
         else:
             loss.backward()
 
