@@ -59,7 +59,8 @@ SPECIAL_CODEPOINTS_BY_NAME: Dict[Text, int] = {name: codepoint for codepoint, na
 
 class CanineTokenizer(PreTrainedTokenizer):
     r"""
-    Construct a CANINE tokenizer (i.e. a character splitter).
+    Construct a CANINE tokenizer (i.e. a character splitter). It turns text into a sequence of characters, and then
+    converts each character into its Unicode code point.
 
     :class:`~transformers.CanineTokenizer` inherits from :class:`~transformers.PreTrainedTokenizer`.
 
@@ -226,6 +227,6 @@ class CanineTokenizer(PreTrainedTokenizer):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
+    # CanineTokenizer has no vocab file
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None):
-        """CANINE does not require a vocabulary."""
-        return ("",)
+        return ()

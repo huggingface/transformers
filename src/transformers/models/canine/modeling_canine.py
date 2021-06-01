@@ -304,9 +304,9 @@ class CharactersToMolecules(nn.Module):
 
 class ConvProjection(nn.Module):
     """
-Project representations from hidden_size*2 back to hidden_size across a window of w = config.upsampling_kernel_size
-characters.
-"""
+    Project representations from hidden_size*2 back to hidden_size across a window of w = config.upsampling_kernel_size
+    characters.
+    """
 
     def __init__(self, config):
         super().__init__()
@@ -1332,7 +1332,7 @@ class CanineModel(CaninePreTrainedModel):
         # this, it seems that molecules and characters require a very different
         # feature space; intuitively, this makes sense.
         init_molecule_encoding = self.chars_to_molecules(input_char_encoding)
-        
+
         # Deep BERT encoder
         # `molecule_sequence_output`: shape (batch_size, mol_seq_len, mol_dim)
         encoder_outputs = self.encoder(
