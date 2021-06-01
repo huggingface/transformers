@@ -288,15 +288,15 @@ def _set_if_auto(config, key, val):
 
 class DeepSpeedConfigHF:
     """
-    This object contains a DeepSpeed configuration dict and can be quickly queried for things like zero stage.
+    This object contains a DeepSpeed configuration dictionary and can be quickly queried for things like zero stage.
 
     A ``weakref`` of this object is stored in the module's globals to be able to access the config from areas where
-    things like the Trainer object is not available (e.g. `from_pretrained` and `_get_resized_embeddings`). Therefore
+    things like the Trainer object is not available (e.g. ``from_pretrained`` and ``_get_resized_embeddings``). Therefore
     it's important that this object remains alive while the program is still running.
 
     :class:`~transformers.Trainer` uses the ``DeepSpeedConfigHFTrainer`` subclass instead. That subclass has logic to
     sync the configuration with values of :class:`~transformers.TrainingArguments` by replacing special placeholder
-    values: ``auto``. Without this special logic the DeepSpeed configuration is not modified in any way.
+    values: ``"auto"``. Without this special logic the DeepSpeed configuration is not modified in any way.
 
     Args:
         config_file_or_dict (:obj:`Union[str, Dict]`) - path to DeepSpeed config file or dict.
