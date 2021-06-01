@@ -41,6 +41,25 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = ReformerTokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
 
+    def test_convert_token_and_id(self):
+        """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
+        token = "<s>"
+        token_id = 1
+
+        self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
+        self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
+
+    def test_get_vocab(self):
+        vocab_keys = list(self.get_tokenizer().get_vocab().keys())
+
+        self.assertEqual(vocab_keys[0], "<unk>")
+        self.assertEqual(vocab_keys[1], "<s>")
+        self.assertEqual(vocab_keys[-1], "j")
+        self.assertEqual(len(vocab_keys), 1_000)
+
+    def test_vocab_size(self):
+        self.assertEqual(self.get_tokenizer().vocab_size, 1_000)
+
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
             return
@@ -328,3 +347,25 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with torch.no_grad():
             model(**encoded_sequence)
             model(**batch_encoded_sequence)
+
+    @slow
+    def test_tokenizer_integration(self):
+        # fmt: off
+        expected_encoding = {'input_ids': [[108, 265, 24, 111, 4, 258, 156, 7, 51, 279, 58, 7, 76, 25, 69, 278], [140, 243, 264, 134, 17, 267, 77, 263, 22, 262, 297, 258, 304, 177, 279, 266, 14, 89, 13, 35, 261, 299, 272, 137, 275, 278]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # noqa: E501
+        # fmt: on
+
+        # This tokenizer does not know some characters like ")".
+        # That is the reason why we use very simple texts here.
+        # Also see https://github.com/huggingface/transformers/pull/11737#issuecomment-850769064
+        sequences = [
+            "This is a very simple sentence.",
+            "The quick brown fox jumps over the lazy dog.",
+        ]
+
+        self.tokenizer_integration_test_util(
+            expected_encoding=expected_encoding,
+            model_name="google/reformer-crime-and-punishment",
+            revision="0e6c3decb8211d49bf881013425dc8b0448b3f5a",
+            padding=False,
+            sequences=sequences,
+        )
