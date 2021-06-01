@@ -28,6 +28,7 @@ from ..bert.modeling_flax_bert import (
     FlaxBertForTokenClassification,
     FlaxBertModel,
 )
+from ..clip.modeling_flax_clip import FlaxCLIPModel
 from ..electra.modeling_flax_electra import (
     FlaxElectraForMaskedLM,
     FlaxElectraForMultipleChoice,
@@ -47,7 +48,7 @@ from ..roberta.modeling_flax_roberta import (
     FlaxRobertaModel,
 )
 from .auto_factory import auto_class_factory
-from .configuration_auto import BertConfig, ElectraConfig, GPT2Config, RobertaConfig
+from .configuration_auto import BertConfig, CLIPConfig, ElectraConfig, GPT2Config, RobertaConfig
 
 
 logger = logging.get_logger(__name__)
@@ -60,6 +61,7 @@ FLAX_MODEL_MAPPING = OrderedDict(
         (BertConfig, FlaxBertModel),
         (GPT2Config, FlaxGPT2Model),
         (ElectraConfig, FlaxElectraModel),
+        (CLIPConfig, FlaxCLIPModel),
     ]
 )
 

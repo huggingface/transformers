@@ -90,7 +90,12 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
             pt_tuple_key = pt_tuple_key[:-1] + ("scale",)
         if pt_tuple_key[-1] == "weight" and pt_tuple_key[:-1] + ("embedding",) in random_flax_state_dict:
             pt_tuple_key = pt_tuple_key[:-1] + ("embedding",)
+        elif pt_tuple_key[-1] == "weight" and pt_tensor.ndim == 4 and pt_tuple_key not in random_flax_state_dict:
+            # conv layer
+            pt_tuple_key = pt_tuple_key[:-1] + ("kernel",)
+            pt_tensor = pt_tensor.transpose(2, 3, 1, 0)
         elif pt_tuple_key[-1] == "weight" and pt_tuple_key not in random_flax_state_dict:
+            # linear layer
             pt_tuple_key = pt_tuple_key[:-1] + ("kernel",)
             pt_tensor = pt_tensor.T
         elif pt_tuple_key[-1] == "gamma":
@@ -170,7 +175,12 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
             flax_key_tuple = (pt_model.base_model_prefix,) + flax_key_tuple
 
         # rename flax weights to PyTorch format
-        if flax_key_tuple[-1] == "kernel" and ".".join(flax_key_tuple) not in pt_model_dict:
+        if flax_key_tuple[-1] == "kernel" and flax_tensor.ndim == 4 and ".".join(flax_key_tuple) not in pt_model_dict:
+            # conv layer
+            flax_key_tuple = flax_key_tuple[:-1] + ("weight",)
+            flax_tensor = jnp.transpose(flax_tensor, (3, 2, 0, 1))
+        elif flax_key_tuple[-1] == "kernel" and ".".join(flax_key_tuple) not in pt_model_dict:
+            # linear layer
             flax_key_tuple = flax_key_tuple[:-1] + ("weight",)
             flax_tensor = flax_tensor.T
         elif flax_key_tuple[-1] in ["scale", "embedding"]:
