@@ -551,6 +551,13 @@ explained here: https://pandas.pydata.org/pandas-docs/stable/getting_started/ins
 
 
 # docstyle-ignore
+SCIPY_IMPORT_ERROR = """
+{0} requires the scipy library but it was not found in your environment. You can install it with pip:
+`pip install scipy`
+"""
+
+
+# docstyle-ignore
 SPEECH_IMPORT_ERROR = """
 {0} requires the torchaudio library but it was not found in your environment. You can install it with pip:
 `pip install torchaudio`
@@ -579,6 +586,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
+        ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
     ]
 )
 
