@@ -242,9 +242,11 @@ class CanineEmbeddings(nn.Module):
             inputs_embeds = self._embed_hash_buckets(
                 input_ids, self.config.hidden_size, self.config.num_hash_functions, self.config.num_hash_buckets
             )
+
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = inputs_embeds + token_type_embeddings
+
         if self.position_embedding_type == "absolute":
             position_embeddings = self.char_position_embeddings(position_ids)
             embeddings += position_embeddings
@@ -1309,7 +1311,7 @@ class CanineModel(CaninePreTrainedModel):
         )
 
         print("Input char embeddings:")
-        print(input_char_embeddings)
+        print(input_char_embeddings[0, -3:, :3])
         print("Sum of input char embeddings:")
         print(input_char_embeddings.sum())
 
@@ -1321,7 +1323,7 @@ class CanineModel(CaninePreTrainedModel):
         input_char_encoding = init_chars_encoder_outputs.last_hidden_state
 
         print("Input char encoding:")
-        print(input_char_encoding)
+        print(input_char_encoding[0,-3:,:3])
         print("Sum of input char encoding:")
         print(input_char_encoding.sum())
 
@@ -1341,6 +1343,12 @@ class CanineModel(CaninePreTrainedModel):
         # feature space; intuitively, this makes sense.
         init_molecule_encoding = self.chars_to_molecules(input_char_encoding)
 
+        print("Init molecule encoding:")
+        print(init_molecule_encoding[0,:3,:3]) 
+
+        print("Sum of init molecule encoding:")
+        print(init_molecule_encoding.sum())
+        
         # Deep BERT encoder
         # `molecule_sequence_output`: shape (batch_size, mol_seq_len, mol_dim)
         encoder_outputs = self.encoder(
@@ -1358,6 +1366,9 @@ class CanineModel(CaninePreTrainedModel):
         molecule_sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(molecule_sequence_output) if self.pooler is not None else None
 
+        print("First token tensor:")
+        print(molecule_sequence_output[0,0:1,:])
+
         # Upsample molecules back to characters.
         # `repeated_molecules`: shape (batch_size, char_seq_len, mol_hidden_size)
         repeated_molecules = self._repeat_molecules(molecule_sequence_output, char_seq_length=input_shape[-1])
@@ -1374,6 +1385,18 @@ class CanineModel(CaninePreTrainedModel):
         # `sequence_output`: shape (batch_size, char_seq_len, hidden_size])
         final_chars_encoder_outputs = self.final_char_encoder(sequence_output, extended_attention_mask)
         sequence_output = final_chars_encoder_outputs.last_hidden_state
+
+        print("Pooled output:")
+        print(pooled_output[0,:3])
+        
+        print("Sum of pooled output:")
+        print(pooled_output.sum())
+        
+        print("Sequence output:")
+        print(sequence_output[0,:3,:3])
+
+        print("Sum of sequence output:")
+        print(sequence_output.sum())
 
         if not return_dict:
             return (sequence_output,) + encoder_outputs[1:]
