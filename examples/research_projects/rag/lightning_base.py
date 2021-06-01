@@ -341,7 +341,7 @@ def generic_train(
     args: argparse.Namespace,
     early_stopping_callback=None,
     logger=True,  # can pass WandbLogger() here
-    myddp_plugin=None,
+    custom_ddp_plugin=None,
     extra_callbacks=[],
     checkpoint_callback=None,
     logging_callback=None,
@@ -380,7 +380,7 @@ def generic_train(
         args,
         weights_summary=None,
         callbacks=[logging_callback] + extra_callbacks + [checkpoint_callback],
-        plugins=[myddp_plugin],
+        plugins=[custom_ddp_plugin],
         logger=logger,
         **train_params,
     )

@@ -73,7 +73,7 @@ class AttrDict(dict):
         self.__dict__ = self
 
 
-class MyDDP(DDPPlugin):
+class CustomDDP(DDPPlugin):
     def init_ddp_connection(self, global_rank=None, world_size=None) -> None:
         module = self.model
         global_rank = global_rank if global_rank is not None else self.cluster_environment.global_rank()
@@ -585,7 +585,7 @@ def main(args=None, model=None) -> GenerativeQAModule:
         checkpoint_callback=get_checkpoint_callback(args.output_dir, model.val_metric),
         early_stopping_callback=es_callback,
         logger=training_logger,
-        myddp_plugin=MyDDP() if args.gpus > 1 else None,
+        custom_ddp_plugin=CustomDDP() if args.gpus > 1 else None,
         profiler=pl.profiler.AdvancedProfiler() if args.profile else None,
     )
     pickle_save(model.hparams, model.output_dir / "hparams.pkl")
