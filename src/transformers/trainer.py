@@ -1362,20 +1362,24 @@ class Trainer:
                     self.state.best_model_checkpoint, load_optimizer_states=False, load_lr_scheduler_states=False
                 )
 
+        # add remaining tr_loss
+        self._total_loss_scalar += tr_loss.item()
+        train_loss = self._total_loss_scalar / self.state.global_step
+
         metrics = speed_metrics("train", start_time, num_samples=num_train_samples, num_steps=self.state.max_steps)
         self.store_flos()
         metrics["total_flos"] = self.state.total_flos
-        self.log(metrics)
-
-        self.control = self.callback_handler.on_train_end(args, self.state, self.control)
-        # add remaining tr_loss
-        self._total_loss_scalar += tr_loss.item()
+        metrics["train_loss"] = train_loss
 
         self.is_in_train = False
 
         self._memory_tracker.stop_and_update_metrics(metrics)
 
-        return TrainOutput(self.state.global_step, self._total_loss_scalar / self.state.global_step, metrics)
+        self.log(metrics)
+
+        self.control = self.callback_handler.on_train_end(args, self.state, self.control)
+
+        return TrainOutput(self.state.global_step, train_loss, metrics)
 
     def _load_state_dict_in_model(self, state_dict):
         load_result = self.model.load_state_dict(state_dict, strict=False)
