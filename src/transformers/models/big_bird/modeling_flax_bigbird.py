@@ -1405,7 +1405,7 @@ class FlaxBigBirdModule(nn.Module):
         )
         hidden_states = outputs[0]
         
-        pooled = nn.tanh(self.pooler(hidden_states)) if self.add_pooling_layer else None
+        pooled = nn.tanh(self.pooler(hidden_states[:, 0, :])) if self.add_pooling_layer else None
 
         if not return_dict:
             # if pooled is None, don't return it
@@ -1892,14 +1892,13 @@ class FlaxBigBirdForQuestionAnsweringHead(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        # flax dropout layer
-        # self.dropout = 
-        self.intermediate = FlaxBigBirdIntermediate(self.config)
-        self.output = FlaxBigBirdOutput(self.config)
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+        self.intermediate = FlaxBigBirdIntermediate(self.config, dtype=self.dtype)
+        self.output = FlaxBigBirdOutput(self.config, dtype=self.dtype)
         self.qa_outputs = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
-    def __call__(self, encoder_output):
-        hidden_states = self.dropout(encoder_output)
+    def __call__(self, encoder_output, deterministic=True):
+        hidden_states = self.dropout(encoder_output, deterministic=deterministic)
         hidden_states = self.intermediate(hidden_states)
         hidden_states = self.output(hidden_states, encoder_output)
         hidden_states = self.qa_outputs(hidden_states)
@@ -1909,14 +1908,12 @@ class FlaxBigBirdForQuestionAnsweringHead(nn.Module):
 class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
-
-    def __post_init__(self):
-        super().__post_init__()
-        self.config.num_labels = 2
+    add_pooling_layer: bool = False
 
     def setup(self):
-        self.bert = FlaxBigBirdModule(config=self.config, dtype=self.dtype, add_pooling_layer=self.config.add_pooling_layer)
-        self.qa_outputs = nn.Dense(self.config.num_labels, dtype=self.dtype)
+        self.config.num_labels = 2
+        self.bert = FlaxBigBirdModule(self.config, dtype=self.dtype, add_pooling_layer=self.add_pooling_layer)
+        self.qa_classifier = FlaxBigBirdForQuestionAnsweringHead(self.config, dtype=self.dtype)
 
     def __call__(
         self,
@@ -1924,7 +1921,7 @@ class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
-        question_lengths=None,
+        logits_mask=None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -1944,8 +1941,12 @@ class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
         )
 
         hidden_states = outputs[0]
+        logits = self.qa_classifier(hidden_states, deterministic=deterministic)
 
-        logits = self.qa_outputs(hidden_states)
+        if logits_mask is not None:
+            # removing question tokens from the competition
+            logits = logits - logits_mask * 1e6
+
         start_logits, end_logits = logits.split(self.config.num_labels, axis=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
@@ -1968,10 +1969,81 @@ class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
     """,
     BIG_BIRD_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForQuestionAnswering with Bert->BigBird
+
 class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdForQuestionAnsweringModule
 
+    @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    def __call__(
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        question_lengths=None,
+        params: dict = None,
+        dropout_rng: jax.random.PRNGKey = None,
+        train: bool = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        if position_ids is None:
+            position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+
+        if attention_mask is None:
+            attention_mask = jnp.ones_like(input_ids)
+
+        if question_lengths is None and input_ids is not None:
+            # assuming input_ids format: <cls> <question> <sep> context <sep>
+            question_lengths = jnp.argmax((input_ids == self.config.sep_token_id).astype("i4"), axis=-1) + 1
+            question_lengths = jnp.expand_dims(question_lengths, axis=1)
+
+        seqlen = input_ids.shape[1]
+
+        logits_mask = None
+        if question_lengths is not None:
+            # setting lengths logits to `-inf`
+            logits_mask = self.prepare_question_mask(question_lengths, seqlen)
+            if token_type_ids is None:
+                token_type_ids = (~logits_mask).astype("i4")
+            logits_mask = jnp.expand_dims(logits_mask, axis=2)
+
+        # init input tensors if not passed
+        if token_type_ids is None:
+            token_type_ids = jnp.zeros_like(input_ids)
+
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
+        return self.module.apply(
+            {"params": params or self.params},
+            jnp.array(input_ids, dtype="i4"),
+            jnp.array(attention_mask, dtype="i4"),
+            token_type_ids,
+            jnp.array(position_ids, dtype="i4"),
+            logits_mask,
+            not train,
+            output_attentions,
+            output_hidden_states,
+            return_dict,
+            rngs=rngs,
+        )
+
+    @staticmethod
+    def prepare_question_mask(q_lengths, maxlen: int):
+        # q_lengths -> (bz, 1)
+        mask = jnp.arange(0, maxlen)
+        mask = jnp.expand_dims(mask, axis=0) < q_lengths
+        return mask
 
 append_call_sample_docstring(
     FlaxBigBirdForQuestionAnswering,

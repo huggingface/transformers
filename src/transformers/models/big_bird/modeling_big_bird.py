@@ -2306,7 +2306,6 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
         )
 
         sequence_output, pooled_output = outputs[:2]
-
         prediction_scores, seq_relationship_score = self.cls(sequence_output, pooled_output)
 
         total_loss = None
