@@ -77,7 +77,7 @@ class CanineConfig(PretrainedConfig):
         local_transformer_stride (:obj:`int`, `optional`, defaults to 128):
             ... Good TPU/XLA memory alignment.
 
-        Example::
+    Example::
 
         >>> from transformers import CanineModel, CanineConfig
 

@@ -1932,7 +1932,6 @@ if TYPE_CHECKING:
         from .models.bert import BertTokenizerFast
         from .models.big_bird import BigBirdTokenizerFast
         from .models.camembert import CamembertTokenizerFast
-        from .models.canine import CanineTokenizerFast
         from .models.clip import CLIPTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.deberta import DebertaTokenizerFast
