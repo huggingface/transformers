@@ -191,7 +191,7 @@ class FlaxBigBirdEmbeddings(nn.Module):
         return hidden_states
 
 
-# TODO: can't we add config.use_bias in FlaxBert to have this copy
+# TODO: ADD USE_BIAS BELOW: can't we add config.use_bias in FlaxBert to have this copy
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertSelfAttention with Bert->BigBird
 class FlaxBigBirdSelfAttention(nn.Module):
@@ -274,9 +274,24 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.query = nn.Dense(self.config.hidden_size, dtype=self.dtype, use_bias=self.config.use_bias, kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype))
-        self.key = nn.Dense(self.config.hidden_size, dtype=self.dtype, use_bias=self.config.use_bias, kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype))
-        self.value = nn.Dense(self.config.hidden_size, dtype=self.dtype, use_bias=self.config.use_bias, kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype))
+        self.query = nn.Dense(
+            self.config.hidden_size,
+            dtype=self.dtype,
+            use_bias=self.config.use_bias,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+        )
+        self.key = nn.Dense(
+            self.config.hidden_size,
+            dtype=self.dtype,
+            use_bias=self.config.use_bias,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+        )
+        self.value = nn.Dense(
+            self.config.hidden_size,
+            dtype=self.dtype,
+            use_bias=self.config.use_bias,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+        )
 
     @staticmethod
     def transpose_for_scores(x, n_heads, head_size):
@@ -294,8 +309,10 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         n_heads = self.config.num_attention_heads
         head_size = self.config.hidden_size // n_heads
 
-        blocked_encoder_mask, band_mask, from_mask, to_mask = self.create_masks_for_block_sparse_attn(attention_mask, self.config.block_size)
-        
+        blocked_encoder_mask, band_mask, from_mask, to_mask = self.create_masks_for_block_sparse_attn(
+            attention_mask, self.config.block_size
+        )
+
         query_layer = self.transpose_for_scores(self.query(hidden_states), n_heads, head_size)
         key_layer = self.transpose_for_scores(self.key(hidden_states), n_heads, head_size)
         value_layer = self.transpose_for_scores(self.value(hidden_states), n_heads, head_size)
@@ -410,9 +427,12 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         np.random.seed(self.block_sparse_seed)
         if from_seq_len in [1024, 3072, 4096]:  # old plans used in paper
             max_seqlen = self.config.max_position_embeddings
-            rand_attn = [self._bigbird_block_rand_mask(
+            rand_attn = [
+                self._bigbird_block_rand_mask(
                     max_seqlen, max_seqlen, from_block_size, to_block_size, n_rand_blocks, last_idx=1024
-                )[: (from_seq_len // from_block_size - 2)] for _ in range(n_heads)]
+                )[: (from_seq_len // from_block_size - 2)]
+                for _ in range(n_heads)
+            ]
             # rand_attn = jnp.broadcast_to(rand_attn, (n_heads,) + rand_attn.shape)
         else:
             if plan_from_length is None:
@@ -573,8 +593,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         # contribution of sliding keys
         # [bsz, n_heads, m//from_block_size-4, from_block_size, 3*to_block_size] x [bsz, n_heads, from_seq_len//from_block_size-4, 3*to_block_size, -1]
         context_layer = jnp.einsum(
-            "bhlqk,bhlkd->bhlqd",
-            attn_weights[:, :, :, :, to_block_size : 4 * to_block_size], exp_blocked_value_matrix
+            "bhlqk,bhlkd->bhlqd", attn_weights[:, :, :, :, to_block_size : 4 * to_block_size], exp_blocked_value_matrix
         )
         #     ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1]
 
@@ -582,7 +601,8 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, n_rand_blocks*to_block_size] x [bsz, n_heads, from_seq_len//from_block_size-4, n_rand_blocks*to_block_size, -1]
         context_layer += jnp.einsum(
             "bhlqk,bhlkd->bhlqd",
-            attn_weights[:, :, :, :, 4 * to_block_size : -to_block_size], gathered_value[:, :, 1:-1]
+            attn_weights[:, :, :, :, 4 * to_block_size : -to_block_size],
+            gathered_value[:, :, 1:-1],
         )
         #     ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1]
 
@@ -684,13 +704,14 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             params: (bsz, n_heads, num_blocks, block_size, head_dim)
             indices: (<num_blocks, 1)
         """
+
         def _jax_gather(params, indices):
             return params[indices]
 
         for _ in range(batch_dims):
             _jax_gather = jax.vmap(_jax_gather, in_axes=(0, 0))
 
-        return _jax_gather(params, indices) # params.shape[:batch_dims] + indices.shape + params.shape[batch_dims+1:]
+        return _jax_gather(params, indices)  # params.shape[:batch_dims] + indices.shape + params.shape[batch_dims+1:]
 
     def _create_rand_mask_from_inputs(
         self,
@@ -722,7 +743,9 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         """
         num_windows = from_seq_length // from_block_size - 2
         rand_mask = self.jax_gather(to_blocked_mask, broadcasted_rand_attn, batch_dims=1)
-        rand_mask = rand_mask.reshape(batch_size, num_attention_heads, num_windows, num_random_blocks * from_block_size)
+        rand_mask = rand_mask.reshape(
+            batch_size, num_attention_heads, num_windows, num_random_blocks * from_block_size
+        )
         rand_mask = jnp.einsum("blq,bhlk->bhlqk", from_blocked_mask[:, 1:-1], rand_mask)
         return rand_mask
 
@@ -1041,7 +1064,9 @@ class FlaxBigBirdAttention(nn.Module):
         elif self.config.attention_type == "block_sparse":
             self.self = FlaxBigBirdBlockSparseAttention(self.config, block_sparse_seed=self.layer_id, dtype=self.dtype)
         else:
-            raise ValueError(f"Your `config.attention_type` is {self.config.attention_type} but it can either be `original_full` or `block_sparse`")
+            raise ValueError(
+                f"Your `config.attention_type` is {self.config.attention_type} but it can either be `original_full` or `block_sparse`"
+            )
 
         self.output = FlaxBigBirdSelfOutput(self.config, dtype=self.dtype)
 
@@ -1304,7 +1329,7 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         if config.attention_type == "block_sparse":
-            input_shape = (1, 12*config.block_size)
+            input_shape = (1, 12 * config.block_size)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
@@ -1407,7 +1432,7 @@ class FlaxBigBirdModule(nn.Module):
             return_dict=return_dict,
         )
         hidden_states = outputs[0]
-        
+
         pooled = nn.tanh(self.pooler(hidden_states[:, 0, :])) if self.add_pooling_layer else None
 
         if not return_dict:
@@ -1436,6 +1461,7 @@ class FlaxBigBirdModel(FlaxBigBirdPreTrainedModel):
 append_call_sample_docstring(
     FlaxBigBirdModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
 )
+
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForPreTrainingModule with Bert->BigBird
 class FlaxBigBirdForPreTrainingModule(nn.Module):
@@ -1530,6 +1556,7 @@ append_replace_return_docstrings(
     FlaxBigBirdForPreTraining, output_type=FlaxBigBirdForPreTrainingOutput, config_class=_CONFIG_FOR_DOC
 )
 
+
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForMaskedLMModule with Bert->BigBird
 class FlaxBigBirdForMaskedLMModule(nn.Module):
     config: BigBirdConfig
@@ -1590,6 +1617,7 @@ class FlaxBigBirdForMaskedLM(FlaxBigBirdPreTrainedModel):
 append_call_sample_docstring(
     FlaxBigBirdForMaskedLM, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
 )
+
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForNextSentencePredictionModule with Bert->BigBird
 class FlaxBigBirdForNextSentencePredictionModule(nn.Module):
@@ -1675,6 +1703,7 @@ append_replace_return_docstrings(
     FlaxBigBirdForNextSentencePrediction, output_type=FlaxNextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC
 )
 
+
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForSequenceClassificationModule with Bert->BigBird
 class FlaxBigBirdForSequenceClassificationModule(nn.Module):
     config: BigBirdConfig
@@ -1744,6 +1773,7 @@ append_call_sample_docstring(
     FlaxSequenceClassifierOutput,
     _CONFIG_FOR_DOC,
 )
+
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForMultipleChoiceModule with Bert->BigBird
 class FlaxBigBirdForMultipleChoiceModule(nn.Module):
@@ -1823,6 +1853,7 @@ append_call_sample_docstring(
     _CONFIG_FOR_DOC,
 )
 
+
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForTokenClassificationModule with Bert->BigBird
 class FlaxBigBirdForTokenClassificationModule(nn.Module):
     config: BigBirdConfig
@@ -1890,6 +1921,7 @@ append_call_sample_docstring(
     _CONFIG_FOR_DOC,
 )
 
+
 class FlaxBigBirdForQuestionAnsweringHead(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
@@ -1930,7 +1962,7 @@ class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-    
+
         # Model
         outputs = self.bert(
             input_ids,
@@ -1972,7 +2004,6 @@ class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
     """,
     BIG_BIRD_START_DOCSTRING,
 )
-
 class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdForQuestionAnsweringModule
 
@@ -2047,6 +2078,7 @@ class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
         mask = jnp.arange(0, maxlen)
         mask = jnp.expand_dims(mask, axis=0) < q_lengths
         return mask
+
 
 append_call_sample_docstring(
     FlaxBigBirdForQuestionAnswering,

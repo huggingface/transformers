@@ -29,6 +29,16 @@ from ..bert.modeling_flax_bert import (
     FlaxBertModel,
 )
 from ..clip.modeling_flax_clip import FlaxCLIPModel
+from ..big_bird.modeling_flax_bigbird import (
+    FlaxBigBirdForMaskedLM,
+    FlaxBigBirdForMultipleChoice,
+    FlaxBigBirdForNextSentencePrediction,
+    FlaxBigBirdForPreTraining,
+    FlaxBigBirdForQuestionAnswering,
+    FlaxBigBirdForSequenceClassification,
+    FlaxBigBirdForTokenClassification,
+    FlaxBigBirdModel,
+)
 from ..electra.modeling_flax_electra import (
     FlaxElectraForMaskedLM,
     FlaxElectraForMultipleChoice,
@@ -49,7 +59,7 @@ from ..roberta.modeling_flax_roberta import (
 )
 from ..vit.modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel
 from .auto_factory import auto_class_factory
-from .configuration_auto import BertConfig, CLIPConfig, ElectraConfig, GPT2Config, RobertaConfig, ViTConfig
+from .configuration_auto import BertConfig, BigBirdConfig, CLIPConfig, ElectraConfig, GPT2Config, RobertaConfig, ViTConfig
 
 
 logger = logging.get_logger(__name__)
@@ -60,6 +70,7 @@ FLAX_MODEL_MAPPING = OrderedDict(
         # Base model mapping
         (RobertaConfig, FlaxRobertaModel),
         (BertConfig, FlaxBertModel),
+        (BigBirdConfig, FlaxBigBirdModel),
         (GPT2Config, FlaxGPT2Model),
         (ElectraConfig, FlaxElectraModel),
         (CLIPConfig, FlaxCLIPModel),
@@ -72,6 +83,7 @@ FLAX_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         # Model for pre-training mapping
         (RobertaConfig, FlaxRobertaForMaskedLM),
         (BertConfig, FlaxBertForPreTraining),
+        (BigBirdConfig, FlaxBigBirdForPreTraining),
         (ElectraConfig, FlaxElectraForPreTraining),
     ]
 )
@@ -81,6 +93,7 @@ FLAX_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         # Model for Masked LM mapping
         (RobertaConfig, FlaxRobertaForMaskedLM),
         (BertConfig, FlaxBertForMaskedLM),
+        (BigBirdConfig, FlaxBigBirdForMaskedLM),
         (ElectraConfig, FlaxElectraForMaskedLM),
     ]
 )
@@ -104,6 +117,7 @@ FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         # Model for Sequence Classification mapping
         (RobertaConfig, FlaxRobertaForSequenceClassification),
         (BertConfig, FlaxBertForSequenceClassification),
+        (BigBirdConfig, FlaxBigBirdForSequenceClassification),
         (ElectraConfig, FlaxElectraForSequenceClassification),
     ]
 )
@@ -113,6 +127,7 @@ FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         # Model for Question Answering mapping
         (RobertaConfig, FlaxRobertaForQuestionAnswering),
         (BertConfig, FlaxBertForQuestionAnswering),
+        (BigBirdConfig, FlaxBigBirdForQuestionAnswering),
         (ElectraConfig, FlaxElectraForQuestionAnswering),
     ]
 )
@@ -122,6 +137,7 @@ FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         # Model for Token Classification mapping
         (RobertaConfig, FlaxRobertaForTokenClassification),
         (BertConfig, FlaxBertForTokenClassification),
+        (BigBirdConfig, FlaxBigBirdForTokenClassification),
         (ElectraConfig, FlaxElectraForTokenClassification),
     ]
 )
@@ -131,6 +147,7 @@ FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         # Model for Multiple Choice mapping
         (RobertaConfig, FlaxRobertaForMultipleChoice),
         (BertConfig, FlaxBertForMultipleChoice),
+        (BigBirdConfig, FlaxBigBirdForMultipleChoice),
         (ElectraConfig, FlaxElectraForMultipleChoice),
     ]
 )
@@ -138,6 +155,7 @@ FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
 FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = OrderedDict(
     [
         (BertConfig, FlaxBertForNextSentencePrediction),
+        (BigBirdConfig, FlaxBigBirdForNextSentencePrediction),
     ]
 )
 

@@ -2831,6 +2831,15 @@ if TYPE_CHECKING:
             FlaxBertForTokenClassification,
             FlaxBertModel,
             FlaxBertPreTrainedModel,
+            FlaxBigBirdForMaskedLM,
+            FlaxBigBirdForMultipleChoice,
+            FlaxBigBirdForNextSentencePrediction,
+            FlaxBigBirdForPreTraining,
+            FlaxBigBirdForQuestionAnswering,
+            FlaxBigBirdForSequenceClassification,
+            FlaxBigBirdForTokenClassification,
+            FlaxBigBirdModel,
+            FlaxBigBirdPreTrainedModel,
         )
         from .models.clip import FlaxCLIPModel, FlaxCLIPPreTrainedModel, FlaxCLIPTextModel, FlaxCLIPVisionModel
         from .models.electra import (
