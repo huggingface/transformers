@@ -10,27 +10,27 @@
     an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
     specific language governing permissions and limitations under the License.
 
-DeepSpeedConfigHF
+HfDeepSpeedConfig
 -----------------------------------------------------------------------------------------------------------------------
 
-The :class:`~transformers.integrations.DeepSpeedConfigHF` is used to integrate Deepspeed into the 🤗 Transformer core
+The :class:`~transformers.integrations.HfDeepSpeedConfig` is used to integrate Deepspeed into the 🤗 Transformer core
 functionality, when :class:`~transformers.Trainer` is not used.
 
 When using :class:`~transformers.Trainer` everything is automatically taken care of.
 
 When not using :class:`~transformers.Trainer`, to efficiently deploy DeepSpeed stage 3, you must instantiate the
-:class:`~transformers.integrations.DeepSpeedConfigHF` object before instantiating the model.
+:class:`~transformers.integrations.HfDeepSpeedConfig` object before instantiating the model.
 
 For example for a pretrained model:
 
 .. code-block:: python
 
-    from transformers.integrations import DeepSpeedConfigHF
+    from transformers.integrations import HfDeepSpeedConfig
     from transformers import AugoModel
 
     ds_config = { ... } # deepspeed config object or path to the file
     # must run before instantiating the model
-    dschf = DeepSpeedConfigHF(ds_config) # keep this object alive
+    dschf = HfDeepSpeedConfig(ds_config) # keep this object alive
     model = AutoModel.from_pretrained("gpt2")
     engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
 
@@ -38,19 +38,19 @@ or for non-pretrained model:
 
 .. code-block:: python
 
-    from transformers.integrations import DeepSpeedConfigHF
+    from transformers.integrations import HfDeepSpeedConfig
     from transformers import AugoModel, AutoConfig
 
     ds_config = { ... } # deepspeed config object or path to the file
     # must run before instantiating the model
-    dschf = DeepSpeedConfigHF(ds_config) # keep this object alive
+    dschf = HfDeepSpeedConfig(ds_config) # keep this object alive
     config = AutoConfig.from_pretrained("gpt2")
     model = AutoModel.from_config(config)
     engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
 
 
-DeepSpeedConfigHF
+HfDeepSpeedConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.integrations.DeepSpeedConfigHF
+.. autoclass:: transformers.integrations.HfDeepSpeedConfig
     :members:

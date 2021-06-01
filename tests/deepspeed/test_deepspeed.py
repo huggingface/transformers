@@ -22,7 +22,7 @@ from copy import deepcopy
 from parameterized import parameterized
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
 from transformers.file_utils import WEIGHTS_NAME
-from transformers.integrations import DeepSpeedConfigHF, is_deepspeed_available
+from transformers.integrations import HfDeepSpeedConfig, is_deepspeed_available
 from transformers.testing_utils import (
     CaptureLogger,
     CaptureStderr,
@@ -101,7 +101,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             },
         }
 
-        dschf = DeepSpeedConfigHF(ds_config)
+        dschf = HfDeepSpeedConfig(ds_config)
 
         self.assertTrue(dschf.is_zero3())
         self.assertTrue(is_deepspeed_zero3_enabled())
@@ -115,7 +115,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
 
         # now remove zero optimization
         del ds_config["zero_optimization"]
-        dschf = DeepSpeedConfigHF(ds_config)
+        dschf = HfDeepSpeedConfig(ds_config)
 
         self.assertFalse(dschf.is_zero3())
         self.assertFalse(is_deepspeed_zero3_enabled())

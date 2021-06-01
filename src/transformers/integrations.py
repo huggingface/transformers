@@ -286,15 +286,15 @@ def _set_if_auto(config, key, val):
         config[key] = val
 
 
-class DeepSpeedConfigHF:
+class HfDeepSpeedConfig:
     """
     This object contains a DeepSpeed configuration dictionary and can be quickly queried for things like zero stage.
 
     A ``weakref`` of this object is stored in the module's globals to be able to access the config from areas where
-    things like the Trainer object is not available (e.g. ``from_pretrained`` and ``_get_resized_embeddings``). Therefore
-    it's important that this object remains alive while the program is still running.
+    things like the Trainer object is not available (e.g. ``from_pretrained`` and ``_get_resized_embeddings``).
+    Therefore it's important that this object remains alive while the program is still running.
 
-    :class:`~transformers.Trainer` uses the ``DeepSpeedConfigHFTrainer`` subclass instead. That subclass has logic to
+    :class:`~transformers.Trainer` uses the ``HfTrainerDeepSpeedConfig`` subclass instead. That subclass has logic to
     sync the configuration with values of :class:`~transformers.TrainingArguments` by replacing special placeholder
     values: ``"auto"``. Without this special logic the DeepSpeed configuration is not modified in any way.
 
@@ -305,7 +305,7 @@ class DeepSpeedConfigHF:
 
     def __init__(self, config_file_or_dict):
         # set global weakref object
-        deepspeed_config_hf_set(self)
+        set_hf_deepspeed_config(self)
 
         dep_version_check("deepspeed")
 
@@ -348,9 +348,9 @@ class DeepSpeedConfigHF:
         return self.offload
 
 
-class DeepSpeedConfigHFTrainer(DeepSpeedConfigHF):
+class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
     """
-    The ``DeepSpeedConfigHFTrainer`` object is meant to be created during ``TrainingArguments`` object creation and has
+    The ``HfTrainerDeepSpeedConfig`` object is meant to be created during ``TrainingArguments`` object creation and has
     the same lifespan as the latter.
 
     """
@@ -430,27 +430,27 @@ class DeepSpeedConfigHFTrainer(DeepSpeedConfigHF):
 
 
 # keep the config object global to be able to access it anywhere during TrainingArguments life-cycle
-_deepspeed_config_hf_weak_ref = None
+_hf_deepspeed_config_weak_ref = None
 
 
-def deepspeed_config_hf_set(deepspeed_config_hf_obj):
+def set_hf_deepspeed_config(hf_deepspeed_config_obj):
     # this is a special weakref global object to allow us to get to Deepspeed config from APIs
     # that don't have an easy way to get to the Deepspeed config outside of the Trainer domain.
-    global _deepspeed_config_hf_weak_ref
-    # will go away automatically when DeepSpeedConfigHF is destroyed (when TrainingArguments is destroyed)
-    _deepspeed_config_hf_weak_ref = weakref.ref(deepspeed_config_hf_obj)
+    global _hf_deepspeed_config_weak_ref
+    # will go away automatically when HfDeepSpeedConfig is destroyed (when TrainingArguments is destroyed)
+    _hf_deepspeed_config_weak_ref = weakref.ref(hf_deepspeed_config_obj)
 
 
 def is_deepspeed_zero3_enabled():
-    if _deepspeed_config_hf_weak_ref is not None and _deepspeed_config_hf_weak_ref() is not None:
-        return _deepspeed_config_hf_weak_ref().is_zero3()
+    if _hf_deepspeed_config_weak_ref is not None and _hf_deepspeed_config_weak_ref() is not None:
+        return _hf_deepspeed_config_weak_ref().is_zero3()
     else:
         return False
 
 
 def deepspeed_config():
-    if _deepspeed_config_hf_weak_ref is not None and _deepspeed_config_hf_weak_ref() is not None:
-        return _deepspeed_config_hf_weak_ref().config
+    if _hf_deepspeed_config_weak_ref is not None and _hf_deepspeed_config_weak_ref() is not None:
+        return _hf_deepspeed_config_weak_ref().config
     else:
         return None
 
@@ -473,11 +473,11 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
 
     model = trainer.model
 
-    deepspeed_config_hf = trainer.args.deepspeed_config_hf
-    deepspeed_config_hf.trainer_config_finalize(trainer.args, model, num_training_steps)
+    hf_deepspeed_config = trainer.args.hf_deepspeed_config
+    hf_deepspeed_config.trainer_config_finalize(trainer.args, model, num_training_steps)
 
     # resume config update - some bits like `model` and `num_training_steps` only become available during train
-    config = deepspeed_config_hf.config
+    config = hf_deepspeed_config.config
 
     # Optimizer + Scheduler
     # Currently supported combos:
@@ -494,7 +494,7 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
 
     optimizer = None
     if "optimizer" not in config:
-        if deepspeed_config_hf.is_offload():
+        if hf_deepspeed_config.is_offload():
             raise ValueError("ZeRO Offload can only work with DeepSpeed optimizers")
 
         # ds supports Adam, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
