@@ -1750,8 +1750,9 @@ class Trainer:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         elif self.deepspeed:
-            # loss gets scaled under gradient_accumulation_steps in deepspeed
-            loss = self.deepspeed.backward(loss)
+            self.deepspeed.backward(loss)
+            # to report the proper loss, we do the scaling here, after the `backward` pass
+            loss = loss / self.args.gradient_accumulation_steps
         else:
             loss.backward()
 
