@@ -861,7 +861,7 @@ class TrainingArguments:
         The index of the local process used.
         """
         if is_torch_tpu_available():
-            return xm.get_ordinal(local=True)
+            return xm.get_local_ordinal()
         elif is_sagemaker_mp_enabled():
             return smp.local_rank()
         elif is_sagemaker_dp_enabled():
