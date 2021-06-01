@@ -17,12 +17,24 @@ Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The ByT5 model was presented in `ByT5: Towards a token-free future with pre-trained byte-to-byte models
-<https://arxiv.org/abs/2105.13626>`_ by Linting Xue, Aditya Barua, Noah Constant, Rami Al-Rfou, Sharan Narang, Mihir Kale, Adam Roberts, Colin Raffel.
+<https://arxiv.org/abs/2105.13626>`_ by Linting Xue, Aditya Barua, Noah Constant, Rami Al-Rfou, Sharan Narang, Mihir
+Kale, Adam Roberts, Colin Raffel.
 
 The abstract from the paper is the following:
 
-benchmarks. All of the code and model checkpoints*
-*Most widely-used pre-trained language models operate on sequences of tokens corresponding to word or subword units. Encoding text as a sequence of tokens requires a tokenizer, which is typically created as an independent artifact from the model. Token-free models that instead operate directly on raw text (bytes or characters) have many benefits: they can process text in any language out of the box, they are more robust to noise, and they minimize technical debt by removing complex and error-prone text preprocessing pipelines. Since byte or character sequences are longer than token sequences, past work on token-free models has often introduced new model architectures designed to amortize the cost of operating directly on raw text. In this paper, we show that a standard Transformer architecture can be used with minimal modifications to process byte sequences. We carefully characterize the trade-offs in terms of parameter count, training FLOPs, and inference speed, and show that byte-level models are competitive with their token-level counterparts. We also demonstrate that byte-level models are significantly more robust to noise and perform better on tasks that are sensitive to spelling and pronunciation. As part of our contribution, we release a new set of pre-trained byte-level Transformer models based on the T5 architecture, as well as all code and data used in our experiments.*
+benchmarks. All of the code and model checkpoints* *Most widely-used pre-trained language models operate on sequences
+of tokens corresponding to word or subword units. Encoding text as a sequence of tokens requires a tokenizer, which is
+typically created as an independent artifact from the model. Token-free models that instead operate directly on raw
+text (bytes or characters) have many benefits: they can process text in any language out of the box, they are more
+robust to noise, and they minimize technical debt by removing complex and error-prone text preprocessing pipelines.
+Since byte or character sequences are longer than token sequences, past work on token-free models has often introduced
+new model architectures designed to amortize the cost of operating directly on raw text. In this paper, we show that a
+standard Transformer architecture can be used with minimal modifications to process byte sequences. We carefully
+characterize the trade-offs in terms of parameter count, training FLOPs, and inference speed, and show that byte-level
+models are competitive with their token-level counterparts. We also demonstrate that byte-level models are
+significantly more robust to noise and perform better on tasks that are sensitive to spelling and pronunciation. As
+part of our contribution, we release a new set of pre-trained byte-level Transformer models based on the T5
+architecture, as well as all code and data used in our experiments.*
 
 This model was contributed by `patrickvonplaten <https://huggingface.co/patrickvonplaten>`__. The original code can be
 found `here <https://github.com/google-research/byt5>`__.
@@ -49,8 +61,7 @@ ByT5 works on raw UTF-8 bytes, so it can be used without a tokenizer:
     loss = model(input_ids, labels=labels) # forward pass
 
 
-For batched inference and training it is however recommended to make use 
-of the tokenizer:
+For batched inference and training it is however recommended to make use of the tokenizer:
 
 .. code-block::
 
