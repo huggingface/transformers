@@ -1092,6 +1092,7 @@ class TFT5Model(TFT5PreTrainedModel):
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
+        decoder_config.num_layers = config.num_decoder_layers
         self.decoder = TFT5MainLayer(decoder_config, embed_tokens, name="decoder")
 
     def get_encoder(self):
@@ -1255,6 +1256,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
+        decoder_config.num_layers = config.num_decoder_layers
         self.decoder = TFT5MainLayer(decoder_config, embed_tokens, name="decoder")
 
         if not config.tie_word_embeddings:
