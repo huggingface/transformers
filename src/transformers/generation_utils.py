@@ -769,7 +769,7 @@ class GenerationMixin:
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
                 returned tensors for more details.
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
                 for more details.
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
@@ -1187,7 +1187,7 @@ class GenerationMixin:
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
                 returned tensors for more details.
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
                 for more details.
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
@@ -1416,7 +1416,7 @@ class GenerationMixin:
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
                 returned tensors for more details.
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
                 for more details.
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
@@ -1657,7 +1657,7 @@ class GenerationMixin:
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
                 returned tensors for more details.
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
                 for more details.
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
@@ -1953,7 +1953,7 @@ class GenerationMixin:
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
                 returned tensors for more details.
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
                 for more details.
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
@@ -2250,7 +2250,7 @@ class GenerationMixin:
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
                 returned tensors for more details.
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
                 for more details.
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
