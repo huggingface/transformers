@@ -60,6 +60,22 @@ def ids_tensor(shape, vocab_size, rng=None):
     return output
 
 
+def floats_tensor(shape, scale=1.0, rng=None, name=None):
+    """Creates a random float32 tensor"""
+    if rng is None:
+        rng = random.Random()
+
+    total_dims = 1
+    for dim in shape:
+        total_dims *= dim
+
+    values = []
+    for _ in range(total_dims):
+        values.append(rng.random() * scale)
+
+    return np.array(values, dtype=jnp.float32).reshape(shape)
+
+
 def random_attention_mask(shape, rng=None):
     attn_mask = ids_tensor(shape, vocab_size=2, rng=rng)
     # make sure that at least one token is attended to for each batch
