@@ -30,8 +30,6 @@ if is_torch_available():
 
     from transformers import (
         CanineConfig,
-        CanineForCausalLM,
-        CanineForMaskedLM,
         CanineForMultipleChoice,
         CanineForQuestionAnswering,
         CanineForSequenceClassification,
@@ -89,11 +87,12 @@ class CanineModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        input_ids = torch.tensor([[ord(char) for char in "hello world"]])
+        # let's use a vocab size that's way bigger than BERT
+        input_ids = ids_tensor([self.batch_size, self.seq_length], 100000)
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.ones_like(input_ids)
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -123,33 +122,6 @@ class CanineModelTester:
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-
-        config.is_decoder = True
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-        return (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        )
-
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -160,127 +132,6 @@ class CanineModelTester:
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_model_as_decoder(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.add_cross_attention = True
-        model = CanineModel(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-        )
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            encoder_hidden_states=encoder_hidden_states,
-        )
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        model = CanineForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_for_masked_lm(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = CanineForMaskedLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_decoder_model_past_large_inputs(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.is_decoder = True
-        config.add_cross_attention = True
-        model = CanineForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        # first forward pass
-        outputs = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            use_cache=True,
-        )
-        past_key_values = outputs.past_key_values
-
-        # create hypothetical multiple next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
-
-        # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
-
-        output_from_no_past = model(
-            next_input_ids,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-        output_from_past = model(
-            next_tokens,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
-
-        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
-
-        # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def create_and_check_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -357,8 +208,6 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             CanineModel,
-            CanineForMaskedLM,
-            CanineForCausalLM,
             CanineForMultipleChoice,
             CanineForQuestionAnswering,
             CanineForSequenceClassification,
@@ -367,7 +216,6 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (CanineForCausalLM,) if is_torch_available() else ()
 
     test_torchscript = False
     test_resize_embeddings = False
@@ -382,10 +230,6 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_for_masked_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
 
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -403,6 +247,11 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
+    @unittest.skip("CANINE does not have a get_input_embeddings() method.")
+    def test_inputs_embeds(self):
+        # ViT does not use inputs_embeds
+        pass
+    
     @slow
     def test_model_from_pretrained(self):
         for model_name in CANINE_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -414,6 +263,7 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
 class CanineModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
+        # TODO replace nielsr by google
         model = CanineModel.from_pretrained("nielsr/canine-s")
         # this one corresponds to the first example of the TydiQA dev set. 
         input_ids = [57344, 57349, 85, 107, 117, 98, 119, 97, 32, 119, 97, 32, 82, 105, 106, 105, 108, 105, 32, 75, 97, 110, 116, 111, 114, 105, 32, 110, 105, 32, 107, 105, 97, 115, 105, 32, 103, 97, 110, 105, 63, 57345, 57350, 32, 82, 105, 106, 105, 108, 105, 32, 75, 97, 110, 116, 111, 114, 105, 32, 44, 32, 82, 105, 106, 105, 108, 105, 32, 75, 97, 110, 116, 97, 114, 117, 115, 105, 32, 97, 117, 32, 105, 110, 103, 46, 32, 65, 108, 112, 104, 97, 32, 67, 101, 110, 116, 97, 117, 114, 105, 32, 40, 112, 105, 97, 58, 32, 84, 111, 108, 105, 109, 97, 110, 32, 97, 117, 32, 82, 105, 103, 105, 108, 32, 75, 101, 110, 116, 97, 117, 114, 117, 115, 41, 32, 110, 105, 32, 110, 121, 111, 116, 97, 32, 105, 110, 97, 121, 111, 110, 103, 39, 97, 97, 32, 115, 97, 110, 97, 32, 107, 97, 116, 105, 107, 97, 32, 97, 110, 103, 97, 32, 121, 97, 32, 107, 117, 115, 105, 110, 105, 32, 107, 119, 101, 110, 121, 101, 32, 107, 117, 110, 100, 105, 110, 121, 111, 116, 97, 32, 121, 97, 32, 75, 97, 110, 116, 97, 114, 117, 115, 105, 32, 40, 112, 105, 97, 58, 32, 105, 110, 103, 46, 32, 67, 101, 110, 116, 97, 117, 114, 117, 115, 41, 46, 32, 78, 105, 32, 110, 121, 111, 116, 97, 32, 121, 97, 32, 107, 117, 110, 103, 97, 97, 32, 115, 97, 110, 97, 32, 121, 97, 32, 110, 110, 101, 32, 97, 110, 103, 97, 110, 105, 32, 108, 97, 107, 105, 110, 105, 32, 104, 97, 105, 111, 110, 101, 107, 97, 110, 105, 32, 107, 119, 101, 110, 121, 101, 32, 110, 117, 115, 117, 100, 117, 110, 105, 97, 32, 121, 97, 32, 107, 97, 115, 107, 97, 122, 105, 110, 105, 46, 32, 57351, 32, 65, 108, 112, 104, 97, 32, 67, 101, 110, 116, 97, 117, 114, 105, 32, 110, 105, 32, 110, 121, 111, 116, 97, 32, 121, 97, 32, 112, 101, 107, 101, 101, 32, 107, 119, 97, 32, 115, 97, 98, 97, 98, 117, 32, 110, 105, 32, 110, 121, 111, 116, 97, 32, 121, 101, 116, 117, 32, 106, 105, 114, 97, 110, 105, 32, 107, 97, 116, 105, 107, 97, 32, 97, 110, 103, 97, 32, 105, 110, 97, 32, 117, 109, 98, 97, 108, 105, 32, 119, 97, 32, 109, 105, 97, 107, 97, 32, 121, 97, 32, 110, 117, 114, 117, 32, 52, 46, 50, 46, 32, 73, 110, 97, 111, 110, 101, 107, 97, 110, 97, 32, 97, 110, 103, 97, 110, 105, 32, 107, 97, 114, 105, 98, 117, 32, 110, 97, 32, 107, 117, 110, 100, 105, 110, 121, 111, 116, 97, 32, 121, 97, 32, 83, 97, 108, 105, 98, 117, 32, 40, 67, 114, 117, 120, 41, 46, 32, 57352, 32, 82, 105, 106, 105, 108, 105, 32, 75, 97, 110, 116, 97, 114, 117, 115, 105, 32, 40, 65, 108, 112, 104, 97, 32, 67, 101, 110, 116, 97, 117, 114, 105, 41, 32, 105, 110, 97, 111, 110, 101, 107, 97, 110, 97, 32, 107, 97, 109, 97, 32, 110, 121, 111, 116, 97, 32, 109, 111, 106, 97, 32, 108, 97, 107, 105, 110, 105, 32, 107, 119, 97, 32, 100, 97, 114, 117, 98, 105, 110, 105, 32, 107, 117, 98, 119, 97, 32, 105, 110, 97, 111, 110, 101, 107, 97, 110, 97, 32, 107, 117, 119, 97, 32, 109, 102, 117, 109, 111, 32, 119, 97, 32, 110, 121, 111, 116, 97, 32, 116, 97, 116, 117, 32, 122, 105, 110, 97, 122, 111, 107, 97, 97, 32, 107, 97, 114, 105, 98, 117, 32, 110, 97, 32, 107, 117, 115, 104, 105, 107, 97, 109, 97, 110, 97, 32, 107, 97, 116, 105, 32, 121, 97, 111, 46, 32, 78, 121, 111, 116, 97, 32, 109, 97, 112, 97, 99, 104, 97, 32, 122, 97, 32, 65, 108, 112, 104, 97, 32, 67, 101, 110, 116, 97, 117, 114, 105, 32, 65, 32, 110, 97, 32, 65, 108, 112, 104, 97, 32, 67, 101, 110, 116, 97, 117, 114, 105, 32, 66, 32, 122, 105, 107, 111, 32, 109, 105, 97, 107, 97, 32, 121, 97, 32, 110, 117, 114, 117, 32, 52, 46, 51, 54, 32, 107, 117, 116, 111, 107, 97, 32, 107, 119, 101, 116, 117, 32, 110, 97, 32, 110, 121, 111, 116, 97, 32, 121, 97, 32, 116, 97, 116, 117, 32, 65, 108, 112, 104, 97, 32, 67, 101, 110, 116, 97, 117, 114, 105, 32, 67, 32, 97, 117, 32, 80, 114, 111, 120, 105, 109, 97, 32, 67, 101, 110, 116, 97, 117, 114, 105, 32, 105, 110, 97, 32, 117, 109, 98, 97, 108, 105, 32, 119, 97, 32, 109, 105, 97, 107, 97, 32, 121, 97, 32, 110, 117, 114, 117, 32, 52, 46, 50, 50, 46, 32, 57353, 32, 80, 114, 111, 120, 105, 109, 97, 32, 67, 101, 110, 116, 97, 117, 114, 105, 32, 40, 121, 97, 97, 110, 105, 32, 110, 121, 111, 116, 97, 32, 121, 97, 32, 75, 97, 110, 116, 97, 114, 117, 115, 105, 32, 105, 108, 105, 121, 111, 32, 107, 97, 114, 105, 98, 117, 32, 122, 97, 105, 100, 105, 32, 110, 97, 115, 105, 41, 32, 105, 109, 101, 103, 117, 110, 100, 117, 108, 105, 119, 97, 32, 107, 117, 119, 97, 32, 110, 97, 32, 115, 97, 121, 97, 114, 105, 32, 109, 111, 106, 97, 46, 32, 86, 105, 112, 105, 109, 111, 32, 118, 105, 110, 97, 118, 121, 111, 112, 97, 116, 105, 107, 97, 110, 97, 32, 104, 97, 100, 105, 32, 115, 97, 115, 97, 32, 122, 105, 110, 97, 111, 110, 121, 101, 115, 104, 97, 32, 117, 119, 101, 122, 101, 107, 97, 110, 111, 32, 109, 107, 117, 98, 119, 97, 32, 121, 97, 32, 107, 119, 97, 109, 98, 97, 32, 115, 97, 121, 97, 114, 105, 32, 104, 105, 105, 32, 110, 105, 32, 121, 97, 32, 109, 119, 97, 109, 98, 97, 32, 40, 107, 97, 109, 97, 32, 100, 117, 110, 105, 97, 32, 121, 101, 116, 117, 44, 32, 77, 105, 114, 105, 104, 105, 32, 97, 117, 32, 90, 117, 104, 117, 114, 97, 41, 32, 110, 97, 32, 105, 110, 97, 119, 101, 122, 97, 32, 107, 117, 119, 97, 32, 110, 97, 32, 97, 110, 103, 97, 104, 101, 119, 97, 44, 32, 116, 101, 110, 97, 32, 107, 97, 116, 105, 107, 97, 32, 117, 112, 101, 111, 32, 119, 97, 32, 106, 111, 116, 111, 32, 117, 110, 97, 111, 114, 117, 104, 117, 115, 117, 32, 107, 117, 119, 101, 112, 111, 32, 107, 119, 97, 32, 117, 104, 97, 105, 46, 32, 91, 49, 93, 57345, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]

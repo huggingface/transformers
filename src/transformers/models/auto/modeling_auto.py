@@ -82,8 +82,6 @@ from ..camembert.modeling_camembert import (
 
 # Add modeling imports here
 from ..canine.modeling_canine import (
-    CanineForCausalLM,
-    CanineForMaskedLM,
     CanineForMultipleChoice,
     CanineForQuestionAnswering,
     CanineForSequenceClassification,
@@ -484,7 +482,6 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
-        (CanineConfig, CanineForMaskedLM),
         (RoFormerConfig, RoFormerForMaskedLM),
         (BigBirdPegasusConfig, BigBirdPegasusForConditionalGeneration),
         (GPTNeoConfig, GPTNeoForCausalLM),
@@ -533,7 +530,6 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Causal LM mapping
-        (CanineConfig, CanineForCausalLM),
         (RoFormerConfig, RoFormerForCausalLM),
         (BigBirdPegasusConfig, BigBirdPegasusForCausalLM),
         (GPTNeoConfig, GPTNeoForCausalLM),
@@ -576,7 +572,6 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
-        (CanineConfig, CanineForMaskedLM),
         (RoFormerConfig, RoFormerForMaskedLM),
         (BigBirdConfig, BigBirdForMaskedLM),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),

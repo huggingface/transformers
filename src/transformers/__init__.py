@@ -637,8 +637,6 @@ if is_torch_available():
     _import_structure["models.canine"].extend(
         [
             "CANINE_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "CanineForCausalLM",
-            "CanineForMaskedLM",
             "CanineForMultipleChoice",
             "CanineForQuestionAnswering",
             "CanineForSequenceClassification",
