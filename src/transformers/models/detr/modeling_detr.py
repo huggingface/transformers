@@ -82,7 +82,8 @@ class DetrDecoderOutput(BaseModelOutputWithCrossAttentions):
             sequence_length, sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the
             attention softmax, used to compute the weighted average in the cross-attention heads.
         intermediate_hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(config.decoder_layers, batch_size, num_queries, hidden_size)`, `optional`, returned when ``config.auxiliary_loss=True``):
-            Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a layernorm.
+            Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
+            layernorm.
     """
 
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
@@ -1100,7 +1101,7 @@ class DetrDecoder(DetrPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
-        
+
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
@@ -1144,7 +1145,7 @@ class DetrDecoder(DetrPreTrainedModel):
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
-                
+
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_outputs[2],)
 
@@ -1154,7 +1155,7 @@ class DetrDecoder(DetrPreTrainedModel):
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
-        
+
         # stack intermediate decoder activations
         if self.config.auxiliary_loss:
             intermediate = torch.stack(intermediate)
@@ -1299,7 +1300,7 @@ class DetrModel(DetrPreTrainedModel):
         # Fifth, sent query embeddings + position embeddings through the decoder (which is conditioned on the encoder output)
         query_position_embeddings = self.query_position_embeddings.weight.unsqueeze(0).repeat(batch_size, 1, 1)
         queries = torch.zeros_like(query_position_embeddings)
-        
+
         # decoder outputs consists of (dec_features, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             inputs_embeds=queries,

@@ -352,7 +352,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     def test_retain_grad_hidden_states_attentions(self):
         # removed retain_grad and grad on decoder_hidden_states, as queries don't require grad
-        
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
         config.output_attentions = True
@@ -460,12 +460,10 @@ def prepare_img():
 class DetrModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        # TODO replace by facebook/detr-resnet-50
-        return DetrFeatureExtractor.from_pretrained("nielsr/detr-resnet-50") if is_vision_available() else None
+        return DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50") if is_vision_available() else None
 
     def test_inference_no_head(self):
-        # TODO replace by facebook/detr-resnet-50
-        model = DetrModel.from_pretrained("nielsr/detr-resnet-50").to(torch_device)
+        model = DetrModel.from_pretrained("facebook/detr-resnet-50").to(torch_device)
         model.eval()
 
         feature_extractor = self.default_feature_extractor
@@ -483,8 +481,7 @@ class DetrModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
 
     def test_inference_object_detection_head(self):
-        # TODO replace by facebook/detr-resnet-50
-        model = DetrForObjectDetection.from_pretrained("nielsr/detr-resnet-50").to(torch_device)
+        model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50").to(torch_device)
         model.eval()
 
         feature_extractor = self.default_feature_extractor
@@ -511,8 +508,7 @@ class DetrModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 
     def test_inference_panoptic_segmentation_head(self):
-        # TODO replace by facebook/detr-resnet-50-panoptic
-        model = DetrForSegmentation.from_pretrained("nielsr/detr-testje").to(torch_device)
+        model = DetrForSegmentation.from_pretrained("facebook/detr-testje").to(torch_device)
         model.eval()
 
         feature_extractor = self.default_feature_extractor
