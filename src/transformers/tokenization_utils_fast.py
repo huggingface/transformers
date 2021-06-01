@@ -528,7 +528,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if self.slow_tokenizer_class is None and legacy_format is True:
             raise ValueError(
                 "Your tokenizer does not have a legacy version defined and therefore cannot register this version. You "
-                "might consider setting the legacy_format argument to None or False."
+                "might consider leaving the legacy_format at `None` or setting it to `False`."
             )
 
         save_slow = (legacy_format is None or legacy_format is True) and self.slow_tokenizer_class is not None
