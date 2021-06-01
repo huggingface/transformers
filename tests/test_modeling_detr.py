@@ -508,7 +508,7 @@ class DetrModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 
     def test_inference_panoptic_segmentation_head(self):
-        model = DetrForSegmentation.from_pretrained("facebook/detr-testje").to(torch_device)
+        model = DetrForSegmentation.from_pretrained("facebook/detr-resnet-50-panoptic").to(torch_device)
         model.eval()
 
         feature_extractor = self.default_feature_extractor
