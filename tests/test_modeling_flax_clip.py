@@ -383,7 +383,7 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
         @jax.jit
         def model_jitted(pixel_values):
-            return model.get_image_features(pixel_values=pixel_values).to_tuple()
+            return model.get_image_features(pixel_values=pixel_values)
 
         with self.subTest("JIT Enabled"):
             jitted_output = model_jitted(inputs_dict["pixel_values"])
@@ -393,7 +393,7 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 output = model_jitted(inputs_dict["pixel_values"])
 
         self.assertEqual(jitted_output.shape, output.shape)
-        self.assertTrue(np.all(jitted_output == output))
+        self.assertTrue(np.allclose(jitted_output, output, atol=1e-3))
 
     def test_get_text_features(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -401,17 +401,17 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
         @jax.jit
         def model_jitted(input_ids, attention_mask, **kwargs):
-            return model.get_text_features(input_ids=input_ids, attention_mask=attention_mask).to_tuple()
+            return model.get_text_features(input_ids=input_ids, attention_mask=attention_mask)
 
         with self.subTest("JIT Enabled"):
-            jitted_output = model_jitted(inputs_dict["pixel_values"])
+            jitted_output = model_jitted(**inputs_dict)
 
         with self.subTest("JIT Disabled"):
             with jax.disable_jit():
-                output = model_jitted(inputs_dict["pixel_values"])
+                output = model_jitted(**inputs_dict)
 
         self.assertEqual(jitted_output.shape, output.shape)
-        self.assertTrue(np.all(jitted_output == output))
+        self.assertTrue(np.allclose(jitted_output, output, atol=1e-3))
 
     @slow
     def test_model_from_pretrained(self):
@@ -420,6 +420,8 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
             outputs = model(input_ids=np.ones((1, 1)), pixel_values=np.ones((1, 3, 224, 224)))
             self.assertIsNotNone(outputs)
 
+    # overwrite from common since FlaxCLIPModel returns nested output
+    # which is not supported in the common test
     @is_pt_flax_cross_test
     def test_equivalence_pt_to_flax(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -461,6 +463,8 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 for fx_output_loaded, pt_output in zip(fx_outputs_loaded[:4], pt_outputs[:4]):
                     self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 4e-2)
 
+    # overwrite from common since FlaxCLIPModel returns nested output
+    # which is not supported in the common test
     @is_pt_flax_cross_test
     def test_equivalence_flax_to_pt(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -489,7 +493,6 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 pt_outputs = pt_outputs[1:]
 
                 fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
-                print("check", pt_outputs[0])
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
                 for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
                     self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
