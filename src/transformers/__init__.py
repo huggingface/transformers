@@ -165,6 +165,7 @@ _import_structure = {
         "BlenderbotSmallConfig",
         "BlenderbotSmallTokenizer",
     ],
+    "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1482,6 +1483,14 @@ if is_flax_available():
             "FlaxBertPreTrainedModel",
         ]
     )
+    _import_structure["models.clip"].extend(
+        [
+            "FlaxCLIPModel",
+            "FlaxCLIPPreTrainedModel",
+            "FlaxCLIPTextModel",
+            "FlaxCLIPVisionModel",
+        ]
+    )
     _import_structure["models.electra"].extend(
         [
             "FlaxElectraForMaskedLM",
@@ -1628,6 +1637,7 @@ if TYPE_CHECKING:
         BlenderbotSmallConfig,
         BlenderbotSmallTokenizer,
     )
+    from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.clip import (
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -2743,6 +2753,7 @@ if TYPE_CHECKING:
             FlaxBertModel,
             FlaxBertPreTrainedModel,
         )
+        from .models.clip import FlaxCLIPModel, FlaxCLIPPreTrainedModel, FlaxCLIPTextModel, FlaxCLIPVisionModel
         from .models.electra import (
             FlaxElectraForMaskedLM,
             FlaxElectraForMultipleChoice,
