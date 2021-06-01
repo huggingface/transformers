@@ -490,8 +490,7 @@ class TokenizerTesterMixin:
         self.assertEqual(tok1.__getstate__(), tok2.__getstate__())
 
     def test_added_tokens_do_lower_case(self):
-        # TODO(thom) activate fast tokenizer tests once Rust tokenizers accepts white spaces in added tokens. Change it
-        # also into test_tokenization_fast.py
+        # TODO(thom) activate fast tokenizer tests once Rust tokenizers accepts white spaces in added tokens.
         tokenizers = self.get_tokenizers(fast=False, do_lower_case=True)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
