@@ -1362,7 +1362,6 @@ class Trainer:
                     self.state.best_model_checkpoint, load_optimizer_states=False, load_lr_scheduler_states=False
                 )
 
-        self.control = self.callback_handler.on_train_end(args, self.state, self.control)
         # add remaining tr_loss
         self._total_loss_scalar += tr_loss.item()
         train_loss = self._total_loss_scalar / self.state.global_step
@@ -1377,6 +1376,8 @@ class Trainer:
         self._memory_tracker.stop_and_update_metrics(metrics)
 
         self.log(metrics)
+
+        self.control = self.callback_handler.on_train_end(args, self.state, self.control)
 
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
