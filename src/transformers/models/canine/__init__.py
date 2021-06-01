@@ -25,14 +25,9 @@ _import_structure = {
     "tokenization_canine": ["CanineTokenizer"],
 }
 
-if is_tokenizers_available():
-    _import_structure["tokenization_canine_fast"] = ["CanineTokenizerFast"]
-
 if is_torch_available():
     _import_structure["modeling_canine"] = [
         "CANINE_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "CanineForCausalLM",
-        "CanineForMaskedLM",
         "CanineForMultipleChoice",
         "CanineForQuestionAnswering",
         "CanineForSequenceClassification",
@@ -48,14 +43,9 @@ if TYPE_CHECKING:
     from .configuration_canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig
     from .tokenization_canine import CanineTokenizer
 
-    if is_tokenizers_available():
-        from .tokenization_canine_fast import CanineTokenizerFast
-
     if is_torch_available():
         from .modeling_canine import (
             CANINE_PRETRAINED_MODEL_ARCHIVE_LIST,
-            CanineForCausalLM,
-            CanineForMaskedLM,
             CanineForMultipleChoice,
             CanineForQuestionAnswering,
             CanineForSequenceClassification,
