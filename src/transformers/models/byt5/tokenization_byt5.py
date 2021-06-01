@@ -28,7 +28,7 @@ logger = logging.get_logger(__name__)
 
 class ByT5Tokenizer(PreTrainedTokenizer):
     """
-    Construct a ByT5 tokenizer. ByT5 is simply uses raw bytes utf-8 encoding.
+    Construct a ByT5 tokenizer. ByT5 simply uses raw bytes utf-8 encoding.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
