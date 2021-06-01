@@ -22,7 +22,7 @@ Kale, Adam Roberts, Colin Raffel.
 
 The abstract from the paper is the following:
 
-benchmarks. All of the code and model checkpoints* *Most widely-used pre-trained language models operate on sequences
+*Most widely-used pre-trained language models operate on sequences
 of tokens corresponding to word or subword units. Encoding text as a sequence of tokens requires a tokenizer, which is
 typically created as an independent artifact from the model. Token-free models that instead operate directly on raw
 text (bytes or characters) have many benefits: they can process text in any language out of the box, they are more
