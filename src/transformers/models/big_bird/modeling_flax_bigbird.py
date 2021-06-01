@@ -1045,6 +1045,7 @@ class FlaxBigBirdAttention(nn.Module):
 
         self.output = FlaxBigBirdSelfOutput(self.config, dtype=self.dtype)
 
+    # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertAttention.__call__ with Bert->BigBird
     def __call__(self, hidden_states, attention_mask=None, deterministic=True, output_attentions: bool = False):
         # Attention mask comes in as attention_mask.shape == (*batch_sizes, kv_length)
         # FLAX expects: attention_mask.shape == (*batch_sizes, 1, 1, kv_length) such that it is broadcastable
@@ -1052,7 +1053,6 @@ class FlaxBigBirdAttention(nn.Module):
         attn_outputs = self.self(
             hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
         )
-
         attn_output = attn_outputs[0]
         hidden_states = self.output(attn_output, hidden_states, deterministic=deterministic)
 
@@ -1114,6 +1114,7 @@ class FlaxBigBirdLayer(nn.Module):
         self.intermediate = FlaxBigBirdIntermediate(self.config, dtype=self.dtype)
         self.output = FlaxBigBirdOutput(self.config, dtype=self.dtype)
 
+    # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayer.__call__ with Bert->BigBird
     def __call__(self, hidden_states, attention_mask, deterministic: bool = True, output_attentions: bool = False):
         attention_outputs = self.attention(
             hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
@@ -1140,6 +1141,7 @@ class FlaxBigBirdLayerCollection(nn.Module):
             for i in range(self.config.num_hidden_layers)
         ]
 
+    # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayerCollection.__call__ with Bert->BigBird
     def __call__(
         self,
         hidden_states,
@@ -1178,6 +1180,7 @@ class FlaxBigBirdLayerCollection(nn.Module):
         )
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEncoder with Bert->BigBird
 class FlaxBigBirdEncoder(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
