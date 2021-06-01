@@ -484,6 +484,7 @@ Flax), PyTorch, and/or TensorFlow.
     model_doc/blenderbot
     model_doc/blenderbot_small
     model_doc/bort
+    model_doc/byt5
     model_doc/camembert
     model_doc/clip
     model_doc/convbert
