@@ -55,10 +55,10 @@ ByT5 works on raw UTF-8 bytes, so it can be used without a tokenizer:
 
     model = T5ForConditionalGeneration.from_pretrained('google/byt5-small')
 
-    input_ids = torch.tensor("Life is like a box of chocolates.".encode("utf-8")).unsqueeze(0) + 3  # add 3 for special tokens
-    labels = torch.tensor("La vie est comme une boîte de chocolat.".encode("utf-8")).unsqueeze(0) + 3  # add 3 for special tokens
+    input_ids = torch.tensor([list("Life is like a box of chocolates.".encode("utf-8"))]) + 3  # add 3 for special tokens
+    labels = torch.tensor([list("La vie est comme une boîte de chocolat.".encode("utf-8"))]) + 3  # add 3 for special tokens
 
-    loss = model(input_ids, labels=labels) # forward pass
+    loss = model(input_ids, labels=labels).loss # forward pass
 
 
 For batched inference and training it is however recommended to make use of the tokenizer:
@@ -73,7 +73,7 @@ For batched inference and training it is however recommended to make use of the 
     model_inputs = tokenizer(["Life is like a box of chocolates.", "Today is Monday."], padding="longest", return_tensors="pt")
     labels = tokenizer(["La vie est comme une boîte de chocolat.", "Aujourd'hui c'est lundi."], padding="longest", return_tensors="pt").input_ids
 
-    loss = model(**model_inputs, labels=labels) # forward pass
+    loss = model(**model_inputs, labels=labels).loss # forward pass
 
 ByT5Tokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
