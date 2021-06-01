@@ -1627,6 +1627,34 @@ Here is the `documentation
 <https://www.deepspeed.ai/docs/config-json/#automatic-mixed-precision-amp-training-options>`__.
 
 
+Batch Size
+=======================================================================================================================
+
+To configure batch size, use:
+
+.. code-block:: json
+
+    {
+        "train_batch_size": "auto",
+        "train_micro_batch_size_per_gpu": "auto"
+    }
+
+and the :class:`~transformers.Trainer` will automatically set ``train_micro_batch_size_per_gpu`` to the value of
+``args.per_device_train_batch_size`` and ``train_batch_size`` to ``args.world_size * args.per_device_train_batch_size *
+args.gradient_accumulation_steps``.
+
+You can also set the values explicitly:
+
+.. code-block:: json
+
+    {
+        "train_batch_size": 12,
+        "train_micro_batch_size_per_gpu": 4
+    }
+
+But then you're on your own synchronizing the :class:`~transformers.Trainer` command line arguments and the DeepSpeed
+configuration.
+
 Gradient Accumulation
 =======================================================================================================================
 
