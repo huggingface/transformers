@@ -1880,7 +1880,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 be loaded in the corresponding "slow" tokenizer.
 
                 If :obj:`True`, will save the tokenizer in legacy format. If the "slow" tokenizer doesn't exits, a
-                value error is raised
+                value error is raised.
             filename_prefix: (:obj:`str`, `optional`):
                 A prefix to add to the names of the files saved by the tokenizer.
 
