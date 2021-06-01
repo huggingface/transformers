@@ -713,6 +713,7 @@ class WandbCallback(TrainerCallback):
         hp_search = state.is_hyper_param_search
         if hp_search:
             self._wandb.finish()
+            self._initialized = False
         if not self._initialized:
             self.setup(args, state, model, **kwargs)
 
