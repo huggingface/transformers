@@ -646,8 +646,8 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
 
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads}"
             )
 
         self.num_heads = config.num_attention_heads
@@ -1189,7 +1189,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
 
     @staticmethod
     def _get_global_attn_indices(is_index_global_attn):
-        """ compute global attn indices required throughout forward pass """
+        """compute global attn indices required throughout forward pass"""
         # helper variable
         num_global_attn_indices = tf.math.count_nonzero(is_index_global_attn, axis=1)
         num_global_attn_indices = tf.cast(num_global_attn_indices, dtype=tf.constant(1).dtype)
@@ -1388,7 +1388,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         # compute global attn probs
         global_attn_probs_float = tf.nn.softmax(global_attn_scores, axis=-1)
 
-        # apply layer head maskin
+        # apply layer head masking
         if layer_head_mask is not None:
             if tf.executing_eagerly():
                 tf.debugging.assert_equal(
@@ -1518,9 +1518,7 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
 
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
-        self.layer = [
-            TFLongformerLayer(config, i, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)
-        ]
+        self.layer = [TFLongformerLayer(config, i, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
 
     def call(
         self,
@@ -1709,7 +1707,7 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
             inputs["attention_mask"], (attention_mask_shape[0], attention_mask_shape[1], 1, 1)
         )
 
-        # Since attention_mask is 1.0 for positions we want to locall attend locally and 0.0 for
+        # Since attention_mask is 1.0 for positions we want to attend locally and 0.0 for
         # masked and global attn positions, this operation will create a tensor which is 0.0 for
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
@@ -1780,9 +1778,8 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
 
         if padding_len > 0:
             logger.info(
-                "Input ids are automatically padded from {} to {} to be a multiple of `config.attention_window`: {}".format(
-                    seq_len, seq_len + padding_len, attention_window
-                )
+                f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
+                f"`config.attention_window`: {attention_window}"
             )
 
         paddings = tf.convert_to_tensor([[0, 0], [0, padding_len]])
@@ -1923,7 +1920,7 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
-            - 0 indicates the heas is **masked**.
+            - 0 indicates the head is **masked**.
 
         global_attention_mask (:obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
             Mask to decide the attention given on each token, local attention or global attention. Tokens with global
@@ -2085,6 +2082,7 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFLongformerMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        mask="<mask>",
     )
     def call(
         self,

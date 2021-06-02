@@ -33,7 +33,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     is_scatter_available,
     replace_return_docstrings,
-    requires_scatter,
+    requires_backends,
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
 from ...modeling_utils import (
@@ -142,13 +142,13 @@ def load_tf_weights_in_tapas(model, config, tf_checkpoint_path):
         )
         raise
     tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
+    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
     # Load weights from TF model
     init_vars = tf.train.list_variables(tf_path)
     names = []
     arrays = []
     for name, shape in init_vars:
-        logger.info("Loading TF weight {} with shape {}".format(name, shape))
+        logger.info(f"Loading TF weight {name} with shape {shape}")
         array = tf.train.load_variable(tf_path, name)
         names.append(name)
         arrays.append(array)
@@ -169,19 +169,19 @@ def load_tf_weights_in_tapas(model, config, tf_checkpoint_path):
             ]
             for n in name
         ):
-            logger.info("Skipping {}".format("/".join(name)))
+            logger.info(f"Skipping {'/'.join(name)}")
             continue
         # in case the model is TapasForSequenceClassification, we skip output_bias and output_weights
         # since these are not used for classification
         if isinstance(model, TapasForSequenceClassification):
             if any(n in ["output_bias", "output_weights"] for n in name):
-                logger.info("Skipping {}".format("/".join(name)))
+                logger.info(f"Skipping {'/'.join(name)}")
                 continue
         # in case the model is TapasModel, we skip output_bias, output_weights, output_bias_cls and output_weights_cls
         # since this model does not have MLM and NSP heads
         if isinstance(model, TapasModel):
             if any(n in ["output_bias", "output_weights", "output_bias_cls", "output_weights_cls"] for n in name):
-                logger.info("Skipping {}".format("/".join(name)))
+                logger.info(f"Skipping {'/'.join(name)}")
                 continue
         # if first scope name starts with "bert", change it to "tapas"
         if name[0] == "bert":
@@ -223,7 +223,7 @@ def load_tf_weights_in_tapas(model, config, tf_checkpoint_path):
                 try:
                     pointer = getattr(pointer, scope_names[0])
                 except AttributeError:
-                    logger.info("Skipping {}".format("/".join(name)))
+                    logger.info(f"Skipping {'/'.join(name)}")
                     continue
             if len(scope_names) >= 2:
                 num = int(scope_names[1])
@@ -241,7 +241,7 @@ def load_tf_weights_in_tapas(model, config, tf_checkpoint_path):
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
-        logger.info("Initialize PyTorch weight {}".format(name))
+        logger.info(f"Initialize PyTorch weight {name}")
         # Added a check to see whether the array is a scalar (because bias terms in Tapas checkpoints can be
         # scalar => should first be converted to numpy arrays)
         if np.isscalar(array):
@@ -699,7 +699,7 @@ class TapasPreTrainedModel(PreTrainedModel):
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -792,7 +792,7 @@ class TapasModel(TapasPreTrainedModel):
     """
 
     def __init__(self, config, add_pooling_layer=True):
-        requires_scatter(self)
+        requires_backends(self, "scatter")
         super().__init__(config)
         self.config = config
 
@@ -2021,7 +2021,7 @@ def _calculate_aggregate_mask(answer, pooled_output, cell_selection_preference, 
     apply to numbers. If the answer is a number but does not appear in the table then we must use some aggregation
     case. The ambiguous case is when the answer is a number that also appears in the table. In this case we use the
     aggregation function probabilities predicted by the model to decide whether to select or aggregate. The threshold
-    for this is a hyperparameter `cell_selection_preference
+    for this is a hyperparameter `cell_selection_preference`
 
     Args:
         answer (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, )`):
@@ -2041,7 +2041,7 @@ def _calculate_aggregate_mask(answer, pooled_output, cell_selection_preference, 
     aggregate_mask_init = torch.logical_not(torch.isnan(answer)).type(torch.FloatTensor).to(answer.device)
     logits_aggregation = aggregation_classifier(pooled_output)
     dist_aggregation = torch.distributions.categorical.Categorical(logits=logits_aggregation)
-    # Index 0 correponds to "no aggregation".
+    # Index 0 corresponds to "no aggregation".
     aggregation_ops_total_mass = torch.sum(dist_aggregation.probs[:, 1:], dim=1)
 
     # Cell selection examples according to current model.
@@ -2126,7 +2126,7 @@ def _calculate_aggregation_loss_unknown(logits_aggregation, aggregate_mask):
         answer supervision) per example.
     """
     dist_aggregation = torch.distributions.categorical.Categorical(logits=logits_aggregation)
-    # Index 0 correponds to "no aggregation".
+    # Index 0 corresponds to "no aggregation".
     aggregation_ops_total_mass = torch.sum(dist_aggregation.probs[:, 1:], dim=1)
     # Predict some aggregation in case of an answer that needs aggregation.
     # This increases the probability of all aggregation functions, in a way

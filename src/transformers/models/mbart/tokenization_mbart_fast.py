@@ -112,10 +112,24 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
     prefix_tokens: List[int] = []
     suffix_tokens: List[int] = []
 
-    def __init__(self, *args, tokenizer_file=None, src_lang=None, tgt_lang=None, **kwargs):
-        super().__init__(*args, tokenizer_file=tokenizer_file, src_lang=src_lang, tgt_lang=tgt_lang, **kwargs)
+    def __init__(
+        self, *args, tokenizer_file=None, src_lang=None, tgt_lang=None, additional_special_tokens=None, **kwargs
+    ):
+        super().__init__(
+            *args,
+            tokenizer_file=tokenizer_file,
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
+            additional_special_tokens=additional_special_tokens,
+            **kwargs,
+        )
 
-        self.add_special_tokens({"additional_special_tokens": FAIRSEQ_LANGUAGE_CODES})
+        _additional_special_tokens = FAIRSEQ_LANGUAGE_CODES.copy()
+
+        if additional_special_tokens is not None:
+            _additional_special_tokens.extend(additional_special_tokens)
+
+        self.add_special_tokens({"additional_special_tokens": _additional_special_tokens})
 
         self._src_lang = src_lang if src_lang is not None else "en_XX"
         self.cur_lang_code = self.convert_tokens_to_ids(self._src_lang)
@@ -130,38 +144,6 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
     def src_lang(self, new_src_lang: str) -> None:
         self._src_lang = new_src_lang
         self.set_src_lang_special_tokens(self._src_lang)
-
-    def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
-        """
-        Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` method.
-
-        Args:
-            token_ids_0 (:obj:`List[int]`):
-                List of ids.
-            token_ids_1 (:obj:`List[int]`, `optional`):
-                Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the token list is already formatted with special tokens for the model.
-
-        Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
-        """
-
-        if already_has_special_tokens:
-            if token_ids_1 is not None:
-                raise ValueError(
-                    "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formatted with special tokens for the model."
-                )
-            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
-        prefix_ones = [1] * len(self.prefix_tokens)
-        suffix_ones = [1] * len(self.suffix_tokens)
-        if token_ids_1 is None:
-            return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
-        return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -191,6 +173,16 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
             return self.prefix_tokens + token_ids_0 + self.suffix_tokens
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
+
+    def _build_translation_inputs(self, raw_inputs, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs):
+        """Used by translation pipeline, to prepare inputs for the generate function"""
+        if src_lang is None or tgt_lang is None:
+            raise ValueError("Translation requires a `src_lang` and a `tgt_lang` for this model")
+        self.src_lang = src_lang
+        inputs = self(raw_inputs, add_special_tokens=True, return_tensors="pt", **extra_kwargs)
+        tgt_lang_id = self.convert_tokens_to_ids(tgt_lang)
+        inputs["forced_bos_token_id"] = tgt_lang_id
+        return inputs
 
     def prepare_seq2seq_batch(
         self,

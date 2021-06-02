@@ -197,6 +197,16 @@ class FeatureExtractionMixin:
     extractors.
     """
 
+    def __init__(self, **kwargs):
+        """Set elements of `kwargs` as attributes."""
+        # Additional attributes without default values
+        for key, value in kwargs.items():
+            try:
+                setattr(self, key, value)
+            except AttributeError as err:
+                logger.error(f"Can't set {key} with value {value} for {self}")
+                raise err
+
     @classmethod
     def from_pretrained(
         cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
@@ -216,7 +226,7 @@ class FeatureExtractionMixin:
                   :func:`~transformers.feature_extraction_utils.FeatureExtractionMixin.save_pretrained` method, e.g.,
                   ``./my_model_directory/``.
                 - a path or url to a saved feature extractor JSON `file`, e.g.,
-                  ``./my_model_directory/feature_extraction_config.json``.
+                  ``./my_model_directory/preprocessor_config.json``.
             cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
                 Path to a directory in which a downloaded pretrained model feature extractor should be cached if the
                 standard cache should not be used.
@@ -315,6 +325,13 @@ class FeatureExtractionMixin:
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
 
+        from_pipeline = kwargs.pop("_from_pipeline", None)
+        from_auto_class = kwargs.pop("_from_auto", False)
+
+        user_agent = {"file_type": "feature extractor", "from_auto_class": from_auto_class}
+        if from_pipeline is not None:
+            user_agent["using_pipeline"] = from_pipeline
+
         if is_offline_mode() and not local_files_only:
             logger.info("Offline mode: forcing local_files_only=True")
             local_files_only = True
@@ -339,6 +356,7 @@ class FeatureExtractionMixin:
                 resume_download=resume_download,
                 local_files_only=local_files_only,
                 use_auth_token=use_auth_token,
+                user_agent=user_agent,
             )
             # Load feature_extractor dict
             with open(resolved_feature_extractor_file, "r", encoding="utf-8") as reader:
@@ -416,6 +434,7 @@ class FeatureExtractionMixin:
             :obj:`Dict[str, Any]`: Dictionary of all the attributes that make up this feature extractor instance.
         """
         output = copy.deepcopy(self.__dict__)
+        output["feature_extractor_type"] = self.__class__.__name__
 
         return output
 

@@ -48,71 +48,67 @@ def _compute_mask_indices(
     shape: Tuple[int, int],
     mask_prob: float,
     mask_length: int,
-    attention_mask: Optional[torch.Tensor] = None,
+    device: torch.device,
     min_masks: int = 0,
-) -> np.ndarray:
+) -> torch.tensor:
     """
-    Computes random mask spans for a given shape
+    Computes random mask spans for a given shape. Used to implement `SpecAugment: A Simple Data Augmentation Method for
+    ASR <https://arxiv.org/abs/1904.08779>`__.
 
     Args:
         shape: the the shape for which to compute masks.
             should be of size 2 where first element is batch size and 2nd is timesteps
-        attention_mask: optional padding mask of the same size as shape, which will prevent masking padded elements
         mask_prob: probability for each token to be chosen as start of the span to be masked. this will be multiplied by
             number of timesteps divided by length of mask span to mask approximately this percentage of all elements.
             however due to overlaps, the actual number will be smaller (unless no_overlap is True)
         mask_length: size of the mask
         min_masks: minimum number of masked spans
 
-    Adapted from `fairseq's data_utils.py
-    <https://github.com/pytorch/fairseq/blob/e0788f7007a8473a76db573985031f3c94201e79/fairseq/data/data_utils.py#L376>`__.
     """
-    bsz, all_sz = shape
-    mask = np.full((bsz, all_sz), False)
+    batch_size, sequence_length = shape
 
-    all_num_mask = int(
-        # add a random number for probabilistic rounding
-        mask_prob * all_sz / float(mask_length)
-        + np.random.rand()
+    if mask_length < 1:
+        raise ValueError("`mask_length` has to be bigger than 0.")
+
+    if mask_length > sequence_length:
+        raise ValueError(
+            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and `sequence_length`: {sequence_length}`"
+        )
+
+    # compute number of masked spans in batch
+    num_masked_spans = int(mask_prob * sequence_length / mask_length + torch.rand((1,)).item())
+    num_masked_spans = max(num_masked_spans, min_masks)
+
+    # make sure num masked indices <= sequence_length
+    if num_masked_spans * mask_length > sequence_length:
+        num_masked_spans = sequence_length // mask_length
+
+    # SpecAugment mask to fill
+    spec_aug_mask = torch.zeros((batch_size, sequence_length), device=device, dtype=torch.bool)
+
+    # uniform distribution to sample from, make sure that offset samples are < sequence_length
+    uniform_dist = torch.ones((batch_size, sequence_length - (mask_length - 1)), device=device)
+
+    # get random indices to mask
+    spec_aug_mask_idxs = torch.multinomial(uniform_dist, num_masked_spans)
+
+    # expand masked indices to masked spans
+    spec_aug_mask_idxs = (
+        spec_aug_mask_idxs.unsqueeze(dim=-1)
+        .expand((batch_size, num_masked_spans, mask_length))
+        .reshape(batch_size, num_masked_spans * mask_length)
     )
+    offsets = (
+        torch.arange(mask_length, device=device)[None, None, :]
+        .expand((batch_size, num_masked_spans, mask_length))
+        .reshape(batch_size, num_masked_spans * mask_length)
+    )
+    spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
 
-    all_num_mask = max(min_masks, all_num_mask)
+    # scatter indices to mask
+    spec_aug_mask = spec_aug_mask.scatter(1, spec_aug_mask_idxs, True)
 
-    mask_idcs = []
-    padding_mask = attention_mask.ne(1) if attention_mask is not None else None
-    for i in range(bsz):
-        if padding_mask is not None:
-            sz = all_sz - padding_mask[i].long().sum().item()
-            num_mask = int(
-                # add a random number for probabilistic rounding
-                mask_prob * sz / float(mask_length)
-                + np.random.rand()
-            )
-            num_mask = max(min_masks, num_mask)
-        else:
-            sz = all_sz
-            num_mask = all_num_mask
-
-        lengths = np.full(num_mask, mask_length)
-
-        if sum(lengths) == 0:
-            lengths[0] = min(mask_length, sz - 1)
-
-        min_len = min(lengths)
-        if sz - min_len <= num_mask:
-            min_len = sz - num_mask - 1
-
-        mask_idc = np.random.choice(sz - min_len, num_mask, replace=False)
-        mask_idc = np.asarray([mask_idc[j] + offset for j in range(len(mask_idc)) for offset in range(lengths[j])])
-        mask_idcs.append(np.unique(mask_idc[mask_idc < sz]))
-
-    min_len = min([len(m) for m in mask_idcs])
-    for i, mask_idc in enumerate(mask_idcs):
-        if len(mask_idc) > min_len:
-            mask_idc = np.random.choice(mask_idc, min_len, replace=False)
-        mask[i, mask_idc] = True
-
-    return mask
+    return spec_aug_mask
 
 
 class Wav2Vec2NoLayerNormConvLayer(nn.Module):
@@ -356,35 +352,33 @@ class Wav2Vec2Attention(nn.Module):
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
-        assert attn_weights.size() == (
-            bsz * self.num_heads,
-            tgt_len,
-            src_len,
-        ), f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
+            raise ValueError(
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+            )
 
         if attention_mask is not None:
-            assert attention_mask.size() == (
-                bsz,
-                1,
-                tgt_len,
-                src_len,
-            ), f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
+                raise ValueError(
+                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+                )
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = F.softmax(attn_weights, dim=-1)
 
         if layer_head_mask is not None:
-            assert layer_head_mask.size() == (
-                self.num_heads,
-            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+            if layer_head_mask.size() != (self.num_heads,):
+                raise ValueError(
+                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+                )
             attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if output_attentions:
-            # this operation is a bit akward, but it's required to
+            # this operation is a bit awkward, but it's required to
             # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
+            # In order to do so, attn_weights have to be reshaped
             # twice and have to be reused in the following
             attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
@@ -395,17 +389,14 @@ class Wav2Vec2Attention(nn.Module):
 
         attn_output = torch.bmm(attn_probs, value_states)
 
-        assert attn_output.size() == (
-            bsz * self.num_heads,
-            tgt_len,
-            self.head_dim,
-        ), f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+            )
 
-        attn_output = (
-            attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-            .transpose(1, 2)
-            .reshape(bsz, tgt_len, embed_dim)
-        )
+        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
+        attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
 
         attn_output = self.out_proj(attn_output)
 
@@ -680,7 +671,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -852,21 +843,21 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
             if self.config.mask_time_prob > 0:
                 mask_time_indices = _compute_mask_indices(
                     (batch_size, sequence_length),
-                    self.config.mask_time_prob,
-                    self.config.mask_time_length,
-                    attention_mask=attention_mask,
+                    mask_prob=self.config.mask_time_prob,
+                    mask_length=self.config.mask_time_length,
+                    device=hidden_states.device,
                     min_masks=2,
                 )
-                hidden_states[torch.from_numpy(mask_time_indices)] = self.masked_spec_embed.to(hidden_states.dtype)
+                hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
 
             # apply SpecAugment along feature axis
             if self.config.mask_feature_prob > 0:
                 mask_feature_indices = _compute_mask_indices(
                     (batch_size, hidden_size),
-                    self.config.mask_feature_prob,
-                    self.config.mask_feature_length,
+                    mask_prob=self.config.mask_feature_prob,
+                    mask_length=self.config.mask_feature_length,
+                    device=hidden_states.device,
                 )
-                mask_feature_indices = torch.from_numpy(mask_feature_indices).to(hidden_states.device)
                 hidden_states[mask_feature_indices[:, None].expand(-1, sequence_length, -1)] = 0
 
         encoder_outputs = self.encoder(
@@ -1035,7 +1026,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
             >>> # wrap processor as target processor to encode labels
             >>> with processor.as_target_processor():
-            >>>     labels = processor(transcription, return_tensors="pt").input_ids
+            >>>     labels = processor(target_transcription, return_tensors="pt").input_ids
 
             >>> loss = model(input_values, labels=labels).loss
         """

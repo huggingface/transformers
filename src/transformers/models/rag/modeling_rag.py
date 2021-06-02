@@ -233,6 +233,13 @@ class RagPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        # At the moment fast initialization is not supported
+        # for composite models
+        kwargs["_fast_init"] = False
+        return super().from_pretrained(*args, **kwargs)
+
+    @classmethod
     def from_pretrained_question_encoder_generator(
         cls,
         question_encoder_pretrained_model_name_or_path: str = None,
@@ -494,9 +501,7 @@ class RagModel(RagPreTrainedModel):
                 question_encoder.config, generator.config, **kwargs
             )
         else:
-            assert isinstance(config, self.config_class), "config: {} has to be of type {}".format(
-                config, self.config_class
-            )
+            assert isinstance(config, self.config_class), f"config: {config} has to be of type {self.config_class}"
         super().__init__(config)
         if question_encoder is None:
             from ..auto.modeling_auto import AutoModel
@@ -517,6 +522,9 @@ class RagModel(RagPreTrainedModel):
 
         self.question_encoder = question_encoder
         self.generator = generator
+
+        self.ctx_encoder = None
+        self.context_encoder_training = False
 
     @add_start_docstrings_to_model_forward(RAG_FORWARD_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=RetrievAugLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -583,22 +591,58 @@ class RagModel(RagPreTrainedModel):
                     n_docs=n_docs,
                     return_tensors="pt",
                 )
-                context_input_ids, context_attention_mask, retrieved_doc_embeds, retrieved_doc_ids = (
-                    retriever_outputs["context_input_ids"],
-                    retriever_outputs["context_attention_mask"],
-                    retriever_outputs["retrieved_doc_embeds"],
-                    retriever_outputs["doc_ids"],
-                )
+                if self.context_encoder_training:
 
-                # set to correct device
-                retrieved_doc_embeds = retrieved_doc_embeds.to(question_encoder_last_hidden_state)
-                context_input_ids = context_input_ids.to(input_ids)
-                context_attention_mask = context_attention_mask.to(input_ids)
+                    (
+                        context_input_ids,
+                        context_attention_mask,
+                        retrieved_doc_embeds,
+                        retrived_doc_input_ids,
+                        retrived_doc_attention_mask,
+                        retrieved_doc_ids,
+                    ) = (
+                        retriever_outputs["context_input_ids"],
+                        retriever_outputs["context_attention_mask"],
+                        retriever_outputs["retrieved_doc_embeds"],
+                        retriever_outputs["tokenized_doc_ids"],
+                        retriever_outputs["tokenized_doc_attention_mask"],
+                        retriever_outputs["doc_ids"],
+                    )
 
-                # compute doc_scores
-                doc_scores = torch.bmm(
-                    question_encoder_last_hidden_state.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)
-                ).squeeze(1)
+                    context_input_ids = context_input_ids.to(input_ids)
+                    context_attention_mask = context_attention_mask.to(input_ids)
+
+                    retrived_doc_input_ids = retrived_doc_input_ids.to(input_ids)
+                    retrived_doc_attention_mask = retrived_doc_attention_mask.to(input_ids)
+                    retrieved_doc_embeds = self.ctx_encoder(
+                        retrived_doc_input_ids, attention_mask=retrived_doc_attention_mask, return_dict=True
+                    ).pooler_output
+                    retrieved_doc_embeds = retrieved_doc_embeds.view(
+                        -1, n_docs, question_encoder_last_hidden_state.shape[1]
+                    )  # reshaping
+
+                    # compute doc_scores involving ctx_encoder
+                    doc_scores = torch.bmm(
+                        question_encoder_last_hidden_state.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)
+                    ).squeeze(1)
+
+                else:
+                    context_input_ids, context_attention_mask, retrieved_doc_embeds, retrieved_doc_ids = (
+                        retriever_outputs["context_input_ids"],
+                        retriever_outputs["context_attention_mask"],
+                        retriever_outputs["retrieved_doc_embeds"],
+                        retriever_outputs["doc_ids"],
+                    )
+
+                    # set to correct device
+                    retrieved_doc_embeds = retrieved_doc_embeds.to(question_encoder_last_hidden_state)
+                    context_input_ids = context_input_ids.to(input_ids)
+                    context_attention_mask = context_attention_mask.to(input_ids)
+
+                    # compute doc_scores
+                    doc_scores = torch.bmm(
+                        question_encoder_last_hidden_state.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)
+                    ).squeeze(1)
             else:
                 assert (
                     context_input_ids is not None
@@ -704,6 +748,10 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
     def set_retriever(self, retriever: RagRetriever):
         self.rag.retriever = retriever
+
+    def set_context_encoder_for_training(self, ctx_encoder: PreTrainedModel):
+        self.rag.context_encoder_training = True
+        self.rag.ctx_encoder = ctx_encoder
 
     @add_start_docstrings_to_model_forward(RAG_FORWARD_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=RetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
@@ -1092,6 +1140,10 @@ class RagTokenForGeneration(RagPreTrainedModel):
     def set_retriever(self, retriever: RagRetriever):
         self.rag.retriever = retriever
 
+    def set_context_encoder_for_training(self, ctx_encoder: PreTrainedModel):
+        self.rag.context_encoder_training = True
+        self.rag.ctx_encoder = ctx_encoder
+
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
@@ -1318,6 +1370,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]] = None,
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
+        remove_invalid_values: Optional[bool] = None,
         **model_kwargs
     ):
         """
@@ -1415,6 +1468,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 needs to be the target language token.
             forced_eos_token_id (:obj:`int`, `optional`):
                 The id of the token to force as the last generated token when :obj:`max_length` is reached.
+            remove_invalid_values (:obj:`bool`, `optional`):
+                Whether to remove possible `nan` and `inf` outputs of the model to prevent the generation method to
+                crash. Note that using ``remove_invalid_values`` can slow down generation.
 
         Return:
             :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
@@ -1437,6 +1493,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
             decoder_start_token_id
             if decoder_start_token_id is not None
             else self.config.generator.decoder_start_token_id
+        )
+        remove_invalid_values = (
+            remove_invalid_values if remove_invalid_values is not None else self.config.remove_invalid_values
         )
 
         # retrieve docs
@@ -1518,6 +1577,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             num_beams=num_beams,
             num_beam_groups=num_beam_groups,
             diversity_penalty=diversity_penalty,
+            remove_invalid_values=remove_invalid_values,
         )
 
         if num_beams == 1:
@@ -1540,7 +1600,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
-                max_length=max_length,
                 num_beams=num_beams,
                 device=self.device,
                 length_penalty=length_penalty,

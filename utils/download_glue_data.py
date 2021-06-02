@@ -45,8 +45,8 @@ MRPC_TEST = "https://dl.fbaipublicfiles.com/senteval/senteval_data/msr_paraphras
 
 
 def download_and_extract(task, data_dir):
-    print("Downloading and extracting %s..." % task)
-    data_file = "%s.zip" % task
+    print(f"Downloading and extracting {task}...")
+    data_file = f"{task}.zip"
     urllib.request.urlretrieve(TASK2PATH[task], data_file)
     with zipfile.ZipFile(data_file) as zip_ref:
         zip_ref.extractall(data_dir)

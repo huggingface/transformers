@@ -370,6 +370,10 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
         # This test is too long (>30sec) and makes fail the CI
         pass
 
+    def test_generate_with_headmasking(self):
+        # TODO: Head-masking not yet implement
+        pass
+
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
     """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
@@ -380,10 +384,9 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
             return True
         raise
     except Exception:
-        msg = "{} != {}".format(a, b)
-        if prefix:
-            msg = prefix + ": " + msg
-        raise AssertionError(msg)
+        if len(prefix) > 0:
+            prefix = f"{prefix}: "
+        raise AssertionError(f"{prefix}{a} != {b}")
 
 
 def _long_tensor(tok_lst):

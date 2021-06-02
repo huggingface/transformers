@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- Sequence feature extraction class for common feature extrcactors to preprocess sequences.
+ Sequence feature extraction class for common feature extractors to preprocess sequences.
 """
 from typing import Dict, List, Optional, Union
 
@@ -56,13 +56,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         self.padding_side = kwargs.pop("padding_side", "right")
         self.return_attention_mask = kwargs.pop("return_attention_mask", True)
 
-        # Additional attributes without default values
-        for key, value in kwargs.items():
-            try:
-                setattr(self, key, value)
-            except AttributeError as err:
-                logger.error(f"Can't set {key} with value {value} for {self}")
-                raise err
+        super().__init__(**kwargs)
 
     def pad(
         self,

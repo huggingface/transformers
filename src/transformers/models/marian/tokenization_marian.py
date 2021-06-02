@@ -18,7 +18,7 @@ import warnings
 from contextlib import contextmanager
 from pathlib import Path
 from shutil import copyfile
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import sentencepiece
 
@@ -82,6 +82,20 @@ class MarianTokenizer(PreTrainedTokenizer):
             The maximum sentence length the model accepts.
         additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<eop>", "<eod>"]`):
             Additional special tokens used by the tokenizer.
+        sp_model_kwargs (:obj:`dict`, `optional`):
+            Will be passed to the ``SentencePieceProcessor.__init__()`` method. The `Python wrapper for SentencePiece
+            <https://github.com/google/sentencepiece/tree/master/python>`__ can be used, among other things, to set:
+
+            - ``enable_sampling``: Enable subword regularization.
+            - ``nbest_size``: Sampling parameters for unigram. Invalid for BPE-Dropout.
+
+              - ``nbest_size = {0,1}``: No sampling is performed.
+              - ``nbest_size > 1``: samples from the nbest_size results.
+              - ``nbest_size < 0``: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+                using forward-filtering-and-backward-sampling algorithm.
+
+            - ``alpha``: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+              BPE-dropout.
 
     Examples::
 
@@ -115,8 +129,11 @@ class MarianTokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         pad_token="<pad>",
         model_max_length=512,
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs
-    ):
+    ) -> None:
+        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+
         super().__init__(
             # bos_token=bos_token,  unused. Start decoding with config.decoder_start_token_id
             source_lang=source_lang,
@@ -125,6 +142,7 @@ class MarianTokenizer(PreTrainedTokenizer):
             eos_token=eos_token,
             pad_token=pad_token,
             model_max_length=model_max_length,
+            sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
         assert Path(source_spm).exists(), f"cannot find spm source {source_spm}"
@@ -140,8 +158,8 @@ class MarianTokenizer(PreTrainedTokenizer):
         self.spm_files = [source_spm, target_spm]
 
         # load SentencePiece model for pre-processing
-        self.spm_source = load_spm(source_spm)
-        self.spm_target = load_spm(target_spm)
+        self.spm_source = load_spm(source_spm, self.sp_model_kwargs)
+        self.spm_target = load_spm(target_spm, self.sp_model_kwargs)
         self.current_spm = self.spm_source
 
         # Multilingual target side: default to using first supported language code.
@@ -172,7 +190,7 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     def _tokenize(self, text: str) -> List[str]:
         code, text = self.remove_language_code(text)
-        pieces = self.current_spm.EncodeAsPieces(text)
+        pieces = self.current_spm.encode(text, out_type=str)
         return code + pieces
 
     def _convert_id_to_token(self, index: int) -> str:
@@ -227,7 +245,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         return super().decode(token_ids, **kwargs)
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        """Uses source spm if _decode_use_source_tokenizer is True, and target spm otherwise """
+        """Uses source spm if _decode_use_source_tokenizer is True, and target spm otherwise"""
         if self._decode_use_source_tokenizer:
             return self.spm_source.DecodePieces(tokens)
         else:
@@ -283,7 +301,12 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d: Dict) -> None:
         self.__dict__ = d
-        self.spm_source, self.spm_target = (load_spm(f) for f in self.spm_files)
+
+        # for backward compatibility
+        if not hasattr(self, "sp_model_kwargs"):
+            self.sp_model_kwargs = {}
+
+        self.spm_source, self.spm_target = (load_spm(f, self.sp_model_kwargs) for f in self.spm_files)
         self.current_spm = self.spm_source
         self._setup_normalizer()
 
@@ -308,8 +331,8 @@ class MarianTokenizer(PreTrainedTokenizer):
             return self._special_token_mask(token_ids_0 + token_ids_1) + [1]
 
 
-def load_spm(path: str) -> sentencepiece.SentencePieceProcessor:
-    spm = sentencepiece.SentencePieceProcessor()
+def load_spm(path: str, sp_model_kwargs: Dict[str, Any]) -> sentencepiece.SentencePieceProcessor:
+    spm = sentencepiece.SentencePieceProcessor(**sp_model_kwargs)
     spm.Load(path)
     return spm
 

@@ -21,7 +21,7 @@ from typing import Optional, Tuple
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
 from ...activations import ACT2FN, gelu
@@ -393,7 +393,7 @@ class LongformerTokenClassifierOutput(ModelOutput):
 
 def _get_question_end_index(input_ids, sep_token_id):
     """
-    Computes the index of the first occurance of `sep_token_id`.
+    Computes the index of the first occurrence of `sep_token_id`.
     """
 
     sep_token_indices = (input_ids == sep_token_id).nonzero()
@@ -521,8 +521,8 @@ class LongformerSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
             )
         self.num_heads = config.num_attention_heads
         self.head_dim = int(config.hidden_size / config.num_attention_heads)
@@ -814,7 +814,7 @@ class LongformerSelfAttention(nn.Module):
         # matrix multiplication
         # bcxd: batch_size * num_heads x chunks x 2window_overlap x head_dim
         # bcyd: batch_size * num_heads x chunks x 2window_overlap x head_dim
-        # bcxy: batch_size * num_heads x chunks x 2window_overlap x window_overlap
+        # bcxy: batch_size * num_heads x chunks x 2window_overlap x 2window_overlap
         diagonal_chunked_attention_scores = torch.einsum("bcxd,bcyd->bcxy", (query, key))  # multiply
 
         # convert diagonals into columns
@@ -899,7 +899,7 @@ class LongformerSelfAttention(nn.Module):
 
     @staticmethod
     def _get_global_attn_indices(is_index_global_attn):
-        """ compute global attn indices required throughout forward pass """
+        """compute global attn indices required throughout forward pass"""
         # helper variable
         num_global_attn_indices = is_index_global_attn.long().sum(dim=1)
 
@@ -1363,7 +1363,7 @@ class LongformerPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -1428,7 +1428,7 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
-            - 0 indicates the heas is **masked**.
+            - 0 indicates the head is **masked**.
 
         decoder_head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in ``[0, 1]``:
@@ -1542,9 +1542,8 @@ class LongformerModel(LongformerPreTrainedModel):
         padding_len = (attention_window - seq_len % attention_window) % attention_window
         if padding_len > 0:
             logger.info(
-                "Input ids are automatically padded from {} to {} to be a multiple of `config.attention_window`: {}".format(
-                    seq_len, seq_len + padding_len, attention_window
-                )
+                f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
+                f"`config.attention_window`: {attention_window}"
             )
             if input_ids is not None:
                 input_ids = F.pad(input_ids, (0, padding_len), value=pad_token_id)
@@ -1786,6 +1785,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
             logits=prediction_scores,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            global_attentions=outputs.global_attentions,
         )
 
 
@@ -1803,6 +1803,7 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
+        self.config = config
 
         self.longformer = LongformerModel(config, add_pooling_layer=False)
         self.classifier = LongformerClassificationHead(config)
@@ -1861,13 +1862,26 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -1878,6 +1892,7 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            global_attentions=outputs.global_attentions,
         )
 
 
@@ -2002,8 +2017,8 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
+        start_logits = start_logits.squeeze(-1).contiguous()
+        end_logits = end_logits.squeeze(-1).contiguous()
 
         total_loss = None
         if start_positions is not None and end_positions is not None:
@@ -2126,6 +2141,7 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            global_attentions=outputs.global_attentions,
         )
 
 

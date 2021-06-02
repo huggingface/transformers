@@ -21,14 +21,8 @@ from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
 
-from ...file_utils import (
-    cached_path,
-    is_datasets_available,
-    is_faiss_available,
-    is_remote_url,
-    requires_datasets,
-    requires_faiss,
-)
+from ...file_utils import cached_path, is_datasets_available, is_faiss_available, is_remote_url, requires_backends
+from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
 from .configuration_rag import RagConfig
@@ -133,20 +127,20 @@ class LegacyIndex(Index):
             )
             raise EnvironmentError(msg)
         if resolved_archive_file == archive_file:
-            logger.info("loading file {}".format(archive_file))
+            logger.info(f"loading file {archive_file}")
         else:
-            logger.info("loading file {} from cache at {}".format(archive_file, resolved_archive_file))
+            logger.info(f"loading file {archive_file} from cache at {resolved_archive_file}")
         return resolved_archive_file
 
     def _load_passages(self):
-        logger.info("Loading passages from {}".format(self.index_path))
+        logger.info(f"Loading passages from {self.index_path}")
         passages_path = self._resolve_path(self.index_path, self.PASSAGE_FILENAME)
         with open(passages_path, "rb") as passages_file:
             passages = pickle.load(passages_file)
         return passages
 
     def _deserialize_index(self):
-        logger.info("Loading index from {}".format(self.index_path))
+        logger.info(f"Loading index from {self.index_path}")
         resolved_index_path = self._resolve_path(self.index_path, self.INDEX_FILENAME + ".index.dpr")
         self.index = faiss.read_index(resolved_index_path)
         resolved_meta_path = self._resolve_path(self.index_path, self.INDEX_FILENAME + ".index_meta.dpr")
@@ -200,12 +194,12 @@ class HFIndexBase(Index):
 
     def _check_dataset_format(self, with_index: bool):
         if not isinstance(self.dataset, Dataset):
-            raise ValueError("Dataset should be a datasets.Dataset object, but got {}".format(type(self.dataset)))
+            raise ValueError(f"Dataset should be a datasets.Dataset object, but got {type(self.dataset)}")
         if len({"title", "text", "embeddings"} - set(self.dataset.column_names)) > 0:
             raise ValueError(
                 "Dataset should be a dataset with the following columns: "
                 "title (str), text (str) and embeddings (arrays of dimension vector_size), "
-                "but got columns {}".format(self.dataset.column_names)
+                f"but got columns {self.dataset.column_names}"
             )
         if with_index and "embeddings" not in self.dataset.list_indexes():
             raise ValueError(
@@ -241,7 +235,7 @@ class CanonicalHFIndex(HFIndexBase):
     Args:
         vector_size (:obj:`int`): the dimension of the passages embeddings used by the index
         dataset_name (:obj:`str`, optional, defaults to ``wiki_dpr``):
-            A datatset identifier of the indexed dataset on HuggingFace AWS bucket (list all available datasets and ids
+            A dataset identifier of the indexed dataset on HuggingFace AWS bucket (list all available datasets and ids
             with ``datasets.list_datasets()``).
         dataset_split (:obj:`str`, optional, defaults to ``train``)
             Which split of the ``dataset`` to load.
@@ -269,7 +263,7 @@ class CanonicalHFIndex(HFIndexBase):
         self.index_name = index_name
         self.index_path = index_path
         self.use_dummy_dataset = use_dummy_dataset
-        logger.info("Loading passages from {}".format(self.dataset_name))
+        logger.info(f"Loading passages from {self.dataset_name}")
         dataset = load_dataset(
             self.dataset_name, with_index=False, split=self.dataset_split, dummy=self.use_dummy_dataset
         )
@@ -277,10 +271,10 @@ class CanonicalHFIndex(HFIndexBase):
 
     def init_index(self):
         if self.index_path is not None:
-            logger.info("Loading index from {}".format(self.index_path))
+            logger.info(f"Loading index from {self.index_path}")
             self.dataset.load_faiss_index("embeddings", file=self.index_path)
         else:
-            logger.info("Loading index from {}".format(self.dataset_name + " with index name " + self.index_name))
+            logger.info(f"Loading index from {self.dataset_name} with index name {self.index_name}")
             self.dataset = load_dataset(
                 self.dataset_name,
                 with_embeddings=True,
@@ -313,7 +307,7 @@ class CustomHFIndex(HFIndexBase):
 
     @classmethod
     def load_from_disk(cls, vector_size, dataset_path, index_path):
-        logger.info("Loading passages from {}".format(dataset_path))
+        logger.info(f"Loading passages from {dataset_path}")
         if dataset_path is None or index_path is None:
             raise ValueError(
                 "Please provide ``dataset_path`` and ``index_path`` after calling ``dataset.save_to_disk(dataset_path)`` "
@@ -324,7 +318,7 @@ class CustomHFIndex(HFIndexBase):
 
     def init_index(self):
         if not self.is_initialized():
-            logger.info("Loading index from {}".format(self.index_path))
+            logger.info(f"Loading index from {self.index_path}")
             self.dataset.load_faiss_index("embeddings", file=self.index_path)
             self._index_initialized = True
 
@@ -372,8 +366,7 @@ class RagRetriever:
 
     def __init__(self, config, question_encoder_tokenizer, generator_tokenizer, index=None, init_retrieval=True):
         self._init_retrieval = init_retrieval
-        requires_datasets(self)
-        requires_faiss(self)
+        requires_backends(self, ["datasets", "faiss"])
         super().__init__()
         self.index = index or self._build_index(config)
         self.generator_tokenizer = generator_tokenizer
@@ -385,6 +378,9 @@ class RagRetriever:
         self.config = config
         if self._init_retrieval:
             self.init_retrieval()
+
+        self.ctx_encoder_tokenizer = None
+        self.return_tokenized_docs = False
 
     @staticmethod
     def _build_index(config):
@@ -411,8 +407,7 @@ class RagRetriever:
 
     @classmethod
     def from_pretrained(cls, retriever_name_or_path, indexed_dataset=None, **kwargs):
-        requires_datasets(cls)
-        requires_faiss(cls)
+        requires_backends(cls, ["datasets", "faiss"])
         config = kwargs.pop("config", None) or RagConfig.from_pretrained(retriever_name_or_path, **kwargs)
         rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path, config=config)
         question_encoder_tokenizer = rag_tokenizer.question_encoder
@@ -451,7 +446,7 @@ class RagRetriever:
 
     def init_retrieval(self):
         """
-        Retriever initalization function. It loads the index into memory.
+        Retriever initialization function. It loads the index into memory.
         """
 
         logger.info("initializing retrieval")
@@ -520,9 +515,7 @@ class RagRetriever:
             start_time = time.time()
             ids, vectors = self.index.get_top_docs(question_hidden_states, n_docs)
             logger.debug(
-                "index search time: {} sec, batch size {}".format(
-                    time.time() - start_time, question_hidden_states.shape
-                )
+                f"index search time: {time.time() - start_time} sec, batch size {question_hidden_states.shape}"
             )
             ids_batched.extend(ids)
             vectors_batched.extend(vectors)
@@ -553,6 +546,11 @@ class RagRetriever:
 
         doc_ids, retrieved_doc_embeds = self._main_retrieve(question_hidden_states, n_docs)
         return retrieved_doc_embeds, doc_ids, self.index.get_doc_dicts(doc_ids)
+
+    def set_ctx_encoder_tokenizer(self, ctx_encoder_tokenizer: PreTrainedTokenizer):
+        # used in end2end retriever training
+        self.ctx_encoder_tokenizer = ctx_encoder_tokenizer
+        self.return_tokenized_docs = True
 
     def __call__(
         self,
@@ -605,12 +603,42 @@ class RagRetriever:
             docs, input_strings, prefix, n_docs, return_tensors=return_tensors
         )
 
-        return BatchEncoding(
-            {
-                "context_input_ids": context_input_ids,
-                "context_attention_mask": context_attention_mask,
-                "retrieved_doc_embeds": retrieved_doc_embeds,
-                "doc_ids": doc_ids,
-            },
-            tensor_type=return_tensors,
-        )
+        if self.return_tokenized_docs:
+            retrived_doc_text = []
+            retrived_doc_title = []
+
+            for b_idx in range(len(docs)):
+                for doc_idx in range(n_docs):
+                    retrived_doc_text.append(docs[b_idx]["text"][doc_idx])
+                    retrived_doc_title.append(docs[b_idx]["title"][doc_idx])
+
+            tokenized_docs = self.ctx_encoder_tokenizer(
+                retrived_doc_title,
+                retrived_doc_text,
+                truncation=True,
+                padding="longest",
+                return_tensors=return_tensors,
+            )
+
+            return BatchEncoding(
+                {
+                    "context_input_ids": context_input_ids,
+                    "context_attention_mask": context_attention_mask,
+                    "retrieved_doc_embeds": retrieved_doc_embeds,
+                    "doc_ids": doc_ids,
+                    "tokenized_doc_ids": tokenized_docs["input_ids"],
+                    "tokenized_doc_attention_mask": tokenized_docs["attention_mask"],
+                },
+                tensor_type=return_tensors,
+            )
+
+        else:
+            return BatchEncoding(
+                {
+                    "context_input_ids": context_input_ids,
+                    "context_attention_mask": context_attention_mask,
+                    "retrieved_doc_embeds": retrieved_doc_embeds,
+                    "doc_ids": doc_ids,
+                },
+                tensor_type=return_tensors,
+            )

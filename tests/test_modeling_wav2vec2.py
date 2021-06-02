@@ -162,7 +162,7 @@ class Wav2Vec2ModelTester:
         model.eval()
 
         input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.bool)
+        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.long)
 
         input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
         max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
@@ -171,7 +171,7 @@ class Wav2Vec2ModelTester:
         # pad input
         for i in range(len(input_lengths)):
             input_values[i, input_lengths[i] :] = 0.0
-            attention_mask[i, input_lengths[i] :] = 0.0
+            attention_mask[i, input_lengths[i] :] = 0
 
         model.config.ctc_loss_reduction = "sum"
         sum_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss
@@ -320,14 +320,23 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
                     if "conv.weight" in name or "masked_spec_embed" in name:
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     else:
                         self.assertIn(
                             ((param.data.mean() * 1e9).round() / 1e9).item(),
                             [0.0, 1.0],
-                            msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
+
+    # overwrite from test_modeling_common
+    def _mock_init_weights(self, module):
+        if hasattr(module, "weight") and module.weight is not None:
+            module.weight.data.fill_(3)
+        if hasattr(module, "weight_g") and module.weight is not None:
+            module.weight_g.data.fill_(3)
+        if hasattr(module, "bias") and module.bias is not None:
+            module.bias.data.fill_(3)
 
     @slow
     def test_model_from_pretrained(self):
@@ -437,14 +446,23 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
                     if "conv.weight" in name or "masked_spec_embed" in name:
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     else:
                         self.assertIn(
                             ((param.data.mean() * 1e9).round() / 1e9).item(),
                             [0.0, 1.0],
-                            msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
+
+    # overwrite from test_modeling_common
+    def _mock_init_weights(self, module):
+        if hasattr(module, "weight") and module.weight is not None:
+            module.weight.data.fill_(3)
+        if hasattr(module, "weight_g") and module.weight is not None:
+            module.weight_g.data.fill_(3)
+        if hasattr(module, "bias") and module.bias is not None:
+            module.bias.data.fill_(3)
 
     @slow
     def test_model_from_pretrained(self):
@@ -460,18 +478,9 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         mask_prob = 0.5
         mask_length = 1
 
-        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length, torch_device)
 
         self.assertListEqual(mask.sum(axis=-1).tolist(), [mask_prob * sequence_length for _ in range(batch_size)])
-
-        attention_mask = torch.ones((batch_size, sequence_length), device=torch_device, dtype=torch.long)
-        attention_mask[:, -sequence_length // 2 :] = 0
-
-        mask = _compute_mask_indices(
-            (batch_size, sequence_length), mask_prob, mask_length, attention_mask=attention_mask
-        )
-
-        self.assertListEqual(mask.sum(axis=-1).tolist(), [mask_prob * sequence_length // 2 for _ in range(batch_size)])
 
     def test_compute_mask_indices_overlap(self):
         batch_size = 4
@@ -479,29 +488,13 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         mask_prob = 0.5
         mask_length = 4
 
-        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length, torch_device)
 
         # because of overlap there is a range of possible masks
         for batch_sum in mask.sum(axis=-1):
             self.assertIn(
                 int(batch_sum),
                 list(range(int(mask_prob // mask_length * sequence_length), int(mask_prob * sequence_length))),
-            )
-
-        attention_mask = torch.ones((batch_size, sequence_length), device=torch_device, dtype=torch.long)
-        attention_mask[:, -sequence_length // 2 :] = 0
-
-        mask = _compute_mask_indices(
-            (batch_size, sequence_length), mask_prob, mask_length, attention_mask=attention_mask
-        )
-
-        # because of overlap there is a range of possible masks
-        for batch_sum in mask.sum(axis=-1):
-            self.assertIn(
-                int(batch_sum),
-                list(
-                    range(int(mask_prob // mask_length * sequence_length // 2), int(mask_prob * sequence_length // 2))
-                ),
             )
 
 
@@ -515,6 +508,8 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         import soundfile as sf
 
+        ids = [f"1272-141231-000{i}" for i in range(num_samples)]
+
         # map files to raw
         def map_to_array(batch):
             speech, _ = sf.read(batch["file"])
@@ -522,7 +517,8 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             return batch
 
         ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-        ds = ds.select(range(num_samples)).map(map_to_array)
+
+        ds = ds.filter(lambda x: x["id"] in ids).sort("id").map(map_to_array)
 
         return ds["speech"][:num_samples]
 
