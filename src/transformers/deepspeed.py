@@ -15,18 +15,15 @@
 Integration with Deepspeed
 """
 
-from copy import deepcopy
 import importlib.util
 import io
 import json
-import numbers
-import os
-import tempfile
 import weakref
-from pathlib import Path
+from copy import deepcopy
 
 from .dependency_versions_check import dep_version_check
 from .utils import logging
+
 
 logger = logging.get_logger(__name__)
 
