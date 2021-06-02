@@ -407,6 +407,7 @@ Known caveats:
   :obj:`FullyShardedDataParallelism` of fairscale. It should be used with the option :obj:`auto_wrap` if you are not
   doing this yourself: :obj:`--sharded_ddp "zero_dp_3 auto_wrap"`.
 
+
 DeepSpeed
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
