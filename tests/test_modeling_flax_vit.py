@@ -13,9 +13,10 @@
 # limitations under the License.
 
 import unittest
-
+import inspect
 import numpy as np
 
+from typing import List, Tuple
 from transformers import ViTConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
@@ -24,7 +25,9 @@ from .test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_
 
 
 if is_flax_available():
-    from transformers.models.vit.modeling_flax_vit import FlaxViTModel, FlaxViTPreTrainedModel
+
+    import jax
+    from transformers.models.vit.modeling_flax_vit import FlaxViTModel, FlaxViTForImageClassificationModule
 
 
 class FlaxViTModelTester(unittest.TestCase):
@@ -89,29 +92,6 @@ class FlaxViTModelTester(unittest.TestCase):
 
         return config, pixel_values, labels
 
-    def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.image_size, self.image_size, self.num_channels])
-        labels = None
-        if self.use_labels:
-            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-
-        config = ViTConfig(
-            image_size=self.image_size,
-            patch_size=self.patch_size,
-            num_channels=self.num_channels,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
-        )
-
-        return config, pixel_values, labels
-
     def create_and_check_model(self, config, pixel_values, labels):
 
         model = FlaxViTModel(config=config)
@@ -136,7 +116,7 @@ class FlaxViTModelTester(unittest.TestCase):
 @require_flax
 class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (FlaxViTModel, FlaxViTPreTrainedModel) if is_flax_available() else ()
+    all_model_classes = (FlaxViTModel, ) if is_flax_available() else ()
 
     def setUp(self) -> None:
         self.model_tester = FlaxViTModelTester(self)
@@ -145,6 +125,148 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            print(model_class)
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            model = model_class(config)
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, 226, 226],
+            )
+            out_len = len(outputs)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            added_hidden_states = 1
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, 226, 226],
+            )
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.__call__)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    def test_jit_compilation(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                model = model_class(config)
+
+                @jax.jit
+                def model_jitted(pixel_values, **kwargs):
+                    return model(pixel_values=pixel_values, **kwargs)
+
+                with self.subTest("JIT Enabled"):
+                    jitted_outputs = model_jitted(**prepared_inputs_dict).to_tuple()
+
+                with self.subTest("JIT Disabled"):
+                    with jax.disable_jit():
+                        outputs = model_jitted(**prepared_inputs_dict).to_tuple()
+
+                self.assertEqual(len(outputs), len(jitted_outputs))
+                for jitted_output, output in zip(jitted_outputs, outputs):
+                    self.assertEqual(jitted_output.shape, output.shape)
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            hidden_states = outputs.hidden_states
+
+            self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
+            seq_length = 226#self.model_tester.seq_length
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [seq_length, self.model_tester.hidden_size],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_model_outputs_equivalence(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def set_nan_tensor_to_zero(t):
+            t[t != t] = 0
+            return t
+
+        def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
+            tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
+            dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+
+            def recursive_check(tuple_object, dict_object):
+                if isinstance(tuple_object, (List, Tuple)):
+                    for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                        recursive_check(tuple_iterable_value, dict_iterable_value)
+                elif tuple_object is None:
+                    return
+                else:
+                    self.assert_almost_equals(
+                        set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), 1e-5
+                    )
+
+                recursive_check(tuple_output, dict_output)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+
     @slow
-    def test_mode_from_pretrained(self):
-        pass
+    def test_model_from_pretrained(self):
+        for model_class_name in self.all_model_classes:
+            model = model_class_name.from_pretrained("vit-base", from_pt=True)
+            outputs = model(np.ones((1, 1)))
+            self.assertIsNotNone(outputs)
