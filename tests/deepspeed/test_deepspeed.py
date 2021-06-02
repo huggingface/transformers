@@ -73,6 +73,9 @@ def require_deepspeed_aio(test_case):
     """
     Decorator marking a test that requires deepspeed aio (nvme)
     """
+    if not is_deepspeed_available():
+        return unittest.skip("test requires deepspeed")(test_case)
+
     import deepspeed
     from deepspeed.ops.aio import AsyncIOBuilder
 
