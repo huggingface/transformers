@@ -21,8 +21,8 @@ from copy import deepcopy
 
 from parameterized import parameterized
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
+from transformers.deepspeed import HfDeepSpeedConfig, is_deepspeed_available
 from transformers.file_utils import WEIGHTS_NAME
-from transformers.integrations import HfDeepSpeedConfig, is_deepspeed_available
 from transformers.testing_utils import (
     CaptureLogger,
     CaptureStderr,
@@ -71,7 +71,7 @@ def require_deepspeed(test_case):
 
 if is_deepspeed_available():
     from deepspeed.utils import logger as deepspeed_logger  # noqa
-    from transformers.integrations import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
+    from transformers.deepspeed import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
 
 ZERO2 = "zero2"
 ZERO3 = "zero3"
