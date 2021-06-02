@@ -14,7 +14,7 @@
 # limitations under the License.
 """Feature extractor class for CLIP."""
 
-from typing import List, Optional, Union, Tuple
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 from PIL import Image
@@ -159,7 +159,7 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if self.do_resize and self.size is not None and self.resample is not None:
             for i, image in enumerate(images):
                 # PIL Image has "size" while np array and tensor has "shape"
-                image_size = image.size if hasattr(image, "size") else tuple(image.shape)
+                image_size = image.size if isinstance(image, Image.Image) else tuple(image.shape)
                 scaled_size = _get_scaled_size(image_size, smaller_side_length=self.size)
                 images[i] = self.resize(image=image, size=scaled_size, resample=self.resample)
         if self.do_center_crop and self.crop_size is not None:
