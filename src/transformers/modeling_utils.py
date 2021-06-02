@@ -29,6 +29,7 @@ from torch.nn import functional as F
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
+from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
 from .file_utils import (
     CONFIG_NAME,
     DUMMY_INPUTS,
@@ -45,7 +46,6 @@ from .file_utils import (
     replace_return_docstrings,
 )
 from .generation_utils import GenerationMixin
-from .integrations import deepspeed_config, is_deepspeed_zero3_enabled
 from .utils import logging
 
 

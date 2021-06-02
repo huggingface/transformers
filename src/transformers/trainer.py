@@ -44,8 +44,6 @@ from .integrations import (  # isort: split
     is_ray_tune_available,
     run_hp_search_optuna,
     run_hp_search_ray,
-    deepspeed_init,
-    is_deepspeed_zero3_enabled,
 )
 
 import numpy as np
@@ -61,6 +59,7 @@ from . import __version__
 from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
+from .deepspeed import deepspeed_init, is_deepspeed_zero3_enabled
 from .dependency_versions_check import dep_version_check
 from .file_utils import (
     CONFIG_NAME,
@@ -863,7 +862,7 @@ class Trainer:
             logger.info("Trial:", trial.params)
         if self.args.deepspeed:
             # Rebuild the deepspeed config to reflect the updated training parameters
-            from transformers.integrations import HfDeepSpeedConfig
+            from transformers.deepspeed import HfDeepSpeedConfig
 
             self.args.hf_deepspeed_config = HfDeepSpeedConfig(self.args)
 
