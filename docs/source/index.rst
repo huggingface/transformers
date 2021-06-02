@@ -256,22 +256,25 @@ Supported models
     Words: Transformers for Image Recognition at Scale <https://arxiv.org/abs/2010.11929>`__ by Alexey Dosovitskiy,
     Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias
     Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, Neil Houlsby.
-54. :doc:`Wav2Vec2 <model_doc/wav2vec2>` (from Facebook AI) released with the paper `wav2vec 2.0: A Framework for
+54. :doc:`VisualBERT <model_doc/visual_bert>` (from UCLA NLP) released with the paper `VisualBERT: A Simple and
+    Performant Baseline for Vision and Language <https://arxiv.org/pdf/1908.03557>`__ by Liunian Harold Li, Mark
+    Yatskar, Da Yin, Cho-Jui Hsieh, Kai-Wei Chang.
+55. :doc:`Wav2Vec2 <model_doc/wav2vec2>` (from Facebook AI) released with the paper `wav2vec 2.0: A Framework for
     Self-Supervised Learning of Speech Representations <https://arxiv.org/abs/2006.11477>`__ by Alexei Baevski, Henry
     Zhou, Abdelrahman Mohamed, Michael Auli.
-55. :doc:`XLM <model_doc/xlm>` (from Facebook) released together with the paper `Cross-lingual Language Model
+56. :doc:`XLM <model_doc/xlm>` (from Facebook) released together with the paper `Cross-lingual Language Model
     Pretraining <https://arxiv.org/abs/1901.07291>`__ by Guillaume Lample and Alexis Conneau.
-56. :doc:`XLM-ProphetNet <model_doc/xlmprophetnet>` (from Microsoft Research) released with the paper `ProphetNet:
+57. :doc:`XLM-ProphetNet <model_doc/xlmprophetnet>` (from Microsoft Research) released with the paper `ProphetNet:
     Predicting Future N-gram for Sequence-to-Sequence Pre-training <https://arxiv.org/abs/2001.04063>`__ by Yu Yan,
     Weizhen Qi, Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei Zhang and Ming Zhou.
-57. :doc:`XLM-RoBERTa <model_doc/xlmroberta>` (from Facebook AI), released together with the paper `Unsupervised
+58. :doc:`XLM-RoBERTa <model_doc/xlmroberta>` (from Facebook AI), released together with the paper `Unsupervised
     Cross-lingual Representation Learning at Scale <https://arxiv.org/abs/1911.02116>`__ by Alexis Conneau*, Kartikay
     Khandelwal*, Naman Goyal, Vishrav Chaudhary, Guillaume Wenzek, Francisco Guzmán, Edouard Grave, Myle Ott, Luke
     Zettlemoyer and Veselin Stoyanov.
-58. :doc:`XLNet <model_doc/xlnet>` (from Google/CMU) released with the paper `​XLNet: Generalized Autoregressive
+59. :doc:`XLNet <model_doc/xlnet>` (from Google/CMU) released with the paper `​XLNet: Generalized Autoregressive
     Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`__ by Zhilin Yang*, Zihang Dai*, Yiming
     Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
-59. :doc:`XLSR-Wav2Vec2 <model_doc/xlsr_wav2vec2>` (from Facebook AI) released with the paper `Unsupervised
+60. :doc:`XLSR-Wav2Vec2 <model_doc/xlsr_wav2vec2>` (from Facebook AI) released with the paper `Unsupervised
     Cross-Lingual Representation Learning For Speech Recognition <https://arxiv.org/abs/2006.13979>`__ by Alexis
     Conneau, Alexei Baevski, Ronan Collobert, Abdelrahman Mohamed, Michael Auli.
 
@@ -388,6 +391,8 @@ Flax), PyTorch, and/or TensorFlow.
 |       Transformer-XL        |       ✅       |       ❌       |       ✅        |         ✅         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |             ViT             |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
++-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
+|         VisualBert          |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |          Wav2Vec2           |       ✅       |       ❌       |       ✅        |         ❌         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
@@ -537,6 +542,7 @@ Flax), PyTorch, and/or TensorFlow.
     model_doc/tapas
     model_doc/transformerxl
     model_doc/vit
+    model_doc/visual_bert
     model_doc/wav2vec2
     model_doc/xlm
     model_doc/xlmprophetnet
