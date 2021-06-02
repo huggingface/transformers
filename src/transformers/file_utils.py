@@ -613,18 +613,18 @@ def add_end_docstrings(*docstr):
 
 PT_RETURN_INTRODUCTION = r"""
     Returns:
-        :class:`~{full_output_type}` or :obj:`tuple(torch.FloatTensor)`: A :class:`~{full_output_type}` (if
-        ``return_dict=True`` is passed or when ``config.return_dict=True``) or a tuple of :obj:`torch.FloatTensor`
-        comprising various elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
+        :class:`~{full_output_type}` or :obj:`tuple(torch.FloatTensor)`: A :class:`~{full_output_type}` or a tuple of
+        :obj:`torch.FloatTensor` (if ``return_dict=False`` is passed or when ``config.return_dict=False``) comprising
+        various elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
 
 """
 
 
 TF_RETURN_INTRODUCTION = r"""
     Returns:
-        :class:`~{full_output_type}` or :obj:`tuple(tf.Tensor)`: A :class:`~{full_output_type}` (if
-        ``return_dict=True`` is passed or when ``config.return_dict=True``) or a tuple of :obj:`tf.Tensor` comprising
-        various elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
+        :class:`~{full_output_type}` or :obj:`tuple(tf.Tensor)`: A :class:`~{full_output_type}` or a tuple of
+        :obj:`tf.Tensor` (if ``return_dict=False`` is passed or when ``config.return_dict=False``) comprising various
+        elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
 
 """
 
