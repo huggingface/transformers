@@ -63,7 +63,6 @@ class FlaxBigBirdModelTester(unittest.TestCase):
         rescale_embeddings=False,
         block_size=4,
         num_random_blocks=3,
-
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -151,6 +150,8 @@ class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
         else ()
     )
 
+    test_attn_probs = True
+
     def setUp(self):
         self.model_tester = FlaxBigBirdModelTester(self)
 
@@ -160,3 +161,7 @@ class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
             model = model_class_name.from_pretrained("google/bigbird-roberta-base", from_pt=True)
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)
+
+    def test_attention_outputs(self):
+        if self.test_attn_probs:
+            super().test_attention_outputs()

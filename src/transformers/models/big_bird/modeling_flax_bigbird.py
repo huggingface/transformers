@@ -1819,7 +1819,7 @@ class FlaxBigBirdForMultipleChoiceModule(nn.Module):
         logits = self.classifier(pooled_output)
 
         # TODO: this is wrong in BERT also & FlaxBertForMultipleChoice doesn't work
-        reshaped_logits = logits#.reshape(-1, num_choices)
+        reshaped_logits = logits  # .reshape(-1, num_choices)
 
         if not return_dict:
             return (reshaped_logits,) + outputs[2:]
