@@ -29,7 +29,6 @@ import jax
 import jax.numpy as jnp
 import optax
 import transformers
-from flax import linen as nn
 from flax import struct, traverse_util
 from flax.jax_utils import replicate, unreplicate
 from flax.metrics import tensorboard
@@ -202,7 +201,6 @@ def create_train_state(
     else:  # Classification.
 
         def cross_entropy_loss(logits, labels):
-            logits = nn.log_softmax(logits)
             xentropy = optax.softmax_cross_entropy(logits, onehot(labels, num_classes=num_labels))
             return jnp.mean(xentropy)
 

@@ -20,13 +20,14 @@ import unittest
 from copy import deepcopy
 
 from parameterized import parameterized
-from transformers import TrainingArguments, is_torch_available
+from transformers import AutoModel, TrainingArguments, is_torch_available, logging
 from transformers.file_utils import WEIGHTS_NAME
-from transformers.integrations import is_deepspeed_available
+from transformers.integrations import HfDeepSpeedConfig, is_deepspeed_available
 from transformers.testing_utils import (
     CaptureLogger,
     CaptureStderr,
     ExtendSysPath,
+    LoggingLevel,
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
@@ -75,6 +76,56 @@ if is_deepspeed_available():
 ZERO2 = "zero2"
 ZERO3 = "zero3"
 stages = [ZERO2, ZERO3]
+
+
+@require_deepspeed
+@require_torch_gpu
+class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
+    """
+    Testing non-Trainer DeepSpeed integration
+    """
+
+    def setUp(self):
+        super().setUp()
+
+        self.dist_env_1_gpu = dict(
+            MASTER_ADDR="localhost", MASTER_PORT="10999", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
+        )
+
+    def test_init_zero3(self):
+        # test that zero.Init() works correctly under zero3
+        ds_config = {
+            "train_batch_size": 1,
+            "zero_optimization": {
+                "stage": 3,
+            },
+        }
+
+        dschf = HfDeepSpeedConfig(ds_config)
+
+        self.assertTrue(dschf.is_zero3())
+        self.assertTrue(is_deepspeed_zero3_enabled())
+
+        with LoggingLevel(logging.INFO):
+            with mockenv_context(**self.dist_env_1_gpu):
+                logger = logging.get_logger("transformers.modeling_utils")
+                with CaptureLogger(logger) as cl:
+                    AutoModel.from_pretrained(T5_TINY)
+        self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
+
+        # now remove zero optimization
+        del ds_config["zero_optimization"]
+        dschf = HfDeepSpeedConfig(ds_config)
+
+        self.assertFalse(dschf.is_zero3())
+        self.assertFalse(is_deepspeed_zero3_enabled())
+
+        with LoggingLevel(logging.INFO):
+            with mockenv_context(**self.dist_env_1_gpu):
+                logger = logging.get_logger("transformers.modeling_utils")
+                with CaptureLogger(logger) as cl:
+                    AutoModel.from_pretrained(T5_TINY)
+        self.assertNotIn("Detected DeepSpeed ZeRO-3", cl.out)
 
 
 @require_deepspeed
@@ -194,9 +245,9 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             ds_config_zero3_dict["zero_optimization"]["offload_optimizer"] = nvme_config
             ds_config_zero3_dict["zero_optimization"]["offload_param"] = nvme_config
             trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_zero3_dict)
-            with CaptureLogger(deepspeed_logger) as cs:
+            with CaptureLogger(deepspeed_logger) as cl:
                 trainer.train()
-            self.assertIn("DeepSpeed info", cs.out, "expected DeepSpeed logger output but got none")
+            self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
 
     # --- These tests need to run on both zero stages --- #
 
@@ -230,9 +281,9 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # to reset `deepspeed_logger.handlers[0].setStream(sys.stdout)` or directly capture from the deepspeed_logger.
         with mockenv_context(**self.dist_env_1_gpu):
             trainer = get_regression_trainer(local_rank=0, deepspeed=self.get_config_dict(stage))
-            with CaptureLogger(deepspeed_logger) as cs:
+            with CaptureLogger(deepspeed_logger) as cl:
                 trainer.train()
-            self.assertIn("DeepSpeed info", cs.out, "expected DeepSpeed logger output but got none")
+            self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
 
     @parameterized.expand(stages)
     def test_early_get_last_lr(self, stage):

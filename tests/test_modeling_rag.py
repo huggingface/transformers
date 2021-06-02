@@ -26,7 +26,7 @@ import numpy as np
 from transformers import BartTokenizer, T5Tokenizer
 from transformers.file_utils import cached_property, is_datasets_available, is_faiss_available, is_torch_available
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
-from transformers.models.dpr.tokenization_dpr import DPRQuestionEncoderTokenizer
+from transformers.models.dpr.tokenization_dpr import DPRContextEncoderTokenizer, DPRQuestionEncoderTokenizer
 from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 from transformers.testing_utils import (
     require_sentencepiece,
@@ -55,6 +55,7 @@ if is_torch_available() and is_datasets_available() and is_faiss_available():
         AutoConfig,
         AutoModel,
         AutoModelForSeq2SeqLM,
+        DPRContextEncoder,
         RagConfig,
         RagModel,
         RagRetriever,
@@ -180,6 +181,10 @@ class RagTestMixin:
         return DPRQuestionEncoderTokenizer.from_pretrained(os.path.join(self.tmpdirname, "dpr_tokenizer"))
 
     @cached_property
+    def dpr_ctx_encoder_tokenizer(self) -> DPRContextEncoderTokenizer:
+        return DPRContextEncoderTokenizer.from_pretrained(os.path.join(self.tmpdirname, "dpr_tokenizer"))
+
+    @cached_property
     def bart_tokenizer(self) -> BartTokenizer:
         return BartTokenizer.from_pretrained(os.path.join(self.tmpdirname, "bart_tokenizer"))
 
@@ -222,6 +227,46 @@ class RagTestMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config, retriever=self.get_retriever(config)).to(torch_device)
+            model.eval()
+
+            self.assertTrue(model.config.is_encoder_decoder)
+
+            outputs = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                decoder_input_ids=decoder_input_ids,
+                decoder_attention_mask=decoder_attention_mask,
+            )
+
+            # logits
+            self.assertEqual(
+                outputs.logits.shape,
+                (self.n_docs * decoder_input_ids.shape[0], decoder_input_ids.shape[1], config.generator.vocab_size),
+            )
+            # generator encoder last hidden states
+            self.assertEqual(
+                outputs.generator_enc_last_hidden_state.shape,
+                (self.n_docs * decoder_input_ids.shape[0], self.max_combined_length, config.generator.hidden_size),
+            )
+            # doc scores
+            self.assertEqual(outputs.doc_scores.shape, (input_ids.shape[0], self.n_docs))
+
+    def check_model_with_end2end_retriever(
+        self, config, input_ids, attention_mask, decoder_input_ids, decoder_attention_mask, **kwargs
+    ):
+        self.assertIsNotNone(config.question_encoder)
+        self.assertIsNotNone(config.generator)
+
+        context_encoder_tokenizer = self.dpr_ctx_encoder_tokenizer
+        dpr_context_encoder = DPRContextEncoder(config.question_encoder)  # dpr is a twin tower
+
+        retriever = self.get_retriever(config)
+        retriever.set_ctx_encoder_tokenizer(context_encoder_tokenizer)  # setting the ctx_encoder_tokenizer.
+
+        for model_class in [RagTokenForGeneration, RagSequenceForGeneration]:
+            model = model_class(config, retriever=retriever)
+            model.set_context_encoder_for_training(dpr_context_encoder)  # set the context_encoder for training
+            model.to(torch_device)
             model.eval()
 
             self.assertTrue(model.config.is_encoder_decoder)
@@ -537,6 +582,10 @@ class RagTestMixin:
     def test_model_with_retriever(self):
         inputs_dict = self.config_and_inputs
         self.check_model_with_retriever(**inputs_dict)
+
+    def test_model_with_end2end_retriever(self):
+        inputs_dict = self.config_and_inputs
+        self.check_model_with_end2end_retriever(**inputs_dict)
 
     def test_model_without_retriever(self):
         inputs_dict = self.config_and_inputs
