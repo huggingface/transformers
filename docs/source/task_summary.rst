@@ -505,8 +505,8 @@ This outputs a (hopefully) coherent next token following the original sequence, 
     >>> print(resulting_string)
     Hugging Face is based in DUMBO, New York City, and has
 
-In the next section, we show how :func:`~transformers.generation_utils.GenerationMixin.generate` can be used to generate multiple tokens
-up to a specified length instead of one token at a time.
+In the next section, we show how :func:`~transformers.generation_utils.GenerationMixin.generate` can be used to
+generate multiple tokens up to a specified length instead of one token at a time.
 
 Text Generation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
