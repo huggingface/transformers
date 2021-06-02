@@ -144,9 +144,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to normalize the input with mean and standard deviation.
         image_mean (:obj:`int`, `optional`, defaults to :obj:`[0.485, 0.456, 0.406]s`):
-            The sequence of means for each channel, to be used when normalizing images.
+            The sequence of means for each channel, to be used when normalizing images. Defaults to the ImageNet mean.
         image_std (:obj:`int`, `optional`, defaults to :obj:`[0.229, 0.224, 0.225]`):
-            The sequence of standard deviations for each channel, to be used when normalizing images.
+            The sequence of standard deviations for each channel, to be used when normalizing images. Defaults to the
+            ImageNet std.
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
@@ -168,8 +169,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.size = size
         self.max_size = max_size
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else [0.485, 0.456, 0.406]
-        self.image_std = image_std if image_std is not None else [0.229, 0.224, 0.225]
+        self.image_mean = image_mean if image_mean is not None else [0.485, 0.456, 0.406]  # ImageNet mean
+        self.image_std = image_std if image_std is not None else [0.229, 0.224, 0.225]  # ImageNet std
 
     def _is_valid_format(self, format):
         if format not in ["coco_detection", "coco_panoptic"]:
@@ -192,7 +193,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         try:
             from pycocotools import mask as coco_mask
         except ImportError:
-            print("Pycocotools is not installed in your environment.")
+            raise ImportError("Pycocotools is not installed in your environment.")
 
         masks = []
         for polygons in segmentations:

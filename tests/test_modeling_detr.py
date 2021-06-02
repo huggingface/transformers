@@ -80,7 +80,7 @@ class DetrModelTester:
         self.n_targets = n_targets
         self.num_labels = num_labels
 
-        # we can also set the expected seq length for both encoder and decoder
+        # we also set the expected seq length for both encoder and decoder
         self.encoder_seq_length = math.ceil(self.min_size / 32) * math.ceil(self.max_size / 32)
         self.decoder_seq_length = self.num_queries
 
@@ -215,14 +215,9 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="DETR does not have a get_input_embeddings method")
     def test_model_common_attributes(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            # DETR does not have a get_input_embeddings method
-            x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
+        pass
 
     @unittest.skip(reason="DETR is not a generative model")
     def test_generate_without_input_ids(self):
@@ -236,14 +231,10 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
-        seq_len = getattr(self.model_tester, "seq_length", None)
-        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
-        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
-        chunk_length = getattr(self.model_tester, "chunk_length", None)
-        if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
-            encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
+        decoder_seq_length = self.model_tester.decoder_seq_length
+        encoder_seq_length = self.model_tester.encoder_seq_length
+        decoder_key_length = self.model_tester.decoder_seq_length
+        encoder_key_length = self.model_tester.encoder_seq_length
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -268,16 +259,10 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
-            if chunk_length is not None:
-                self.assertListEqual(
-                    list(attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
-                )
-            else:
-                self.assertListEqual(
-                    list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                )
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+            )
             out_len = len(outputs)
 
             if self.is_encoder_decoder:
@@ -339,16 +324,10 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            if chunk_length is not None:
-                self.assertListEqual(
-                    list(self_attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
-                )
-            else:
-                self.assertListEqual(
-                    list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                )
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+            )
 
     def test_retain_grad_hidden_states_attentions(self):
         # removed retain_grad and grad on decoder_hidden_states, as queries don't require grad
@@ -368,37 +347,23 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
         output = outputs[0]
 
-        if config.is_encoder_decoder:
-            # Seq2Seq models
-            encoder_hidden_states = outputs.encoder_hidden_states[0]
-            encoder_attentions = outputs.encoder_attentions[0]
-            encoder_hidden_states.retain_grad()
-            encoder_attentions.retain_grad()
+        encoder_hidden_states = outputs.encoder_hidden_states[0]
+        encoder_attentions = outputs.encoder_attentions[0]
+        encoder_hidden_states.retain_grad()
+        encoder_attentions.retain_grad()
 
-            decoder_attentions = outputs.decoder_attentions[0]
-            decoder_attentions.retain_grad()
+        decoder_attentions = outputs.decoder_attentions[0]
+        decoder_attentions.retain_grad()
 
-            cross_attentions = outputs.cross_attentions[0]
-            cross_attentions.retain_grad()
+        cross_attentions = outputs.cross_attentions[0]
+        cross_attentions.retain_grad()
 
-            output.flatten()[0].backward(retain_graph=True)
+        output.flatten()[0].backward(retain_graph=True)
 
-            self.assertIsNotNone(encoder_hidden_states.grad)
-            self.assertIsNotNone(encoder_attentions.grad)
-            self.assertIsNotNone(decoder_attentions.grad)
-            self.assertIsNotNone(cross_attentions.grad)
-        else:
-            # Encoder-/Decoder-only models
-            hidden_states = outputs.hidden_states[0]
-            attentions = outputs.attentions[0]
-
-            hidden_states.retain_grad()
-            attentions.retain_grad()
-
-            output.flatten()[0].backward(retain_graph=True)
-
-            self.assertIsNotNone(hidden_states.grad)
-            self.assertIsNotNone(attentions.grad)
+        self.assertIsNotNone(encoder_hidden_states.grad)
+        self.assertIsNotNone(encoder_attentions.grad)
+        self.assertIsNotNone(decoder_attentions.grad)
+        self.assertIsNotNone(cross_attentions.grad)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -464,7 +429,6 @@ class DetrModelIntegrationTests(unittest.TestCase):
 
     def test_inference_no_head(self):
         model = DetrModel.from_pretrained("facebook/detr-resnet-50").to(torch_device)
-        model.eval()
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -482,7 +446,6 @@ class DetrModelIntegrationTests(unittest.TestCase):
 
     def test_inference_object_detection_head(self):
         model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50").to(torch_device)
-        model.eval()
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -509,7 +472,6 @@ class DetrModelIntegrationTests(unittest.TestCase):
 
     def test_inference_panoptic_segmentation_head(self):
         model = DetrForSegmentation.from_pretrained("facebook/detr-resnet-50-panoptic").to(torch_device)
-        model.eval()
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()

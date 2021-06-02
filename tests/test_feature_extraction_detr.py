@@ -23,7 +23,7 @@ import numpy as np
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow
 
-from .test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_inputs
+from .test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
@@ -133,7 +133,7 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random PIL images
-        image_inputs = prepare_inputs(self.feature_extract_tester, equal_resolution=False)
+        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
 
@@ -165,7 +165,7 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random numpy tensors
-        image_inputs = prepare_inputs(self.feature_extract_tester, equal_resolution=False, numpify=True)
+        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
 
@@ -198,7 +198,7 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random PyTorch tensors
-        image_inputs = prepare_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
+        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 
@@ -232,7 +232,7 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         feature_extractor_1 = self.feature_extraction_class(**self.feat_extract_dict)
         feature_extractor_2 = self.feature_extraction_class(do_resize=False, do_normalize=False)
         # create random PyTorch tensors
-        image_inputs = prepare_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
+        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 

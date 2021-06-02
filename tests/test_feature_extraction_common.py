@@ -29,7 +29,7 @@ if is_vision_available():
     from PIL import Image
 
 
-def prepare_inputs(feature_extract_tester, equal_resolution=False, numpify=False, torchify=False):
+def prepare_image_inputs(feature_extract_tester, equal_resolution=False, numpify=False, torchify=False):
     """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
     or a list of PyTorch tensors if one specifies torchify=True.
     """

@@ -71,7 +71,7 @@ class DetrConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         init_std (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        init_xavier_std (:obj:`float`, `optional`, defaults to 1.):
+        init_xavier_std (:obj:`float`, `optional`, defaults to 1):
             The scaling factor used for the Xavier initialization gain in the HM Attention map module.
         encoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
             The LayerDrop probability for the encoder. See the `LayerDrop paper <see
@@ -85,7 +85,9 @@ class DetrConfig(PretrainedConfig):
             Type of position embeddings to be used on top of the image features. One of :obj:`"sine"` or
             :obj:`"learned"`.
         backbone (:obj:`str`, `optional`, defaults to :obj:`"resnet50"`):
-            Name of convolutional backbone to use. Supports any convolutional backbone from the timm package.
+            Name of convolutional backbone to use. Supports any convolutional backbone from the timm package. For a
+            list of all available models, see `this page
+            <https://rwightman.github.io/pytorch-image-models/#load-a-pretrained-model>`__.
         dilation (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to replace stride with dilation in the last convolutional block (DC5).
         return_intermediate_layers (:obj:`bool`, `optional`, defaults to :obj:`False`):

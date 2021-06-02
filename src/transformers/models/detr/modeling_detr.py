@@ -271,7 +271,7 @@ class DetrSegmentationOutput(ModelOutput):
 
 # BELOW: utilities copied from
 # https://github.com/facebookresearch/detr/blob/master/backbone.py
-class FrozenBatchNorm2d(nn.Module):
+class DetrFrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
 
@@ -280,7 +280,7 @@ class FrozenBatchNorm2d(nn.Module):
     """
 
     def __init__(self, n):
-        super(FrozenBatchNorm2d, self).__init__()
+        super(DetrFrozenBatchNorm2d, self).__init__()
         self.register_buffer("weight", torch.ones(n))
         self.register_buffer("bias", torch.zeros(n))
         self.register_buffer("running_mean", torch.zeros(n))
@@ -293,7 +293,7 @@ class FrozenBatchNorm2d(nn.Module):
         if num_batches_tracked_key in state_dict:
             del state_dict[num_batches_tracked_key]
 
-        super(FrozenBatchNorm2d, self)._load_from_state_dict(
+        super(DetrFrozenBatchNorm2d, self)._load_from_state_dict(
             state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
         )
 
@@ -314,7 +314,7 @@ def replace_batch_norm(m, name=""):
     for attr_str in dir(m):
         target_attr = getattr(m, attr_str)
         if isinstance(target_attr, torch.nn.BatchNorm2d):
-            frozen = FrozenBatchNorm2d(target_attr.num_features)
+            frozen = DetrFrozenBatchNorm2d(target_attr.num_features)
             bn = getattr(m, attr_str)
             frozen.weight.data.copy_(bn.weight)
             frozen.bias.data.copy_(bn.bias)
@@ -329,7 +329,7 @@ class TimmBackbone(nn.Module):
     """
     Timm convolutional backbone.
 
-    nn.BatchNorm2d layers are replaced by FrozenBatchNorm2d as defined above.
+    nn.BatchNorm2d layers are replaced by DetrFrozenBatchNorm2d as defined above.
 
     """
 
@@ -471,12 +471,12 @@ class DetrLearnedPositionEmbedding(nn.Module):
 
 
 def build_position_encoding(config):
-    N_steps = config.d_model // 2
+    n_steps = config.d_model // 2
     if config.position_embedding_type == "sine":
         # TODO find a better way of exposing other arguments
-        position_embedding = DetrSinePositionEmbedding(N_steps, normalize=True)
+        position_embedding = DetrSinePositionEmbedding(n_steps, normalize=True)
     elif config.position_embedding_type == "learned":
-        position_embedding = DetrLearnedPositionEmbedding(N_steps)
+        position_embedding = DetrLearnedPositionEmbedding(n_steps)
     else:
         raise ValueError(f"Not supported {config.position_embedding_type}")
 
@@ -1428,12 +1428,12 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
             # First: create the matcher
-            matcher = HungarianMatcher(
+            matcher = DetrHungarianMatcher(
                 class_cost=self.config.class_cost, bbox_cost=self.config.bbox_cost, giou_cost=self.config.giou_cost
             )
             # Second: create the criterion
             losses = ["labels", "boxes", "cardinality"]
-            criterion = SetCriterion(
+            criterion = DetrLoss(
                 matcher=matcher,
                 num_classes=self.config.num_labels,
                 eos_coef=self.config.eos_coefficient,
@@ -1646,12 +1646,12 @@ class DetrForSegmentation(DetrPreTrainedModel):
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
             # First: create the matcher
-            matcher = HungarianMatcher(
+            matcher = DetrHungarianMatcher(
                 class_cost=self.config.class_cost, bbox_cost=self.config.bbox_cost, giou_cost=self.config.giou_cost
             )
             # Second: create the criterion
             losses = ["labels", "boxes", "cardinality", "masks"]
-            criterion = SetCriterion(
+            criterion = DetrLoss(
                 matcher=matcher,
                 num_classes=self.config.num_labels,
                 eos_coef=self.config.eos_coefficient,
@@ -1872,7 +1872,7 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
 
 
 # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-class SetCriterion(nn.Module):
+class DetrLoss(nn.Module):
     """
     This class computes the losses for DetrForObjectDetection/DetrForSegmentation. The process happens in two steps: 1)
     we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair
@@ -2086,7 +2086,7 @@ class DetrMLPPredictionHead(nn.Module):
 
 
 # taken from https://github.com/facebookresearch/detr/blob/master/models/matcher.py
-class HungarianMatcher(nn.Module):
+class DetrHungarianMatcher(nn.Module):
     """
     This class computes an assignment between the targets and the predictions of the network.
 
@@ -2153,11 +2153,11 @@ class HungarianMatcher(nn.Module):
         giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(tgt_bbox))
 
         # Final cost matrix
-        C = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
-        C = C.view(bs, num_queries, -1).cpu()
+        cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
+        cost_matrix = cost_matrix.view(bs, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]
-        indices = [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))]
+        indices = [linear_sum_assignment(c[i]) for i, c in enumerate(cost_matrix.split(sizes, -1))]
         return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
 
 
