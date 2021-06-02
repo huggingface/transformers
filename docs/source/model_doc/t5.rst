@@ -1,4 +1,4 @@
-.. 
+..
     Copyright 2020 The HuggingFace Team. All rights reserved.
 
     Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -44,9 +44,9 @@ Tips:
 
   For more information about which prefix to use, it is easiest to look into Appendix D of the `paper
   <https://arxiv.org/pdf/1910.10683.pdf>`__. - For sequence-to-sequence generation, it is recommended to use
-  :obj:`T5ForConditionalGeneration.generate()`. This method takes care of feeding the encoded input via cross-attention
-  layers to the decoder and auto-regressively generates the decoder output. - T5 uses relative scalar embeddings.
-  Encoder input padding can be done on the left and on the right.
+  :meth:`~transformers.generation_utils.GenerationMixin.generate`. This method takes care of feeding the encoded input
+  via cross-attention layers to the decoder and auto-regressively generates the decoder output. - T5 uses relative
+  scalar embeddings. Encoder input padding can be done on the left and on the right.
 
 This model was contributed by `thomwolf <https://huggingface.co/thomwolf>`__. The original code can be found `here
 <https://github.com/google-research/text-to-text-transfer-transformer>`__.
