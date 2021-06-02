@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import unittest
 import inspect
+import unittest
+from typing import List, Tuple
+
 import numpy as np
 
-from typing import List, Tuple
 from transformers import ViTConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
@@ -27,7 +28,7 @@ from .test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_
 if is_flax_available():
 
     import jax
-    from transformers.models.vit.modeling_flax_vit import FlaxViTModel, FlaxViTForImageClassificationModule
+    from transformers.models.vit.modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel
 
 
 class FlaxViTModelTester(unittest.TestCase):
@@ -116,7 +117,7 @@ class FlaxViTModelTester(unittest.TestCase):
 @require_flax
 class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (FlaxViTModel, ) if is_flax_available() else ()
+    all_model_classes = (FlaxViTModel, FlaxViTForImageClassification) if is_flax_available() else ()
 
     def setUp(self) -> None:
         self.model_tester = FlaxViTModelTester(self)
@@ -130,7 +131,6 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            print(model_class)
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             model = model_class(config)
@@ -210,7 +210,7 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
             hidden_states = outputs.hidden_states
 
             self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
-            seq_length = 226#self.model_tester.seq_length
+            seq_length = 226  # self.model_tester.seq_length
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),

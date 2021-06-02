@@ -22,33 +22,44 @@ import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict
 from flax.linen.attention import dot_product_attention_weights
-from jax import lax
 
-from ...file_utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxBaseModelOutputWithPooling, FlaxSequenceClassifierOutput
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
+from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel
 from .configuration_vit import ViTConfig
 
 
 VIT_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ subclass. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
+
+    This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
+    generic methods the library implements for all its model (such as downloading, saving and converting weights from
+    PyTorch models)
+
+    This model is also a Flax Linen `flax.linen.Module
+    <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`__ subclass. Use it as a regular Flax linen Module
+    and refer to the Flax documentation for all matter related to general usage and behavior.
+
+    Finally, this model supports inherent JAX features such as:
+
+    - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
+    - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
+    - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
+    - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
 
     Parameters:
         config (:class:`~transformers.ViTConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
+            model weights.
 """
 
 VIT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
+        pixel_values (:obj:`numpy.ndarray` of shape :obj:`(batch_size, height, width, num_channels)`):
             Pixel values. Pixel values can be obtained using :class:`~transformers.ViTFeatureExtractor`. See
             :meth:`transformers.ViTFeatureExtractor.__call__` for details.
 
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
+        head_mask (:obj:`numpy.ndarray` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
@@ -384,8 +395,8 @@ class FlaxViTPooler(nn.Module):
         return nn.tanh(cls_hidden_state)
 
 
-class FlaxViTPreTrainedModule(nn.Module):
-    pass
+# class FlaxViTPreTrainedModule(nn.Module):
+#     pass
 
 
 class FlaxViTPreTrainedModel(FlaxPreTrainedModel):
@@ -498,7 +509,7 @@ class FlaxViTModule(nn.Module):
 
 
 @add_start_docstrings(
-    "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare ViT Model transformer outputting raw hidden-states without any specific head on top.",
     VIT_START_DOCSTRING,
 )
 class FlaxViTModel(FlaxViTPreTrainedModel):
@@ -510,19 +521,12 @@ class FlaxViTModel(FlaxViTPreTrainedModel):
 # )
 
 
-@add_start_docstrings(
-    """
-    ViT Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.
-    """,
-    VIT_START_DOCSTRING,
-)
 class FlaxViTForImageClassificationModule(nn.Module):
     config: ViTConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.vit = FlaxViTModel(config=self.config, dtype=self.dtype, add_pooling_layer=False)
+        self.vit = FlaxViTModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
         self.classifier = nn.Dense(
             self.config.num_labels,
             dtype=self.dtype,
@@ -532,6 +536,7 @@ class FlaxViTForImageClassificationModule(nn.Module):
     def __call__(
         self,
         pixel_values=None,
+        deterministic: bool = True,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -540,6 +545,7 @@ class FlaxViTForImageClassificationModule(nn.Module):
 
         outputs = self.vit(
             pixel_values,
+            deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -557,3 +563,14 @@ class FlaxViTForImageClassificationModule(nn.Module):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+@add_start_docstrings(
+    """
+    ViT Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
+    the [CLS] token) e.g. for ImageNet.
+    """,
+    VIT_START_DOCSTRING,
+)
+class FlaxViTForImageClassification(FlaxViTPreTrainedModel):
+    module_class = FlaxViTForImageClassificationModule
