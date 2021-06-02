@@ -69,6 +69,22 @@ def require_deepspeed(test_case):
         return test_case
 
 
+def require_deepspeed_aio(test_case):
+    """
+    Decorator marking a test that requires deepspeed aio (nvme)
+    """
+    if not is_deepspeed_available():
+        return unittest.skip("test requires deepspeed")(test_case)
+
+    import deepspeed
+    from deepspeed.ops.aio import AsyncIOBuilder
+
+    if not deepspeed.ops.__compatible_ops__[AsyncIOBuilder.NAME]:
+        return unittest.skip("test requires deepspeed async-io")(test_case)
+    else:
+        return test_case
+
+
 if is_deepspeed_available():
     from deepspeed.utils import logger as deepspeed_logger  # noqa
     from transformers.deepspeed import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
@@ -235,6 +251,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             f"got exception: {context.exception}",
         )
 
+    @require_deepspeed_aio
     def test_stage3_nvme_offload(self):
         with mockenv_context(**self.dist_env_1_gpu):
             # this actually doesn't have to be on NVMe, any storage will do since this test only
