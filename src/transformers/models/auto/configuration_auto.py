@@ -19,6 +19,7 @@ from collections import OrderedDict
 
 from ...configuration_utils import PretrainedConfig
 from ..albert.configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+from ..vilbert.configuration_vilbert import VILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VilbertConfig
 from ..bart.configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig
 from ..bert.configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from ..bert_generation.configuration_bert_generation import BertGenerationConfig
@@ -92,6 +93,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     (key, value)
     for pretrained_map in [
         # Add archive maps here
+        VILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -148,6 +150,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
+        ("vilbert", VilbertConfig),
         ("roformer", RoFormerConfig),
         ("clip", CLIPConfig),
         ("bigbird_pegasus", BigBirdPegasusConfig),
@@ -210,6 +213,7 @@ CONFIG_MAPPING = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("vilbert", "Vilbert"),
         ("roformer", "RoFormer"),
         ("clip", "CLIP"),
         ("bigbird_pegasus", "BigBirdPegasus"),

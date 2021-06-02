@@ -17,6 +17,7 @@
 # limitations under the License.
 
 from . import (
+    vilbert,
     albert,
     auto,
     bart,

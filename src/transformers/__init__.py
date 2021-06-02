@@ -130,6 +130,7 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
+    "models.vilbert": ["VILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VilbertConfig", "VilbertTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -324,6 +325,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.vilbert"].append("VilbertTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
@@ -466,6 +468,22 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
+
+    _import_structure["models.vilbert"].extend(
+        [
+            "VILBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VilbertForMaskedLM",
+            "VilbertForCausalLM",
+            "VilbertForMultipleChoice",
+            "VilbertForQuestionAnswering",
+            "VilbertForSequenceClassification",
+            "VilbertForTokenClassification",
+            "VilbertLayer",
+            "VilbertModel",
+            "VilbertPreTrainedModel",
+            "load_tf_weights_in_vilbert",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1608,6 +1626,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.vilbert import VILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VilbertConfig, VilbertTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1790,6 +1809,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
+        from .models.vilbert import VilbertTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -1854,6 +1874,20 @@ if TYPE_CHECKING:
 
     # Modeling
     if is_torch_available():
+
+        from .models.vilbert import (
+            VILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VilbertForMaskedLM,
+            VilbertForCausalLM,
+            VilbertForMultipleChoice,
+            VilbertForQuestionAnswering,
+            VilbertForSequenceClassification,
+            VilbertForTokenClassification,
+            VilbertLayer,
+            VilbertModel,
+            VilbertPreTrainedModel,
+            load_tf_weights_in_vilbert,
+        )
 
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
