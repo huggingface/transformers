@@ -233,6 +233,7 @@ _import_structure = {
         "TransfoXLCorpus",
         "TransfoXLTokenizer",
     ],
+    "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
     "models.wav2vec2": [
         "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -996,6 +997,19 @@ if is_torch_available():
             "load_tf_weights_in_transfo_xl",
         ]
     )
+    _import_structure["models.visual_bert"].extend(
+        [
+            "VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VisualBertForMultipleChoice",
+            "VisualBertForPreTraining",
+            "VisualBertForQuestionAnswering",
+            "VisualBertForRegionToPhraseAlignment",
+            "VisualBertForVisualReasoning",
+            "VisualBertLayer",
+            "VisualBertModel",
+            "VisualBertPreTrainedModel",
+        ]
+    )
     _import_structure["models.vit"].extend(
         [
             "VIT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1702,6 +1716,7 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
+    from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -2337,6 +2352,17 @@ if TYPE_CHECKING:
             TransfoXLModel,
             TransfoXLPreTrainedModel,
             load_tf_weights_in_transfo_xl,
+        )
+        from .models.visual_bert import (  # load_tf_weights_in_visual_bert,
+            VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VisualBertForMultipleChoice,
+            VisualBertForPreTraining,
+            VisualBertForQuestionAnswering,
+            VisualBertForRegionToPhraseAlignment,
+            VisualBertForVisualReasoning,
+            VisualBertLayer,
+            VisualBertModel,
+            VisualBertPreTrainedModel,
         )
         from .models.vit import (
             VIT_PRETRAINED_MODEL_ARCHIVE_LIST,
