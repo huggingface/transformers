@@ -19,7 +19,7 @@ from packaging import version
 from torch import nn
 from torch.utils.data.dataset import Dataset
 
-from .integrations import is_deepspeed_zero3_enabled
+from .deepspeed import is_deepspeed_zero3_enabled
 from .trainer import Trainer
 from .trainer_utils import PredictionOutput
 from .utils import logging

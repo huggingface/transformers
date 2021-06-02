@@ -671,7 +671,7 @@ class TrainingArguments:
         if self.deepspeed:
             # - must be run very last in arg parsing, since it will use a lot of these settings.
             # - must be run before the model is created.
-            from transformers.integrations import HfTrainerDeepSpeedConfig
+            from transformers.deepspeed import HfTrainerDeepSpeedConfig
 
             # will be used later by the Trainer
             # note: leave self.deepspeed unmodified in case a user relies on it not to be modified)
@@ -739,7 +739,7 @@ class TrainingArguments:
             # deepspeed  ./program.py
             # rather than:
             # python -m torch.distributed.launch --nproc_per_node=2 ./program.py
-            from .integrations import is_deepspeed_available
+            from .deepspeed import is_deepspeed_available
 
             if not is_deepspeed_available():
                 raise ImportError("--deepspeed requires deepspeed: `pip install deepspeed`.")
