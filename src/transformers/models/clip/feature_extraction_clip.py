@@ -14,7 +14,7 @@
 # limitations under the License.
 """Feature extractor class for CLIP."""
 
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Tuple
 
 import numpy as np
 from PIL import Image
@@ -26,6 +26,20 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+
+def _get_scaled_size(size: Tuple[int, int], smaller_side_length: int) -> Tuple[int, int]:
+    """
+    Calculates a new size where the smaller side is of a specific length
+
+    Args:
+        size (:obj:`tuple`):
+            The width and height of the current size
+        smaller_side_length (:obj:`int`):
+            The desired size of the smaller side of :obj:`size`
+    """
+    factor = smaller_side_length / min(*size)
+    return (int(size[0] * factor), int(size[1] * factor))
 
 
 class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
@@ -143,7 +157,11 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         # transformations (resizing + center cropping + normalization)
         if self.do_resize and self.size is not None and self.resample is not None:
-            images = [self.resize(image=image, size=self.size, resample=self.resample) for image in images]
+            for i, image in enumerate(images):
+                # PIL Image has "size" while np array and tensor has "shape"
+                image_size = image.size if hasattr(image, "size") else tuple(image.shape)
+                scaled_size = _get_scaled_size(image_size, smaller_side_length=self.size)
+                images[i] = self.resize(image=image, size=scaled_size, resample=self.resample)
         if self.do_center_crop and self.crop_size is not None:
             images = [self.center_crop(image, self.crop_size) for image in images]
         if self.do_normalize:
