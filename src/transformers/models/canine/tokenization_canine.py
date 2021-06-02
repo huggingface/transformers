@@ -117,6 +117,13 @@ class CanineTokenizer(PreTrainedTokenizer):
             codepoint: name for name, codepoint in self._special_codepoints.items()
         }
 
+        self._unicode_vocab_size = 1114112 # Unicode defines 1,114,112 total “codepoints”
+        self._num_special_tokens = len(self._special_codepoints)
+
+    @property
+    def vocab_size(self):
+        return self._unicode_vocab_size + self._num_special_tokens
+    
     def _tokenize(self, text: str) -> List[str]:
         """Tokenize a string (i.e. perform character splitting)."""
 
