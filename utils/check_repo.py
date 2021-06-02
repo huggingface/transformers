@@ -118,6 +118,10 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "XLMForQuestionAnswering",
     "XLNetForQuestionAnswering",
     "SeparableConv1D",
+    "VisualBertForRegionToPhraseAlignment",
+    "VisualBertForVisualReasoning",
+    "VisualBertForQuestionAnswering",
+    "VisualBertForMultipleChoice",
 ]
 
 # This is to make sure the transformers module imported is the one in the repo.

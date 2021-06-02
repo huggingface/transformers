@@ -2864,6 +2864,65 @@ def load_tf_weights_in_transfo_xl(*args, **kwargs):
     requires_backends(load_tf_weights_in_transfo_xl, ["torch"])
 
 
+VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class VisualBertForMultipleChoice:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VisualBertForPreTraining:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VisualBertForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VisualBertForRegionToPhraseAlignment:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VisualBertForVisualReasoning:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VisualBertLayer:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VisualBertModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VisualBertPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 VIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
