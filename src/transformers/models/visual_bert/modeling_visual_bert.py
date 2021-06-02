@@ -728,6 +728,9 @@ class VisualBertModel(VisualBertPreTrainedModel):
         return_dict=None,
     ):
         r"""
+
+        Returns:
+
         Example::
 
             >>> # Assumption: `get_visual_embeddings(image)` gets the visual embeddings of the image.
@@ -907,7 +910,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
                 - 0 indicates sequence B is a matching pair of sequence A for the given image,
                 - 1 indicates sequence B is a random sequence w.r.t A for the given image.
 
-            Returns:
+        Returns:
 
         Example::
 
@@ -1016,6 +1019,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(
         VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
+    @replace_return_docstrings(output_type=MultipleChoiceModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -1038,6 +1042,8 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
                 Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
                 num_choices-1]`` where :obj:`num_choices` is the size of the second dimension of the input tensors.
                 (See :obj:`input_ids` above)
+
+        Returns:
 
         Example::
 
@@ -1160,6 +1166,7 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -1182,6 +1189,7 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
                 Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
                 config.num_labels - 1]`. A KLDivLoss is computed between the labels and the returned logits.
 
+        Returns:
 
         Example::
 
@@ -1280,6 +1288,7 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -1301,6 +1310,8 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
             labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
                 Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
                 config.num_labels - 1]`. A classification loss is computed (Cross-Entropy) against these labels.
+
+        Returns:
 
         Example::
 
@@ -1433,6 +1444,7 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -1458,6 +1470,8 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
             labels (:obj:`torch.LongTensor` of shape ``(batch_size, total_sequence_length, visual_sequence_length)``, `optional`):
                 Labels for computing the masked language modeling loss. KLDivLoss is computed against these labels and
                 the outputs from the attention layer.
+
+        Returns:
 
         Example::
 
