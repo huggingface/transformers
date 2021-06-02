@@ -410,28 +410,8 @@ Known caveats:
 DeepSpeed
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-:doc:`deepspeed`
 
-
-`DeepSpeed <https://github.com/microsoft/DeepSpeed>`__ implements everything described in the `ZeRO paper
-<https://arxiv.org/abs/1910.02054>`__. Currently it provides full support for:
-
-1. Optimizer state partitioning (ZeRO stage 1)
-2. Gradient partitioning (ZeRO stage 2)
-3. Parameter partitioning (ZeRO stage 3)
-4. Custom mixed precision training handling
-5. A range of fast CUDA-extension-based optimizers
-6. ZeRO-Offload to CPU and NVMe
-
-ZeRO-Offload has its own dedicated paper: `ZeRO-Offload: Democratizing Billion-Scale Model Training
-<https://arxiv.org/abs/2101.06840>`__. And NVMe-support is described in the paper `ZeRO-Infinity: Breaking the GPU
-Memory Wall for Extreme Scale Deep Learning <https://arxiv.org/abs/2104.07857>`__.
-
-DeepSpeed ZeRO-2 is primarily used only for training, as its features are of no use to inference.
-
-DeepSpeed ZeRO-3 can be used for inference as well, since it allows huge models to be loaded on multiple GPUs, which
-won't be possible on a single GPU.
-
+Moved to :ref:`deepspeed-trainer-integration`.
 
 
 Installation
