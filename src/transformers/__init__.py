@@ -165,6 +165,7 @@ _import_structure = {
         "BlenderbotSmallConfig",
         "BlenderbotSmallTokenizer",
     ],
+    "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -232,6 +233,7 @@ _import_structure = {
         "TransfoXLCorpus",
         "TransfoXLTokenizer",
     ],
+    "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
     "models.wav2vec2": [
         "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -995,6 +997,19 @@ if is_torch_available():
             "load_tf_weights_in_transfo_xl",
         ]
     )
+    _import_structure["models.visual_bert"].extend(
+        [
+            "VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VisualBertForMultipleChoice",
+            "VisualBertForPreTraining",
+            "VisualBertForQuestionAnswering",
+            "VisualBertForRegionToPhraseAlignment",
+            "VisualBertForVisualReasoning",
+            "VisualBertLayer",
+            "VisualBertModel",
+            "VisualBertPreTrainedModel",
+        ]
+    )
     _import_structure["models.vit"].extend(
         [
             "VIT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1482,6 +1497,14 @@ if is_flax_available():
             "FlaxBertPreTrainedModel",
         ]
     )
+    _import_structure["models.clip"].extend(
+        [
+            "FlaxCLIPModel",
+            "FlaxCLIPPreTrainedModel",
+            "FlaxCLIPTextModel",
+            "FlaxCLIPVisionModel",
+        ]
+    )
     _import_structure["models.electra"].extend(
         [
             "FlaxElectraForMaskedLM",
@@ -1628,6 +1651,7 @@ if TYPE_CHECKING:
         BlenderbotSmallConfig,
         BlenderbotSmallTokenizer,
     )
+    from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.clip import (
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -1692,6 +1716,7 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
+    from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -2328,6 +2353,17 @@ if TYPE_CHECKING:
             TransfoXLPreTrainedModel,
             load_tf_weights_in_transfo_xl,
         )
+        from .models.visual_bert import (  # load_tf_weights_in_visual_bert,
+            VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VisualBertForMultipleChoice,
+            VisualBertForPreTraining,
+            VisualBertForQuestionAnswering,
+            VisualBertForRegionToPhraseAlignment,
+            VisualBertForVisualReasoning,
+            VisualBertLayer,
+            VisualBertModel,
+            VisualBertPreTrainedModel,
+        )
         from .models.vit import (
             VIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViTForImageClassification,
@@ -2743,6 +2779,7 @@ if TYPE_CHECKING:
             FlaxBertModel,
             FlaxBertPreTrainedModel,
         )
+        from .models.clip import FlaxCLIPModel, FlaxCLIPPreTrainedModel, FlaxCLIPTextModel, FlaxCLIPVisionModel
         from .models.electra import (
             FlaxElectraForMaskedLM,
             FlaxElectraForMultipleChoice,
