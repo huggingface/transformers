@@ -125,8 +125,10 @@ def convert_megatron_checkpoint(args, input_state_dict):
         elif op_name == "attention.query_key_value" and weight_or_bias == "weight":
 
             # Insert a tensor of 1x1xDxD bias.
-            zeros = torch.ones(1, 1, hidden_size, hidden_size)
-            output_state_dict[layer_name + ".attn.bias"] = zeros
+            causal_mask = torch.tril(torch.ones((hidden_size, hidden_size), dtype=torch.uint8)).view(
+                1, 1, hidden_size, hidden_size
+            )
+            output_state_dict[layer_name + ".attn.bias"] = causal_mask
 
             # Insert a "dummy" tensor for masked_bias.
             masked_bias = torch.tensor(-1e4)
