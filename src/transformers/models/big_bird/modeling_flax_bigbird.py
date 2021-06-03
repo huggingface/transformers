@@ -1281,17 +1281,6 @@ class FlaxBigBirdOnlyMLMHead(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertOnlyNSPHead with Bert->BigBird
-class FlaxBigBirdOnlyNSPHead(nn.Module):
-    dtype: jnp.dtype = jnp.float32
-
-    def setup(self):
-        self.seq_relationship = nn.Dense(2, dtype=self.dtype)
-
-    def __call__(self, pooled_output):
-        return self.seq_relationship(pooled_output)
-
-
 class FlaxBigBirdPreTrainingHeads(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
@@ -1619,7 +1608,26 @@ append_call_sample_docstring(
 )
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForSequenceClassificationModule with Bert->BigBird
+class FlaxBigBirdClassificationHead(nn.Module):
+    """Head for sentence-level classification tasks."""
+
+    config: BigBirdConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.dense = nn.Dense(self.config.hidden_size, dtype=self.dtype)
+        self.dropout = nn.Dropout(self.config.hidden_dropout_prob)
+        self.out_proj = nn.Dense(self.config.num_labels, dtype=self.dtype)
+
+    def __call__(self, features, deterministic=True):
+        x = self.dropout(features, deterministic=deterministic)
+        x = self.dense(x)
+        x = ACT2FN[self.config.hidden_act](x)
+        x = self.dropout(x, deterministic=deterministic)
+        x = self.out_proj(x)
+        return x
+
+
 class FlaxBigBirdForSequenceClassificationModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
@@ -1627,10 +1635,7 @@ class FlaxBigBirdForSequenceClassificationModule(nn.Module):
     def setup(self):
         self.bert = FlaxBigBirdModule(config=self.config, dtype=self.dtype)
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
-        self.classifier = nn.Dense(
-            self.config.num_labels,
-            dtype=self.dtype,
-        )
+        self.classifier = FlaxBigBirdClassificationHead(self.config, dtype=self.dtype)
 
     def __call__(
         self,
@@ -1657,7 +1662,7 @@ class FlaxBigBirdForSequenceClassificationModule(nn.Module):
 
         pooled_output = outputs[1]
         pooled_output = self.dropout(pooled_output, deterministic=deterministic)
-        logits = self.classifier(pooled_output)
+        logits = self.classifier(pooled_output, deterministic=deterministic)
 
         if not return_dict:
             return (logits,) + outputs[2:]
