@@ -51,9 +51,9 @@ class BigBirdConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         intermediate_size (:obj:`int`, `optional`, defaults to 3072):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu_fast"`):
+        hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu_new"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
-            :obj:`"gelu"`, :obj:`"gelu_fast"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):

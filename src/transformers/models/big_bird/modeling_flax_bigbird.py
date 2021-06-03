@@ -782,9 +782,6 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
 
         return plan_from_length, plan_num_rand_blocks
 
-    # TODO: can we replace all below methods with jax version instead (should speed up)
-    # TODO: also let's define them only once as discussed in torch PR
-
     @staticmethod
     def _bigbird_block_rand_mask(
         from_seq_length, to_seq_length, from_block_size, to_block_size, num_rand_blocks, last_idx=-1
@@ -1329,7 +1326,10 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         if config.attention_type == "block_sparse":
-            input_shape = (1, 12 * config.block_size)
+            seqlen = 12 * config.block_size
+            input_shape = (1, seqlen)
+            if isinstance(module, FlaxBigBirdForMultipleChoiceModule):
+                input_shape = (1, 1, seqlen)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
@@ -1818,8 +1818,7 @@ class FlaxBigBirdForMultipleChoiceModule(nn.Module):
         pooled_output = self.dropout(pooled_output, deterministic=deterministic)
         logits = self.classifier(pooled_output)
 
-        # TODO: this is wrong in BERT also & FlaxBertForMultipleChoice doesn't work
-        reshaped_logits = logits  # .reshape(-1, num_choices)
+        reshaped_logits = logits.reshape(-1, num_choices)
 
         if not return_dict:
             return (reshaped_logits,) + outputs[2:]
