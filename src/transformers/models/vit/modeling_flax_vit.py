@@ -92,7 +92,7 @@ class PatchEmbeddings(nn.Module):
             strides=(patch_size, patch_size),
             padding="VALID",
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
         )
 
     def __call__(self, pixel_values):
