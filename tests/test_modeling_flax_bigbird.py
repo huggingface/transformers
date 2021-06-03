@@ -150,7 +150,7 @@ class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
         else ()
     )
 
-    test_attn_probs = True
+    test_attn_probs = False
 
     def setUp(self):
         self.model_tester = FlaxBigBirdModelTester(self)
