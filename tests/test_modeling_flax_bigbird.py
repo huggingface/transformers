@@ -26,7 +26,6 @@ if is_flax_available():
     from transformers.models.big_bird.modeling_flax_bigbird import (
         FlaxBigBirdForMaskedLM,
         FlaxBigBirdForMultipleChoice,
-        FlaxBigBirdForNextSentencePrediction,
         FlaxBigBirdForPreTraining,
         FlaxBigBirdForQuestionAnswering,
         FlaxBigBirdForSequenceClassification,
@@ -136,15 +135,13 @@ class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            FlaxBigBirdModel,
-            FlaxBigBirdForPreTraining,
-            FlaxBigBirdForMaskedLM,
-            FlaxBigBirdForMultipleChoice,
-            FlaxBigBirdForQuestionAnswering,
-            FlaxBigBirdForNextSentencePrediction,
-            FlaxBigBirdForSequenceClassification,
-            FlaxBigBirdForTokenClassification,
-            FlaxBigBirdForQuestionAnswering,
+            # FlaxBigBirdModel,
+            # FlaxBigBirdForPreTraining,
+            # FlaxBigBirdForMaskedLM,
+            # FlaxBigBirdForMultipleChoice, #
+            # FlaxBigBirdForQuestionAnswering,
+            FlaxBigBirdForSequenceClassification, #
+            # FlaxBigBirdForTokenClassification
         )
         if is_flax_available()
         else ()

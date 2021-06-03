@@ -1533,7 +1533,6 @@ if is_flax_available():
         [
             "FlaxBigBirdForMaskedLM",
             "FlaxBigBirdForMultipleChoice",
-            "FlaxBigBirdForNextSentencePrediction",
             "FlaxBigBirdForPreTraining",
             "FlaxBigBirdForQuestionAnswering",
             "FlaxBigBirdForSequenceClassification",
@@ -2831,9 +2830,10 @@ if TYPE_CHECKING:
             FlaxBertForTokenClassification,
             FlaxBertModel,
             FlaxBertPreTrainedModel,
+        )
+        from .models.big_bird import (
             FlaxBigBirdForMaskedLM,
             FlaxBigBirdForMultipleChoice,
-            FlaxBigBirdForNextSentencePrediction,
             FlaxBigBirdForPreTraining,
             FlaxBigBirdForQuestionAnswering,
             FlaxBigBirdForSequenceClassification,

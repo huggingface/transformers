@@ -57,7 +57,6 @@ if is_flax_available():
     _import_structure["modeling_flax_bigbird"] = [
         "FlaxBigBirdForMaskedLM",
         "FlaxBigBirdForMultipleChoice",
-        "FlaxBigBirdForNextSentencePrediction",
         "FlaxBigBirdForPreTraining",
         "FlaxBigBirdForQuestionAnswering",
         "FlaxBigBirdForSequenceClassification",
@@ -95,7 +94,6 @@ if TYPE_CHECKING:
         from .modeling_flax_bigbird import (
             FlaxBigBirdForMaskedLM,
             FlaxBigBirdForMultipleChoice,
-            FlaxBigBirdForNextSentencePrediction,
             FlaxBigBirdForPreTraining,
             FlaxBigBirdForQuestionAnswering,
             FlaxBigBirdForSequenceClassification,
