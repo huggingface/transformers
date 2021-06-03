@@ -165,25 +165,17 @@ def create_train_state(
         logits_fn: Callable = struct.field(pytree_node=False)
         loss_fn: Callable = struct.field(pytree_node=False)
 
-    # Creates a multi-optimizer consisting of two "Adam with weight decay" optimizers.
-    def adamw(decay):
-        return optax.adamw(learning_rate=learning_rate_fn, b1=0.9, b2=0.999, eps=1e-6, weight_decay=decay)
+    # We use Optax's "masking" functionality to not apply weight decay
+    # to bias and LayerNorm scale parameters. decay_mask_fn returns a
+    # mask boolean with the same structure as the parameters.
+    # The mask is True for parameters that should be decayed.
+    def decay_mask_fn(params):
+        flat_params = traverse_util.flatten_dict(params)
+        flat_mask = {path: (path[-1] != "bias" and path[-2:] != ("LayerNorm", "scale")) for path in flat_params}
+        return traverse_util.unflatten_dict(flat_mask)
 
-    def traverse(fn):
-        def mask(data):
-            flat = traverse_util.flatten_dict(data)
-            return traverse_util.unflatten_dict({k: fn(k, v) for k, v in flat.items()})
-
-        return mask
-
-    # We use Optax's "masking" functionality to create a multi-optimizer, one
-    # with weight decay and the other without. Note masking means the optimizer
-    # will ignore these paths.
-    decay_path = lambda p: not any(x in p for x in ["bias", "LayerNorm.weight"])  # noqa: E731
-
-    tx = optax.chain(
-        optax.masked(adamw(0.0), mask=traverse(lambda path, _: decay_path(path))),
-        optax.masked(adamw(weight_decay), mask=traverse(lambda path, _: not decay_path(path))),
+    tx = optax.adamw(
+        learning_rate=learning_rate_fn, b1=0.9, b2=0.999, eps=1e-6, weight_decay=weight_decay, mask=decay_mask_fn
     )
 
     if is_regression:

@@ -63,15 +63,15 @@ In the Tensorboard results linked below, the random seed of each model is equal 
 
 | Task  | Metric                       | Acc (best run) | Acc (avg/5runs) | Stdev     | Metrics                                                                  |
 |-------|------------------------------|----------------|-----------------|-----------|--------------------------------------------------------------------------|
-| CoLA  | Matthew's corr               | 60.82          | 59.04           | 1.17      | [tfhub.dev](https://tensorboard.dev/experiment/U2ncNFP3RpWW6YnA9PYJBA/)  |
-| SST-2 | Accuracy                     | 92.43          | 92.13           | 0.38      | [tfhub.dev](https://tensorboard.dev/experiment/vzxoOHZURcm0rO1I33x7uA/)  |
-| MRPC  | F1/Accuracy                  | 89.90/88.98    | 88.98/85.30     | 0.73/2.33 | [tfhub.dev](https://tensorboard.dev/experiment/EWPBIbfYSDGHjiYxrw2a2Q/)  |
-| STS-B | Pearson/Spearman corr.       | 89.04/88.70    | 88.94/88.63     | 0.07/0.07 | [tfhub.dev](https://tensorboard.dev/experiment/3aYHKL10TeiaZYwH1M8ogA/)  |
-| QQP   | Accuracy/F1                  | 90.82/87.54    | 90.75/87.53     | 0.06/0.02 | [tfhub.dev](https://tensorboard.dev/experiment/VfVDLS4AQnqr4NMbng6yUw/)  |
-| MNLI  | Matched acc.                 | 84.10          | 83.84           | 0.16      | [tfhub.dev](https://tensorboard.dev/experiment/Sz9UdhoORaaSjzuOHRB4Jw/)  |
-| QNLI  | Accuracy                     | 91.07          | 90.83           | 0.19      | [tfhub.dev](https://tensorboard.dev/experiment/zk6udb5MQAyAQ4eczrFBaQ/)  |
-| RTE   | Accuracy                     | 66.06          | 64.76           | 1.04      | [tfhub.dev](https://tensorboard.dev/experiment/BwxaUoAEQ5aa3oQilEjADw/)  |
-| WNLI  | Accuracy                     | 46.48          | 37.01           | 6.83      | [tfhub.dev](https://tensorboard.dev/experiment/b2Y8ouwMTRC8iBWzRzVYTA/)  |
+| CoLA  | Matthew's corr               | 60.57          | 59.04           | 1.06      | [tfhub.dev](https://tensorboard.dev/experiment/lfr2adVpRtmLDALKrElkzg/)  |
+| SST-2 | Accuracy                     | 92.66          | 92.23           | 0.57      | [tfhub.dev](https://tensorboard.dev/experiment/jYvfv2trRHKMjoWnXVwrZA/)  |
+| MRPC  | F1/Accuracy                  | 89.90/85.78    | 88.97/84.36     | 0.72/1.09 | [tfhub.dev](https://tensorboard.dev/experiment/bo3W3DEoRw2Q7YXjWrJkfg/)  |
+| STS-B | Pearson/Spearman corr.       | 89.04/88.70    | 88.94/88.63     | 0.07/0.07 | [tfhub.dev](https://tensorboard.dev/experiment/fxVwbLD7QpKhbot0r9rn2w/)  |
+| QQP   | Accuracy/F1                  | 90.81/87.58    | 90.76/87.51     | 0.05/0.06 | [tfhub.dev](https://tensorboard.dev/experiment/di089Rc9TZmsnKRMrYNLsA/)  |
+| MNLI  | Matched acc.                 | 84.10          | 83.80           | 0.16      | [tfhub.dev](https://tensorboard.dev/experiment/JgNCGHDJSRaW6HBx6YQFYQ/)  |
+| QNLI  | Accuracy                     | 91.01          | 90.82           | 0.17      | [tfhub.dev](https://tensorboard.dev/experiment/Bq7cMGJnQMSggYgL8qNGeQ/)  |
+| RTE   | Accuracy                     | 66.06          | 64.76           | 1.04      | [tfhub.dev](https://tensorboard.dev/experiment/66Eq24bhRjqN6CEhgDSGqQ/)  |
+| WNLI  | Accuracy                     | 46.48          | 37.01           | 6.83      | [tfhub.dev](https://tensorboard.dev/experiment/TAqcnddqTkWvVEeGaWwIdQ/)  |
 
 Some of these results are significantly different from the ones reported on the test set of GLUE benchmark on the
 website. For QQP and WNLI, please refer to [FAQ #12](https://gluebenchmark.com/faq) on the website.
