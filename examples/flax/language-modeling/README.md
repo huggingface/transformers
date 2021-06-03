@@ -127,3 +127,97 @@ look at [this TODO: (Patrick)]() google colab.
 
 
 ## TODO(Patrick): Add comparison with PyTorch GPU/TPU
+
+### Script to compare pre-training with PyTorch/XLA on TPUv3-8
+
+For comparison you can run the same pre-training with PyTorch/XLA on TPU.
+Having created the tokenzier and configuration in `norwegian-roberta-base`, we just create the following symbolic links:
+
+```bash
+ln -s ~/transformers/examples/pytorch/language-modeling/run_mlm.py ./
+ln -s ~/transformers/examples/pytorch/xla_spawn.py ./
+```
+
+,set some environment variables:
+
+```bash
+export NUM_TPUS=8
+export TOKENIZERS_PARALLELISM=0
+export MODEL_DIR="./norwegian-roberta-base"
+mkdir -p ${MODEL_DIR}
+```
+
+, and can start training as follows:
+
+```bash
+python xla_spawn.py --num_cores ${NUM_TPUS} run_mlm.py --output_dir="./runs" \
+										--model_type="roberta" \
+										--config_name="${MODEL_DIR}" \
+										--tokenizer_name="${MODEL_DIR}" \
+										--dataset_name="oscar" \
+										--dataset_config_name="unshuffled_deduplicated_no" \
+										--max_seq_length="128" \
+										--pad_to_max_length \
+										--weight_decay="0.01" \
+										--per_device_train_batch_size="64" \
+										--per_device_eval_batch_size="64" \
+										--gradient_accumulation_steps="2" \
+										--learning_rate="3e-4" \
+										--warmup_steps="1000" \
+										--overwrite_output_dir \
+										--num_train_epochs="18" \
+										--adam_beta1="0.9" \
+										--adam_beta2="0.98" \
+										--do_train \
+										--do_eval \
+										--logging_steps="200" \
+										--evaluation_strategy="steps" \
+										--report_to="tensorboard"
+```
+
+### Script to compare pre-training with PyTorch on 8 GPU V100's
+
+For comparison you can run the same pre-training with PyTorch on GPU.
+Having created the tokenzier and configuration in `norwegian-roberta-base`, we just create the following symbolic links:
+
+```bash
+ln -s ~/transformers/examples/pytorch/language-modeling/run_mlm.py ./
+```
+
+,set some environment variables:
+
+```bash
+export NUM_GPUS=8
+export TOKENIZERS_PARALLELISM=0
+export MODEL_DIR="./norwegian-roberta-base"
+mkdir -p ${MODEL_DIR}
+```
+
+, and can start training as follows:
+
+```bash
+python -m torch.distributed.launch --nproc_per_node ${NUM_GPUS} run_mlm.py \
+                        --output_dir="./runs" \
+                        --model_type="roberta" \
+                        --config_name="${MODEL_DIR}" \
+                        --tokenizer_name="${MODEL_DIR}" \
+                        --dataset_name="oscar" \
+                        --dataset_config_name="unshuffled_deduplicated_no" \
+                        --max_seq_length="128" \
+                        --pad_to_max_length \
+                        --weight_decay="0.01" \
+                        --per_device_train_batch_size="64" \
+                        --per_device_eval_batch_size="64" \
+                        --gradient_accumulation_steps="2" \
+                        --learning_rate="3e-4" \
+                        --warmup_steps="1000" \
+                        --overwrite_output_dir \
+                        --num_train_epochs="18" \
+                        --adam_beta1="0.9" \
+                        --adam_beta2="0.98" \
+                        --do_train \
+                        --do_eval \
+                        --logging_steps="200" \
+                        --evaluation_strategy="steps" \
+                        --report_to="tensorboard"
+```
