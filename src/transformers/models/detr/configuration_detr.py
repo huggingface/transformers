@@ -90,8 +90,6 @@ class DetrConfig(PretrainedConfig):
             <https://rwightman.github.io/pytorch-image-models/#load-a-pretrained-model>`__.
         dilation (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to replace stride with dilation in the last convolutional block (DC5).
-        return_intermediate_layers (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to return intermediate layers from the convolutional backbone.
         class_cost (:obj:`float`, `optional`, defaults to 1):
             Relative weight of the classification error in the Hungarian matching cost.
         bbox_cost (:obj:`float`, `optional`, defaults to 5):
@@ -151,7 +149,6 @@ class DetrConfig(PretrainedConfig):
         position_embedding_type="sine",
         backbone="resnet50",
         dilation=False,
-        return_intermediate_layers=False,
         class_cost=1,
         bbox_cost=5,
         giou_cost=2,
@@ -188,7 +185,6 @@ class DetrConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.backbone = backbone
         self.dilation = dilation
-        self.return_intermediate_layers = return_intermediate_layers
         # Hungarian matcher
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost

@@ -333,7 +333,7 @@ class TimmBackbone(nn.Module):
 
     """
 
-    def __init__(self, name: str, dilation: bool, return_intermediate_layers: bool):
+    def __init__(self, name: str, dilation: bool):
         super().__init__()
 
         kwargs = {}
@@ -344,7 +344,6 @@ class TimmBackbone(nn.Module):
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.body = backbone
-        self.return_intermediate_layers = return_intermediate_layers
         self.intermediate_channel_sizes = self.body.feature_info.channels()
 
         if "resnet" in name:
@@ -354,42 +353,29 @@ class TimmBackbone(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the body to get list of feature maps
-        feature_maps = self.body(pixel_values)
+        features = self.body(pixel_values)
 
-        if not self.return_intermediate_layers:
-            # get final feature map
-            feature_map = feature_maps[-1]
-            # downsample the pixel_mask to match the shape of the feature map
+        out = []
+        for feature_map in features:
+            # downsample pixel_mask to match shape of corresponding feature_map
             mask = F.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
-            return feature_map, mask
-        else:
-            out = []
-            for i, x in enumerate(feature_maps):
-                mask = F.interpolate(pixel_mask[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
-                out.append((x, mask))
-            return out
+            out.append((feature_map, mask))
+        return out
 
 
-class Joiner(nn.Sequential):
+class DetrJoiner(nn.Sequential):
     def __init__(self, backbone, position_embedding):
         super().__init__(backbone, position_embedding)
 
     def forward(self, pixel_values, pixel_mask):
-        if self[0].return_intermediate_layers:
-            features = self[0](pixel_values, pixel_mask)
-            feature_map, pixel_mask = features[-1]
-            pos = self[1](feature_map, pixel_mask).to(feature_map.dtype)
+        # send pixel_values and pixel_mask through backbone to get list of (feature_map, pixel_mask) tuples
+        out = self[0](pixel_values, pixel_mask)
+        pos = []
+        for feature_map, mask in out:
+            # position encoding
+            pos.append(self[1](feature_map, mask).to(feature_map.dtype))
 
-            return features, pos
-
-        else:
-            # first, send pixel_values and pixel_mask through backbone to obtain updated feature_map and pixel_mask
-            feature_map, pixel_mask = self[0](pixel_values, pixel_mask)
-
-            # next, create position embeddings for the outputs of the outputs_dict
-            pos = self[1](feature_map, pixel_mask).to(feature_map.dtype)
-
-            return feature_map, pixel_mask, pos
+        return out, pos
 
 
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
@@ -1187,9 +1173,9 @@ class DetrModel(DetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = TimmBackbone(config.backbone, config.dilation, config.return_intermediate_layers)
+        backbone = TimmBackbone(config.backbone, config.dilation)
         position_embeddings = build_position_encoding(config)
-        self.backbone = Joiner(backbone, position_embeddings)
+        self.backbone = DetrJoiner(backbone, position_embeddings)
 
         # Create projection layer
         self.input_projection = nn.Conv2d(backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1)
@@ -1260,10 +1246,12 @@ class DetrModel(DetrPreTrainedModel):
             pixel_mask = torch.ones(((batch_size, height, width)), device=device)
 
         # First, sent pixel_values + pixel_mask through Backbone to obtain the features
-        # (includes features map, downsampled mask and position embeddings)
         # pixel_values should be of shape (batch_size, num_channels, height, width)
         # pixel_mask should be of shape (batch_size, height, width)
-        feature_map, mask, position_embeddings = self.backbone(pixel_values, pixel_mask)
+        features, position_embeddings_list = self.backbone(pixel_values, pixel_mask)
+
+        # get final feature map and downsampled mask
+        feature_map, mask = features[-1]
 
         assert mask is not None, "Backbone does not return downsampled pixel mask"
 
@@ -1273,7 +1261,7 @@ class DetrModel(DetrPreTrainedModel):
         # Third, flatten the feature map + position embeddings of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
         # In other words, turn their shape into (batch_size, sequence_length, hidden_size)
         flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
-        position_embeddings = position_embeddings.flatten(2).permute(0, 2, 1)
+        position_embeddings = position_embeddings_list[-1].flatten(2).permute(0, 2, 1)
 
         flattened_mask = mask.flatten(1)
 
@@ -1497,7 +1485,6 @@ class DetrForSegmentation(DetrPreTrainedModel):
     def __init__(self, config: DetrConfig):
         super().__init__(config)
 
-        config.return_intermediate_layers = True
         # object detection model
         self.detr = DetrForObjectDetection(config)
 
@@ -1572,7 +1559,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
             pixel_mask = torch.ones((batch_size, height, width), device=device)
 
         # First, get list of feature maps and position embeddings
-        features, position_embeddings = self.detr.model.backbone(pixel_values, pixel_mask=pixel_mask)
+        features, position_embeddings_list = self.detr.model.backbone(pixel_values, pixel_mask=pixel_mask)
 
         # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
         feature_map, mask = features[-1]
@@ -1582,7 +1569,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
         # Third, flatten the feature map + position embeddings of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
         # In other words, turn their shape into (batch_size, sequence_length, hidden_size)
         flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
-        position_embeddings = position_embeddings.flatten(2).permute(0, 2, 1)
+        position_embeddings = position_embeddings_list[-1].flatten(2).permute(0, 2, 1)
 
         flattened_mask = mask.flatten(1)
 
