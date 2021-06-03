@@ -14,7 +14,6 @@
 # limitations under the License.
 """ TF 2.0 Wav2Vec2 model. """
 
-import random
 from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
@@ -113,7 +112,7 @@ def _compute_mask_indices(
             mask_idc = np.random.choice(mask_idc, min_len, replace=False)
         mask[i, mask_idc] = True
 
-    return mask
+    return tf.cast(mask, tf.float32)
 
 
 def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
@@ -129,7 +128,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
 
-class GroupNorm(tf.keras.layers.Layer):
+class TFWav2Vec2GroupNorm(tf.keras.layers.Layer):
     """
     From tensorflow-addons https://www.tensorflow.org/addons/api_docs/python/tfa/layers/GroupNormalization
     """
@@ -347,10 +346,10 @@ class GroupNorm(tf.keras.layers.Layer):
         return broadcast_shape
 
 
-class WeightNormConv1D(tf.keras.layers.Conv1D):
+class TFWav2Vec2WeightNormConv1D(tf.keras.layers.Conv1D):
     """Adapted from https://www.tensorflow.org/probability/api_docs/python/tfp/layers/weight_norm/WeightNorm"""
 
-    def __init__(self, filters, kernel_size, groups, padding, **kwargs):
+    def __init__(self, filters, kernel_size, groups, explicit_padding, **kwargs):
         super().__init__(
             filters=filters,
             kernel_size=kernel_size,
@@ -360,7 +359,7 @@ class WeightNormConv1D(tf.keras.layers.Conv1D):
             bias_initializer="he_normal",
             **kwargs,
         )
-        self._padding = padding
+        self.explicit_padding = explicit_padding
         self.filter_axis = 0
         self.initialized = False
 
@@ -371,13 +370,12 @@ class WeightNormConv1D(tf.keras.layers.Conv1D):
 
     def _compute_weights(self):
         """Generate weights with normalization."""
+
         # `self.kernel_norm_axes` is determined by `self.filter_axis` and the rank
         # of the layer kernel, and is thus statically known.
         self.kernel = tf.nn.l2_normalize(self.weight_v, axis=self.kernel_norm_axes) * self.weight_g
 
     def build(self, input_shape):
-        self.input_spec = tf.keras.layers.InputSpec(shape=input_shape)
-
         if not self.built:
             super().build(input_shape)
             kernel_norm_axes = list(range(self.kernel.shape.rank))
@@ -385,7 +383,8 @@ class WeightNormConv1D(tf.keras.layers.Conv1D):
             # Convert `kernel_norm_axes` from a list to a constant Tensor to allow
             # TF checkpoint saving.
             self.kernel_norm_axes = tf.constant(kernel_norm_axes)
-            self.weight_v = tf.Variable(self.kernel, name="weight_v", trainable=True)
+            self.kernel = tf.Variable(self.kernel, name="weight_v", trainable=True)
+            self.weight_v = self.kernel
 
             self.weight_g = self.add_weight(
                 name="weight_g",
@@ -395,11 +394,14 @@ class WeightNormConv1D(tf.keras.layers.Conv1D):
                 trainable=True,
             )
             self.bias = self.add_weight(name="bias", shape=(self.filters,), initializer="zeros", trainable=True)
-            self._init_norm()
 
     def call(self, inputs):
+        if not self.initialized:
+            self._init_norm()
+            self.initialized = True
+
         self._compute_weights()
-        output = tf.pad(inputs, ((0, 0), (self._padding, self._padding), (0, 0)))
+        output = tf.pad(inputs, ((0, 0), (self.explicit_padding, self.explicit_padding), (0, 0)))
         output = super().call(output)
         return output
 
@@ -432,7 +434,7 @@ class TFWav2Vec2LayerNormConvLayer(tf.keras.layers.Layer):
         self.out_conv_dim = config.conv_dim[layer_id]
 
         self.conv = tf.keras.layers.Conv1D(
-            filters=config.conv_dim[layer_id],
+            filters=self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             strides=config.conv_stride[layer_id],
             use_bias=config.conv_bias,
@@ -441,7 +443,6 @@ class TFWav2Vec2LayerNormConvLayer(tf.keras.layers.Layer):
         self.layer_norm = tf.keras.layers.LayerNormalization(name="layer_norm", epsilon=config.layer_norm_eps)
         self.activation = get_tf_activation(config.feat_extract_activation)
 
-    @tf.function
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.conv(hidden_states)
         hidden_states = self.layer_norm(hidden_states)
@@ -463,7 +464,9 @@ class TFWav2Vec2GroupNormConvLayer(tf.keras.layers.Layer):
             name="conv",
         )
         self.activation = get_tf_activation(config.feat_extract_activation)
-        self.layer_norm = GroupNorm(groups=self.out_conv_dim, epsilon=config.layer_norm_eps, name="layer_norm")
+        self.layer_norm = TFWav2Vec2GroupNorm(
+            groups=self.out_conv_dim, epsilon=config.layer_norm_eps, name="layer_norm"
+        )
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.conv(hidden_states)
@@ -475,11 +478,11 @@ class TFWav2Vec2GroupNormConvLayer(tf.keras.layers.Layer):
 class TFWav2Vec2PositionalConvEmbedding(tf.keras.layers.Layer):
     def __init__(self, config: Wav2Vec2Config, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.conv = WeightNormConv1D(
+        self.conv = TFWav2Vec2WeightNormConv1D(
             filters=config.hidden_size,
             kernel_size=config.num_conv_pos_embeddings,
             groups=config.num_conv_pos_embedding_groups,
-            padding=config.num_conv_pos_embeddings // 2,
+            explicit_padding=config.num_conv_pos_embeddings // 2,
             name="conv",
         )
         self.padding = TFWav2Vec2SamePadLayer(config.num_conv_pos_embeddings)
@@ -845,6 +848,12 @@ class TFWav2Vec2Encoder(tf.keras.layers.Layer):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
+        if attention_mask is not None:
+            hidden_states = hidden_states * tf.expand_dims(attention_mask, -1)
+            attention_mask = _expand_mask(attention_mask)
+        else:
+            attention_mask = None
+
         position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
         hidden_states = self.layer_norm(hidden_states)
@@ -855,7 +864,7 @@ class TFWav2Vec2Encoder(tf.keras.layers.Layer):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
+            dropout_probability = np.random.uniform(0, 1)
             if training and (dropout_probability < self.layerdrop):  # skip the layer
                 continue
 
@@ -876,7 +885,6 @@ class TFWav2Vec2Encoder(tf.keras.layers.Layer):
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-
         return TFBaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -907,6 +915,12 @@ class TFWav2Vec2EncoderStableLayerNorm(tf.keras.layers.Layer):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
+        if attention_mask is not None:
+            hidden_states = hidden_states * tf.expand_dims(attention_mask, -1)
+            attention_mask = _expand_mask(attention_mask)
+        else:
+            attention_mask = None
+
         position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
         hidden_states = self.layer_norm(hidden_states)
@@ -932,13 +946,11 @@ class TFWav2Vec2EncoderStableLayerNorm(tf.keras.layers.Layer):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
-        # Add last layer
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-
         return TFBaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -1007,12 +1019,11 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
         )
 
         hidden_states = self.feature_extractor(tf.cast(inputs["input_ids"], tf.float32), training=inputs["training"])
+
         if inputs["attention_mask"] is not None:
             # compute real output lengths according to convolution formula
-            output_lengths = self._get_feat_extract_output_lengths(tf.reduce_sum(inputs["attention_mask"]))
-            tensor_shape = shape_list(hidden_states)
-            attention_mask = tf.ones((tensor_shape[0], tensor_shape[1]), dtype=tf.int32)
-            attention_mask = _expand_mask(attention_mask, output_lengths)
+            output_lengths = self._get_feat_extract_output_lengths(tf.reduce_sum(inputs["attention_mask"], -1))
+            attention_mask = tf.sequence_mask(output_lengths, dtype=hidden_states.dtype)
 
         hidden_states = self.feature_projection(hidden_states, training=inputs["training"])
 
@@ -1047,7 +1058,7 @@ class TFWav2Vec2PreTrainedModel(TFPreTrainedModel):
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        pad_token = 1.0
+        pad_token = 0.0
         input_ids = tf.convert_to_tensor(np.random.rand(1, 16000), tf.float32)
         dummy_inputs = {
             "input_ids": input_ids,
@@ -1192,7 +1203,7 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
             >>> import soundfile as sf
 
             >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
-            >>> model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h", from_pt=True)
+            >>> model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
 
             >>> def map_to_array(batch):
             >>>     speech, _ = sf.read(batch["file"])
@@ -1296,29 +1307,33 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
 
         Returns:
 
-        Example:
+        Example::
 
-            >>> import tensorflow as tf >>> from transformers import Wav2Vec2Processor, TFWav2Vec2ForCTC >>> from
-            datasets import load_dataset >>> import soundfile as sf
+            >>> import tensorflow as tf
+            >>> from transformers import Wav2Vec2Processor, TFWav2Vec2ForCTC
+            >>> from datasets import load_dataset
+            >>> import soundfile as sf
 
-            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h") >>> model =
-            TFWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
+            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
+            >>> model = TFWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
 
-            >>> def map_to_array(batch): >>> speech, _ = sf.read(batch["file"]) >>> batch["speech"] = speech >>> return
-            batch
+            >>> def map_to_array(batch): >>> speech, _ = sf.read(batch["file"]) >>> batch["speech"] = speech
+            >>> return batch
 
-            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation") >>> ds =
-            ds.map(map_to_array)
+            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+            >>> ds = ds.map(map_to_array)
 
-            >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values # Batch size 1 >>> logits =
-            model(input_values).logits >>> predicted_ids = tf.argmax(logits, axis=-1)
+            >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values # Batch size 1
+            >>> logits = model(input_values).logits >>> predicted_ids = tf.argmax(logits, axis=-1)
 
             >>> transcription = processor.decode(predicted_ids[0])
 
-            >>> # compute loss >>> target_transcription = "A MAN SAID TO THE UNIVERSE SIR I EXIST"
+            >>> # compute loss
+            >>> target_transcription = "A MAN SAID TO THE UNIVERSE SIR I EXIST"
 
-            >>> # wrap processor as target processor to encode labels >>> with processor.as_target_processor(): >>>
-            labels = processor(transcription, return_tensors="tf").input_ids
+            >>> # wrap processor as target processor to encode labels
+            >>> with processor.as_target_processor():
+            >>>     labels = processor(transcription, return_tensors="tf").input_ids
 
             >>> loss = model(input_values, labels=labels).loss
         """
@@ -1358,23 +1373,31 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
 
         if labels is not None:
             attention_mask = (
-                attention_mask if attention_mask is not None else tf.ones_like(inputs["input_ids"], dtype=tf.float32)
+                inputs["attention_mask"]
+                if inputs["attention_mask"] is not None
+                else tf.ones_like(inputs["input_ids"], dtype=tf.float32)
             )
-            input_lengths = self._get_feat_extract_output_lengths(tf.sum(attention_mask, axis=-1))
+            input_lengths = self.wav2vec2._get_feat_extract_output_lengths(tf.reduce_sum(attention_mask, axis=-1))
 
-            labels_mask = labels >= 0
+            labels_mask = tf.cast(labels >= 0, tf.int32)
             target_lengths = tf.reduce_sum(labels_mask, axis=-1)
-            flattened_targets = tf.sequence_mask(target_lengths, maxlen=target_lengths)
+            labels = labels * labels_mask
 
             log_probs = tf.nn.log_softmax(logits, axis=-1)
 
             loss = tf.nn.ctc_loss(
                 logits=log_probs,
-                labels=flattened_targets,
+                labels=labels,
                 logit_length=input_lengths,
                 label_length=target_lengths,
                 blank_index=self.config.pad_token_id,
+                logits_time_major=False,
             )
+
+            if self.config.ctc_loss_reduction == "sum":
+                loss = tf.reduce_sum(loss)
+            if self.config.ctc_loss_reduction == "mean":
+                loss = tf.reduce_mean(loss)
         else:
             loss = None
 

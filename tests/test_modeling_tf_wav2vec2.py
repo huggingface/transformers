@@ -19,8 +19,9 @@ import unittest
 
 import numpy as np
 
-from transformers import Wav2Vec2Config, Wav2Vec2ForCTC, is_tf_available, is_torch_available
-from transformers.testing_utils import require_datasets, require_soundfile, require_tf, require_torch, slow
+from transformers import Wav2Vec2Config, is_tf_available
+from transformers.models.wav2vec2.modeling_tf_wav2vec2 import _compute_mask_indices
+from transformers.testing_utils import require_datasets, require_soundfile, require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -31,13 +32,7 @@ if is_tf_available():
 
     from transformers import TFWav2Vec2ForCTC, TFWav2Vec2Model, Wav2Vec2Processor
 
-if is_torch_available():
-    import torch
 
-MODEL_PATH = "wrice/wav2vec2-base-960h"
-
-
-@require_torch
 @require_tf
 class TFWav2Vec2ModelTester:
     def __init__(
@@ -47,7 +42,7 @@ class TFWav2Vec2ModelTester:
         seq_length=1024,
         is_training=False,
         hidden_size=16,
-        feat_extract_norm="layer",
+        feat_extract_norm="group",
         feat_extract_dropout=0.0,
         feat_extract_activation="gelu",
         conv_dim=(32, 32, 32),
@@ -98,11 +93,9 @@ class TFWav2Vec2ModelTester:
         self.output_seq_length = int(math.ceil(output_seq_length))
         self.encoder_seq_length = self.output_seq_length
 
-        self.pt_model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
-        self.tf_model = TFWav2Vec2ForCTC.from_pretrained(MODEL_PATH)
-
     def prepare_config_and_inputs(self):
-        input_ids = tf.cast(ids_tensor([self.batch_size, self.seq_length], 32768), tf.float32) / 32768.0
+        input_values = tf.cast(ids_tensor([self.batch_size, self.seq_length], 32768), tf.float32) / 32768.0
+        attention_mask = tf.ones_like(input_values)
 
         config = Wav2Vec2Config(
             hidden_size=self.hidden_size,
@@ -123,126 +116,91 @@ class TFWav2Vec2ModelTester:
             hidden_act=self.hidden_act,
             initializer_range=self.initializer_range,
             vocab_size=self.vocab_size,
+            do_stable_layer_norm=self.do_stable_layer_norm,
         )
 
-        inputs_dict = {"input_ids": input_ids}
-        return config, inputs_dict
+        return config, input_values, attention_mask
 
-    def create_and_check_model(self, config, input_dict):
+    def create_and_check_model(self, config, input_values, attention_mask):
         model = TFWav2Vec2Model(config)
-        result = model(input_dict)
+        result = model(input_values, attention_mask=attention_mask)
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
         )
 
-    def check_pos_embedding(self, config, input_dict):
-
-        tf_layer = self.tf_model.wav2vec2.encoder.pos_conv_embed
-        pt_layer = self.pt_model.wav2vec2.encoder.pos_conv_embed
-
-        input_ids = np.random.rand(1, 49, 768).astype(np.float32)
-
-        tf_output = tf_layer(input_ids).numpy()
-        pt_output = pt_layer(torch.from_numpy(input_ids)).detach().numpy()
-
-        tf.testing.assert_near(tf_output, pt_output, atol=1e-3)
-
-    def check_attention(self, config, input_dict):
-
-        for i in range(config.num_hidden_layers):
-            tf_layer = self.tf_model.wav2vec2.encoder.layer[i].attention
-            pt_layer = self.pt_model.wav2vec2.encoder.layers[i].attention
-
-            test = np.random.rand(1, 768, 768).astype(np.float32)
-
-            tf_output = tf_layer(test)[0].numpy()
-            pt_output = pt_layer(torch.from_numpy(test))[0].detach().numpy()
-
-            tf.testing.assert_near(tf_output, pt_output, atol=1e-3)
-
-    def check_feature_projector(self):
-        tf_layer = self.tf_model.wav2vec2.feature_projection
-        pt_layer = self.pt_model.wav2vec2.feature_projection
-
-        test = np.random.rand(1, 292, 768).astype(np.float32)
-
-        tf_input = test
-        pt_input = torch.from_numpy(test)
-
-        tf_output = tf_layer(tf_input).last_hidden_state.numpy()
-        pt_output = pt_layer(pt_input).last_hidden_state.detach().numpy()
-
-        tf.testing.assert_near(tf_output, pt_output, atol=1e-3)
-
-    def check_feature_extractor(self):
-        tf_layer = self.tf_model.wav2vec2.feature_projection
-        pt_layer = self.pt_model.wav2vec2.feature_projection
-
-        test = np.random.rand(1, 16000).astype(np.float32)
-
-        tf_input = test
-        pt_input = torch.from_numpy(test)
-
-        tf_output = tf_layer(tf_input).last_hidden_state.numpy()
-        pt_output = pt_layer(pt_input).last_hidden_state.detach().numpy()
-
-        tf.testing.assert_near(tf_output, pt_output, atol=1e-3)
-
-    def check_feed_forward(self):
-        config = Wav2Vec2Config()
-        for i in range(config.num_hidden_layers):
-            tf_layer = self.tf_model.wav2vec2.encoder.layer[i].feed_forward
-            pt_layer = self.pt_model.wav2vec2.encoder.layers[i].feed_forward
-
-            test = np.random.rand(1, 292, 768).astype(np.float32)
-
-            tf_input = test
-            pt_input = torch.from_numpy(test)
-
-            tf_output = tf_layer(tf_input)[0].numpy()
-            pt_output = pt_layer(pt_input)[0].detach().numpy()
-
-            tf.testing.assert_near(tf_output, pt_output, atol=1e-3)
-
-    def check_ctc_head(self):
-        tf_layer = self.tf_model.lm_head
-        pt_layer = self.pt_model.lm_head
-
-        test = np.random.rand(1, 292, 768).astype(np.float32)
-
-        tf_input = test
-        pt_input = torch.from_numpy(test)
-
-        tf_output = tf_layer(tf_input).numpy()
-        pt_output = pt_layer(pt_input).detach().numpy()
-
-        tf.testing.assert_near(tf_output, pt_output, atol=1e-3)
-
-    def check_encoder(self):
-        tf_layer = self.tf_model.wav2vec2.encoder
-        pt_layer = self.pt_model.wav2vec2.encoder
-
-        test = np.random.rand(1, 292, 768).astype(np.float32)
-
-        tf_input = test
-        pt_input = torch.from_numpy(test)
-
-        tf_output = tf_layer(tf_input).last_hidden_state.numpy()
-        pt_output = pt_layer(pt_input).last_hidden_state.detach().numpy()
-
-        tf.testing.assert_near(tf_output, pt_output, atol=1e-3)
-
     def create_and_check_batch_inference(self, config, input_values, *args):
         # test does not pass for models making use of `group_norm`
         # check: https://github.com/pytorch/fairseq/issues/3227
-        pass
+        config.layerdrop = 0.0
+        model = TFWav2Vec2Model(config)
+
+        input_values = input_values[:3]
+        attention_mask = tf.ones_like(input_values)
+
+        input_lengths = tf.constant([input_values.shape[-1] // i for i in [4, 2, 1]])
+        length_mask = tf.sequence_mask(input_lengths, dtype=tf.float32)
+
+        input_values = input_values * length_mask
+        attention_mask = attention_mask * length_mask
+
+        batch_outputs = model(input_values, attention_mask=attention_mask, training=False).last_hidden_state
+
+        for i in range(input_values.shape[0]):
+            input_slice = input_values[i : i + 1, : input_lengths[i]]
+            output = model(input_slice, training=False).last_hidden_state
+
+            batch_output = batch_outputs[i : i + 1, : output.shape[1]]
+            self.parent.assertTrue(np.allclose(output, batch_output, atol=1e-3))
+
+    def check_ctc_loss(self, config, input_values, *args):
+        model = TFWav2Vec2ForCTC(config)
+
+        input_values = input_values[:3]
+        attention_mask = tf.ones(input_values.shape)
+
+        input_lengths = tf.constant([input_values.shape[-1] // i for i in [4, 2, 1]])
+        max_length_labels = model.wav2vec2._get_feat_extract_output_lengths(input_lengths)
+        labels = ids_tensor((input_values.shape[0], min(max_length_labels) - 1), model.config.vocab_size)
+
+        length_mask = tf.sequence_mask(input_lengths, dtype=tf.float32)
+
+        input_values = input_values * length_mask
+        attention_mask = attention_mask * length_mask
+
+        model.config.ctc_loss_reduction = "sum"
+        sum_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss
+
+        model.config.ctc_loss_reduction = "mean"
+        mean_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss
+
+        self.parent.assertTrue(abs(labels.shape[0] * labels.shape[1] * mean_loss - sum_loss) < 1e-3)
+
+    def check_training(self, config, input_values, *args):
+        model = TFWav2Vec2ForCTC(config)
+        # freeze feature encoder
+        model.freeze_feature_extractor()
+
+        input_values = input_values[:3]
+
+        input_lengths = tf.constant([input_values.shape[-1] // i for i in [4, 2, 1]])
+        max_length_labels = model.wav2vec2._get_feat_extract_output_lengths(input_lengths)
+        labels = ids_tensor((input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size)
+
+        length_mask = tf.sequence_mask(input_lengths, dtype=tf.float32)
+
+        input_values = input_values * length_mask
+
+        labels = tf.pad(labels, ((0, 0), (0, max(max_length_labels))), constant_values=-100)
+
+        loss = model(input_values, labels=labels).loss
+        self.parent.assertFalse(tf.math.is_inf(loss))
 
     def prepare_config_and_inputs_for_common(self):
-        config, inputs_dict = self.prepare_config_and_inputs()
+        config, input_values, attention_mask = self.prepare_config_and_inputs()
+        inputs_dict = {"input_ids": input_values, "attention_mask": attention_mask}
         return config, inputs_dict
 
 
-@require_torch
 @require_tf
 class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
 
@@ -263,7 +221,38 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_hidden_states_output(self):
-        pass
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def check_hidden_states_output(config, inputs_dict, model_class):
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+
+            hidden_states = outputs.hidden_states
+            self.assertEqual(config.output_attentions, False)
+            self.assertEqual(len(hidden_states), expected_num_layers)
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [self.model_tester.output_seq_length, self.model_tester.hidden_size],
+            )
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(config, inputs_dict, model_class)
+
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+            check_hidden_states_output(config, inputs_dict, model_class)
+
+    def test_ctc_loss_inference(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_ctc_loss(*config_and_inputs)
+
+    def test_train(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_training(*config_and_inputs)
 
     # Wav2Vec2 has no inputs_embeds
     def test_inputs_embeds(self):
@@ -280,16 +269,125 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-    def test_pt_tf_model_equivalence(self):
-        return super().test_pt_tf_model_equivalence()
+    @slow
+    def test_model_from_pretrained(self):
+        model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
+        self.assertIsNotNone(model)
+
+
+class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
+    all_model_classes = (TFWav2Vec2Model, TFWav2Vec2ForCTC) if is_tf_available() else ()
+    test_resize_embeddings = False
+    test_head_masking = False
+    test_onnx = False
+
+    def setUp(self):
+        self.model_tester = TFWav2Vec2ModelTester(
+            self,
+            conv_stride=(3, 3, 3),
+            feat_extract_norm="layer",
+            do_stable_layer_norm=True,
+            scope="robust",
+        )
+        self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_hidden_states_output(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def check_hidden_states_output(config, inputs_dict, model_class):
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+
+            hidden_states = outputs.hidden_states
+            self.assertEqual(config.output_attentions, False)
+            self.assertEqual(len(hidden_states), expected_num_layers)
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [self.model_tester.output_seq_length, self.model_tester.hidden_size],
+            )
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(config, inputs_dict, model_class)
+
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+            check_hidden_states_output(config, inputs_dict, model_class)
+
+    def test_batched_inference(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_batch_inference(*config_and_inputs)
+
+    def test_ctc_loss_inference(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_ctc_loss(*config_and_inputs)
+
+    def test_train(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_training(*config_and_inputs)
+
+    # Wav2Vec2 has no inputs_embeds
+    def test_inputs_embeds(self):
+        pass
+
+    # Wav2Vec2 cannot resize token embeddings
+    # since it has no tokens embeddings
+    def test_resize_tokens_embeddings(self):
+        pass
+
+    # Wav2Vec2 has no inputs_embeds
+    # and thus the `get_input_embeddings` fn
+    # is not implemented
+    def test_model_common_attributes(self):
+        pass
 
     @slow
     def test_model_from_pretrained(self):
-        model = TFWav2Vec2Model.from_pretrained(MODEL_PATH)
+        model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsNotNone(model)
 
 
 @require_tf
+class TFWav2Vec2UtilsTest(unittest.TestCase):
+    def test_compute_mask_indices(self):
+        batch_size = 4
+        sequence_length = 60
+        mask_prob = 0.5
+        mask_length = 1
+
+        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+
+        self.assertListEqual(
+            tf.reduce_sum(mask, -1).numpy().tolist(), [mask_prob * sequence_length for _ in range(batch_size)]
+        )
+
+    def test_compute_mask_indices_overlap(self):
+        batch_size = 4
+        sequence_length = 60
+        mask_prob = 0.5
+        mask_length = 4
+
+        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+
+        for batch_sum in tf.reduce_sum(mask, -1):
+            self.assertIn(
+                int(batch_sum),
+                list(range(int(mask_prob // mask_length * sequence_length), int(mask_prob * sequence_length))),
+            )
+
+
+@require_tf
+@slow
 @require_datasets
 @require_soundfile
 class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
@@ -313,7 +411,7 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
         return ds["speech"][:num_samples]
 
     def test_inference_ctc_normal(self):
-        model = TFWav2Vec2ForCTC.from_pretrained(MODEL_PATH)
+        model = TFWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
         processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h", do_lower_case=True)
         input_speech = self._load_datasamples(1)
 
@@ -328,7 +426,7 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
     def test_inference_ctc_normal_batched(self):
-        model = TFWav2Vec2ForCTC.from_pretrained(MODEL_PATH)
+        model = TFWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
         processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h", do_lower_case=True)
 
         input_speech = self._load_datasamples(2)
@@ -345,5 +443,29 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
         EXPECTED_TRANSCRIPTIONS = [
             "a man said to the universe sir i exist",
             "sweat covered brion's body trickling into the tight lowing cloth that was the only garment he wore",
+        ]
+        self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
+
+    def test_inference_ctc_robust_batched(self):
+        model = TFWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-960h-lv60-self")
+        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-960h-lv60-self", do_lower_case=True)
+
+        input_speech = self._load_datasamples(4)
+
+        inputs = processor(input_speech, return_tensors="tf", padding=True, truncation=True)
+
+        input_values = inputs.input_values
+        attention_mask = inputs.attention_mask
+
+        logits = model(input_values, attention_mask=attention_mask).logits
+
+        predicted_ids = tf.argmax(logits, dim=-1)
+        predicted_trans = processor.batch_decode(predicted_ids)
+
+        EXPECTED_TRANSCRIPTIONS = [
+            "a man said to the universe sir i exist",
+            "sweat covered brion's body trickling into the tight loin cloth that was the only garment he wore",
+            "the cut on his chest still dripping blood the ache of his overstrained eyes even the soaring arena around him with the thousands of spectators were trivialities not worth thinking about",
+            "his instant panic was followed by a small sharp blow high on his chest",
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
