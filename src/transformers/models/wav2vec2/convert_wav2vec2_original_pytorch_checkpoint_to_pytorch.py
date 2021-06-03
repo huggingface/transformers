@@ -28,7 +28,7 @@ from transformers import (
     Wav2Vec2CTCTokenizer,
     Wav2Vec2FeatureExtractor,
     Wav2Vec2ForCTC,
-    Wav2Vec2Model,
+    Wav2Vec2ForPreTraining,
     Wav2Vec2Processor,
     logging,
 )
@@ -97,7 +97,7 @@ def recursively_load_weights(fairseq_model, hf_model, is_headless):
     unused_weights = []
     fairseq_dict = fairseq_model.state_dict()
 
-    feature_extractor = hf_model.wav2vec2.feature_extractor if not is_headless else hf_model.feature_extractor
+    feature_extractor = hf_model.wav2vec2.feature_extractor
 
     for name, value in fairseq_dict.items():
         is_used = False
@@ -113,10 +113,9 @@ def recursively_load_weights(fairseq_model, hf_model, is_headless):
         else:
             for key, mapped_key in MAPPING.items():
                 mapped_key = (
-                    "wav2vec2." + mapped_key if not is_headless and mapped_key not in TOP_LEVEL_KEYS else mapped_key
+                    "wav2vec2." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
                 )
-
-                if key in name or (key.split("w2v_model.")[-1] == name.split(".")[0] and not is_headless):
+                if key in name or key.split("w2v_model.")[-1] == name.split(".")[0]:
                     is_used = True
                     if "*" in mapped_key:
                         layer_index = name.split(key)[0].split(".")[-2]
@@ -227,7 +226,7 @@ def convert_wav2vec2_checkpoint(
 
         hf_wav2vec = Wav2Vec2ForCTC(config)
     else:
-        hf_wav2vec = Wav2Vec2Model(config)
+        hf_wav2vec = Wav2Vec2ForPreTraining(config)
 
     if is_finetuned:
         model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
