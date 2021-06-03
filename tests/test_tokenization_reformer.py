@@ -13,9 +13,16 @@
 # limitations under the License.
 
 import os
+import tempfile
 import unittest
 
-from transformers import SPIECE_UNDERLINE, ReformerByteTokenizer, ReformerTokenizer, ReformerTokenizerFast
+from transformers import (
+    SPIECE_UNDERLINE,
+    BatchEncoding,
+    ReformerByteTokenizer,
+    ReformerTokenizer,
+    ReformerTokenizerFast,
+)
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow
 
@@ -368,64 +375,68 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             revision="0e6c3decb8211d49bf881013425dc8b0448b3f5a",
             padding=False,
             sequences=sequences,
+        )
 
-class ReformerByteTokenizationTest(unittest.TestCase):
+
+@require_torch
+class ReformerByteTokenizerTest(unittest.TestCase):
     tokenizer_class = ReformerByteTokenizer
+    test_rust_tokenizer = False
 
-    def test_full_tokenizer(self):
-        tokenizer = ReformerByteTokenizer()
+    def setUp(self):
+        super().setUp()
+        self.tokenizer = ReformerByteTokenizer()
+        self.tmpdirname = tempfile.mkdtemp()
 
-        tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, [84, 104, 105, 115, 32, 105, 115, 32, 97, 32, 116, 101, 115, 116])
+    @cached_property
+    def reformer_byte_base_tokenizer(self):
+        return ReformerByteTokenizer.from_pretrained("google/reformer-enwik8")
 
-        self.assertListEqual(
-            tokenizer.convert_tokens_to_ids(tokens),
-            [86, 106, 107, 117, 34, 107, 117, 34, 99, 34, 118, 103, 117, 118],
-        )
+    def get_tokenizer(self, **kwargs) -> ReformerByteTokenizer:
+        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
-        tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
-        self.assertListEqual(
-            tokens,
-            [
-                73,
-                32,
-                119,
-                97,
-                115,
-                32,
-                98,
-                111,
-                114,
-                110,
-                32,
-                105,
-                110,
-                32,
-                57,
-                50,
-                48,
-                48,
-                48,
-                44,
-                32,
-                97,
-                110,
-                100,
-                32,
-                116,
-                104,
-                105,
-                115,
-                32,
-                105,
-                115,
-                32,
-                102,
-                97,
-                108,
-                115,
-                195,
-                169,
-                46,
-            ],
-        )
+    def test_prepare_batch_integration(self):
+        tokenizer = self.reformer_byte_base_tokenizer
+        src_text = ["A long", "Another."]
+        batch = tokenizer(src_text, padding=True, return_tensors="pt")
+        self.assertIsInstance(batch, BatchEncoding)
+
+        result = list(batch.input_ids.tolist()[0])
+        self.assertListEqual(result, [67, 34, 110, 113, 112, 105, 0, 0])
+
+        result = list(batch.input_ids.tolist()[1])
+        self.assertListEqual(result, [67, 112, 113, 118, 106, 103, 116, 48])
+
+        self.assertEqual((2, 8), batch.input_ids.shape)
+        self.assertEqual((2, 8), batch.attention_mask.shape)
+
+    def test_decode_with_pad(self):
+        tokenizer = self.reformer_byte_base_tokenizer
+        ids = [67, 34, 110, 113, 112, 105, 0, 0]
+        tokens = [tokenizer._convert_id_to_token(_id) for _id in ids]
+        string = tokenizer.convert_tokens_to_string(tokens)
+        self.assertEqual(string, "A long")
+
+    def test_empty_target_text(self):
+        tokenizer = self.reformer_byte_base_tokenizer
+        src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
+        batch = tokenizer(src_text, padding=True, return_tensors="pt")
+        # check if input_ids are returned and no decoder_input_ids
+        self.assertIn("input_ids", batch)
+        self.assertIn("attention_mask", batch)
+        self.assertNotIn("decoder_input_ids", batch)
+        self.assertNotIn("decoder_attention_mask", batch)
+
+    def test_max_length_integration(self):
+        tokenizer = self.reformer_byte_base_tokenizer
+        tgt_text = [
+            "Summary of the text.",
+            "Another summary.",
+        ]
+        with tokenizer.as_target_tokenizer():
+            targets = tokenizer(tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors="pt")
+        self.assertEqual(32, targets["input_ids"].shape[1])
+
+    def test_save_and_load(self):
+        self.tokenizer.save_pretrained(self.tmpdirname)
+        ReformerByteTokenizer.from_pretrained(self.tmpdirname)

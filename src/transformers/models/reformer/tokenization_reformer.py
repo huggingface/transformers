@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -170,32 +170,56 @@ class ReformerTokenizer(PreTrainedTokenizer):
 
 
 class ReformerByteTokenizer(PreTrainedTokenizer):
+    """
+    Construct a ReformerByteTokenizer tokenizer. ReformerByteTokenizer simply uses raw bytes utf-8 encoding shifted by
+    2.
+
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    Users should refer to this superclass for more information regarding those methods. Refer to
+    `google/reformer-enwik8 <https://huggingface.co/google/reformer-enwik8>`__ for more information
+
+    Args:
+        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
+            The padding token uses id=0.
+    """
+
+    def __init__(self, pad_token="<pad>", **kwargs):
+        self.offset = 2
+        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+
+        super().__init__(pad_token=pad_token, **kwargs)
+
+        self.special_tokens_encoder: Dict[str, int] = {self.pad_token: 0}
+        self.special_tokens_decoder: Dict[int, str] = {v: k for k, v in self.special_tokens_encoder.items()}
+
+    @property
+    def vocab_size(self):
+        return 256 + self.offset
+
     def _tokenize(self, text, sample=False):
         """Take as input a string and return a list of raw bytes"""
         return [c for c in text.encode("utf-8")]
 
     def _convert_token_to_id(self, token: int):
         """raw bytes (0, 256) to id (2, 258)"""
-        return token + 2
+        if not isinstance(token, int):
+            if token in self.special_tokens_encoder:
+                return self.special_tokens_encoder[token]
+            raise ValueError(f"{self.__class__.__name__} `_convert_token_to_id` expects ids, not str ({token})")
+        return token + self.offset
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (u8)"""
-        assert 2 <= index < 258
-        return index - 2
+        assert 0 <= index < 258
+        return index - self.offset
 
     def convert_tokens_to_string(self, tokens: List[int]):
         """Converts a sequence of tokens (u8) in a single string."""
-        return bytes(tokens).decode("utf-8")
+        if not isinstance(tokens, list) or not all(isinstance(token, int) for token in tokens):
+            raise ValueError(f"{self.__class__.__name__} `convert_tokens_to_string` expects ids, not str ({tokens})")
+        return bytes(tok for tok in tokens if tok >= 0).decode("utf-8")
 
+    # ReformerByteTokenizerTokenizer has no vocab file
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        if not os.path.isdir(save_directory):
-            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return
-        out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + "special_tokens_map.json"
-        )
-
-        with open(out_vocab_file, "w") as f:
-            f.write("{}")
-
-        return (out_vocab_file,)
+        "ReformerByteTokenizer has no vocabulary, no-op"
+        return ()
