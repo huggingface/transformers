@@ -32,7 +32,6 @@ from ..clip.modeling_flax_clip import FlaxCLIPModel
 from ..big_bird.modeling_flax_bigbird import (
     FlaxBigBirdForMaskedLM,
     FlaxBigBirdForMultipleChoice,
-    FlaxBigBirdForNextSentencePrediction,
     FlaxBigBirdForPreTraining,
     FlaxBigBirdForQuestionAnswering,
     FlaxBigBirdForSequenceClassification,
@@ -155,7 +154,6 @@ FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
 FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = OrderedDict(
     [
         (BertConfig, FlaxBertForNextSentencePrediction),
-        (BigBirdConfig, FlaxBigBirdForNextSentencePrediction),
     ]
 )
 

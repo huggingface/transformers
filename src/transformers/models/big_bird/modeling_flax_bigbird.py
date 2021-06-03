@@ -33,7 +33,6 @@ from ...modeling_flax_outputs import (
     FlaxBaseModelOutputWithPooling,
     FlaxMaskedLMOutput,
     FlaxMultipleChoiceModelOutput,
-    FlaxNextSentencePredictorOutput,
     FlaxQuestionAnsweringModelOutput,
     FlaxSequenceClassifierOutput,
     FlaxTokenClassifierOutput,

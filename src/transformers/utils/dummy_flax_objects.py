@@ -249,11 +249,6 @@ class FlaxBigBirdForMultipleChoice:
         requires_backends(self, ["flax"])
 
 
-class FlaxBigBirdForNextSentencePrediction:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
 class FlaxBigBirdForPreTraining:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
