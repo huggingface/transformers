@@ -1,4 +1,4 @@
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -72,10 +72,6 @@ class FlaxViTModelTester(unittest.TestCase):
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.image_size, self.image_size, self.num_channels])
 
-        labels = None
-        if self.use_labels:
-            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-
         config = ViTConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
@@ -91,7 +87,7 @@ class FlaxViTModelTester(unittest.TestCase):
             initializer_range=self.initializer_range,
         )
 
-        return config, pixel_values, labels
+        return config, pixel_values
 
     def create_and_check_model(self, config, pixel_values, labels):
 
@@ -108,7 +104,6 @@ class FlaxViTModelTester(unittest.TestCase):
         (
             config,
             pixel_values,
-            labels,
         ) = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
@@ -130,6 +125,8 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
+        num_patches = (config.image_size // config.patch_size)**2
+
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
@@ -148,7 +145,7 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, 226, 226],
+                [self.model_tester.num_attention_heads, num_patches+1, num_patches+1],
             )
             out_len = len(outputs)
 
@@ -164,7 +161,7 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, 226, 226],
+                [self.model_tester.num_attention_heads, num_patches+1, num_patches+1],
             )
 
     def test_forward_signature(self):
@@ -205,16 +202,17 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
+            num_patches = (config.image_size // config.patch_size) ** 2
 
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             hidden_states = outputs.hidden_states
 
             self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
-            seq_length = 226  # self.model_tester.seq_length
+
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
+                [num_patches+1, self.model_tester.hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -229,40 +227,6 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    def test_model_outputs_equivalence(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        def set_nan_tensor_to_zero(t):
-            t[t != t] = 0
-            return t
-
-        def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
-            tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
-            dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
-
-            def recursive_check(tuple_object, dict_object):
-                if isinstance(tuple_object, (List, Tuple)):
-                    for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
-                        recursive_check(tuple_iterable_value, dict_iterable_value)
-                elif tuple_object is None:
-                    return
-                else:
-                    self.assert_almost_equals(
-                        set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), 1e-5
-                    )
-
-                recursive_check(tuple_output, dict_output)
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(model, tuple_inputs, dict_inputs)
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
     @slow
     def test_model_from_pretrained(self):

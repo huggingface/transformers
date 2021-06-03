@@ -59,12 +59,6 @@ VIT_INPUTS_DOCSTRING = r"""
             Pixel values. Pixel values can be obtained using :class:`~transformers.ViTFeatureExtractor`. See
             :meth:`transformers.ViTFeatureExtractor.__call__` for details.
 
-        head_mask (:obj:`numpy.ndarray` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
@@ -168,8 +162,6 @@ class FlaxViTSelfAttention(nn.Module):
             hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
         )
 
-        attention_bias = None
-
         dropout_rng = None
         if not deterministic and self.config.attention_probs_dropout_prob > 0.0:
             dropout_rng = self.make_rng("dropout")
@@ -177,7 +169,6 @@ class FlaxViTSelfAttention(nn.Module):
         attn_weights = dot_product_attention_weights(
             query_states,
             key_states,
-            bias=attention_bias,
             dropout_rng=dropout_rng,
             dropout_rate=self.config.attention_probs_dropout_prob,
             broadcast_dropout=True,
@@ -220,9 +211,6 @@ class FlaxViTAttention(nn.Module):
         self.output = FlaxViTSelfOutput(self.config, dtype=self.dtype)
 
     def __call__(self, hidden_states, deterministic=True, output_attentions: bool = False):
-        # Attention mask comes in as attention_mask.shape == (*batch_sizes, kv_length)
-        # FLAX expects: attention_mask.shape == (*batch_sizes, 1, 1, kv_length) such that it is broadcastable
-        # with attn_weights.shape == (*batch_sizes, num_heads, q_length, kv_length)
         attn_outputs = self.self(hidden_states, deterministic=deterministic, output_attentions=output_attentions)
         attn_output = attn_outputs[0]
         hidden_states = self.output(attn_output, hidden_states, deterministic=deterministic)
@@ -395,10 +383,6 @@ class FlaxViTPooler(nn.Module):
         return nn.tanh(cls_hidden_state)
 
 
-# class FlaxViTPreTrainedModule(nn.Module):
-#     pass
-
-
 class FlaxViTPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -422,7 +406,6 @@ class FlaxViTPreTrainedModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        # return self.module.init(rngs, pixel_values, attention_mask, return_dict=False)["params"]
         return self.module.init(rngs, pixel_values, return_dict=False)["params"]
 
     @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -467,7 +450,7 @@ class FlaxViTModule(nn.Module):
         self.embeddings = FlaxViTEmbeddings(self.config, dtype=self.dtype)
         self.encoder = FlaxViTEncoder(self.config, dtype=self.dtype)
         self.layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
-        self.pooler = FlaxViTPooler(self.config, dtype=self.dtype)
+        self.pooler = FlaxViTPooler(self.config, dtype=self.dtype) if self.add_pooling_layer else None
 
     def __call__(
         self,
@@ -477,9 +460,6 @@ class FlaxViTModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.embeddings(pixel_values, deterministic=deterministic)
 
