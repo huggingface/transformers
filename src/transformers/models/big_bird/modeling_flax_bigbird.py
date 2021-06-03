@@ -1634,7 +1634,6 @@ class FlaxBigBirdForSequenceClassificationModule(nn.Module):
 
     def setup(self):
         self.bert = FlaxBigBirdModule(config=self.config, dtype=self.dtype)
-        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
         self.classifier = FlaxBigBirdClassificationHead(self.config, dtype=self.dtype)
 
     def __call__(
@@ -1661,7 +1660,6 @@ class FlaxBigBirdForSequenceClassificationModule(nn.Module):
         )
 
         pooled_output = outputs[1]
-        pooled_output = self.dropout(pooled_output, deterministic=deterministic)
         logits = self.classifier(pooled_output, deterministic=deterministic)
 
         if not return_dict:

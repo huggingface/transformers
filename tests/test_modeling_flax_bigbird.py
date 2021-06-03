@@ -135,13 +135,13 @@ class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            # FlaxBigBirdModel,
-            # FlaxBigBirdForPreTraining,
-            # FlaxBigBirdForMaskedLM,
-            # FlaxBigBirdForMultipleChoice, #
-            # FlaxBigBirdForQuestionAnswering,
-            FlaxBigBirdForSequenceClassification, #
-            # FlaxBigBirdForTokenClassification
+            FlaxBigBirdModel,
+            FlaxBigBirdForPreTraining,
+            FlaxBigBirdForMaskedLM,
+            FlaxBigBirdForMultipleChoice,
+            FlaxBigBirdForQuestionAnswering,
+            FlaxBigBirdForSequenceClassification,
+            FlaxBigBirdForTokenClassification,
         )
         if is_flax_available()
         else ()
