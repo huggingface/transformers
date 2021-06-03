@@ -671,10 +671,12 @@ class TrainingArguments:
         if self.deepspeed:
             # - must be run very last in arg parsing, since it will use a lot of these settings.
             # - must be run before the model is created.
-            from transformers.integrations import DeepSpeedConfigHF
+            from transformers.deepspeed import HfTrainerDeepSpeedConfig
 
-            # will be used later by the Trainer (leave self.deepspeed unmodified in case a user relies on it not to be modified)
-            self.deepspeed_config_hf = DeepSpeedConfigHF(self)
+            # will be used later by the Trainer
+            # note: leave self.deepspeed unmodified in case a user relies on it not to be modified)
+            self.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.deepspeed)
+            self.hf_deepspeed_config.trainer_config_process(self)
 
     def __repr__(self):
         # We override the default repr to remove deprecated arguments from the repr. This method should be removed once
@@ -737,7 +739,7 @@ class TrainingArguments:
             # deepspeed  ./program.py
             # rather than:
             # python -m torch.distributed.launch --nproc_per_node=2 ./program.py
-            from .integrations import is_deepspeed_available
+            from .deepspeed import is_deepspeed_available
 
             if not is_deepspeed_available():
                 raise ImportError("--deepspeed requires deepspeed: `pip install deepspeed`.")
@@ -861,7 +863,7 @@ class TrainingArguments:
         The index of the local process used.
         """
         if is_torch_tpu_available():
-            return xm.get_ordinal(local=True)
+            return xm.get_local_ordinal()
         elif is_sagemaker_mp_enabled():
             return smp.local_rank()
         elif is_sagemaker_dp_enabled():
