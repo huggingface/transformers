@@ -28,6 +28,7 @@ from ..bertweet.tokenization_bertweet import BertweetTokenizer
 from ..blenderbot.tokenization_blenderbot import BlenderbotTokenizer
 from ..blenderbot_small.tokenization_blenderbot_small import BlenderbotSmallTokenizer
 from ..byt5.tokenization_byt5 import ByT5Tokenizer
+from ..canine.tokenization_canine import CanineTokenizer
 from ..convbert.tokenization_convbert import ConvBertTokenizer
 from ..ctrl.tokenization_ctrl import CTRLTokenizer
 from ..deberta.tokenization_deberta import DebertaTokenizer
@@ -69,6 +70,7 @@ from .configuration_auto import (
     BlenderbotConfig,
     BlenderbotSmallConfig,
     CamembertConfig,
+    CanineConfig,
     ConvBertConfig,
     CTRLConfig,
     DebertaConfig,
@@ -283,6 +285,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (GPTNeoConfig, (GPT2Tokenizer, GPT2TokenizerFast)),
         (LukeConfig, (LukeTokenizer, None)),
         (BigBirdPegasusConfig, (PegasusTokenizer, PegasusTokenizerFast)),
+        (CanineConfig, (CanineTokenizer, None)),
     ]
 )
 

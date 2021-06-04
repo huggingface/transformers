@@ -65,7 +65,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.canine_tokenizer
         src_text = ["Once there was a man.", "He wrote a test in HuggingFace Tranformers."]
         batch = tokenizer(src_text, padding=True, return_tensors=FRAMEWORK)
-        # check if input_ids, attention_mask and token_type_ids are returned 
+        # check if input_ids, attention_mask and token_type_ids are returned
         self.assertIn("input_ids", batch)
         self.assertIn("attention_mask", batch)
         self.assertIn("token_type_ids", batch)
