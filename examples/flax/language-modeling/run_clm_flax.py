@@ -39,6 +39,7 @@ import jax.numpy as jnp
 import optax
 import transformers
 from flax import jax_utils, traverse_util
+from flax.jax_utils import unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
 from transformers import (
@@ -451,7 +452,10 @@ if __name__ == "__main__":
     # Initialize our training
     distributed = jax.local_device_count() > 1
     rng = jax.random.PRNGKey(training_args.seed)
-    dropout_rngs = jax.random.split(rng, jax.local_device_count())
+    if distributed:
+        dropout_rngs = jax.random.split(rng, jax.local_device_count())
+    else:
+        rng, dropout_rngs = jax.random.split(rng)
 
     # Store some constant
     num_epochs = int(training_args.num_train_epochs)
@@ -538,7 +542,7 @@ if __name__ == "__main__":
         state = jax_utils.replicate(state)
     else:
         train_step = jax.jit(_train_step, donate_argnums=(0,))
-        eval_step = jax.jit(_eval_step, donate_argnums=(0,))
+        eval_step = jax.jit(_eval_step)
 
     train_metrics = []
     train_time = 0
@@ -561,8 +565,11 @@ if __name__ == "__main__":
 
         train_time += time.time() - train_start
 
+        if distributed:
+            train_metric = unreplicate(train_metric)
+
         epochs.write(
-            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss'][0]}, Learning Rate: {train_metric['learning_rate'][0]})"
+            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']})"
         )
 
         # ======================== Evaluating ==============================
