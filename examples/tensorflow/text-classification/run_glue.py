@@ -474,9 +474,8 @@ def main():
             else:
                 validation_data = None
             history = model.fit(tf_data['train'], validation_data=validation_data,
-                                epochs=training_args.epochs,
+                                epochs=int(training_args.num_train_epochs),
                                 callbacks=callbacks)
-            train_predictions = model.predict(tf_data['train'])
         # endregion
 
         # region Evaluation
