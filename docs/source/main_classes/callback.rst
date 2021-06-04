@@ -74,6 +74,32 @@ TrainerCallback
 .. autoclass:: transformers.TrainerCallback
     :members:
 
+Here is an example of how to register a custom callback with the PyTorch :class:`~transformers.Trainer`:
+
+.. code-block:: python
+
+    class MyCallback(TrainerCallback):
+        "A callback that prints a message at the beginning of training"
+
+        def on_train_begin(self, args, state, control, **kwargs):
+            print("Starting training")
+
+    trainer = Trainer(
+        model,
+        args,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        callbacks=[MyCallback]  # We can either pass the callback class this way or an instance of it (MyCallback())
+    )
+
+Another way to register a callback is to call ``trainer.add_callback()`` as follows:
+
+.. code-block:: python
+
+    trainer = Trainer(...)
+    trainer.add_callback(MyCallback)
+    # Alternatively, we can pass an instance of the callback class
+    trainer.add_callback(MyCallback())
 
 TrainerState
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

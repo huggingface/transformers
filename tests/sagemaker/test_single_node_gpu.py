@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 import unittest
@@ -11,7 +12,7 @@ from . import is_sagemaker_available
 
 
 if is_sagemaker_available():
-    from sagemaker import TrainingJobAnalytics
+    from sagemaker import Session, TrainingJobAnalytics
     from sagemaker.huggingface import HuggingFace
 
 
@@ -27,14 +28,14 @@ if is_sagemaker_available():
             "script": "run_glue.py",
             "model_name_or_path": "distilbert-base-cased",
             "instance_type": "ml.g4dn.xlarge",
-            "results": {"train_runtime": 200, "eval_accuracy": 0.6, "eval_loss": 0.9},
+            "results": {"train_runtime": 650, "eval_accuracy": 0.6, "eval_loss": 0.9},
         },
         {
             "framework": "tensorflow",
             "script": "run_tf.py",
             "model_name_or_path": "distilbert-base-cased",
             "instance_type": "ml.g4dn.xlarge",
-            "results": {"train_runtime": 350, "eval_accuracy": 0.3, "eval_loss": 0.9},
+            "results": {"train_runtime": 600, "eval_accuracy": 0.3, "eval_loss": 0.9},
         },
     ]
 )
@@ -42,7 +43,7 @@ class SingleNodeTest(unittest.TestCase):
     def setUp(self):
         if self.framework == "pytorch":
             subprocess.run(
-                f"cp ./examples/text-classification/run_glue.py {self.env.test_path}/run_glue.py".split(),
+                f"cp ./examples/pytorch/text-classification/run_glue.py {self.env.test_path}/run_glue.py".split(),
                 encoding="utf-8",
                 check=True,
             )
@@ -74,17 +75,22 @@ class SingleNodeTest(unittest.TestCase):
         # run training
         estimator.fit()
 
-        # save csv
-        self.save_results_as_csv(estimator.latest_training_job.name)
         # result dataframe
         result_metrics_df = TrainingJobAnalytics(estimator.latest_training_job.name).dataframe()
 
         # extract kpis
-        train_runtime = list(result_metrics_df[result_metrics_df.metric_name == "train_runtime"]["value"])
         eval_accuracy = list(result_metrics_df[result_metrics_df.metric_name == "eval_accuracy"]["value"])
         eval_loss = list(result_metrics_df[result_metrics_df.metric_name == "eval_loss"]["value"])
+        # get train time from SageMaker job, this includes starting, preprocessing, stopping
+        train_runtime = (
+            Session().describe_training_job(estimator.latest_training_job.name).get("TrainingTimeInSeconds", 999999)
+        )
 
         # assert kpis
-        assert all(t <= self.results["train_runtime"] for t in train_runtime)
+        assert train_runtime <= self.results["train_runtime"]
         assert all(t >= self.results["eval_accuracy"] for t in eval_accuracy)
         assert all(t <= self.results["eval_loss"] for t in eval_loss)
+
+        # dump tests result into json file to share in PR
+        with open(f"{estimator.latest_training_job.name}.json", "w") as outfile:
+            json.dump({"train_time": train_runtime, "eval_accuracy": eval_accuracy, "eval_loss": eval_loss}, outfile)

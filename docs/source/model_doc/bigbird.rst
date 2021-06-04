@@ -50,7 +50,8 @@ Tips:
 - Current implementation supports only **ITC**.
 - Current implementation doesn't support **num_random_blocks = 0**
 
-The original code can be found `here <https://github.com/google-research/bigbird>`__.
+This model was contributed by `vasudevgupta <https://huggingface.co/vasudevgupta>`__. The original code can be found
+`here <https://github.com/google-research/bigbird>`__.
 
 BigBirdConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -66,6 +67,11 @@ BigBirdTokenizer
     :members: build_inputs_with_special_tokens, get_special_tokens_mask,
         create_token_type_ids_from_sequences, save_vocabulary
 
+BigBirdTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.BigBirdTokenizerFast
+    :members:
 
 BigBird specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

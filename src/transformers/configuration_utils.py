@@ -22,30 +22,41 @@ import os
 from typing import Any, Dict, Tuple, Union
 
 from . import __version__
-from .file_utils import CONFIG_NAME, cached_path, hf_bucket_url, is_offline_mode, is_remote_url
+from .file_utils import CONFIG_NAME, PushToHubMixin, cached_path, hf_bucket_url, is_offline_mode, is_remote_url
 from .utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class PretrainedConfig(object):
+class PretrainedConfig(PushToHubMixin):
     r"""
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
     methods for loading/downloading/saving configurations.
 
-    Note: A configuration file can be loaded and saved to disk. Loading the configuration file and using this file to
-    initialize a model does **not** load the model weights. It only affects the model's configuration.
+    Note:
+        A configuration file can be loaded and saved to disk. Loading the configuration file and using this file to
+        initialize a model does **not** load the model weights. It only affects the model's configuration.
 
     Class attributes (overridden by derived classes)
 
-        - **model_type** (:obj:`str`): An identifier for the model type, serialized into the JSON file, and used to
+        - **model_type** (:obj:`str`) -- An identifier for the model type, serialized into the JSON file, and used to
           recreate the correct object in :class:`~transformers.AutoConfig`.
-        - **is_composition** (:obj:`bool`): Whether the config class is composed of multiple sub-configs. In this case
-          the config has to be initialized from two or more configs of type :class:`~transformers.PretrainedConfig`
-          like: :class:`~transformers.EncoderDecoderConfig` or :class:`~RagConfig`.
-        - **keys_to_ignore_at_inference** (:obj:`List[str]`): A list of keys to ignore by default when looking at
+        - **is_composition** (:obj:`bool`) -- Whether the config class is composed of multiple sub-configs. In this
+          case the config has to be initialized from two or more configs of type
+          :class:`~transformers.PretrainedConfig` like: :class:`~transformers.EncoderDecoderConfig` or
+          :class:`~RagConfig`.
+        - **keys_to_ignore_at_inference** (:obj:`List[str]`) -- A list of keys to ignore by default when looking at
           dictionary outputs of the model during inference.
+
+    Common attributes (present in all subclasses)
+
+        - **vocab_size** (:obj:`int`) -- The number of tokens in the vocabulary, which is also the first dimension of
+          the embeddings matrix (this attribute may be missing for models that don't have a text modality like ViT).
+        - **hidden_size** (:obj:`int`) -- The hidden size of the model.
+        - **num_attention_heads** (:obj:`int`) -- The number of attention heads used in the multi-head attention layers
+          of the model.
+        - **num_hidden_layers** (:obj:`int`) -- The number of blocks in the model.
 
     Args:
         name_or_path (:obj:`str`, `optional`, defaults to :obj:`""`):
@@ -152,6 +163,14 @@ class PretrainedConfig(object):
           typically for a classification task.
         - **task_specific_params** (:obj:`Dict[str, Any]`, `optional`) -- Additional keyword arguments to store for the
           current task.
+        - **problem_type** (:obj:`str`, `optional`) -- Problem type for :obj:`XxxForSequenceClassification` models. Can
+          be one of (:obj:`"regression"`, :obj:`"single_label_classification"`, :obj:`"multi_label_classification"`).
+          Please note that this parameter is only available in the following models: `AlbertForSequenceClassification`,
+          `BertForSequenceClassification`, `BigBirdForSequenceClassification`, `ConvBertForSequenceClassification`,
+          `DistilBertForSequenceClassification`, `ElectraForSequenceClassification`, `FunnelForSequenceClassification`,
+          `LongformerForSequenceClassification`, `MobileBertForSequenceClassification`,
+          `ReformerForSequenceClassification`, `RobertaForSequenceClassification`,
+          `SqueezeBertForSequenceClassification`, `XLMForSequenceClassification` and `XLNetForSequenceClassification`.
 
     Parameters linked to the tokenizer
 
@@ -249,9 +268,18 @@ class PretrainedConfig(object):
         # task specific arguments
         self.task_specific_params = kwargs.pop("task_specific_params", None)
 
+        # regression / multi-label classification
+        self.problem_type = kwargs.pop("problem_type", None)
+        allowed_problem_types = ("regression", "single_label_classification", "multi_label_classification")
+        if self.problem_type is not None and self.problem_type not in allowed_problem_types:
+            raise ValueError(
+                f"The config parameter `problem_type` wasnot understood: received {self.problem_type}"
+                "but only 'regression', 'single_label_classification' and 'multi_label_classification' are valid."
+            )
+
         # TPU arguments
         if kwargs.pop("xla_device", None) is not None:
-            logger.warn(
+            logger.warning(
                 "The `xla_device` argument has been deprecated in v4.4.0 of Transformers. It is ignored and you can "
                 "safely remove it from your `config.json` file."
             )
@@ -260,7 +288,7 @@ class PretrainedConfig(object):
         self._name_or_path = str(kwargs.pop("name_or_path", ""))
 
         # Drop the transformers version info
-        kwargs.pop("transformers_version", None)
+        self.transformers_version = kwargs.pop("transformers_version", None)
 
         # Additional attributes without default values
         for key, value in kwargs.items():
@@ -299,7 +327,7 @@ class PretrainedConfig(object):
             self.id2label = {i: f"LABEL_{i}" for i in range(num_labels)}
             self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike]):
+    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
         """
         Save a configuration object to the directory ``save_directory``, so that it can be re-loaded using the
         :func:`~transformers.PretrainedConfig.from_pretrained` class method.
@@ -307,6 +335,11 @@ class PretrainedConfig(object):
         Args:
             save_directory (:obj:`str` or :obj:`os.PathLike`):
                 Directory where the configuration JSON file will be saved (will be created if it does not exist).
+            push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to push your model to the Hugging Face model hub after saving it.
+            kwargs:
+                Additional key word arguments passed along to the
+                :meth:`~transformers.file_utils.PushToHubMixin.push_to_hub` method.
         """
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -316,6 +349,10 @@ class PretrainedConfig(object):
 
         self.to_json_file(output_config_file, use_diff=True)
         logger.info(f"Configuration saved in {output_config_file}")
+
+        if push_to_hub:
+            url = self._push_to_hub(save_files=[output_config_file], **kwargs)
+            logger.info(f"Configuration pushed to the hub in this commit: {url}")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -388,10 +425,11 @@ class PretrainedConfig(object):
 
         """
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-        if config_dict.get("model_type", False) and hasattr(cls, "model_type"):
-            assert (
-                config_dict["model_type"] == cls.model_type
-            ), f"You tried to initiate a model of type '{cls.model_type}' with a pretrained model of type '{config_dict['model_type']}'"
+        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+            logger.warn(
+                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+            )
 
         return cls.from_dict(config_dict, **kwargs)
 
@@ -629,7 +667,45 @@ class PretrainedConfig(object):
         Updates attributes of this class with attributes from ``config_dict``.
 
         Args:
-            config_dict (:obj:`Dict[str, Any]`): Dictionary of attributes that shall be updated for this class.
+            config_dict (:obj:`Dict[str, Any]`): Dictionary of attributes that should be updated for this class.
         """
         for key, value in config_dict.items():
             setattr(self, key, value)
+
+    def update_from_string(self, update_str: str):
+        """
+        Updates attributes of this class with attributes from ``update_str``.
+
+        The expected format is ints, floats and strings as is, and for booleans use ``true`` or ``false``. For example:
+        "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+
+        The keys to change have to already exist in the config object.
+
+        Args:
+            update_str (:obj:`str`): String with attributes that should be updated for this class.
+
+        """
+
+        d = dict(x.split("=") for x in update_str.split(","))
+        for k, v in d.items():
+            if not hasattr(self, k):
+                raise ValueError(f"key {k} isn't in the original config dict")
+
+            old_v = getattr(self, k)
+            if isinstance(old_v, bool):
+                if v.lower() in ["true", "1", "y", "yes"]:
+                    v = True
+                elif v.lower() in ["false", "0", "n", "no"]:
+                    v = False
+                else:
+                    raise ValueError(f"can't derive true or false from {v} (key {k})")
+            elif isinstance(old_v, int):
+                v = int(v)
+            elif isinstance(old_v, float):
+                v = float(v)
+            elif not isinstance(old_v, str):
+                raise ValueError(
+                    f"You can only update int, float, bool or string values in the config, got {v} for key {k}"
+                )
+
+            setattr(self, k, v)

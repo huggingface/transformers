@@ -23,16 +23,22 @@ from ..bart.configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartCo
 from ..bert.configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from ..bert_generation.configuration_bert_generation import BertGenerationConfig
 from ..big_bird.configuration_big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig
+from ..bigbird_pegasus.configuration_bigbird_pegasus import (
+    BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    BigBirdPegasusConfig,
+)
 from ..blenderbot.configuration_blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig
 from ..blenderbot_small.configuration_blenderbot_small import (
     BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
     BlenderbotSmallConfig,
 )
 from ..camembert.configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
+from ..clip.configuration_clip import CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, CLIPConfig
 from ..convbert.configuration_convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig
 from ..ctrl.configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from ..deberta.configuration_deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig
 from ..deberta_v2.configuration_deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config
+from ..deit.configuration_deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
 from ..distilbert.configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
 from ..dpr.configuration_dpr import DPR_PRETRAINED_CONFIG_ARCHIVE_MAP, DPRConfig
 from ..electra.configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
@@ -46,10 +52,12 @@ from ..ibert.configuration_ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBe
 from ..layoutlm.configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig
 from ..led.configuration_led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig
 from ..longformer.configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
+from ..luke.configuration_luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig
 from ..lxmert.configuration_lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig
 from ..m2m_100.configuration_m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
 from ..marian.configuration_marian import MarianConfig
 from ..mbart.configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfig
+from ..megatron_bert.configuration_megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
 from ..mobilebert.configuration_mobilebert import MobileBertConfig
 from ..mpnet.configuration_mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig
 from ..mt5.configuration_mt5 import MT5Config
@@ -60,6 +68,7 @@ from ..rag.configuration_rag import RagConfig
 from ..reformer.configuration_reformer import ReformerConfig
 from ..retribert.configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
 from ..roberta.configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
+from ..roformer.configuration_roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig
 from ..speech_to_text.configuration_speech_to_text import (
     SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     Speech2TextConfig,
@@ -68,6 +77,7 @@ from ..squeezebert.configuration_squeezebert import SQUEEZEBERT_PRETRAINED_CONFI
 from ..t5.configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from ..tapas.configuration_tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig
 from ..transfo_xl.configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
+from ..visual_bert.configuration_visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
 from ..vit.configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
 from ..wav2vec2.configuration_wav2vec2 import WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP, Wav2Vec2Config
 from ..xlm.configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
@@ -83,8 +93,15 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     (key, value)
     for pretrained_map in [
         # Add archive maps here
+        VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         VIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -133,6 +150,12 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
+        ("visual_bert", VisualBertConfig),
+        ("roformer", RoFormerConfig),
+        ("clip", CLIPConfig),
+        ("bigbird_pegasus", BigBirdPegasusConfig),
+        ("deit", DeiTConfig),
+        ("luke", LukeConfig),
         ("gpt_neo", GPTNeoConfig),
         ("big_bird", BigBirdConfig),
         ("speech_to_text", Speech2TextConfig),
@@ -155,6 +178,7 @@ CONFIG_MAPPING = OrderedDict(
         ("pegasus", PegasusConfig),
         ("marian", MarianConfig),
         ("mbart", MBartConfig),
+        ("megatron_bert", MegatronBertConfig),
         ("mpnet", MPNetConfig),
         ("bart", BartConfig),
         ("blenderbot", BlenderbotConfig),
@@ -189,6 +213,12 @@ CONFIG_MAPPING = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("visual_bert", "VisualBert"),
+        ("roformer", "RoFormer"),
+        ("clip", "CLIP"),
+        ("bigbird_pegasus", "BigBirdPegasus"),
+        ("deit", "DeiT"),
+        ("luke", "LUKE"),
         ("gpt_neo", "GPT Neo"),
         ("big_bird", "BigBird"),
         ("speech_to_text", "Speech2Text"),
@@ -211,6 +241,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("blenderbot", "Blenderbot"),
         ("marian", "Marian"),
         ("mbart", "mBART"),
+        ("megatron_bert", "MegatronBert"),
         ("bart", "BART"),
         ("reformer", "Reformer"),
         ("longformer", "Longformer"),
@@ -243,30 +274,39 @@ MODEL_NAMES_MAPPING = OrderedDict(
 )
 
 
+def _get_class_name(model_class):
+    if isinstance(model_class, (list, tuple)):
+        return " or ".join([f":class:`~transformers.{c.__name__}`" for c in model_class])
+    return f":class:`~transformers.{model_class.__name__}`"
+
+
 def _list_model_options(indent, config_to_class=None, use_model_types=True):
     if config_to_class is None and not use_model_types:
         raise ValueError("Using `use_model_types=False` requires a `config_to_class` dictionary.")
     if use_model_types:
         if config_to_class is None:
-            model_type_to_name = {model_type: config.__name__ for model_type, config in CONFIG_MAPPING.items()}
+            model_type_to_name = {
+                model_type: f":class:`~transformers.{config.__name__}`"
+                for model_type, config in CONFIG_MAPPING.items()
+            }
         else:
             model_type_to_name = {
-                model_type: config_to_class[config].__name__
+                model_type: _get_class_name(config_to_class[config])
                 for model_type, config in CONFIG_MAPPING.items()
                 if config in config_to_class
             }
         lines = [
-            f"{indent}- **{model_type}** -- :class:`~transformers.{cls_name}` ({MODEL_NAMES_MAPPING[model_type]} model)"
-            for model_type, cls_name in model_type_to_name.items()
+            f"{indent}- **{model_type}** -- {model_type_to_name[model_type]} ({MODEL_NAMES_MAPPING[model_type]} model)"
+            for model_type in sorted(model_type_to_name.keys())
         ]
     else:
-        config_to_name = {config.__name__: clas.__name__ for config, clas in config_to_class.items()}
+        config_to_name = {config.__name__: _get_class_name(clas) for config, clas in config_to_class.items()}
         config_to_model_name = {
             config.__name__: MODEL_NAMES_MAPPING[model_type] for model_type, config in CONFIG_MAPPING.items()
         }
         lines = [
-            f"{indent}- :class:`~transformers.{config_name}` configuration class: :class:`~transformers.{cls_name}` ({config_to_model_name[config_name]} model)"
-            for config_name, cls_name in config_to_name.items()
+            f"{indent}- :class:`~transformers.{config_name}` configuration class: {config_to_name[config_name]} ({config_to_model_name[config_name]} model)"
+            for config_name in sorted(config_to_name.keys())
         ]
     return "\n".join(lines)
 

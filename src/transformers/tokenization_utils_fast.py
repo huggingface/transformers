@@ -54,6 +54,12 @@ TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 # Slow tokenizers have an additional added tokens files
 ADDED_TOKENS_FILE = "added_tokens.json"
 
+INIT_TOKENIZER_DOCSTRING += """
+        tokenizer_object (:class:`tokenizers.Tokenizer`):
+            A :class:`tokenizers.Tokenizer` object from 🤗 tokenizers to instantiate from. See :doc:`Using tokenizers
+            from 🤗 tokenizers <../fast_tokenizers>` for more information.
+"""
+
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
 class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
@@ -72,6 +78,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     slow_tokenizer_class: PreTrainedTokenizer = None
 
     def __init__(self, *args, **kwargs):
+        tokenizer_object = kwargs.pop("tokenizer_object", None)
         slow_tokenizer = kwargs.pop("__slow_tokenizer", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
         from_slow = kwargs.pop("from_slow", False)
@@ -82,7 +89,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 "have sentencepiece installed."
             )
 
-        if fast_tokenizer_file is not None and not from_slow:
+        if tokenizer_object is not None:
+            fast_tokenizer = tokenizer_object
+        elif fast_tokenizer_file is not None and not from_slow:
             # We have a serialization from tokenizers which let us directly build the backend
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif slow_tokenizer is not None:
@@ -94,10 +103,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
         else:
             raise ValueError(
-                "Couldn't instantiate the backend tokenizer from one of: "
-                "(1) a `tokenizers` library serialization file, "
-                "(2) a slow tokenizer instance to convert or "
-                "(3) an equivalent slow tokenizer class to instantiate and convert. "
+                "Couldn't instantiate the backend tokenizer from one of: \n"
+                "(1) a `tokenizers` library serialization file, \n"
+                "(2) a slow tokenizer instance to convert or \n"
+                "(3) an equivalent slow tokenizer class to instantiate and convert. \n"
                 "You need to have sentencepiece installed to convert a slow tokenizer to a fast one."
             )
 
@@ -507,18 +516,19 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         self,
         save_directory: Union[str, os.PathLike],
         file_names: Tuple[str],
-        legacy_format: bool = True,
+        legacy_format: Optional[bool] = None,
         filename_prefix: Optional[str] = None,
     ) -> Tuple[str]:
         """
-        Save a tokenizer using the slow-tokenizer/legacy format: vocabulary + added tokens.
-
-        Fast tokenizers can also be saved in a unique JSON file containing {config + vocab + added-tokens} using the
-        specific :meth:`~transformers.PreTrainedTokenizerFast._save_pretrained`
+        Save a tokenizer using the slow-tokenizer/legacy format: vocabulary + added tokens as well as in a unique JSON
+        file containing {config + vocab + added-tokens}.
         """
         save_directory = str(save_directory)
 
-        if legacy_format:
+        save_slow = legacy_format is None or legacy_format is True
+        save_fast = legacy_format is None or legacy_format is False
+
+        if save_slow:
             added_tokens_file = os.path.join(
                 save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE
             )
@@ -530,7 +540,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
             vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
             file_names = file_names + vocab_files + (added_tokens_file,)
-        else:
+
+        if save_fast:
             tokenizer_file = os.path.join(
                 save_directory, (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_FILE
             )

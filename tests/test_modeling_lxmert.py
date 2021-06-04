@@ -18,6 +18,7 @@ import copy
 import unittest
 
 from transformers import is_torch_available
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -39,7 +40,7 @@ if is_torch_available():
 
 
 class LxmertModelTester:
-    """You can also import this e.g from .test_modeling_bart import BartModelTester """
+    """You can also import this e.g from .test_modeling_bart import BartModelTester"""
 
     def __init__(
         self,
@@ -532,11 +533,11 @@ class LxmertModelTest(ModelTesterMixin, unittest.TestCase):
         inputs_dict = copy.deepcopy(inputs_dict)
 
         if return_labels:
-            if model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
+            if model_class in get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING):
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
-            elif model_class in MODEL_FOR_PRETRAINING_MAPPING.values():
+            elif model_class in get_values(MODEL_FOR_PRETRAINING_MAPPING):
                 # special case for models like BERT that use multi-loss training for PreTraining
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device

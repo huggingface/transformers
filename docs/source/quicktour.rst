@@ -238,23 +238,22 @@ keys directly to tensors, for a PyTorch model, you need to unpack the dictionary
     >>> ## TENSORFLOW CODE
     >>> tf_outputs = tf_model(tf_batch)
 
-In 🤗 Transformers, all outputs are tuples (with only one element potentially). Here, we get a tuple with just the final
-activations of the model.
+In 🤗 Transformers, all outputs are objects that contain the model's final activations along with other metadata. These
+objects are described in greater detail :doc:`here <main_classes/output>`. For now, let's inspect the output ourselves:
 
 .. code-block::
 
     >>> ## PYTORCH CODE
     >>> print(pt_outputs)
-    (tensor([[-4.0833,  4.3364],
-            [ 0.0818, -0.0418]], grad_fn=<AddmmBackward>),)
+    SequenceClassifierOutput(loss=None, logits=tensor([[-4.0833,  4.3364],
+        [ 0.0818, -0.0418]], grad_fn=<AddmmBackward>), hidden_states=None, attentions=None)
     >>> ## TENSORFLOW CODE
     >>> print(tf_outputs)
-    (<tf.Tensor: shape=(2, 2), dtype=float32, numpy=
-    array([[-4.0832963 ,  4.336414  ],
-           [ 0.08181786, -0.04179301]], dtype=float32)>,)
+    TFSequenceClassifierOutput(loss=None, logits=<tf.Tensor: shape=(2, 2), dtype=float32, numpy=
+    array([[-4.0832963 ,  4.3364143 ],
+           [ 0.081807  , -0.04178282]], dtype=float32)>, hidden_states=None, attentions=None)
 
-The model can return more than just the final activations, which is why the output is a tuple. Here we only asked for
-the final activations, so we get a tuple with one element.
+Notice how the output object has a ``logits`` attribute. You can use this to access the model's final activations.
 
 .. note::
 
@@ -267,10 +266,10 @@ Let's apply the SoftMax activation to get predictions.
 
     >>> ## PYTORCH CODE
     >>> import torch.nn.functional as F
-    >>> pt_predictions = F.softmax(pt_outputs[0], dim=-1)
+    >>> pt_predictions = F.softmax(pt_outputs.logits, dim=-1)
     >>> ## TENSORFLOW CODE
     >>> import tensorflow as tf
-    >>> tf_predictions = tf.nn.softmax(tf_outputs[0], axis=-1)
+    >>> tf.nn.softmax(tf_outputs.logits, axis=-1)
 
 We can see we get the numbers from before:
 
@@ -286,16 +285,24 @@ We can see we get the numbers from before:
     tensor([[2.2043e-04, 9.9978e-01],
             [5.3086e-01, 4.6914e-01]], grad_fn=<SoftmaxBackward>)
 
-If you have labels, you can provide them to the model, it will return a tuple with the loss and the final activations.
+If you provide the model with labels in addition to inputs, the model output object will also contain a ``loss``
+attribute:
 
 .. code-block::
 
     >>> ## PYTORCH CODE
     >>> import torch
     >>> pt_outputs = pt_model(**pt_batch, labels = torch.tensor([1, 0]))
+    >>> print(pt_outputs)
+    SequenceClassifierOutput(loss=tensor(0.3167, grad_fn=<NllLossBackward>), logits=tensor([[-4.0833,  4.3364],
+    [ 0.0818, -0.0418]], grad_fn=<AddmmBackward>), hidden_states=None, attentions=None)
     >>> ## TENSORFLOW CODE
     >>> import tensorflow as tf
     >>> tf_outputs = tf_model(tf_batch, labels = tf.constant([1, 0]))
+    >>> print(tf_outputs)
+    TFSequenceClassifierOutput(loss=<tf.Tensor: shape=(2,), dtype=float32, numpy=array([2.2051287e-04, 6.3326043e-01], dtype=float32)>, logits=<tf.Tensor: shape=(2, 2), dtype=float32, numpy=
+    array([[-4.0832963 ,  4.3364143 ],
+           [ 0.081807  , -0.04178282]], dtype=float32)>, hidden_states=None, attentions=None)
 
 Models are standard `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ or `tf.keras.Model
 <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ so you can use them in your usual training loop. 🤗
@@ -323,6 +330,7 @@ loading a saved PyTorch model in a TensorFlow model, use :func:`~transformers.TF
 
 .. code-block::
 
+    from transformers import TFAutoModel
     tokenizer = AutoTokenizer.from_pretrained(save_directory)
     model = TFAutoModel.from_pretrained(save_directory, from_pt=True)
 
@@ -330,6 +338,7 @@ and if you are loading a saved TensorFlow model in a PyTorch model, you should u
 
 .. code-block::
 
+    from transformers import AutoModel
     tokenizer = AutoTokenizer.from_pretrained(save_directory)
     model = AutoModel.from_pretrained(save_directory, from_tf=True)
 
@@ -340,10 +349,12 @@ Lastly, you can also ask the model to return all hidden states and all attention
 
     >>> ## PYTORCH CODE
     >>> pt_outputs = pt_model(**pt_batch, output_hidden_states=True, output_attentions=True)
-    >>> all_hidden_states, all_attentions = pt_outputs[-2:]
+    >>> all_hidden_states  = pt_outputs.hidden_states 
+    >>> all_attentions = pt_outputs.attentions
     >>> ## TENSORFLOW CODE
     >>> tf_outputs = tf_model(tf_batch, output_hidden_states=True, output_attentions=True)
-    >>> all_hidden_states, all_attentions = tf_outputs[-2:]
+    >>> all_hidden_states =  tf_outputs.hidden_states
+    >>> all_attentions = tf_outputs.attentions
 
 Accessing the code
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -376,16 +387,16 @@ directly instantiate model and tokenizer without the auto magic:
 Customizing the model
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-If you want to change how the model itself is built, you can define your custom configuration class. Each architecture
-comes with its own relevant configuration (in the case of DistilBERT, :class:`~transformers.DistilBertConfig`) which
-allows you to specify any of the hidden dimension, dropout rate, etc. If you do core modifications, like changing the
-hidden size, you won't be able to use a pretrained model anymore and will need to train from scratch. You would then
-instantiate the model directly from this configuration.
+If you want to change how the model itself is built, you can define a custom configuration class. Each architecture
+comes with its own relevant configuration. For example, :class:`~transformers.DistilBertConfig` allows you to specify
+parameters such as the hidden dimension, dropout rate, etc for DistilBERT. If you do core modifications, like changing
+the hidden size, you won't be able to use a pretrained model anymore and will need to train from scratch. You would
+then instantiate the model directly from this configuration.
 
-Here we use the predefined vocabulary of DistilBERT (hence load the tokenizer with the
-:func:`~transformers.DistilBertTokenizer.from_pretrained` method) and initialize the model from scratch (hence
-instantiate the model from the configuration instead of using the
-:func:`~transformers.DistilBertForSequenceClassification.from_pretrained` method).
+Below, we load a predefined vocabulary for a tokenizer with the
+:func:`~transformers.DistilBertTokenizer.from_pretrained` method. However, unlike the tokenizer, we wish to initialize
+the model from scratch. Therefore, we instantiate the model from a configuration instead of using the
+:func:`~transformers.DistilBertForSequenceClassification.from_pretrained` method.
 
 .. code-block::
 
@@ -402,9 +413,9 @@ instantiate the model from the configuration instead of using the
 
 For something that only changes the head of the model (for instance, the number of labels), you can still use a
 pretrained model for the body. For instance, let's define a classifier for 10 different labels using a pretrained body.
-We could create a configuration with all the default values and just change the number of labels, but more easily, you
-can directly pass any argument a configuration would take to the :func:`from_pretrained` method and it will update the
-default configuration with it:
+Instead of creating a new configuration with all the default values just to change the number of labels, we can instead
+pass any argument a configuration would take to the :func:`from_pretrained` method and it will update the default
+configuration appropriately:
 
 .. code-block::
 

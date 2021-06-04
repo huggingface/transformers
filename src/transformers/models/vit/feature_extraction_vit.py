@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright Google AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -36,27 +36,43 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        image_mean (:obj:`int`, defaults to :obj:`[0.5, 0.5, 0.5]`):
-            The sequence of means for each channel, to be used when normalizing images.
-        image_std (:obj:`int`, defaults to :obj:`[0.5, 0.5, 0.5]`):
-            The sequence of standard deviations for each channel, to be used when normalizing images.
-        do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to normalize the input with mean and standard deviation.
         do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to resize the input to a certain :obj:`size`.
-        size (:obj:`int`, `optional`, defaults to 224):
-            Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`.
+        size (:obj:`int` or :obj:`Tuple(int)`, `optional`, defaults to 224):
+            Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
+            integer is provided, then the input will be resized to (size, size). Only has an effect if :obj:`do_resize`
+            is set to :obj:`True`.
+        resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BILINEAR`):
+            An optional resampling filter. This can be one of :obj:`PIL.Image.NEAREST`, :obj:`PIL.Image.BOX`,
+            :obj:`PIL.Image.BILINEAR`, :obj:`PIL.Image.HAMMING`, :obj:`PIL.Image.BICUBIC` or :obj:`PIL.Image.LANCZOS`.
+            Only has an effect if :obj:`do_resize` is set to :obj:`True`.
+        do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not to normalize the input with mean and standard deviation.
+        image_mean (:obj:`List[int]`, defaults to :obj:`[0.5, 0.5, 0.5]`):
+            The sequence of means for each channel, to be used when normalizing images.
+        image_std (:obj:`List[int]`, defaults to :obj:`[0.5, 0.5, 0.5]`):
+            The sequence of standard deviations for each channel, to be used when normalizing images.
     """
 
     model_input_names = ["pixel_values"]
 
-    def __init__(self, image_mean=None, image_std=None, do_normalize=True, do_resize=True, size=224, **kwargs):
+    def __init__(
+        self,
+        do_resize=True,
+        size=224,
+        resample=Image.BILINEAR,
+        do_normalize=True,
+        image_mean=None,
+        image_std=None,
+        **kwargs
+    ):
         super().__init__(**kwargs)
-        self.image_mean = [0.5, 0.5, 0.5]
-        self.image_std = [0.5, 0.5, 0.5]
-        self.do_normalize = do_normalize
         self.do_resize = do_resize
         self.size = size
+        self.resample = resample
+        self.do_normalize = do_normalize
+        self.image_mean = image_mean if image_mean is not None else [0.5, 0.5, 0.5]
+        self.image_std = image_std if image_std is not None else [0.5, 0.5, 0.5]
 
     def __call__(
         self,
@@ -80,18 +96,19 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
 
-            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
-                If set, will return tensors instead of list of python integers. Acceptable values are:
+            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`, defaults to :obj:`'np'`):
+                If set, will return tensors of a particular framework. Acceptable values are:
 
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
                 * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
-                * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.s
+                * :obj:`'np'`: Return NumPy :obj:`np.ndarray` objects.
                 * :obj:`'jax'`: Return JAX :obj:`jnp.ndarray` objects.
 
         Returns:
             :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
 
-            - **pixel_values** -- Pixel values to be fed to a model.
+            - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
+              width).
         """
         # Input type checking for clearer error
         valid_images = False
@@ -119,7 +136,7 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         # transformations (resizing + normalization)
         if self.do_resize and self.size is not None:
-            images = [self.resize(image=image, size=self.size) for image in images]
+            images = [self.resize(image=image, size=self.size, resample=self.resample) for image in images]
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
 

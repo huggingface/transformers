@@ -30,10 +30,12 @@ from tensorflow.python.keras.saving import hdf5_format
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
+    CONFIG_NAME,
     DUMMY_INPUTS,
     TF2_WEIGHTS_NAME,
     WEIGHTS_NAME,
     ModelOutput,
+    PushToHubMixin,
     cached_path,
     hf_bucket_url,
     is_offline_mode,
@@ -290,7 +292,7 @@ def booleans_processing(config, **kwargs):
             or kwargs["output_hidden_states"] is not None
             or ("use_cache" in kwargs and kwargs["use_cache"] is not None)
         ):
-            tf_logger.warn(
+            tf_logger.warning(
                 "The parameters `output_attentions`, `output_hidden_states` and `use_cache` cannot be updated when calling a model."
                 "They have to be set to True/False in the config object (i.e.: `config=XConfig.from_pretrained('name', output_attentions=True)`)."
             )
@@ -299,7 +301,9 @@ def booleans_processing(config, **kwargs):
         final_booleans["output_hidden_states"] = config.output_hidden_states
 
         if kwargs["return_dict"] is not None:
-            tf_logger.warn("The parameter `return_dict` cannot be set in graph mode and will always be set to `True`.")
+            tf_logger.warning(
+                "The parameter `return_dict` cannot be set in graph mode and will always be set to `True`."
+            )
         final_booleans["return_dict"] = True
 
         if "use_cache" in kwargs:
@@ -398,7 +402,7 @@ def input_processing(func, config, input_ids, **kwargs):
             if isinstance(v, allowed_types) or v is None:
                 output[k] = v
             elif k not in parameter_names and "args" not in parameter_names:
-                logger.warn(
+                logger.warning(
                     f"The parameter {k} does not belongs to the parameter list {parameter_names} and will be ignored."
                 )
                 continue
@@ -589,7 +593,7 @@ def init_copy_embeddings(old_embeddings, new_num_tokens):
     return mask, current_weights
 
 
-class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
+class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushToHubMixin):
     r"""
     Base class for all TF models.
 
@@ -655,7 +659,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
         Args:
             inputs (:obj:`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionnary of tensors.
+                The input of the saved model as a dictionary of tensors.
         """
         output = self.call(inputs)
 
@@ -940,7 +944,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 vectors from the end. If not provided or :obj:`None`, just returns None
 
         Return:
-            :obj:`tf.Variable`: Pointer to the resized decoder or None if the output embeddings are differents of the
+            :obj:`tf.Variable`: Pointer to the resized decoder or None if the output embeddings are different from the
             input ones.
         """
         new_lm_head_decoder = old_lm_head_decoder
@@ -1009,7 +1013,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         """
         raise NotImplementedError
 
-    def save_pretrained(self, save_directory, saved_model=False, version=1):
+    def save_pretrained(self, save_directory, saved_model=False, version=1, push_to_hub=False, **kwargs):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
         :func:`~transformers.TFPreTrainedModel.from_pretrained` class method.
@@ -1023,6 +1027,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 The version of the saved model. A saved model needs to be versioned in order to be properly loaded by
                 TensorFlow Serving as detailed in the official documentation
                 https://www.tensorflow.org/tfx/serving/serving_basic
+            push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to push your model to the Hugging Face model hub after saving it.
+            kwargs:
+                Additional key word arguments passed along to the
+                :meth:`~transformers.file_utils.PushToHubMixin.push_to_hub` method.
         """
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -1035,12 +1044,18 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             logger.info(f"Saved model created in {saved_model_dir}")
 
         # Save configuration file
+        self.config.architectures = [self.__class__.__name__[2:]]
         self.config.save_pretrained(save_directory)
 
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, TF2_WEIGHTS_NAME)
         self.save_weights(output_model_file)
         logger.info(f"Model weights saved in {output_model_file}")
+
+        if push_to_hub:
+            saved_files = [os.path.join(save_directory, CONFIG_NAME), output_model_file]
+            url = self._push_to_hub(save_files=saved_files, **kwargs)
+            logger.info(f"Model pushed to the hub in this commit: {url}")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -1113,7 +1128,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
                 identifier allowed by git.
-            mirror(:obj:`str`, `optional`, defaults to :obj:`None`):
+            mirror(:obj:`str`, `optional`):
                 Mirror source to accelerate downloads in China. If you are from China and have an accessibility
                 problem, you can set this option to resolve it. Note that we do not guarantee the timeliness or safety.
                 Please refer to the mirror site for more information.

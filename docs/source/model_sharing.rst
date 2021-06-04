@@ -22,8 +22,6 @@ the `model hub <https://huggingface.co/models>`__.
 
     Optionally, you can join an existing organization or create a new one.
 
-Prepare your model for uploading
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 We have seen in the :doc:`training tutorial <training>`: how to fine-tune a model on a given task. You have probably
 done something similar on your task, either using the model directly in your own training loop or using the
@@ -31,7 +29,7 @@ done something similar on your task, either using the model directly in your own
 `model hub <https://huggingface.co/models>`__.
 
 Model versioning
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Since version v3.5.0, the model hub has built-in model versioning based on git and git-lfs. It is based on the paradigm
 that one model *is* one repo.
@@ -53,6 +51,106 @@ For instance:
     >>>   "julien-c/EsperBERTo-small",
     >>>   revision="v2.0.1" # tag name, or branch name, or commit hash
     >>> )
+
+
+Push your model from Python
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Preparation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The first step is to make sure your credentials to the hub are stored somewhere. This can be done in two ways. If you
+have access to a terminal, you cam just run the following command in the virtual environment where you installed 🤗
+Transformers:
+
+.. code-block:: bash
+
+    transformers-cli login
+
+It will store your access token in the Hugging Face cache folder (by default :obj:`~/.cache/`).
+
+If you don't have an easy access to a terminal (for instance in a Colab session), you can find a token linked to your
+acount by going on `huggingface.co <https://huggingface.co/>`, click on your avatar on the top left corner, then on
+`Edit profile` on the left, just beneath your profile picture. In the submenu `API Tokens`, you will find your API
+token that you can just copy.
+
+Directly push your model to the hub
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Once you have an API token (either stored in the cache or copied and pasted in your notebook), you can directly push a
+finetuned model you saved in :obj:`save_drectory` by calling:
+
+.. code-block:: python
+
+    finetuned_model.push_to_hub("my-awesome-model")
+
+If you have your API token not stored in the cache, you will need to pass it with :obj:`use_auth_token=your_token`.
+This is also be the case for all the examples below, so we won't mention it again.
+
+This will create a repository in your namespace name :obj:`my-awesome-model`, so anyone can now run:
+
+.. code-block:: python
+
+    from transformers import AutoModel
+
+    model = AutoModel.from_pretrained("your_username/my-awesome-model")
+
+Even better, you can combine this push to the hub with the call to :obj:`save_pretrained`:
+
+.. code-block:: python
+
+    finetuned_model.save_pretrained(save_directory, push_to_hub=True, repo_name="my-awesome-model")
+
+If you are a premium user and want your model to be private, just add :obj:`private=True` to this call.
+
+If you are a member of an organization and want to push it inside the namespace of the organization instead of yours,
+just add :obj:`organization=my_amazing_org`.
+
+Add new files to your model repo
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Once you have pushed your model to the hub, you might want to add the tokenizer, or a version of your model for another
+framework (TensorFlow, PyTorch, Flax). This is super easy to do! Let's begin with the tokenizer. You can add it to the
+repo you created before like this
+
+.. code-block:: python
+
+    tokenizer.push_to_hub("my-awesome-model")
+
+If you know its URL (it should be :obj:`https://huggingface.co/username/repo_name`), you can also do:
+
+.. code-block:: python
+
+    tokenizer.push_to_hub(repo_url=my_repo_url)
+
+And that's all there is to it! It's also a very easy way to fix a mistake if one of the files online had a bug.
+
+To add a model for another backend, it's also super easy. Let's say you have fine-tuned a TensorFlow model and want to
+add the pytorch model files to your model repo, so that anyone in the community can use it. The following allows you to
+directly create a PyTorch version of your TensorFlow model:
+
+.. code-block:: python
+
+    from transformers import AutoModel
+
+    model = AutoModel.from_pretrained(save_directory, from_tf=True)
+
+You can also replace :obj:`save_directory` by the identifier of your model (:obj:`username/repo_name`) if you don't
+have a local save of it anymore. Then, just do the same as before:
+
+.. code-block:: python
+
+    model.push_to_hub("my-awesome-model")
+
+or
+
+.. code-block:: python
+
+    model.push_to_hub(repo_url=my_repo_url)
+
+
+Use your terminal and git
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Basic steps
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -18,8 +18,6 @@
 import warnings
 from collections import OrderedDict
 
-from ...configuration_utils import PretrainedConfig
-from ...file_utils import add_start_docstrings
 from ...utils import logging
 
 # Add modeling imports here
@@ -93,6 +91,7 @@ from ..flaubert.modeling_tf_flaubert import (
     TFFlaubertWithLMHeadModel,
 )
 from ..funnel.modeling_tf_funnel import (
+    TFFunnelBaseModel,
     TFFunnelForMaskedLM,
     TFFunnelForMultipleChoice,
     TFFunnelForPreTraining,
@@ -149,6 +148,15 @@ from ..roberta.modeling_tf_roberta import (
     TFRobertaForTokenClassification,
     TFRobertaModel,
 )
+from ..roformer.modeling_tf_roformer import (
+    TFRoFormerForCausalLM,
+    TFRoFormerForMaskedLM,
+    TFRoFormerForMultipleChoice,
+    TFRoFormerForQuestionAnswering,
+    TFRoFormerForSequenceClassification,
+    TFRoFormerForTokenClassification,
+    TFRoFormerModel,
+)
 from ..t5.modeling_tf_t5 import TFT5ForConditionalGeneration, TFT5Model
 from ..transfo_xl.modeling_tf_transfo_xl import (
     TFTransfoXLForSequenceClassification,
@@ -179,9 +187,9 @@ from ..xlnet.modeling_tf_xlnet import (
     TFXLNetLMHeadModel,
     TFXLNetModel,
 )
+from .auto_factory import auto_class_factory
 from .configuration_auto import (
     AlbertConfig,
-    AutoConfig,
     BartConfig,
     BertConfig,
     BlenderbotConfig,
@@ -207,12 +215,12 @@ from .configuration_auto import (
     OpenAIGPTConfig,
     PegasusConfig,
     RobertaConfig,
+    RoFormerConfig,
     T5Config,
     TransfoXLConfig,
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
-    replace_list_option_in_docstrings,
 )
 
 
@@ -222,6 +230,7 @@ logger = logging.get_logger(__name__)
 TF_MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
+        (RoFormerConfig, TFRoFormerModel),
         (ConvBertConfig, TFConvBertModel),
         (LEDConfig, TFLEDModel),
         (LxmertConfig, TFLxmertModel),
@@ -245,7 +254,7 @@ TF_MODEL_MAPPING = OrderedDict(
         (XLMConfig, TFXLMModel),
         (CTRLConfig, TFCTRLModel),
         (ElectraConfig, TFElectraModel),
-        (FunnelConfig, TFFunnelModel),
+        (FunnelConfig, (TFFunnelModel, TFFunnelBaseModel)),
         (DPRConfig, TFDPRQuestionEncoder),
         (MPNetConfig, TFMPNetModel),
         (BartConfig, TFBartModel),
@@ -287,6 +296,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
+        (RoFormerConfig, TFRoFormerForMaskedLM),
         (ConvBertConfig, TFConvBertForMaskedLM),
         (LEDConfig, TFLEDForConditionalGeneration),
         (T5Config, TFT5ForConditionalGeneration),
@@ -317,6 +327,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 TF_MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Causal LM mapping
+        (RoFormerConfig, TFRoFormerForCausalLM),
         (BertConfig, TFBertLMHeadModel),
         (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
         (GPT2Config, TFGPT2LMHeadModel),
@@ -333,6 +344,7 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
 TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
+        (RoFormerConfig, TFRoFormerForMaskedLM),
         (ConvBertConfig, TFConvBertForMaskedLM),
         (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForMaskedLM),
@@ -370,6 +382,7 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        (RoFormerConfig, TFRoFormerForSequenceClassification),
         (ConvBertConfig, TFConvBertForSequenceClassification),
         (DistilBertConfig, TFDistilBertForSequenceClassification),
         (AlbertConfig, TFAlbertForSequenceClassification),
@@ -396,6 +409,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
+        (RoFormerConfig, TFRoFormerForQuestionAnswering),
         (ConvBertConfig, TFConvBertForQuestionAnswering),
         (DistilBertConfig, TFDistilBertForQuestionAnswering),
         (AlbertConfig, TFAlbertForQuestionAnswering),
@@ -417,6 +431,7 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
 TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
+        (RoFormerConfig, TFRoFormerForTokenClassification),
         (ConvBertConfig, TFConvBertForTokenClassification),
         (DistilBertConfig, TFDistilBertForTokenClassification),
         (AlbertConfig, TFAlbertForTokenClassification),
@@ -439,6 +454,7 @@ TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
+        (RoFormerConfig, TFRoFormerForMultipleChoice),
         (ConvBertConfig, TFConvBertForMultipleChoice),
         (CamembertConfig, TFCamembertForMultipleChoice),
         (XLMConfig, TFXLMForMultipleChoice),
@@ -465,1094 +481,74 @@ TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = OrderedDict(
 )
 
 
-TF_AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
+TFAutoModel = auto_class_factory("TFAutoModel", TF_MODEL_MAPPING)
 
-        The model class to instantiate is selected based on the :obj:`model_type` property of the config object (either
-        passed as an argument or loaded from :obj:`pretrained_model_name_or_path` if possible), or when it's missing,
-        by falling back to using pattern matching on :obj:`pretrained_model_name_or_path`:
+TFAutoModelForPreTraining = auto_class_factory(
+    "TFAutoModelForPreTraining", TF_MODEL_FOR_PRETRAINING_MAPPING, head_doc="pretraining"
+)
 
-        List options
+# Private on purpose, the public class will add the deprecation warnings.
+_TFAutoModelWithLMHead = auto_class_factory(
+    "TFAutoModelWithLMHead", TF_MODEL_WITH_LM_HEAD_MAPPING, head_doc="language modeling"
+)
 
-        The model is set in evaluation mode by default using ``model.eval()`` (so for instance, dropout modules are
-        deactivated). To train the model, you should first set it back in training mode with ``model.train()``
+TFAutoModelForCausalLM = auto_class_factory(
+    "TFAutoModelForCausalLM", TF_MODEL_FOR_CAUSAL_LM_MAPPING, head_doc="causal language modeling"
+)
 
-        Args:
-            pretrained_model_name_or_path:
-                Can be either:
+TFAutoModelForMaskedLM = auto_class_factory(
+    "TFAutoModelForMaskedLM", TF_MODEL_FOR_MASKED_LM_MAPPING, head_doc="masked language modeling"
+)
 
-                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
-                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
-                    - A path to a `directory` containing model weights saved using
-                      :func:`~transformers.PreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
-                    - A path or url to a `PyTorch state_dict save file` (e.g, ``./pt_model/pytorch_model.bin``). In
-                      this case, ``from_pt`` should be set to :obj:`True` and a configuration object should be provided
-                      as ``config`` argument. This loading path is slower than converting the PyTorch model in a
-                      TensorFlow model using the provided conversion scripts and loading the TensorFlow model
-                      afterwards.
-            model_args (additional positional arguments, `optional`):
-                Will be passed along to the underlying model ``__init__()`` method.
-            config (:class:`~transformers.PretrainedConfig`, `optional`):
-                Configuration for the model to use instead of an automatically loaded configuration. Configuration can
-                be automatically loaded when:
+TFAutoModelForSeq2SeqLM = auto_class_factory(
+    "TFAutoModelForSeq2SeqLM",
+    TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    head_doc="sequence-to-sequence language modeling",
+    checkpoint_for_example="t5-base",
+)
 
-                    - The model is a model provided by the library (loaded with the `model id` string of a pretrained
-                      model).
-                    - The model was saved using :meth:`~transformers.PreTrainedModel.save_pretrained` and is reloaded
-                      by suppyling the save directory.
-                    - The model is loaded by suppyling a local directory as ``pretrained_model_name_or_path`` and a
-                      configuration JSON file named `config.json` is found in the directory.
-            state_dict (`Dict[str, torch.Tensor]`, `optional`):
-                A state dictionary to use instead of a state dictionary loaded from saved weights file.
+TFAutoModelForSequenceClassification = auto_class_factory(
+    "TFAutoModelForSequenceClassification",
+    TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+    head_doc="sequence classification",
+)
 
-                This option can be used if you want to create a model from a pretrained configuration but load your own
-                weights. In this case though, you should check if using
-                :func:`~transformers.PreTrainedModel.save_pretrained` and
-                :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
-            cache_dir (:obj:`str`, `optional`):
-                Path to a directory in which a downloaded pretrained model configuration should be cached if the
-                standard cache should not be used.
-            from_tf (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Load the model weights from a TensorFlow checkpoint save file (see docstring of
-                ``pretrained_model_name_or_path`` argument).
-            force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to force the (re-)download of the model weights and configuration files, overriding the
-                cached versions if they exist.
-            resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to delete incompletely received files. Will attempt to resume the download if such a
-                file exists.
-            proxies (:obj:`Dict[str, str], `optional`):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
-                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
-            output_loading_info(:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
-            local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to only look at local files (e.g., not try downloading the model).
-            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
-                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-                git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
-                identifier allowed by git.
-            kwargs (additional keyword arguments, `optional`):
-                Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
-                :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or
-                automatically loaded:
+TFAutoModelForQuestionAnswering = auto_class_factory(
+    "TFAutoModelForQuestionAnswering", TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING, head_doc="question answering"
+)
 
-                    - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the
-                      underlying model's ``__init__`` method (we assume all relevant updates to the configuration have
-                      already been done)
-                    - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class
-                      initialization function (:func:`~transformers.PretrainedConfig.from_pretrained`). Each key of
-                      ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute
-                      with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration
-                      attribute will be passed to the underlying model's ``__init__`` function.
-"""
+TFAutoModelForTokenClassification = auto_class_factory(
+    "TFAutoModelForTokenClassification", TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING, head_doc="token classification"
+)
+
+TFAutoModelForMultipleChoice = auto_class_factory(
+    "TFAutoModelForMultipleChoice", TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING, head_doc="multiple choice"
+)
+
+TFAutoModelForNextSentencePrediction = auto_class_factory(
+    "TFAutoModelForNextSentencePrediction",
+    TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
+    head_doc="next sentence prediction",
+)
 
 
-class TFAutoModel(object):
-    r"""
-    This is a generic model class that will be instantiated as one of the base model classes of the library when
-    created with the when created with the :meth:`~transformers.TFAutoModel.from_pretrained` class method or the
-    :meth:`~transformers.TFAutoModel.from_config` class method.
-
-    This class cannot be instantiated directly using ``__init__()`` (throws an error).
-    """
-
-    def __init__(self):
-        raise EnvironmentError(
-            "TFAutoModel is designed to be instantiated "
-            "using the `TFAutoModel.from_pretrained(pretrained_model_name_or_path)` or "
-            "`TFAutoModel.from_config(config)` methods."
-        )
-
+class TFAutoModelWithLMHead(_TFAutoModelWithLMHead):
     @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_MAPPING, use_model_types=False)
-    def from_config(cls, config, **kwargs):
-        r"""
-        Instantiates one of the base model classes of the library from a configuration.
-
-        Note:
-            Loading a model from its configuration file does **not** load the model weights. It only affects the
-            model's configuration. Use :meth:`~transformers.TFAutoModel.from_pretrained` to load the model weights.
-
-        Args:
-            config (:class:`~transformers.PretrainedConfig`):
-                The model class to instantiate is selected based on the configuration class:
-
-                List options
-
-        Examples::
-
-            >>> from transformers import AutoConfig, TFAutoModel
-            >>> # Download configuration from huggingface.co and cache.
-            >>> config = TFAutoConfig.from_pretrained('bert-base-uncased')
-            >>> model = TFAutoModel.from_config(config)
-        """
-        if type(config) in TF_MODEL_MAPPING.keys():
-            return TF_MODEL_MAPPING[type(config)](config, **kwargs)
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_MAPPING.keys())}."
-        )
-
-    @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_MAPPING)
-    @add_start_docstrings(
-        "Instantiate one of the base model classes of the library from a pretrained model.",
-        TF_AUTO_MODEL_PRETRAINED_DOCSTRING,
-    )
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""
-
-        Examples::
-
-            >>> from transformers import AutoConfig, AutoModel
-
-            >>> # Download model and configuration from huggingface.co and cache.
-            >>> model = TFAutoModel.from_pretrained('bert-base-uncased')
-
-            >>> # Update configuration during loading
-            >>> model = TFAutoModel.from_pretrained('bert-base-uncased', output_attentions=True)
-            >>> model.config.output_attentions
-            True
-
-            >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_pretrained('./pt_model/bert_pt_model_config.json')
-            >>> model = TFAutoModel.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
-        """
-        config = kwargs.pop("config", None)
-        kwargs["_from_auto"] = True
-        if not isinstance(config, PretrainedConfig):
-            config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
-            )
-
-        if type(config) in TF_MODEL_MAPPING.keys():
-            return TF_MODEL_MAPPING[type(config)].from_pretrained(
-                pretrained_model_name_or_path, *model_args, config=config, **kwargs
-            )
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_MAPPING.keys())}."
-        )
-
-
-class TFAutoModelForPreTraining(object):
-    r"""
-    This is a generic model class that will be instantiated as one of the model classes of the library---with the
-    architecture used for pretraining this model---when created with the
-    :meth:`~transformers.TFAutoModelForPreTraining.from_pretrained` class method or the
-    :meth:`~transformers.TFAutoModelForPreTraining.from_config` class method.
-
-    This class cannot be instantiated directly using ``__init__()`` (throws an error).
-    """
-
-    def __init__(self):
-        raise EnvironmentError(
-            "TFAutoModelForPreTraining is designed to be instantiated "
-            "using the `TFAutoModelForPreTraining.from_pretrained(pretrained_model_name_or_path)` or "
-            "`TFAutoModelForPreTraining.from_config(config)` methods."
-        )
-
-    @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_FOR_PRETRAINING_MAPPING, use_model_types=False)
     def from_config(cls, config):
-        r"""
-        Instantiates one of the model classes of the library---with the architecture used for pretraining this
-        model---from a configuration.
-
-        Note:
-            Loading a model from its configuration file does **not** load the model weights. It only affects the
-            model's configuration. Use :meth:`~transformers.TFAutoModelForPreTraining.from_pretrained` to load the
-            model weights.
-
-        Args:
-            config (:class:`~transformers.PretrainedConfig`):
-                The model class to instantiate is selected based on the configuration class:
-
-                List options
-
-        Examples::
-
-            >>> from transformers import AutoConfig, TFAutoModelForPreTraining
-            >>> # Download configuration from huggingface.co and cache.
-            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
-            >>> model = TFAutoModelForPreTraining.from_config(config)
-        """
-        if type(config) in TF_MODEL_FOR_PRETRAINING_MAPPING.keys():
-            return TF_MODEL_FOR_PRETRAINING_MAPPING[type(config)](config)
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_PRETRAINING_MAPPING.keys())}."
-        )
-
-    @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_FOR_PRETRAINING_MAPPING)
-    @add_start_docstrings(
-        "Instantiate one of the model classes of the library---with the architecture used for pretraining this ",
-        "model---from a pretrained model.",
-        TF_AUTO_MODEL_PRETRAINED_DOCSTRING,
-    )
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""
-        Examples::
-
-            >>> from transformers import AutoConfig, TFAutoModelForPreTraining
-
-            >>> # Download model and configuration from huggingface.co and cache.
-            >>> model = TFAutoModelForPreTraining.from_pretrained('bert-base-uncased')
-
-            >>> # Update configuration during loading
-            >>> model = TFAutoModelForPreTraining.from_pretrained('bert-base-uncased', output_attentions=True)
-            >>> model.config.output_attentions
-            True
-
-            >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_pretrained('./pt_model/bert_pt_model_config.json')
-            >>> model = TFAutoModelForPreTraining.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
-        """
-        config = kwargs.pop("config", None)
-        kwargs["_from_auto"] = True
-        if not isinstance(config, PretrainedConfig):
-            config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
-            )
-
-        if type(config) in TF_MODEL_FOR_PRETRAINING_MAPPING.keys():
-            return TF_MODEL_FOR_PRETRAINING_MAPPING[type(config)].from_pretrained(
-                pretrained_model_name_or_path, *model_args, config=config, **kwargs
-            )
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_PRETRAINING_MAPPING.keys())}."
-        )
-
-
-class TFAutoModelWithLMHead(object):
-    r"""
-    This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    language modeling head---when created with the :meth:`~transformers.TFAutoModelWithLMHead.from_pretrained` class
-    method or the :meth:`~transformers.TFAutoModelWithLMHead.from_config` class method.
-
-    This class cannot be instantiated directly using ``__init__()`` (throws an error).
-
-    .. warning::
-
-        This class is deprecated and will be removed in a future version. Please use
-        :class:`~transformers.TFAutoModelForCausalLM` for causal language models,
-        :class:`~transformers.TFAutoModelForMaskedLM` for masked language models and
-        :class:`~transformers.TFAutoModelForSeq2SeqLM` for encoder-decoder models.
-    """
-
-    def __init__(self):
-        raise EnvironmentError(
-            "TFAutoModelWithLMHead is designed to be instantiated "
-            "using the `TFAutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)` or "
-            "`TFAutoModelWithLMHead.from_config(config)` methods."
-        )
-
-    @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_WITH_LM_HEAD_MAPPING, use_model_types=False)
-    def from_config(cls, config):
-        r"""
-        Instantiates one of the model classes of the library---with a language modeling head---from a configuration.
-
-        Note:
-            Loading a model from its configuration file does **not** load the model weights. It only affects the
-            model's configuration. Use :meth:`~transformers.TFAutoModelWithLMHead.from_pretrained` to load the model
-            weights.
-
-        Args:
-            config (:class:`~transformers.PretrainedConfig`):
-                The model class to instantiate is selected based on the configuration class:
-
-                List options
-
-        Examples::
-
-            >>> from transformers import AutoConfig, TFAutoModelWithLMHead
-            >>> # Download configuration from huggingface.co and cache.
-            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
-            >>> model = TFAutoModelWithLMHead.from_config(config)
-        """
         warnings.warn(
             "The class `TFAutoModelWithLMHead` is deprecated and will be removed in a future version. Please use "
-            "`TFAutoModelForCausalLM` for causal language models, `TFAutoModelForMaskedLM` for masked language models "
-            "and `TFAutoModelForSeq2SeqLM` for encoder-decoder models.",
+            "`TFAutoModelForCausalLM` for causal language models, `TFAutoModelForMaskedLM` for masked language models and "
+            "`TFAutoModelForSeq2SeqLM` for encoder-decoder models.",
             FutureWarning,
         )
-        if type(config) in TF_MODEL_WITH_LM_HEAD_MAPPING.keys():
-            return TF_MODEL_WITH_LM_HEAD_MAPPING[type(config)](config)
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_WITH_LM_HEAD_MAPPING.keys())}."
-        )
+        return super().from_config(config)
 
     @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_WITH_LM_HEAD_MAPPING)
-    @add_start_docstrings(
-        "Instantiate one of the model classes of the library---with a language modeling head---from a pretrained ",
-        "model.",
-        TF_AUTO_MODEL_PRETRAINED_DOCSTRING,
-    )
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""
-        Examples::
-
-            >>> from transformers import AutoConfig, TFAutoModelWithLMHead
-
-            >>> # Download model and configuration from huggingface.co and cache.
-            >>> model = TFAutoModelWithLMHead.from_pretrained('bert-base-uncased')
-
-            >>> # Update configuration during loading
-            >>> model = TFAutoModelWithLMHead.from_pretrained('bert-base-uncased', output_attentions=True)
-            >>> model.config.output_attentions
-            True
-
-            >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_pretrained('./pt_model/bert_pt_model_config.json')
-            >>> model = TFAutoModelWithLMHead.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
-        """
         warnings.warn(
             "The class `TFAutoModelWithLMHead` is deprecated and will be removed in a future version. Please use "
-            "`TFAutoModelForCausalLM` for causal language models, `TFAutoModelForMaskedLM` for masked language models "
-            "and `TFAutoModelForSeq2SeqLM` for encoder-decoder models.",
+            "`TFAutoModelForCausalLM` for causal language models, `TFAutoModelForMaskedLM` for masked language models and "
+            "`TFAutoModelForSeq2SeqLM` for encoder-decoder models.",
             FutureWarning,
         )
-        config = kwargs.pop("config", None)
-        kwargs["_from_auto"] = True
-        if not isinstance(config, PretrainedConfig):
-            config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
-            )
-
-        if type(config) in TF_MODEL_WITH_LM_HEAD_MAPPING.keys():
-            return TF_MODEL_WITH_LM_HEAD_MAPPING[type(config)].from_pretrained(
-                pretrained_model_name_or_path, *model_args, config=config, **kwargs
-            )
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_WITH_LM_HEAD_MAPPING.keys())}."
-        )
-
-
-class TFAutoModelForCausalLM:
-    r"""
-    This is a generic model class that will be instantiated as one of the model classes of the library---with a causal
-    language modeling head---when created with the :meth:`~transformers.TFAutoModelForCausalLM.from_pretrained` class
-    method or the :meth:`~transformers.TFAutoModelForCausalLM.from_config` class method.
-
-    This class cannot be instantiated directly using ``__init__()`` (throws an error).
-    """
-
-    def __init__(self):
-        raise EnvironmentError(
-            "TFAutoModelForCausalLM is designed to be instantiated "
-            "using the `TFAutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path)` or "
-            "`TFAutoModelForCausalLM.from_config(config)` methods."
-        )
-
-    @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_FOR_CAUSAL_LM_MAPPING, use_model_types=False)
-    def from_config(cls, config):
-        r"""
-        Instantiates one of the model classes of the library---with a causal language modeling head---from a
-        configuration.
-
-        Note:
-            Loading a model from its configuration file does **not** load the model weights. It only affects the
-            model's configuration. Use :meth:`~transformers.TFAutoModelForCausalLM.from_pretrained` to load the model
-            weights.
-
-        Args:
-            config (:class:`~transformers.PretrainedConfig`):
-                The model class to instantiate is selected based on the configuration class:
-
-                List options
-
-        Examples::
-
-            >>> from transformers import AutoConfig, TFAutoModelForCausalLM
-            >>> # Download configuration from huggingface.co and cache.
-            >>> config = AutoConfig.from_pretrained('gpt2')
-            >>> model = TFAutoModelForCausalLM.from_config(config)
-        """
-        if type(config) in TF_MODEL_FOR_CAUSAL_LM_MAPPING.keys():
-            return TF_MODEL_FOR_CAUSAL_LM_MAPPING[type(config)](config)
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_CAUSAL_LM_MAPPING.keys())}."
-        )
-
-    @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_FOR_CAUSAL_LM_MAPPING)
-    @add_start_docstrings(
-        "Instantiate one of the model classes of the library---with a causal language modeling head---from a "
-        "pretrained model.",
-        TF_AUTO_MODEL_PRETRAINED_DOCSTRING,
-    )
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""
-        Examples::
-
-            >>> from transformers import AutoConfig, TFAutoModelForCausalLM
-
-            >>> # Download model and configuration from huggingface.co and cache.
-            >>> model = TFAutoModelForCausalLM.from_pretrained('gpt2')
-
-            >>> # Update configuration during loading
-            >>> model = TFAutoModelForCausalLM.from_pretrained('gpt2', output_attentions=True)
-            >>> model.config.output_attentions
-            True
-
-            >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_pretrained('./pt_model/gpt2_pt_model_config.json')
-            >>> model = TFAutoModelForCausalLM.from_pretrained('./pt_model/gpt2_pytorch_model.bin', from_pt=True, config=config)
-        """
-        config = kwargs.pop("config", None)
-        kwargs["_from_auto"] = True
-        if not isinstance(config, PretrainedConfig):
-            config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
-            )
-
-        if type(config) in TF_MODEL_FOR_CAUSAL_LM_MAPPING.keys():
-            return TF_MODEL_FOR_CAUSAL_LM_MAPPING[type(config)].from_pretrained(
-                pretrained_model_name_or_path, *model_args, config=config, **kwargs
-            )
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_CAUSAL_LM_MAPPING.keys())}."
-        )
-
-
-class TFAutoModelForMaskedLM:
-    r"""
-    This is a generic model class that will be instantiated as one of the model classes of the library---with a masked
-    language modeling head---when created with the :meth:`~transformers.TFAutoModelForMaskedLM.from_pretrained` class
-    method or the :meth:`~transformers.TFAutoModelForMaskedLM.from_config` class method.
-
-    This class cannot be instantiated directly using ``__init__()`` (throws an error).
-    """
-
-    def __init__(self):
-        raise EnvironmentError(
-            "TFAutoModelForMaskedLM is designed to be instantiated "
-            "using the `TFAutoModelForMaskedLM.from_pretrained(pretrained_model_name_or_path)` or "
-            "`TFAutoModelForMaskedLM.from_config(config)` methods."
-        )
-
-    @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_FOR_MASKED_LM_MAPPING, use_model_types=False)
-    def from_config(cls, config):
-        r"""
-        Instantiates one of the model classes of the library---with a masked language modeling head---from a
-        configuration.
-
-        Note:
-            Loading a model from its configuration file does **not** load the model weights. It only affects the
-            model's configuration. Use :meth:`~transformers.TFAutoModelForMaskedLM.from_pretrained` to load the model
-            weights.
-
-        Args:
-            config (:class:`~transformers.PretrainedConfig`):
-                The model class to instantiate is selected based on the configuration class:
-
-                List options
-
-        Examples::
-
-            >>> from transformers import AutoConfig, TFAutoModelForMaskedLM
-            >>> # Download configuration from huggingface.co and cache.
-            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
-            >>> model = TFAutoModelForMaskedLM.from_config(config)
-        """
-        if type(config) in TF_MODEL_FOR_MASKED_LM_MAPPING.keys():
-            return TF_MODEL_FOR_MASKED_LM_MAPPING[type(config)](config)
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_MASKED_LM_MAPPING.keys())}."
-        )
-
-    @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_FOR_MASKED_LM_MAPPING)
-    @add_start_docstrings(
-        "Instantiate one of the model classes of the library---with a masked language modeling head---from a "
-        "pretrained model.",
-        TF_AUTO_MODEL_PRETRAINED_DOCSTRING,
-    )
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""
-        Examples::
-
-            >>> from transformers import AutoConfig, TFAutoModelForMaskedLM
-
-            >>> # Download model and configuration from huggingface.co and cache.
-            >>> model = TFAutoModelForMaskedLM.from_pretrained('bert-base-uncased')
-
-            >>> # Update configuration during loading
-            >>> model = TFAutoModelForMaskedLM.from_pretrained('bert-base-uncased', output_attentions=True)
-            >>> model.config.output_attentions
-            True
-
-            >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_pretrained('./pt_model/bert_pt_model_config.json')
-            >>> model = TFAutoModelForMaskedLM.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
-        """
-        config = kwargs.pop("config", None)
-        kwargs["_from_auto"] = True
-        if not isinstance(config, PretrainedConfig):
-            config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
-            )
-
-        if type(config) in TF_MODEL_FOR_MASKED_LM_MAPPING.keys():
-            return TF_MODEL_FOR_MASKED_LM_MAPPING[type(config)].from_pretrained(
-                pretrained_model_name_or_path, *model_args, config=config, **kwargs
-            )
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_MASKED_LM_MAPPING.keys())}."
-        )
-
-
-class TFAutoModelForSeq2SeqLM:
-    r"""
-    This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    sequence-to-sequence language modeling head---when created with the
-    :meth:`~transformers.TFAutoModelForSeq2SeqLM.from_pretrained` class method or the
-    :meth:`~transformers.TFAutoModelForSeq2SeqLM.from_config` class method.
-
-    This class cannot be instantiated directly using ``__init__()`` (throws an error).
-    """
-
-    def __init__(self):
-        raise EnvironmentError(
-            "TFAutoModelForSeq2SeqLM is designed to be instantiated "
-            "using the `TFAutoModelForSeq2SeqLM.from_pretrained(pretrained_model_name_or_path)` or "
-            "`TFAutoModelForSeq2SeqLM.from_config(config)` methods."
-        )
-
-    @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING, use_model_types=False)
-    def from_config(cls, config, **kwargs):
-        r"""
-        Instantiates one of the model classes of the library---with a sequence-to-sequence language modeling
-        head---from a configuration.
-
-        Note:
-            Loading a model from its configuration file does **not** load the model weights. It only affects the
-            model's configuration. Use :meth:`~transformers.TFAutoModelForSeq2SeqLM.from_pretrained` to load the model
-            weights.
-
-        Args:
-            config (:class:`~transformers.PretrainedConfig`):
-                The model class to instantiate is selected based on the configuration class:
-
-                List options
-
-        Examples::
-
-            >>> from transformers import AutoConfig, TFAutoModelForSeq2SeqLM
-            >>> # Download configuration from huggingface.co and cache.
-            >>> config = AutoConfig.from_pretrained('t5')
-            >>> model = TFAutoModelForSeq2SeqLM.from_config(config)
-        """
-        if type(config) in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys():
-            return TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING[type(config)](config, **kwargs)
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys())}."
-        )
-
-    @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING, use_model_types=False)
-    @add_start_docstrings(
-        "Instantiate one of the model classes of the library---with a sequence-to-sequence language modeling "
-        "head---from a pretrained model.",
-        TF_AUTO_MODEL_PRETRAINED_DOCSTRING,
-    )
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""
-        Examples::
-
-            >>> from transformers import AutoConfig, TFAutoModelForSeq2SeqLM
-
-            >>> # Download model and configuration from huggingface.co and cache.
-            >>> model = TFAutoModelForSeq2SeqLM.from_pretrained('t5-base')
-
-            >>> # Update configuration during loading
-            >>> model = TFAutoModelForSeq2SeqLM.from_pretrained('t5-base', output_attentions=True)
-            >>> model.config.output_attentions
-            True
-
-            >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_pretrained('./pt_model/t5_pt_model_config.json')
-            >>> model = TFAutoModelForSeq2SeqLM.from_pretrained('./pt_model/t5_pytorch_model.bin', from_pt=True, config=config)
-        """
-        config = kwargs.pop("config", None)
-        kwargs["_from_auto"] = True
-        if not isinstance(config, PretrainedConfig):
-            config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
-            )
-
-        if type(config) in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys():
-            return TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING[type(config)].from_pretrained(
-                pretrained_model_name_or_path, *model_args, config=config, **kwargs
-            )
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys())}."
-        )
-
-
-class TFAutoModelForSequenceClassification(object):
-    r"""
-    This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    sequence classification head---when created with the
-    :meth:`~transformers.TFAutoModelForSequenceClassification.from_pretrained` class method or the
-    :meth:`~transformers.TFAutoModelForSequenceClassification.from_config` class method.
-
-    This class cannot be instantiated directly using ``__init__()`` (throws an error).
-    """
-
-    def __init__(self):
-        raise EnvironmentError(
-            "TFAutoModelForSequenceClassification is designed to be instantiated "
-            "using the `TFAutoModelForSequenceClassification.from_pretrained(pretrained_model_name_or_path)` or "
-            "`TFAutoModelForSequenceClassification.from_config(config)` methods."
-        )
-
-    @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING, use_model_types=False)
-    def from_config(cls, config):
-        r"""
-        Instantiates one of the model classes of the library---with a sequence classification head---from a
-        configuration.
-
-        Note:
-            Loading a model from its configuration file does **not** load the model weights. It only affects the
-            model's configuration. Use :meth:`~transformers.TFAutoModelForSequenceClassification.from_pretrained` to
-            load the model weights.
-
-        Args:
-            config (:class:`~transformers.PretrainedConfig`):
-                The model class to instantiate is selected based on the configuration class:
-
-                List options
-
-        Examples::
-
-            >>> from transformers import AutoConfig, TFAutoModelForSequenceClassification
-            >>> # Download configuration from huggingface.co and cache.
-            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
-            >>> model = TFAutoModelForSequenceClassification.from_config(config)
-        """
-        if type(config) in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys():
-            return TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING[type(config)](config)
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys())}."
-        )
-
-    @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING)
-    @add_start_docstrings(
-        "Instantiate one of the model classes of the library---with a sequence classification head---from a "
-        "pretrained model.",
-        TF_AUTO_MODEL_PRETRAINED_DOCSTRING,
-    )
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""
-        Examples::
-
-            >>> from transformers import AutoConfig, TFAutoModelForSequenceClassification
-
-            >>> # Download model and configuration from huggingface.co and cache.
-            >>> model = TFAutoModelForSequenceClassification.from_pretrained('bert-base-uncased')
-
-            >>> # Update configuration during loading
-            >>> model = TFAutoModelForSequenceClassification.from_pretrained('bert-base-uncased', output_attentions=True)
-            >>> model.config.output_attentions
-            True
-
-            >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_pretrained('./pt_model/bert_pt_model_config.json')
-            >>> model = TFAutoModelForSequenceClassification.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
-        """
-        config = kwargs.pop("config", None)
-        kwargs["_from_auto"] = True
-        if not isinstance(config, PretrainedConfig):
-            config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
-            )
-
-        if type(config) in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys():
-            return TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING[type(config)].from_pretrained(
-                pretrained_model_name_or_path, *model_args, config=config, **kwargs
-            )
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys())}."
-        )
-
-
-class TFAutoModelForQuestionAnswering(object):
-    r"""
-    This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    question answering head---when created with the
-    :meth:`~transformers.TFAutoModeForQuestionAnswering.from_pretrained` class method or the
-    :meth:`~transformers.TFAutoModelForQuestionAnswering.from_config` class method.
-
-    This class cannot be instantiated directly using ``__init__()`` (throws an error).
-    """
-
-    def __init__(self):
-        raise EnvironmentError(
-            "TFAutoModelForQuestionAnswering is designed to be instantiated "
-            "using the `TFAutoModelForQuestionAnswering.from_pretrained(pretrained_model_name_or_path)` or "
-            "`TFAutoModelForQuestionAnswering.from_config(config)` methods."
-        )
-
-    @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING, use_model_types=False)
-    def from_config(cls, config):
-        r"""
-        Instantiates one of the model classes of the library---with a question answering head---from a configuration.
-
-        Note:
-            Loading a model from its configuration file does **not** load the model weights. It only affects the
-            model's configuration. Use :meth:`~transformers.TFAutoModelForQuestionAnswering.from_pretrained` to load
-            the model weights.
-
-        Args:
-            config (:class:`~transformers.PretrainedConfig`):
-                The model class to instantiate is selected based on the configuration class:
-
-                List options
-
-        Examples::
-
-            >>> from transformers import AutoConfig, TFAutoModelForQuestionAnswering
-            >>> # Download configuration from huggingface.co and cache.
-            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
-            >>> model = TFAutoModelForQuestionAnswering.from_config(config)
-        """
-        if type(config) in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys():
-            return TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING[type(config)](config)
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys())}."
-        )
-
-    @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING)
-    @add_start_docstrings(
-        "Instantiate one of the model classes of the library---with a question answering head---from a "
-        "pretrained model.",
-        TF_AUTO_MODEL_PRETRAINED_DOCSTRING,
-    )
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""
-        Examples::
-
-            >>> from transformers import AutoConfig, TFAutoModelForQuestionAnswering
-
-            >>> # Download model and configuration from huggingface.co and cache.
-            >>> model = TFAutoModelForQuestionAnswering.from_pretrained('bert-base-uncased')
-
-            >>> # Update configuration during loading
-            >>> model = TFAutoModelForQuestionAnswering.from_pretrained('bert-base-uncased', output_attentions=True)
-            >>> model.config.output_attentions
-            True
-
-            >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_pretrained('./pt_model/bert_pt_model_config.json')
-            >>> model = TFAutoModelForQuestionAnswering.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
-        """
-        config = kwargs.pop("config", None)
-        kwargs["_from_auto"] = True
-        if not isinstance(config, PretrainedConfig):
-            config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
-            )
-
-        if type(config) in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys():
-            return TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING[type(config)].from_pretrained(
-                pretrained_model_name_or_path, *model_args, config=config, **kwargs
-            )
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys())}."
-        )
-
-
-class TFAutoModelForTokenClassification:
-    r"""
-    This is a generic model class that will be instantiated as one of the model classes of the library---with a token
-    classification head---when created with the :meth:`~transformers.TFAutoModelForTokenClassification.from_pretrained`
-    class method or the :meth:`~transformers.TFAutoModelForTokenClassification.from_config` class method.
-
-    This class cannot be instantiated directly using ``__init__()`` (throws an error).
-    """
-
-    def __init__(self):
-        raise EnvironmentError(
-            "TFAutoModelForTokenClassification is designed to be instantiated "
-            "using the `TFAutoModelForTokenClassification.from_pretrained(pretrained_model_name_or_path)` or "
-            "`TFAutoModelForTokenClassification.from_config(config)` methods."
-        )
-
-    @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING, use_model_types=False)
-    def from_config(cls, config):
-        r"""
-        Instantiates one of the model classes of the library---with a token classification head---from a configuration.
-
-        Note:
-            Loading a model from its configuration file does **not** load the model weights. It only affects the
-            model's configuration. Use :meth:`~transformers.TFAutoModelForTokenClassification.from_pretrained` to load
-            the model weights.
-
-        Args:
-            config (:class:`~transformers.PretrainedConfig`):
-                The model class to instantiate is selected based on the configuration class:
-
-                List options
-
-        Examples::
-
-            >>> from transformers import AutoConfig, TFAutoModelForTokenClassification
-            >>> # Download configuration from huggingface.co and cache.
-            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
-            >>> model = TFAutoModelForTokenClassification.from_config(config)
-        """
-        if type(config) in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys():
-            return TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING[type(config)](config)
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys())}."
-        )
-
-    @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING)
-    @add_start_docstrings(
-        "Instantiate one of the model classes of the library---with a token classification head---from a "
-        "pretrained model.",
-        TF_AUTO_MODEL_PRETRAINED_DOCSTRING,
-    )
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""
-        Examples::
-
-            >>> from transformers import AutoConfig, TFAutoModelForTokenClassification
-
-            >>> # Download model and configuration from huggingface.co and cache.
-            >>> model = TFAutoModelForTokenClassification.from_pretrained('bert-base-uncased')
-
-            >>> # Update configuration during loading
-            >>> model = TFAutoModelForTokenClassification.from_pretrained('bert-base-uncased', output_attentions=True)
-            >>> model.config.output_attentions
-            True
-
-            >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_pretrained('./pt_model/bert_pt_model_config.json')
-            >>> model = TFAutoModelForTokenClassification.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
-        """
-        config = kwargs.pop("config", None)
-        kwargs["_from_auto"] = True
-        if not isinstance(config, PretrainedConfig):
-            config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
-            )
-
-        if type(config) in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys():
-            return TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING[type(config)].from_pretrained(
-                pretrained_model_name_or_path, *model_args, config=config, **kwargs
-            )
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys())}."
-        )
-
-
-class TFAutoModelForMultipleChoice:
-    r"""
-    This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    multiple choice classification head---when created with the
-    :meth:`~transformers.TFAutoModelForMultipleChoice.from_pretrained` class method or the
-    :meth:`~transformers.TFAutoModelForMultipleChoice.from_config` class method.
-
-    This class cannot be instantiated directly using ``__init__()`` (throws an error).
-    """
-
-    def __init__(self):
-        raise EnvironmentError(
-            "TFAutoModelForMultipleChoice is designed to be instantiated "
-            "using the `TFAutoModelForMultipleChoice.from_pretrained(pretrained_model_name_or_path)` or "
-            "`TFAutoModelForMultipleChoice.from_config(config)` methods."
-        )
-
-    @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING, use_model_types=False)
-    def from_config(cls, config):
-        r"""
-        Instantiates one of the model classes of the library---with a multiple choice classification head---from a
-        configuration.
-
-        Note:
-            Loading a model from its configuration file does **not** load the model weights. It only affects the
-            model's configuration. Use :meth:`~transformers.TFAutoModelForMultipleChoice.from_pretrained` to load the
-            model weights.
-
-        Args:
-            config (:class:`~transformers.PretrainedConfig`):
-                The model class to instantiate is selected based on the configuration class:
-
-                List options
-
-        Examples::
-
-            >>> from transformers import AutoConfig, TFAutoModelForMultipleChoice
-            >>> # Download configuration from huggingface.co and cache.
-            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
-            >>> model = TFAutoModelForMultipleChoice.from_config(config)
-        """
-        if type(config) in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys():
-            return TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING[type(config)](config)
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys())}."
-        )
-
-    @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING)
-    @add_start_docstrings(
-        "Instantiate one of the model classes of the library---with a multiple choice classification head---from a "
-        "pretrained model.",
-        TF_AUTO_MODEL_PRETRAINED_DOCSTRING,
-    )
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""
-        Examples::
-
-            >>> from transformers import AutoConfig, TFAutoModelForMultipleChoice
-
-            >>> # Download model and configuration from huggingface.co and cache.
-            >>> model = TFAutoModelForMultipleChoice.from_pretrained('bert-base-uncased')
-
-            >>> # Update configuration during loading
-            >>> model = TFAutoModelForMultipleChoice.from_pretrained('bert-base-uncased', output_attentions=True)
-            >>> model.config.output_attentions
-            True
-
-            >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_pretrained('./pt_model/bert_pt_model_config.json')
-            >>> model = TFAutoModelForMultipleChoice.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
-        """
-        config = kwargs.pop("config", None)
-        kwargs["_from_auto"] = True
-        if not isinstance(config, PretrainedConfig):
-            config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
-            )
-
-        if type(config) in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys():
-            return TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING[type(config)].from_pretrained(
-                pretrained_model_name_or_path, *model_args, config=config, **kwargs
-            )
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys())}."
-        )
-
-
-class TFAutoModelForNextSentencePrediction:
-    r"""
-    This is a generic model class that will be instantiated as one of the model classes of the library---with a next
-    sentence prediction head---when created with the
-    :meth:`~transformers.TFAutoModelForNextSentencePrediction.from_pretrained` class method or the
-    :meth:`~transformers.TFAutoModelForNextSentencePrediction.from_config` class method.
-
-    This class cannot be instantiated directly using ``__init__()`` (throws an error).
-    """
-
-    def __init__(self):
-        raise EnvironmentError(
-            "TFAutoModelForNextSentencePrediction is designed to be instantiated "
-            "using the `TFAutoModelForNextSentencePrediction.from_pretrained(pretrained_model_name_or_path)` or "
-            "`TFAutoModelForNextSentencePrediction.from_config(config)` methods."
-        )
-
-    @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING, use_model_types=False)
-    def from_config(cls, config):
-        r"""
-        Instantiates one of the model classes of the library---with a next sentence prediction head---from a
-        configuration.
-
-        Note:
-            Loading a model from its configuration file does **not** load the model weights. It only affects the
-            model's configuration. Use :meth:`~transformers.TFAutoModelForNextSentencePrediction.from_pretrained` to
-            load the model weights.
-
-        Args:
-            config (:class:`~transformers.PretrainedConfig`):
-                The model class to instantiate is selected based on the configuration class:
-
-                List options
-
-        Examples::
-
-            >>> from transformers import AutoConfig, TFAutoModelForNextSentencePrediction
-            >>> # Download configuration from huggingface.co and cache.
-            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
-            >>> model = TFAutoModelForNextSentencePrediction.from_config(config)
-        """
-        if type(config) in TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys():
-            return TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING[type(config)](config)
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys())}."
-        )
-
-    @classmethod
-    @replace_list_option_in_docstrings(TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING)
-    @add_start_docstrings(
-        "Instantiate one of the model classes of the library---with a next sentence prediction head---from a "
-        "pretrained model.",
-        TF_AUTO_MODEL_PRETRAINED_DOCSTRING,
-    )
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""
-        Examples::
-
-            >>> from transformers import AutoConfig, TFAutoModelForNextSentencePrediction
-
-            >>> # Download model and configuration from huggingface.co and cache.
-            >>> model = TFAutoModelForNextSentencePrediction.from_pretrained('bert-base-uncased')
-
-            >>> # Update configuration during loading
-            >>> model = TFAutoModelForNextSentencePrediction.from_pretrained('bert-base-uncased', output_attentions=True)
-            >>> model.config.output_attentions
-            True
-
-            >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_pretrained('./pt_model/bert_pt_model_config.json')
-            >>> model = TFAutoModelForNextSentencePrediction.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
-        """
-        config = kwargs.pop("config", None)
-        kwargs["_from_auto"] = True
-        if not isinstance(config, PretrainedConfig):
-            config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
-            )
-
-        if type(config) in TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys():
-            return TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING[type(config)].from_pretrained(
-                pretrained_model_name_or_path, *model_args, config=config, **kwargs
-            )
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys())}."
-        )
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)

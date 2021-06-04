@@ -33,7 +33,7 @@ def _should_continue(line, indent):
 
 
 def find_code_in_transformers(object_name):
-    """ Find and return the code source code of `object_name`."""
+    """Find and return the code source code of `object_name`."""
     parts = object_name.split(".")
     i = 0
 
@@ -193,7 +193,7 @@ def check_copies(overwrite: bool = False):
 
 
 def get_model_list():
-    """ Extracts the model list from the README. """
+    """Extracts the model list from the README."""
     # If the introduction or the conclusion of the list change, the prompts may need to be updated.
     _start_prompt = "🤗 Transformers currently provides the following architectures"
     _end_prompt = "1. Want to contribute a new model?"
@@ -224,7 +224,7 @@ def get_model_list():
 
 
 def split_long_line_with_indent(line, max_per_line, indent):
-    """ Split the `line` so that it doesn't go over `max_per_line` and adds `indent` to new lines. """
+    """Split the `line` so that it doesn't go over `max_per_line` and adds `indent` to new lines."""
     words = line.split(" ")
     lines = []
     current_line = words[0]
@@ -239,7 +239,7 @@ def split_long_line_with_indent(line, max_per_line, indent):
 
 
 def convert_to_rst(model_list, max_per_line=None):
-    """ Convert `model_list` to rst format. """
+    """Convert `model_list` to rst format."""
     # Convert **[description](link)** to `description <link>`__
     def _rep_link(match):
         title, link = match.groups()
@@ -298,11 +298,11 @@ def _find_text_in_file(filename, start_prompt, end_prompt):
 
 
 def check_model_list_copy(overwrite=False, max_per_line=119):
-    """ Check the model lists in the README and index.rst are consistent and maybe `overwrite`. """
+    """Check the model lists in the README and index.rst are consistent and maybe `overwrite`."""
     rst_list, start_index, end_index, lines = _find_text_in_file(
         filename=os.path.join(PATH_TO_DOCS, "index.rst"),
         start_prompt="    This list is updated automatically from the README",
-        end_prompt=".. _bigtable:",
+        end_prompt="Supported frameworks",
     )
     md_list = get_model_list()
     converted_list = convert_to_rst(md_list, max_per_line=max_per_line)

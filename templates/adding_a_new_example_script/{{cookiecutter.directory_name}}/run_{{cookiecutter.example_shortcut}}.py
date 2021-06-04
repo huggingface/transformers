@@ -43,7 +43,7 @@ from transformers import (
     default_data_collator,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.trainer_utils import get_last_checkpoint
 
 
 logger = logging.getLogger(__name__)
@@ -157,17 +157,17 @@ class DataTrainingArguments:
             "value if set."
         },
     )
-    max_val_samples: Optional[int] = field(
+    max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of validation examples to this "
+            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
             "value if set."
         },
     )
-    max_test_samples: Optional[int] = field(
+    max_predict_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of test examples to this "
+            "help": "For debugging purposes or quicker training, truncate the number of prediction examples to this "
             "value if set."
         },
     )
@@ -226,7 +226,7 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
-    logger.setLevel(logging.INFO if is_main_process(training_args.local_rank) else logging.WARN)
+    logger.setLevel(logging.INFO if training_args.should_log else logging.WARN)
 
     # Log on each process the small summary:
     logger.warning(
@@ -234,7 +234,7 @@ def main():
         + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
     # Set the verbosity to info of the Transformers logger (on main process only):
-    if is_main_process(training_args.local_rank):
+    if training_args.should_log:
         transformers.utils.logging.set_verbosity_info()
     logger.info(f"Training/evaluation parameters {training_args}")
 
@@ -379,8 +379,8 @@ def main():
             raise ValueError("--do_eval requires a validation dataset")
         eval_dataset = datasets["validation"]
         # Selecting samples from dataset
-        if data_args.max_val_samples is not None:
-            eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
+        if data_args.max_eval_samples is not None:
+            eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
         # tokenize validation dataset
         eval_dataset = eval_dataset.map(
             tokenize_function,
@@ -393,12 +393,12 @@ def main():
     if training_args.do_predict:
         if "test" not in datasets:
             raise ValueError("--do_predict requires a test dataset")
-        test_dataset = datasets["test"]
+        predict_dataset = datasets["test"]
         # Selecting samples from dataset
-        if data_args.max_test_samples is not None:
-            test_dataset = test_dataset.select(range(data_args.max_test_samples))
-        # tokenize test dataset
-        test_dataset = test_dataset.map(
+        if data_args.max_predict_samples is not None:
+            predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
+        # tokenize predict dataset
+        predict_dataset = predict_dataset.map(
             tokenize_function,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
@@ -455,8 +455,8 @@ def main():
 
         metrics = trainer.evaluate()
 
-        max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(eval_dataset)
-        metrics["eval_samples"] = min(max_val_samples, len(eval_dataset))
+        max_eval_samples = data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
+        metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
 
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
@@ -464,13 +464,13 @@ def main():
     # Prediction
     if training_args.do_predict:
         logger.info("*** Predict ***")
-        predictions, labels, metrics = trainer.predict(test_dataset)
+        predictions, labels, metrics = trainer.predict(predict_dataset)
 
-        max_test_samples = data_args.max_test_samples if data_args.max_test_samples is not None else len(test_dataset)
-        metrics["test_samples"] = min(max_test_samples, len(test_dataset))
+        max_predict_samples = data_args.max_predict_samples if data_args.max_predict_samples is not None else len(predict_dataset)
+        metrics["predict_samples"] = min(max_predict_samples, len(predict_dataset))
 
-        trainer.log_metrics("test", metrics)
-        trainer.save_metrics("test", metrics)
+        trainer.log_metrics("predict", metrics)
+        trainer.save_metrics("predict", metrics)
         
         # write custom code for saving predictions according to task
 

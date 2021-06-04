@@ -89,7 +89,7 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             :obj:`past_key_values`).
 
             Provide for sequence to sequence training to the decoder. Indices can be obtained using
-            :class:`~transformers.PretrainedTokenizer`. See :meth:`transformers.PreTrainedTokenizer.encode` and
+            :class:`~transformers.PreTrainedTokenizer`. See :meth:`transformers.PreTrainedTokenizer.encode` and
             :meth:`transformers.PreTrainedTokenizer.__call__` for details.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
@@ -175,6 +175,21 @@ class EncoderDecoderModel(PreTrainedModel):
 
         self.encoder = encoder
         self.decoder = decoder
+
+        if self.encoder.config.to_dict() != self.config.encoder.to_dict():
+            logger.warning(
+                f"Config of the encoder: {self.encoder.__class__} is overwritten by shared encoder config: {self.config.encoder}"
+            )
+        if self.decoder.config.to_dict() != self.config.decoder.to_dict():
+            logger.warning(
+                f"Config of the decoder: {self.decoder.__class__} is overwritten by shared decoder config: {self.config.decoder}"
+            )
+
+        # make sure that the individual model's config refers to the shared config
+        # so that the updates to the config will be synced
+        self.encoder.config = self.config.encoder
+        self.decoder.config = self.config.decoder
+
         assert (
             self.encoder.get_output_embeddings() is None
         ), "The encoder {} should not have a LM Head. Please use a model without LM Head"
@@ -205,6 +220,13 @@ class EncoderDecoderModel(PreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         return self.decoder.set_output_embeddings(new_embeddings)
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        # At the moment fast initialization is not supported
+        # for composite models
+        kwargs["_fast_init"] = False
+        return super().from_pretrained(*args, **kwargs)
 
     @classmethod
     def from_encoder_decoder_pretrained(
@@ -457,6 +479,12 @@ class EncoderDecoderModel(PreTrainedModel):
             "use_cache": use_cache,
         }
         return input_dict
+
+    def resize_token_embeddings(self, *args, **kwargs):
+        raise NotImplementedError(
+            "Resizing the embedding layers via the EncoderDecoderModel directly is not supported."
+            "Please use the respective methods of the wrapped objects (model.encoder.resize_token_embeddings(...) or model.decoder.resize_token_embeddings(...))"
+        )
 
     def _reorder_cache(self, past, beam_idx):
         # apply decoder cache reordering here

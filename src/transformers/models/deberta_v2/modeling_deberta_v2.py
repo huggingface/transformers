@@ -511,7 +511,7 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
         query_size (int): the length of query
         key_size (int): the length of key
         bucket_size (int): the size of position bucket
-        max_position (int): the maxium allowed absolute positoin
+        max_position (int): the maximum allowed absolute position
 
     Return:
         :obj:`torch.LongTensor`: A tensor with shape [1, query_size, key_size]
@@ -698,7 +698,7 @@ class DisentangledSelfAttention(torch.nn.Module):
             relative_pos = relative_pos.unsqueeze(1)
         # bsz x height x query x key
         elif relative_pos.dim() != 4:
-            raise ValueError(f"Relative postion ids must be of dim 2 or 3 or 4. {relative_pos.dim()}")
+            raise ValueError(f"Relative position ids must be of dim 2 or 3 or 4. {relative_pos.dim()}")
 
         att_span = self.pos_ebd_size
         relative_pos = relative_pos.long().to(query_layer.device)
@@ -1488,8 +1488,8 @@ class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
+        start_logits = start_logits.squeeze(-1).contiguous()
+        end_logits = end_logits.squeeze(-1).contiguous()
 
         total_loss = None
         if start_positions is not None and end_positions is not None:

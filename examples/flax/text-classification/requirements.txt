@@ -1,0 +1,5 @@
+datasets >= 1.1.3
+jax>=0.2.8
+jaxlib>=0.1.59
+flax>=0.3.4
+git+https://github.com/deepmind/optax.git

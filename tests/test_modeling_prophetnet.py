@@ -891,7 +891,6 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
-    test_headmasking = False
     is_encoder_decoder = True
 
     def setUp(self):
@@ -1089,6 +1088,10 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         self.assertIsNotNone(encoder_hidden_states.grad)
         self.assertIsNotNone(encoder_attentions.grad)
 
+    def test_generate_with_head_masking(self):
+        """Generating with head_masking has not been implemented for ProphetNet models yet."""
+        pass
+
 
 @require_torch
 class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -1097,7 +1100,6 @@ class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMix
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
-    test_headmasking = False
     is_encoder_decoder = False
 
     def setUp(self):
@@ -1126,7 +1128,6 @@ class ProphetNetStandaloneEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
-    test_headmasking = False
     is_encoder_decoder = False
 
     def setUp(self):

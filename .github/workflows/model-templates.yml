@@ -1,6 +1,9 @@
 name: Model templates runner
 
 on:
+  push:
+    branches:
+      - master
   pull_request:
     paths:
       - "src/**"
@@ -34,6 +37,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
+          sudo apt -y update && sudo apt install -y libsndfile1-dev
           pip install .[dev]
       - name: Create model files
         run: |
@@ -46,6 +50,7 @@ jobs:
           make style
           python utils/check_table.py --fix_and_overwrite
           python utils/check_dummies.py --fix_and_overwrite
+          python utils/check_copies.py --fix_and_overwrite
 
       - name: Run all non-slow tests
         run: |
