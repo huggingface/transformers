@@ -93,21 +93,24 @@ def infer_framework_load_model(
     if isinstance(model, str):
         model_kwargs["_from_pipeline"] = task
         class_tuple = ()
+        look_pt = is_torch_available() and framework in {"pt", None}
+        look_tf = is_tf_available() and framework in {"tf", None}
+        if model_classes:
+            if look_pt:
+                class_tuple = class_tuple + model_classes.get("pt", (AutoModel,))
+            if look_tf:
+                class_tuple = class_tuple + model_classes.get("tf", (TFAutoModel,))
         if config.architectures:
             klasses = []
             for architecture in config.architectures:
                 trans = importlib.import_module("transformers")
-                if is_torch_available() and framework in {"pt", None}:
+                if look_tf:
                     klass = getattr(trans, architecture)
                     klasses.append(klass)
-                if is_tf_available() and framework in {"tf", None}:
+                if look_pt:
                     klass = getattr(trans, f"TF{architecture}")
                     klasses.append(klass)
             class_tuple = class_tuple + tuple(klasses)
-        if is_torch_available() and model_classes:
-            class_tuple = class_tuple + model_classes.get("pt", (AutoModel,))
-        elif is_tf_available() and model_classes:
-            class_tuple = class_tuple + model_classes.get("tf", (TFAutoModel,))
 
         if len(class_tuple) == 0 and not config.architectures:
             raise ValueError(f"Pipeline cannot infer suitable model classes from {model}")
@@ -131,7 +134,7 @@ def infer_framework_load_model(
                 model = model_class.from_pretrained(model, **kwargs)
                 # Stop loading on the first successful load.
                 break
-            except OSError:
+            except (OSError, ValueError):
                 continue
 
         if isinstance(model, str):

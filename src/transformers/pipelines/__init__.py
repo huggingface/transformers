@@ -203,8 +203,8 @@ SUPPORTED_TASKS = {
     },
     "conversational": {
         "impl": ConversationalPipeline,
-        "tf": (TFAutoModelForCausalLM, TFAutoModelForSeq2SeqLM) if is_tf_available() else (),
-        "pt": (AutoModelForCausalLM, AutoModelForSeq2SeqLM) if is_torch_available() else (),
+        "tf": (TFAutoModelForSeq2SeqLM, TFAutoModelForCausalLM) if is_tf_available() else (),
+        "pt": (AutoModelForSeq2SeqLM, AutoModelForCausalLM) if is_torch_available() else (),
         "default": {"model": {"pt": "microsoft/DialoGPT-medium", "tf": "microsoft/DialoGPT-medium"}},
     },
     "image-classification": {
