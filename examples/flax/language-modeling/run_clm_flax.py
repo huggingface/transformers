@@ -27,10 +27,10 @@ import os
 import sys
 import time
 from dataclasses import dataclass, field
-
 from pathlib import Path
 from typing import Callable, Optional
 
+import datasets
 from datasets import Dataset, load_dataset
 from tqdm import tqdm
 
@@ -54,6 +54,8 @@ from transformers import (
 )
 from transformers.testing_utils import CaptureLogger
 
+
+logger = logging.getLogger(__name__)
 
 # Cache the result
 has_tensorboard = is_tensorboard_available()
@@ -244,19 +246,20 @@ if __name__ == "__main__":
             "Use --overwrite_output_dir to overcome."
         )
 
-    # Setup logging
+    # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
-        level="NOTSET",
-        datefmt="[%X]",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        level=logging.INFO,
     )
-
-    # Log on each process the small summary:
-    logger = logging.getLogger(__name__)
-    logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
-    )
+    # Setup logging, we only want one process per machine to log things on the screen.
+    logger.setLevel(logging.INFO if jax.process_index() == 0 else logging.ERROR)
+    if jax.process_index() == 0:
+        datasets.utils.logging.set_verbosity_warning()
+        transformers.utils.logging.set_verbosity_info()
+    else:
+        datasets.utils.logging.set_verbosity_error()
+        transformers.utils.logging.set_verbosity_error()
 
     # Set the verbosity to info of the Transformers logger (on main process only):
     logger.info(f"Training/evaluation parameters {training_args}")
@@ -565,8 +568,8 @@ if __name__ == "__main__":
         try:
             eval_metrics["perplexity"] = math.exp(eval_metrics["loss"])
         except OverflowError:
-           eval_metrics["perplexity"] = float("inf") 
-        
+            eval_metrics["perplexity"] = float("inf")
+
         # Update progress bar
         epochs.desc = f"Epoch... ({epoch + 1}/{num_epochs} | Eval Loss: {eval_metrics['loss']} | Eval Perplexity: {eval_metrics['perplexity']})"
 
