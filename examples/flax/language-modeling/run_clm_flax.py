@@ -20,6 +20,7 @@ Here is the full list of checkpoints on the hub that can be fine-tuned by this s
 https://huggingface.co/models?filter=causal-lm
 """
 import logging
+import math
 import os
 import sys
 import time
@@ -129,6 +130,20 @@ class DataTrainingArguments:
     validation_file: Optional[str] = field(
         default=None,
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
+    )
+    max_train_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
+            "value if set."
+        },
+    )
+    max_eval_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+            "value if set."
+        },
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
@@ -404,11 +419,15 @@ if __name__ == "__main__":
         if "train" not in tokenized_datasets:
             raise ValueError("--do_train requires a train dataset")
         train_dataset = lm_datasets["train"]
+        if data_args.max_train_samples is not None:
+            train_dataset = train_dataset.select(range(data_args.max_train_samples))
 
     if training_args.do_eval:
         if "validation" not in tokenized_datasets:
             raise ValueError("--do_eval requires a validation dataset")
         eval_dataset = lm_datasets["validation"]
+        if data_args.max_eval_samples is not None:
+            eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
 
     # Enable tensorboard only on the master node
     if has_tensorboard and jax.process_index() == 0:
@@ -458,7 +477,8 @@ if __name__ == "__main__":
             # compute loss
             shift_logits = logits[..., :-1, :]
             shift_labels = labels[..., 1:]
-            loss = optax.softmax_cross_entropy(shift_logits, onehot(shift_labels, shift_logits.shape[-1])).mean()
+            loss = optax.softmax_cross_entropy(shift_logits, onehot(shift_labels, shift_logits.shape[-1]))
+            loss = loss.mean()
 
             return loss
 
@@ -488,8 +508,7 @@ if __name__ == "__main__":
         loss = optax.softmax_cross_entropy(shift_logits, onehot(shift_labels, shift_logits.shape[-1]))
 
         # summarize metrics
-        metrics = {"loss": loss}
-        metrics = jax.lax.psum(metrics, axis_name="batch")
+        metrics = jax.lax.pmean({"loss": loss.mean()}, axis_name="batch")
 
         return metrics
 
@@ -520,7 +539,7 @@ if __name__ == "__main__":
         train_time += time.time() - train_start
 
         epochs.write(
-            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']})"
+            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss'][0]}, Learning Rate: {train_metric['learning_rate'][0]})"
         )
 
         # ======================== Evaluating ==============================
@@ -535,11 +554,15 @@ if __name__ == "__main__":
 
         # normalize eval metrics
         eval_metrics = get_metrics(eval_metrics)
-        eval_metrics = jax.tree_map(jnp.sum, eval_metrics)
-        # TODO: (compute perplexity)
+        eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
+        eval_metrics["perplexity"] = math.exp(eval_metrics["loss"])
+
+        epochs.write(
+            f"Epoch... ({epoch + 1}/{num_epochs} | Eval Loss: {eval_metrics['loss']}, Eval Perplexity: {eval_metrics['perplexity']})"
+        )
 
         # Update progress bar
-        epochs.desc = f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {eval_metrics['loss']})"
+        epochs.desc = f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {eval_metrics['loss']} | Perplexity: {eval_metrics['perplexity']})"
 
         # Save metrics
         if has_tensorboard and jax.process_index() == 0:
