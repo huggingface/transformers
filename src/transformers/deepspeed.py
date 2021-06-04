@@ -27,6 +27,9 @@ from .file_utils import is_torch_available
 from .utils import logging
 
 
+if is_torch_available():
+    import torch
+
 logger = logging.get_logger(__name__)
 
 
@@ -71,53 +74,25 @@ class HfDeepSpeedConfig:
         # zero stage - this is done as early as possible, before model is created, to allow
         # ``is_deepspeed_zero3_enabled`` query and getting to the early deepspeed config object
         # during ``zero.Init()`` which needs whether fp16 is enabled, dtype, etc.
-        config_zero = config.get("zero_optimization", {})
-        self.stage = config_zero.get("stage", 0)
+        stage = self.get_value("zero_optimization.stage")
+        self.stage = stage if stage is not None else 0
 
         # offload
         self.offload = False
-        config_zero = config.get("zero_optimization", {})
         if self.is_zero2():
-            self.offload = self.is_true(config_zero, "cpu_offload")
+            self.offload = self.is_true("zero_optimization.cpu_offload")
         elif self.is_zero3():
-            offload_devices = ["cpu", "nvme"]
-            if config_zero.get("offload_optimizer", {}).get("device") in offload_devices:
+            offload_devices_valid = set(["cpu", "nvme"])
+            offload_devices = set(
+                [
+                    self.get_value("zero_optimization.offload_optimizer.device"),
+                    self.get_value("zero_optimization.offload_param.device"),
+                ]
+            )
+            if offload_devices | offload_devices_valid:
                 self.offload = True
-            if config_zero.get("offload_param", {}).get("device") in offload_devices:
-                self.offload = True
 
-    def is_zero2(self):
-        return self.stage == 2
-
-    def is_zero3(self):
-        return self.stage == 3
-
-    def is_offload(self):
-        return self.offload
-
-    @staticmethod
-    def is_true(config, key):
-        if config is None:
-            return False
-        return bool(config.get(key))
-
-
-class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
-    """
-    The ``HfTrainerDeepSpeedConfig`` object is meant to be created during ``TrainingArguments`` object creation and has
-    the same lifespan as the latter.
-
-    """
-
-    def __init__(self, config_file_or_dict):
-        super().__init__(config_file_or_dict)
-        self._dtype = None
-        self.mismatches = []
-
-    def dtype(self):
-        return self._dtype
-
-    def find_node(self, ds_key_long):
+    def find_config_node(self, ds_key_long):
         config = self.config
 
         # find the config node of interest if it exists
@@ -130,6 +105,58 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
         return config, ds_key
 
+    def get_value(self, ds_key_long):
+        config, ds_key = self.find_config_node(ds_key_long)
+        if config is None:
+            return None
+        return config.get(ds_key)
+
+    def is_true(self, ds_key_long):
+        """
+        Returns :obj:`True`/:obj:`False` only if the value is set, always :obj:`False` otherwise. So use this method to
+        ask the very specific question of whether the value is set to :obj:`True` (and it's not set to :obj:`False` or
+        wasn't set).
+
+        """
+        value = self.get_value(ds_key_long)
+        if value is None:
+            return False
+        return bool(value)
+
+    def is_false(self, ds_key_long):
+        """
+        Returns :obj:`True`/:obj:`False` only if the value is set, always :obj:`False` otherwise. So use this method to
+        ask the very specific question of whether the value is set to :obj:`False` (and it's not set to :obj:`True` or
+        wasn't set).
+        """
+        value = self.get_value(ds_key_long)
+        if value is None:
+            return False
+        return not bool(value)
+
+    def is_zero2(self):
+        return self.stage == 2
+
+    def is_zero3(self):
+        return self.stage == 3
+
+    def is_offload(self):
+        return self.offload
+
+
+class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
+    """
+    The ``HfTrainerDeepSpeedConfig`` object is meant to be created during ``TrainingArguments`` object creation and has
+    the same lifespan as the latter.
+    """
+
+    def __init__(self, config_file_or_dict):
+        super().__init__(config_file_or_dict)
+        self._dtype = torch.float16
+        self.mismatches = []
+
+    def dtype(self):
+        return self._dtype
 
     def fill_match(self, ds_key_long, hf_val, hf_key=None, must_match=True):
         """
@@ -142,8 +169,7 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         ``trainer_config_finalize`` for one or more mismatches.
 
         """
-
-        config, ds_key = self.find_node(ds_key_long)
+        config, ds_key = self.find_config_node(ds_key_long)
         if config is None:
             return
 
@@ -200,14 +226,9 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         self.fill_match("amp.enabled", fp16_backend == "apex", "fp16+fp16_backend(apex)")
         self.fill_match("amp.opt_level", args.fp16_opt_level, "fp16_opt_level")
 
-        if is_torch_available():
-            import torch
-
         # only if we have an explicit fp16.enabled = False then it's fp32, if it's True or this
         # whole config section is missing then the fallback is fp16
-        self._dtype = torch.float16
-        config_fp16 = self.config.get("fp16", {})
-        if config_fp16 != {} and _is_false(config_fp16, "enabled"):
+        if self.is_false("fp16.enabled"):
             self._dtype = torch.float32
         # later there will be other dtypes besides just fp16 and fp32
         # also not quite sure what dtype should be under apex, defaulting to fp16 for now
