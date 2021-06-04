@@ -537,7 +537,14 @@ difficult to detect ways. You have been warned.
 There are multiple other values that are specific to DeepSpeed-only and those you will have to set manually to suit
 your needs.
 
+In your own programs, you can also use the following approach if you'd like to modify the DeepSpeed config as a master
+and configure :class:`~transformers.TrainingArguments` based on that. The steps are:
 
+1. Create or load the DeepSpeed configuration to be used as a master configuration
+2. Create the :class:`~transformers.TrainingArguments` object based on these values
+
+Do note that some values, such as :obj:`scheduler.params.total_num_steps` are calculated by
+:class:`~transformers.Trainer` during ``train``, but you can of course do the math yourself.
 
 .. _deepspeed-zero:
 
