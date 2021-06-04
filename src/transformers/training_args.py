@@ -680,8 +680,9 @@ class TrainingArguments:
 
     def __repr__(self):
         self_as_dict = asdict(self)
+
         # We remove deprecated arguments from the repr. That code should be removed once
-        # those deprecated arguments are removed form TrainingArguments. (TODO: v5)
+        # those deprecated arguments are removed from TrainingArguments. (TODO: v5)
         del self_as_dict["per_gpu_train_batch_size"]
         del self_as_dict["per_gpu_eval_batch_size"]
 
