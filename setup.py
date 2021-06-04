@@ -86,7 +86,7 @@ if stale_egg_info.exists():
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
     "Pillow",
-    "black==21.4b0",
+    "black==21.4b2",
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
@@ -149,7 +149,7 @@ _deps = [
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "uvicorn",
-    "git+https://github.com/facebookresearch/detectron2.git"
+    "detectron2 @ git+https://github.com/facebookresearch/detectron2.git",
 ]
 
 
@@ -324,7 +324,7 @@ install_requires = [
     deps["sacremoses"],  # for XLM
     deps["tokenizers"],
     deps["tqdm"],  # progress bars in model download and training scripts
-    deps["git+https://github.com/facebookresearch/detectron2.git"], # detectron2 for image embedding
+    deps["detectron2 @ git+https://github.com/facebookresearch/detectron2.git"], # detectron2 for image embedding
 ]
 
 setup(

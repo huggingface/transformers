@@ -332,6 +332,7 @@ from .configuration_auto import (
     GPTNeoConfig,
     IBertConfig,
     LayoutLMConfig,
+    LayoutLMv2Config,
     LEDConfig,
     LongformerConfig,
     LukeConfig,
