@@ -20,23 +20,15 @@ import math
 import os
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
+from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
-    MaskedLMOutput,
     MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
@@ -61,6 +53,7 @@ _TOKENIZER_FOR_DOC = "CanineTokenizer"
 
 CANINE_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/canine-s",
+    "google/canine-r"
     # See all CANINE models at https://huggingface.co/models?filter=canine
 ]
 
@@ -121,7 +114,7 @@ def load_tf_weights_in_canine(model, config, tf_checkpoint_path):
             name = ["projection"] + name[1:]
         pointer = model
         for m_name in name:
-            if re.fullmatch(r"[A-Za-z]+_\d+", m_name) and not "Embedder" in m_name:
+            if (re.fullmatch(r"[A-Za-z]+_\d+", m_name)) and "Embedder" not in m_name:
                 scope_names = re.split(r"_(\d+)", m_name)
             else:
                 scope_names = [m_name]
@@ -210,8 +203,6 @@ class CanineEmbeddings(nn.Module):
         """Converts IDs (e.g. codepoints) into embeddings via multiple hashing."""
         if embedding_size % num_hashes != 0:
             raise ValueError(f"Expected `embedding_size` ({embedding_size}) % " f"`num_hashes` ({num_hashes}) == 0")
-
-        shard_embedding_size = embedding_size // num_hashes
 
         hash_bucket_tensors = self._hash_bucket_tensors(input_ids, num_hashes=num_hashes, num_buckets=num_buckets)
         embedding_shards = []
@@ -310,6 +301,7 @@ class ConvProjection(nn.Module):
 
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.conv = nn.Conv1d(
             in_channels=config.hidden_size * 2,
             out_channels=config.hidden_size,
@@ -330,8 +322,12 @@ class ConvProjection(nn.Module):
         # PyTorch < 1.9 does not support padding="same" (which is used in the original implementation),
         # so we pad the tensor manually before passing it to the conv layer
         # based on https://github.com/google-research/big_transfer/blob/49afe42338b62af9fbe18f0258197a33ee578a6b/bit_tf2/models.py#L36-L38
+        pad_total = self.config.upsampling_kernel_size - 1
+        pad_beg = pad_total // 2
+        pad_end = pad_total - pad_beg
+
+        pad = nn.ConstantPad1d((pad_beg, pad_end), 0)
         # `result`: shape (batch_size, char_seq_len, hidden_size)
-        pad = nn.ConstantPad1d((1, 2), 0)
         result = self.conv(pad(inputs))
         result = torch.transpose(result, 1, 2)
         result = self.activation(result)
@@ -995,7 +991,7 @@ class CaninePreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -1148,9 +1144,7 @@ class CanineModel(CaninePreTrainedModel):
         # We don't assume that `from_tensor` is a mask (although it could be). We
         # don't actually care if we attend *from* padding tokens (only *to* padding)
         # tokens so we create a tensor of all ones.
-        #
-        # `broadcast_ones` = [batch_size, from_seq_length, 1]
-        broadcast_ones = torch.ones(size=(batch_size, from_seq_length, 1), dtype=torch.float32)
+        broadcast_ones = torch.ones(size=(batch_size, from_seq_length, 1), dtype=torch.float32, device=to_mask.device)
 
         # Here we broadcast along two dimensions to create the mask.
         mask = broadcast_ones * to_mask
@@ -1188,7 +1182,7 @@ class CanineModel(CaninePreTrainedModel):
         # n elements (n < `downsampling_rate`), i.e. the remainder of floor
         # division. We do this by repeating the last molecule a few extra times.
         last_molecule = molecules[:, -1:, :]
-        remainder_length = torch.fmod(torch.tensor(char_seq_length), torch.tensor(rate)).float().floor().long()
+        remainder_length = torch.fmod(torch.tensor(char_seq_length), torch.tensor(rate)).item()
         remainder_repeated = torch.repeat_interleave(
             last_molecule,
             # +1 molecule to compensate for truncation.
@@ -1364,11 +1358,16 @@ class CanineModel(CaninePreTrainedModel):
 
         # Apply final shallow Transformer
         # `sequence_output`: shape (batch_size, char_seq_len, hidden_size])
-        final_chars_encoder_outputs = self.final_char_encoder(sequence_output, extended_attention_mask)
+        final_chars_encoder_outputs = self.final_char_encoder(
+            sequence_output,
+            extended_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
         sequence_output = final_chars_encoder_outputs.last_hidden_state
 
         if not return_dict:
-            return (sequence_output,) + encoder_outputs[1:]
+            return (sequence_output, pooled_output) + final_chars_encoder_outputs[1:]
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
