@@ -91,6 +91,7 @@ _deps = [
     "dataclasses",
     "datasets",
     "deepspeed>=0.3.16",
+    "detectron2 @ git+https://github.com/facebookresearch/detectron2.git",
     "docutils==0.16.0",
     "fairscale>0.3",
     "faiss-cpu",
@@ -159,7 +160,6 @@ _deps = [
 #
 # some of the values are versioned whereas others aren't.
 deps = {b: a for a, b in (re.findall(r"^(([^!=<>]+)(?:[!=<>].*)?$)", x)[0] for x in _deps)}
-deps["detectron2"] = "detectron2@git+https://github.com/facebookresearch/detectron2.git"
 
 # since we save this data in src/transformers/dependency_versions_table.py it can be easily accessed from
 # anywhere. If you need to quickly access the data from this table in a shell, you can do so easily with:
@@ -249,7 +249,7 @@ extras["integrations"] = extras["optuna"] + extras["ray"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["speech"] = deps_list("soundfile", "torchaudio")
-extras["vision"] = deps_list("Pillow","detectron2")
+extras["vision"] = deps_list("Pillow")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
@@ -324,7 +324,7 @@ install_requires = [
     deps["sacremoses"],  # for XLM
     deps["tokenizers"],
     deps["tqdm"],  # progress bars in model download and training scripts
-    deps["detectron2"],  # detectron2 for image embedding
+    deps["detectron2 @ git+https://github.com/facebookresearch/detectron2.git"],  # detectron2 for image embedding
 ]
 
 setup(
