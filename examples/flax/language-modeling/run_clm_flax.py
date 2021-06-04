@@ -180,7 +180,9 @@ class DataTrainingArguments:
                 assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
 
 
-def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuffle: bool = False):
+def data_loader(
+    rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuffle: bool = False, distributed: bool = False
+):
     """
     Returns batches of size `batch_size` from truncated `train dataset`, sharded over all local devices.
     Shuffle batches if `shuffle` is `True`.
@@ -198,15 +200,18 @@ def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuf
     for idx in batch_idx:
         batch = dataset[idx]
         batch = {k: jnp.array(v) for k, v in batch.items()}
-        batch = shard(batch)
+
+        if distributed:
+            batch = shard(batch)
 
         yield batch
 
 
-def write_metric(train_metrics, eval_metrics, train_time, step):
+def write_metric(train_metrics, eval_metrics, train_time, step, distributed):
     summary_writer.scalar("train_time", train_time, step)
 
-    train_metrics = get_metrics(train_metrics)
+    if distributed:
+        train_metrics = get_metrics(train_metrics)
     for key, vals in train_metrics.items():
         tag = f"train_{key}"
         for i, val in enumerate(vals):
@@ -444,6 +449,7 @@ if __name__ == "__main__":
         summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir).joinpath("logs").as_posix())
 
     # Initialize our training
+    distributed = jax.local_device_count() > 1
     rng = jax.random.PRNGKey(training_args.seed)
     dropout_rngs = jax.random.split(rng, jax.local_device_count())
 
@@ -489,7 +495,7 @@ if __name__ == "__main__":
         return loss.mean()
 
     # Define gradient update step fn
-    def train_step(state, batch, dropout_rng):
+    def _train_step(state, batch, dropout_rng):
         dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
 
         def compute_loss(params):
@@ -500,31 +506,40 @@ if __name__ == "__main__":
 
         grad_fn = jax.value_and_grad(compute_loss)
         loss, grad = grad_fn(state.params)
-        grad = jax.lax.pmean(grad, "batch")
+        if distributed:
+            grad = jax.lax.pmean(grad, "batch")
+
         new_state = state.apply_gradients(grads=grad)
 
-        metrics = jax.lax.pmean(
-            {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}, axis_name="batch"
-        )
+        metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}
+        if distributed:
+            metrics = jax.lax.pmean(metrics, axis_name="batch")
 
         return new_state, metrics, new_dropout_rng
 
     # Define eval fn
-    def eval_step(params, batch):
+    def _eval_step(params, batch):
         labels = batch.pop("labels")
         logits = model(**batch, params=params, train=False)[0]
         loss = loss_fn(logits, labels)
 
         # summarize metrics
-        metrics = jax.lax.pmean({"loss": loss}, axis_name="batch")
+        metrics = {"loss": loss}
+        if distributed:
+            metrics = jax.lax.pmean(metrics, axis_name="batch")
         return metrics
 
     # Create parallel version of the train and eval step
-    p_train_step = jax.pmap(train_step, "batch", donate_argnums=(0,))
-    p_eval_step = jax.pmap(eval_step, "batch", donate_argnums=(0,))
+    if distributed:
+        train_step = jax.pmap(_train_step, "batch", donate_argnums=(0,))
+        eval_step = jax.pmap(_eval_step, "batch", donate_argnums=(0,))
 
-    # Replicate the train state on each device
-    state = jax_utils.replicate(state)
+        # Replicate the train state on each device
+        state = jax_utils.replicate(state)
+
+    else:
+        train_step = jax.jit(_train_step, "batch", donate_argnums=(0,))
+        eval_step = jax.jit(_eval_step, "batch", donate_argnums=(0,))
 
     train_metrics = []
     train_time = 0
@@ -537,12 +552,12 @@ if __name__ == "__main__":
         rng, input_rng = jax.random.split(rng)
 
         # Generate an epoch by shuffling sampling indices from the train dataset
-        train_loader = data_loader(input_rng, train_dataset, train_batch_size, shuffle=True)
+        train_loader = data_loader(input_rng, train_dataset, train_batch_size, shuffle=True, distributed=distributed)
         steps_per_epoch = len(train_dataset) // train_batch_size
         # train
         for _ in tqdm(range(steps_per_epoch), desc="Training...", position=1):
             batch = next(train_loader)
-            state, train_metric, dropout_rngs = p_train_step(state, batch, dropout_rngs)
+            state, train_metric, dropout_rngs = train_step(state, batch, dropout_rngs)
             train_metrics.append(train_metric)
 
         train_time += time.time() - train_start
@@ -553,16 +568,17 @@ if __name__ == "__main__":
 
         # ======================== Evaluating ==============================
         eval_metrics = []
-        eval_loader = data_loader(input_rng, eval_dataset, eval_batch_size)
+        eval_loader = data_loader(input_rng, eval_dataset, eval_batch_size, distributed=distributed)
         eval_steps = len(eval_dataset) // eval_batch_size
         for _ in tqdm(range(eval_steps), desc="Evaluating...", position=2):
             # Model forward
             batch = next(eval_loader)
-            metrics = p_eval_step(state.params, batch)
+            metrics = eval_step(state.params, batch)
             eval_metrics.append(metrics)
 
         # normalize eval metrics
-        eval_metrics = get_metrics(eval_metrics)
+        if distributed:
+            eval_metrics = get_metrics(eval_metrics)
         eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
 
         try:
@@ -580,5 +596,8 @@ if __name__ == "__main__":
 
     # save last checkpoint
     if jax.process_index() == 0:
-        params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+        if distributed:
+            params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+        else:
+            params = state.params
         model.save_pretrained(training_args.output_dir, params=params)
