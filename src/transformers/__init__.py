@@ -780,7 +780,6 @@ if is_torch_available():
     _import_structure["models.layoutlmv2"].extend(
         [
             "LAYOUTLMv2_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "LayoutLMv2ForMaskedLM",
             "LayoutLMv2ForSequenceClassification",
             "LayoutLMv2ForTokenClassification",
             "LayoutLMv2Model",

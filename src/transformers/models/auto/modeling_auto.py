@@ -161,7 +161,6 @@ from ..layoutlm.modeling_layoutlm import (
     LayoutLMModel,
 )
 from ..layoutlmv2.modeling_layoutlmv2 import (
-    LayoutLMv2ForMaskedLM,
     LayoutLMv2ForSequenceClassification,
     LayoutLMv2ForTokenClassification,
     LayoutLMv2Model,
@@ -434,7 +433,6 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
         # Model for pre-training mapping
         (LayoutLMConfig, LayoutLMForMaskedLM),
-        (LayoutLMv2Config, LayoutLMv2ForMaskedLM),
         (RetriBertConfig, RetriBertModel),
         (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
@@ -482,7 +480,6 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (LEDConfig, LEDForConditionalGeneration),
         (BlenderbotSmallConfig, BlenderbotSmallForConditionalGeneration),
         (LayoutLMConfig, LayoutLMForMaskedLM),
-        (LayoutLMv2Config, LayoutLMv2ForMaskedLM),
         (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForMaskedLM),
@@ -567,7 +564,6 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
         (ConvBertConfig, ConvBertForMaskedLM),
         (LayoutLMConfig, LayoutLMForMaskedLM),
-        (LayoutLMv2Config, LayoutLMv2ForMaskedLM),
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForMaskedLM),
         (BartConfig, BartForConditionalGeneration),

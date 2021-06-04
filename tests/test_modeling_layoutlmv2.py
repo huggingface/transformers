@@ -28,7 +28,6 @@ if is_torch_available():
 
     from transformers import (
         LayoutLMv2Config,
-        LayoutLMv2ForMaskedLM,
         LayoutLMv2ForSequenceClassification,
         LayoutLMv2ForTokenClassification,
         LayoutLMv2Model,
@@ -149,15 +148,6 @@ class LayoutLMv2ModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
-    def create_and_check_for_masked_lm(
-        self, config, input_ids, bbox, image, token_type_ids, position_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = LayoutLMv2ForMaskedLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, bbox, image=image, attention_mask=input_mask, token_type_ids=token_type_ids, position_ids=position_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
     def create_and_check_for_sequence_classification(
         self, config, input_ids, bbox, image, token_type_ids, position_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -166,7 +156,7 @@ class LayoutLMv2ModelTester:
         model.to(torch_device)
         model.eval()
         result = model(
-            input_ids, bbox, image=image, attention_mask=input_mask, token_type_ids=token_type_ids, position_ids=position_ids, labels=sequence_labels
+            input_ids, bbox, image=image, attention_mask=input_mask, token_type_ids=token_type_ids, position_ids=position_ids
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
@@ -177,7 +167,7 @@ class LayoutLMv2ModelTester:
         model = LayoutLMv2ForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, bbox, image=image, attention_mask=input_mask, token_type_ids=token_type_ids, position_ids=position_ids, labels=token_labels)
+        result = model(input_ids, bbox, image=image, attention_mask=input_mask, token_type_ids=token_type_ids, position_ids=position_ids)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def prepare_config_and_inputs_for_common(self):
@@ -201,7 +191,6 @@ class LayoutLMv2ModelTester:
             "token_type_ids": token_type_ids,
             "position_ids": position_ids,
             "attention_mask": input_mask,
-            "labels": token_labels
         }
         return config, inputs_dict
 
@@ -212,7 +201,6 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             LayoutLMv2Model,
-            LayoutLMv2ForMaskedLM,
             LayoutLMv2ForSequenceClassification,
             LayoutLMv2ForTokenClassification,
         )
@@ -236,10 +224,6 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_for_masked_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -307,7 +291,6 @@ class LayoutLMv2ModelIntegrationTest(unittest.TestCase):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            labels=torch.tensor([1, 1], device=torch_device),
         )
 
         # test whether we get a loss as a scalar
@@ -331,7 +314,7 @@ class LayoutLMv2ModelIntegrationTest(unittest.TestCase):
 
         # forward pass
         outputs = model(
-            input_ids=input_ids, bbox=bbox, image=image, attention_mask=attention_mask, token_type_ids=token_type_ids, position_ids=position_ids, labels=labels
+            input_ids=input_ids, bbox=bbox, image=image, attention_mask=attention_mask, token_type_ids=token_type_ids, position_ids=position_ids
         )
 
         # test the loss calculation to be around 2.65
