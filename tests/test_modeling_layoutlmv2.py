@@ -153,7 +153,6 @@ class LayoutLMv2ModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids=input_ids, bbox=bbox, image=image, attention_mask=input_mask, token_type_ids=token_type_ids, position_ids=position_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_for_token_classification(
@@ -261,6 +260,7 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
+            image_feature_pool_shape = config.image_feature_pool_shape
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -288,7 +288,7 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
             else:
                 self.assertListEqual(
                     list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                    [self.model_tester.num_attention_heads, encoder_seq_length + image_feature_pool_shape[0] * image_feature_pool_shape[1], encoder_key_length + image_feature_pool_shape[0] * image_feature_pool_shape[1]],
                 )
             out_len = len(outputs)
 
@@ -356,7 +356,7 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
             else:
                 self.assertListEqual(
                     list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                    [self.model_tester.num_attention_heads, encoder_seq_length + image_feature_pool_shape[0] * image_feature_pool_shape[1], encoder_key_length + image_feature_pool_shape[0] * image_feature_pool_shape[1]],
                 )
 
     def test_hidden_states_output(self):
