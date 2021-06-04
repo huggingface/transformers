@@ -35,11 +35,67 @@ from transformers import (
     EvalPrediction,
     HfArgumentParser,
     PretrainedConfig,
-    TrainingArguments,
+    TFTrainingArguments,
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version
+
+# region Helper functions
+
+
+def convert_dataset_for_tensorflow(
+    dataset, non_label_column_names, batch_size, dataset_mode="variable_batch", shuffle=True, drop_remainder=True
+):
+    """Converts a Hugging Face dataset to a Tensorflow Dataset. The dataset_mode controls whether we pad all batches
+    to the maximum sequence length, or whether we only pad to the maximum length within that batch. The former
+    is most useful when training on TPU, as a new graph compilation is required for each sequence length.
+    """
+
+    def densify_ragged_batch(features, label=None):
+        features = {
+            feature: ragged_tensor.to_tensor(shape=batch_shape[feature]) for feature, ragged_tensor in features.items()
+        }
+        if label is None:
+            return features
+        else:
+            return features, label
+
+    feature_keys = list(set(dataset.features.keys()) - set(non_label_column_names + ["label"]))
+    if dataset_mode == "variable_batch":
+        batch_shape = {key: None for key in feature_keys}
+        data = {key: tf.ragged.constant(dataset[key]) for key in feature_keys}
+    elif dataset_mode == "constant_batch":
+        data = {key: tf.ragged.constant(dataset[key]) for key in feature_keys}
+        batch_shape = {
+            key: tf.concat(([batch_size], ragged_tensor.bounding_shape()[1:]), axis=0)
+            for key, ragged_tensor in data.items()
+        }
+    else:
+        raise ValueError("Unknown dataset mode!")
+
+    if "label" in dataset.features:
+        labels = tf.convert_to_tensor(np.array(dataset["label"]))
+        tf_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
+    else:
+        tf_dataset = tf.data.Dataset.from_tensor_slices(data)
+    if shuffle:
+        tf_dataset = tf_dataset.shuffle(buffer_size=len(dataset))
+    tf_dataset = tf_dataset.batch(batch_size=batch_size, drop_remainder=drop_remainder).map(densify_ragged_batch)
+    return tf_dataset
+
+class SavePretrainedCallback(tf.keras.callbacks.Callback):
+    # Hugging Face models have a save_pretrained() method that saves both the weights and the necessary
+    # metadata to allow them to be loaded as a pretrained model in future. This is a simple Keras callback
+    # that saves the model with this method after each epoch.
+    def __init__(self, output_dir, **kwargs):
+        super().__init__()
+        self.output_dir = output_dir
+
+    def on_epoch_end(self, epoch, logs=None):
+        self.model.save_pretrained(self.output_dir)
+
+# endregion
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -73,6 +129,10 @@ class DataTrainingArguments:
     task_name: str = field(
         metadata={"help": "The name of the task to train on: " + ", ".join(task_to_keys.keys())},
     )
+    predict_file: str = field(
+        metadata={"help": "A file containing user-supplied examples to make predictions for"},
+        default=None,
+    )
     max_seq_length: int = field(
         default=128,
         metadata={
@@ -84,7 +144,7 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
     )
     pad_to_max_length: bool = field(
-        default=True,
+        default=False,
         metadata={
             "help": "Whether to pad all samples to `max_seq_length`. "
             "If False, will pad the samples dynamically when batching to the maximum length in the batch."
@@ -111,22 +171,11 @@ class DataTrainingArguments:
             "value if set."
         },
     )
-    do_train: bool = field(
-        default=False, metadata={"help": "Use the training data from the specified GLUE task for training."}
-    )
-    do_validation: bool = field(
-        default=False, metadata={"help": "Use the validation data from the specified GLUE task for validation."}
-    )
-    do_test: bool = field(
-        default=False, metadata={"help": "Use the test data from the specified GLUE task for testing."}
-    )
 
     def __post_init__(self):
         self.task_name = self.task_name.lower()
         if self.task_name not in task_to_keys.keys():
             raise ValueError("Unknown task, you should pick one in " + ",".join(task_to_keys.keys()))
-        if not (self.do_train or self.do_validation or self.do_test):
-            raise ValueError("Please specify at least one of --do_train, --do_validation or --do_test!")
 
 
 @dataclass
@@ -171,27 +220,30 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TFTrainingArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    if not (training_args.do_train or training_args.do_eval or training_args.do_predict):
+        exit("Must specify at least one of --do_train, --do_eval or --do_predict!")
     # endregion
 
     # region Checkpoints
-    last_checkpoint = None
+    checkpoint = None
     if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
-        last_checkpoint = get_last_checkpoint(training_args.output_dir)
-        if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
+        checkpoint = get_last_checkpoint(training_args.output_dir)
+        if checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
             raise ValueError(
                 f"Output directory ({training_args.output_dir}) already exists and is not empty. "
                 "Use --overwrite_output_dir to overcome."
             )
-        elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
+        elif checkpoint is not None and training_args.resume_from_checkpoint is None:
             logger.info(
-                f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
+                f"Checkpoint detected, resuming training at {checkpoint}. To avoid this behavior, change "
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
             )
     # endregion
@@ -234,6 +286,25 @@ def main():
         num_labels = len(label_list)
     else:
         num_labels = 1
+
+    if data_args.predict_file is not None:
+        logger.info("Preparing user-supplied file for predictions...")
+
+        data_files = {"data": data_args.predict_file}
+
+        for key in data_files.keys():
+            logger.info(f"Loading a local file for {key}: {data_files[key]}")
+
+        if data_args.predict_file.endswith('.csv'):
+            # Loading a dataset from local csv files
+            user_dataset = load_dataset("csv", data_files=data_files, cache_dir=model_args.cache_dir)
+        else:
+            # Loading a dataset from local json files
+            user_dataset = load_dataset("json", data_files=data_files, cache_dir=model_args.cache_dir)
+        needed_keys = task_to_keys[data_args.task_name]
+        for key in needed_keys:
+            assert key in user_dataset['data'].features, f"Your supplied predict_file is missing the {key} key!"
+        datasets['user_data'] = user_dataset['data']
     # endregion
 
     # region Load model config and tokenizer
@@ -259,6 +330,7 @@ def main():
 
     # region Dataset preprocessing
     sentence1_key, sentence2_key = task_to_keys[data_args.task_name]
+    non_label_column_names = [name for name in datasets["train"].column_names if name != "label"]
 
     # Padding strategy
     if data_args.pad_to_max_length:
@@ -298,60 +370,33 @@ def main():
         )
         result = tokenizer(*args, padding=padding, max_length=max_seq_length, truncation=True)
 
-        # Map labels to IDs (not necessary for GLUE tasks)
-        if label_to_id is not None and "label" in examples:
-            result["label"] = [(label_to_id[l] if l != -1 else -1) for l in examples["label"]]
         return result
 
     datasets = datasets.map(preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache)
 
-    if training_args.do_train:
-        if "train" not in datasets:
-            raise ValueError("--do_train requires a train dataset")
-        train_dataset = datasets["train"]
-        if data_args.max_train_samples is not None:
-            train_dataset = train_dataset.select(range(data_args.max_train_samples))
-
-    if training_args.do_eval:
-        if "validation" not in datasets and "validation_matched" not in datasets:
-            raise ValueError("--do_eval requires a validation dataset")
-        eval_dataset = datasets["validation_matched" if data_args.task_name == "mnli" else "validation"]
-        if data_args.max_eval_samples is not None:
-            eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
-
-    if training_args.do_predict or data_args.task_name is not None or data_args.test_file is not None:
-        if "test" not in datasets and "test_matched" not in datasets:
-            raise ValueError("--do_predict requires a test dataset")
-        predict_dataset = datasets["test_matched" if data_args.task_name == "mnli" else "test"]
-        if data_args.max_predict_samples is not None:
-            predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
-
-    # Log a few random samples from the training set:
-    if training_args.do_train:
-        for index in random.sample(range(len(train_dataset)), 3):
-            logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
     # endregion
 
     # region Metric function
     metric = load_metric("glue", data_args.task_name)
-    # TODO: When datasets metrics include regular accuracy, make an else here and remove special branch from
-    # compute_metrics
 
-    # You can define your custom compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
-    # predictions and label_ids field) and has to return a dictionary string to float.
-    def compute_metrics(p: EvalPrediction):
-        preds = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
+    def compute_metrics(preds, label_ids):
+        preds = preds['logits']
         preds = np.squeeze(preds) if is_regression else np.argmax(preds, axis=1)
-        result = metric.compute(predictions=preds, references=p.label_ids)
+        result = metric.compute(predictions=preds, references=label_ids)
         if len(result) > 1:
             result["combined_score"] = np.mean(list(result.values())).item()
         return result
+
     # endregion
 
     with training_args.strategy.scope():
         # region Load pretrained model
+        if checkpoint is None:
+            model_path = model_args.model_name_or_path
+        else:
+            model_path = checkpoint
         model = TFAutoModelForSequenceClassification.from_pretrained(
-            model_args.model_name_or_path,
+            model_path,
             config=config,
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
@@ -376,83 +421,131 @@ def main():
         model.compile(optimizer=optimizer, loss=loss_fn, metrics=metrics)
         # endregion
 
-    # Training
-    if training_args.do_train:
-        checkpoint = None
-        if training_args.resume_from_checkpoint is not None:
-            checkpoint = training_args.resume_from_checkpoint
-        elif last_checkpoint is not None:
-            checkpoint = last_checkpoint
-        train_result = trainer.train(resume_from_checkpoint=checkpoint)
-        metrics = train_result.metrics
-        max_train_samples = (
-            data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
-        )
-        metrics["train_samples"] = min(max_train_samples, len(train_dataset))
-
-        trainer.save_model()  # Saves the tokenizer too for easy upload
-
-        trainer.log_metrics("train", metrics)
-        trainer.save_metrics("train", metrics)
-        trainer.save_state()
-
-    # Evaluation
-    if training_args.do_eval:
-        logger.info("*** Evaluate ***")
-
-        # Loop to handle MNLI double evaluation (matched, mis-matched)
-        tasks = [data_args.task_name]
-        eval_datasets = [eval_dataset]
-        if data_args.task_name == "mnli":
-            tasks.append("mnli-mm")
-            eval_datasets.append(datasets["validation_mismatched"])
-
-        for eval_dataset, task in zip(eval_datasets, tasks):
-            metrics = trainer.evaluate(eval_dataset=eval_dataset)
-
-            max_eval_samples = (
-                data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
+        # region Convert data to a tf.data.Dataset
+        tf_data = dict()
+        if isinstance(training_args.strategy, tf.distribute.TPUStrategy) or data_args.pad_to_max_length:
+            logger.info("Padding all batches to max length because argument was set or we're on TPU.")
+            dataset_mode = "constant_batch"
+        else:
+            dataset_mode = "variable_batch"
+        max_samples = {
+            "train": data_args.max_train_samples,
+            "validation": data_args.max_eval_samples,
+            "validation_matched": data_args.max_eval_samples,
+            "validation_mismatched": data_args.max_eval_samples,
+            "test": data_args.max_predict_samples,
+            "test_matched": data_args.max_predict_samples,
+            "test_mismatched": data_args.max_predict_samples,
+            "user_data": None
+        }
+        for key in datasets.keys():
+            if key == "train" or key.startswith("validation"):
+                assert "label" in datasets[key].features, f"Missing labels from {key} data!"
+            if key == "train":
+                shuffle = True
+                batch_size = training_args.per_device_train_batch_size
+                drop_remainder = True  # Saves us worrying about scaling gradients for the last batch
+            else:
+                shuffle = False
+                batch_size = training_args.per_device_eval_batch_size
+                drop_remainder = False
+            samples_limit = max_samples[key]
+            dataset = datasets[key]
+            if samples_limit is not None:
+                dataset = dataset.select(range(samples_limit))
+            data = convert_dataset_for_tensorflow(
+                dataset,
+                non_label_column_names,
+                batch_size=batch_size,
+                dataset_mode=dataset_mode,
+                drop_remainder=drop_remainder,
+                shuffle=shuffle,
             )
-            metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
+            tf_data[key] = data
+        # endregion
 
-            trainer.log_metrics("eval", metrics)
-            trainer.save_metrics("eval", metrics)
+        # region Training and validation
+        if training_args.do_train:
+            callbacks = [SavePretrainedCallback(output_dir=training_args.output_dir)]
+            if training_args.do_eval and not data_args.task_name == 'mnli':
+                # Do both evaluation and training in the Keras fit loop, unless the task is MNLI
+                # because MNLI has two validation sets
+                validation_data = tf_data['validation']
+            else:
+                validation_data = None
+            history = model.fit(tf_data['train'], validation_data=validation_data,
+                                epochs=training_args.epochs,
+                                callbacks=callbacks)
+            train_predictions = model.predict(tf_data['train'])
+        # endregion
 
-    if training_args.do_predict:
-        logger.info("*** Predict ***")
+        # region Evaluation
+        if training_args.do_eval:
+            # We normally do validation as part of the Keras fit loop, but we run it independently
+            # if there was no fit() step (because we didn't train the model) or if the task is MNLI,
+            # because MNLI has a separate validation-mismatched validation set
+            logger.info("*** Evaluate ***")
 
-        # Loop to handle MNLI double evaluation (matched, mis-matched)
-        tasks = [data_args.task_name]
-        predict_datasets = [predict_dataset]
-        if data_args.task_name == "mnli":
-            tasks.append("mnli-mm")
-            predict_datasets.append(datasets["test_mismatched"])
+            # Loop to handle MNLI double evaluation (matched, mis-matched)
+            if data_args.task_name == "mnli":
+                tasks = ["mnli", "mnli-mm"]
+                tf_datasets = [tf_data['validation-matched'], tf_data['validation-mismatched']]
+                raw_datasets = [datasets['validation_matched'], datasets['validation-mismatched']]
+            else:
+                tasks = [data_args.task_name]
+                tf_datasets = [tf_data['validation']]
+                raw_datasets = [datasets['validation']]
 
-        for predict_dataset, task in zip(predict_datasets, tasks):
-            # Removing the `label` columns because it contains -1 and Trainer won't like that.
-            predict_dataset.remove_columns_("label")
-            predictions = trainer.predict(predict_dataset, metric_key_prefix="predict").predictions
-            predictions = np.squeeze(predictions) if is_regression else np.argmax(predictions, axis=1)
+            for raw_dataset, tf_dataset, task in zip(raw_datasets, tf_datasets, tasks):
+                eval_predictions = model.predict(tf_dataset)
+                eval_metrics = compute_metrics(eval_predictions, raw_dataset['label'])
+                print(f"Evaluation metrics ({task}):")
+                print(eval_metrics)
 
-            output_predict_file = os.path.join(training_args.output_dir, f"predict_results_{task}.txt")
-            if trainer.is_world_process_zero():
+        # endregion
+
+        # region Prediction
+        if training_args.do_predict or data_args.predict_file:
+            logger.info("*** Predict ***")
+
+            # Loop to handle MNLI double evaluation (matched, mis-matched)
+            tasks = []
+            tf_datasets = []
+            raw_datasets = []
+            if training_args.do_predict:
+                if data_args.task_name == "mnli":
+                    tasks.extend(["mnli", "mnli-mm"])
+                    tf_datasets.extend([tf_data["test-matched"], tf_data["test-mismatched"]])
+                    raw_datasets.extend([datasets['test-matched'], datasets['test-mismatched']])
+                else:
+                    tasks.append(data_args.task_name)
+                    tf_datasets.append(tf_data["test"])
+                    raw_datasets.append(datasets['test'])
+            if data_args.predict_file:
+                tasks.append("user_data")
+                tf_datasets.append(tf_data["user_data"])
+                raw_datasets.append(datasets['user_data'])
+
+            for raw_dataset, tf_dataset, task in zip(raw_datasets, tf_datasets, tasks):
+                test_predictions = model.predict(tf_dataset)
+                # TODO Make sure this works for regression problems too!
+                test_class_predictions = np.argmax(test_predictions['logits'], axis=1)
+                if 'label' in raw_dataset:
+                    test_metrics = compute_metrics(test_predictions, raw_dataset['label'])
+                    print(f"Test metrics ({task}):")
+                    print(test_metrics)
+
+                output_predict_file = os.path.join(training_args.output_dir, f"predict_results_{task}.txt")
                 with open(output_predict_file, "w") as writer:
-                    logger.info(f"***** Predict results {task} *****")
+                    logger.info(f"***** Writing prediction results for {task} *****")
                     writer.write("index\tprediction\n")
-                    for index, item in enumerate(predictions):
+                    for index, item in enumerate(test_class_predictions):
                         if is_regression:
                             writer.write(f"{index}\t{item:3.3f}\n")
                         else:
                             item = label_list[item]
                             writer.write(f"{index}\t{item}\n")
-
-    if training_args.push_to_hub:
-        trainer.push_to_hub()
-
-
-def _mp_fn(index):
-    # For xla_spawn (TPUs)
-    main()
+        # endregion
 
 
 if __name__ == "__main__":

@@ -439,10 +439,8 @@ def main():
         model.compile(optimizer=optimizer, loss=loss_fn, metrics=metrics)
         # endregion
 
-        # region Convert data to TF format
+        # region Convert data to a tf.data.Dataset
 
-        # Convert data to a tf.keras.utils.Sequence object for training if we're not using a TPU
-        # For TPU, convert to a tf.data.Dataset
         tf_data = dict()
         max_samples = {
             "train": data_args.max_train_samples,
