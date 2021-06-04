@@ -22,6 +22,7 @@ import weakref
 from copy import deepcopy
 
 from .dependency_versions_check import dep_version_check
+from .file_utils import is_torch_available
 from .utils import logging
 
 
@@ -36,6 +37,12 @@ def _is_true(config, key):
     if config is None:
         return False
     return bool(config.get(key))
+
+
+def _is_false(config, key):
+    if config is None:
+        return False
+    return not bool(config.get(key))
 
 
 def _set_if_auto(config, key, val):
@@ -116,6 +123,10 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
     def __init__(self, config_file_or_dict):
         super().__init__(config_file_or_dict)
+        self._dtype = None
+
+    def dtype(self):
+        return self._dtype
 
     def trainer_config_process(self, args):
         """
@@ -156,7 +167,7 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
         # amp: similar to the pytorch native amp - it has a bunch of optional params but we won't set
         # any here unless the user did the work
-        config_fp16 = config.get("fp16")
+        config_fp16 = config.get("fp16", {})
         _set_if_auto(config_fp16, "enabled", fp16_backend == "amp")
 
         # apex: delegates amp work to apex (which needs to be available), but it cannot be used with any
@@ -164,6 +175,17 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         config_amp = config.get("amp")
         _set_if_auto(config_amp, "enabled", fp16_backend == "apex")
         _set_if_auto(config_amp, "opt_level", args.fp16_opt_level)
+
+        if is_torch_available():
+            import torch
+
+        # only if we have an explicit fp16.enabled = False then it's fp32, if it's True or this
+        # whole config section is missing then the fallback is fp16
+        self._dtype = torch.float16
+        if config_fp16 != {} and _is_false(config_fp16, "enabled"):
+            self._dtype = torch.float32
+        # later there will be other dtypes besides just fp16 and fp32
+        # also not quite sure what dtype should be under apex, defaulting to fp16 for now
 
     def trainer_config_finalize(self, args, model, num_training_steps):
         """

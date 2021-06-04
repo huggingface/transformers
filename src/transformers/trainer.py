@@ -1709,8 +1709,8 @@ class Trainer:
                     # embedding. Other models such as wav2vec2's inputs are already float and thus
                     # may need special handling to match the dtypes of the model
                     # print(f"Before : {k} {inputs[k].device}")
-                    # print(f"NEW TYPE: {k} {self.args.deepspeed_config_hf.dtype()}")
-                    kwargs.update(dict(dtype=self.args.deepspeed_config_hf.dtype()))
+                    # print(f"NEW TYPE: {k} {self.args.hf_deepspeed_config.dtype()}")
+                    kwargs.update(dict(dtype=self.args.hf_deepspeed_config.dtype()))
                     # print(f"After : {k} {inputs[k].dtype}")
                     # print(f"After : {k} {inputs[k].device}")
 

@@ -28,6 +28,7 @@ from typing import Iterator, Union
 
 from transformers import logging as transformers_logging
 
+from .deepspeed import is_deepspeed_available
 from .file_utils import (
     is_datasets_available,
     is_faiss_available,
@@ -44,7 +45,7 @@ from .file_utils import (
     is_torchaudio_available,
     is_vision_available,
 )
-from .integrations import is_deepspeed_available, is_optuna_available, is_ray_available
+from .integrations import is_optuna_available, is_ray_available
 
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
