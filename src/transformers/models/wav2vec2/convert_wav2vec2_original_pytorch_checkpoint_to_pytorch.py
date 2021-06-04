@@ -112,9 +112,7 @@ def recursively_load_weights(fairseq_model, hf_model, is_headless):
             is_used = True
         else:
             for key, mapped_key in MAPPING.items():
-                mapped_key = (
-                    "wav2vec2." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
-                )
+                mapped_key = "wav2vec2." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
                 if key in name or key.split("w2v_model.")[-1] == name.split(".")[0]:
                     is_used = True
                     if "*" in mapped_key:

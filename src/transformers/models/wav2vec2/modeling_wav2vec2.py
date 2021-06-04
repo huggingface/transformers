@@ -296,10 +296,10 @@ class Wav2Vec2FeatureProjection(nn.Module):
 
     def forward(self, hidden_states):
         # non-projected hidden states are needed for quantization
-        hidden_states = self.layer_norm(hidden_states)
-        projected_hidden_states = self.projection(hidden_states)
-        projected_hidden_states = self.dropout(projected_hidden_states)
-        return projected_hidden_states, hidden_states
+        norm_hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.projection(norm_hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        return hidden_states, norm_hidden_states
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Wav2Vec2
@@ -811,7 +811,6 @@ class Wav2Vec2Quantizer(nn.Module):
         quantized_states = self.project_q(quantized_states)
 
         negatives, _ = self.sample_negatives(quantized_states)
-        negatives = self.project_q(negatives)
         transformer_hidden_states = self.final_proj(transformer_hidden_states)
 
         return transformer_hidden_states, quantized_states, negatives, num_vars, prob_perplexity
@@ -994,25 +993,25 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        hidden_states = self.feature_extractor(input_values)
-        hidden_states = hidden_states.transpose(1, 2)
+        extract_features = self.feature_extractor(input_values)
+        extract_features = extract_features.transpose(1, 2)
 
         if attention_mask is not None:
             # compute real output lengths according to convolution formula
             output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
 
             attention_mask = torch.zeros(
-                hidden_states.shape[:2], dtype=hidden_states.dtype, device=hidden_states.device
+                extract_features.shape[:2], dtype=extract_features.dtype, device=extract_features.device
             )
 
             # these two operations makes sure that all values
             # before the output lengths indices are attended to
             attention_mask[
-                (torch.arange(attention_mask.shape[0], device=hidden_states.device), output_lengths - 1)
+                (torch.arange(attention_mask.shape[0], device=extract_features.device), output_lengths - 1)
             ] = 1
             attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
 
-        hidden_states, unmasked_features = self.feature_projection(hidden_states)
+        hidden_states, extract_features = self.feature_projection(extract_features)
 
         mask_time_indices = None
         if self.config.apply_spec_augment and self.training:
@@ -1057,7 +1056,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
             last_hidden_state=hidden_states,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-            extracted_features=unmasked_features,
+            extracted_features=extract_features,
             mask_time_indices=mask_time_indices,
         )
 
@@ -1113,24 +1112,24 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        extractor_features = encoder_outputs.extracted_features
-        extractor_features = self.dropout_features(extractor_features)
+        extractor_features = self.dropout_features(encoder_outputs.extracted_features)
         transformer_features = encoder_outputs.last_hidden_state
 
+        # 1. quantize unmasked features
         quantized_extractor_features, transformer_features, negatives, num_vars, prob_perplexity = self.quantizer(
             extractor_features, transformer_features, encoder_outputs.mask_time_indices
         )
 
         # if a negative vector is identical to the positive (i.e. when codebook utilization is low),
         # its cosine similarity will be masked
-        neg_is_pos = (quantized_extractor_features == negatives).all(-1)
+        neg_is_pos = (transformer_features == negatives).all(-1)
 
-        quantized_extractor_features = quantized_extractor_features.unsqueeze(0)
-        target_states = torch.cat([quantized_extractor_features, negatives], dim=0)
-        logits = torch.cosine_similarity(transformer_features.float(), target_states.float(), dim=-1).type_as(
+        target_states = torch.cat([transformer_features[None, :], negatives], dim=0)
+        logits = torch.cosine_similarity(quantized_extractor_features.float(), target_states.float(), dim=-1).type_as(
             target_states
         )
         logits = logits / self.config.contrastive_logit_temperature
+
         if neg_is_pos.any():
             logits[1:][neg_is_pos] = float("-inf")
 
