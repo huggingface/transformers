@@ -36,6 +36,8 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_gpt_neo import GPTNeoConfig
 
+from einops import rearrange
+
 
 logger = logging.get_logger(__name__)
 
@@ -151,6 +153,30 @@ def to_gpu(x):
     else:
         return x
 
+# from: https://github.com/lucidrains/x-transformers/blob/a11b178573d2941c98a2c6d5b3a15fd9c97d4884/x_transformers/x_transformers.py by Phil Wang (MIT license)
+class RotaryEmbedding(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        inv_freq = 1. / (10000 ** (torch.arange(0, dim, 2).float() / dim))
+        self.register_buffer('inv_freq', inv_freq)
+
+    def forward(self, max_seq_len, device):
+        t = torch.arange(max_seq_len, device = device).type_as(self.inv_freq)
+        freqs = torch.einsum('i , j -> i j', t, self.inv_freq)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        return rearrange(emb, 'n d -> () () n d')
+
+def rotate_half(x):
+    x = rearrange(x, '... (j d) -> ... j d', j = 2)
+    x1, x2 = x.unbind(dim = -2)
+    return torch.cat((-x2, x1), dim = -1)
+
+def apply_rotary_pos_emb(t, freqs):
+    seq_len = t.shape[-2]
+    freqs = freqs[:, :, -seq_len:]
+    return (t * freqs.cos()) + (rotate_half(t) * freqs.sin())
+# end rotary
+
 class GPTNeoAttentionMixin:
     """
     A few attention related utilities for attention modules in GPT Neo, to be used as a mixin.
@@ -245,6 +271,9 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
+        self.rotary_dim = None
+        if config.rotary_dim is not None:
+            self.rotary_dim = config.rotary_dim
 
     def forward(
         self,
@@ -254,6 +283,7 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
+        rotary_emb=None,
     ):
 
         query = self.q_proj(hidden_states)
@@ -263,6 +293,22 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
         query = self._split_heads(query, self.num_heads, self.head_dim)
         key = self._split_heads(key, self.num_heads, self.head_dim)
         value = self._split_heads(value, self.num_heads, self.head_dim)
+
+        if rotary_emb is not None and self.rotary_dim is not None:
+            k_rot = key[:, :, :, :self.rotary_dim]
+            k_pass = key[:, :, :, self.rotary_dim:]
+
+            q_rot = query[:, :, :, :self.rotary_dim]
+            q_pass = query[:, :, :, self.rotary_dim:]
+
+            k_rot = apply_rotary_pos_emb(k_rot, rotary_emb)
+            q_rot = apply_rotary_pos_emb(q_rot, rotary_emb)
+
+            key = torch.cat([k_rot, k_pass], dim=-1)
+            query = torch.cat([q_rot, q_pass], dim=-1)
+        elif rotary_emb is not None:
+            key = apply_rotary_pos_emb(key, rotary_emb)
+            query = apply_rotary_pos_emb(query, rotary_emb)
 
         if layer_past is not None:
             past_key = layer_past[0]
@@ -316,6 +362,7 @@ class GPTNeoAttention(nn.Module):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
+        rotary_emb=None,
     ):
         outputs = self.attention(
             hidden_states,
@@ -324,6 +371,7 @@ class GPTNeoAttention(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            rotary_emb=rotary_emb,
         )
 
         return outputs
@@ -364,6 +412,7 @@ class GPTNeoBlock(nn.Module):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
+        rotary_emb=None,
     ):
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
@@ -374,6 +423,7 @@ class GPTNeoBlock(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            rotary_emb=rotary_emb,
         )
         attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attn_outputs[1:]
@@ -522,6 +572,12 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         self.drop = nn.Dropout(config.embed_dropout)
         self.h = nn.ModuleList([to_gpu(GPTNeoBlock(config, layer_id=i).half()) for i in range(config.num_layers)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.rotary = None
+        if config.rotary:
+            rotary_dim = config.hidden_size // config.num_heads
+            if config.rotary_dim is not None:
+                rotary_dim = min(config.rotary_dim, rotary_dim)
+            self.rotary = RotaryEmbedding(rotary_dim)
 
         self.init_weights()
 
@@ -622,8 +678,14 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
-        position_embeds = self.wpe(position_ids)
-        hidden_states = inputs_embeds + position_embeds
+
+        if self.rotary is not None:
+            hidden_states = inputs_embeds
+            rotary_emb = self.rotary(seq_length, self.device)
+        else:
+            position_embeds = self.wpe(position_ids)
+            hidden_states = inputs_embeds + position_embeds
+            rotary_emb = None
 
         if token_type_ids is not None:
             token_type_embeds = self.wte(token_type_ids)
@@ -674,6 +736,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
                     head_mask=head_mask[i],
                     use_cache=use_cache,
                     output_attentions=output_attentions,
+                    rotary_emb=rotary_emb,
                 )
 
             hidden_states = outputs[0]
