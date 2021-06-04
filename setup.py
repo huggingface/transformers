@@ -149,7 +149,6 @@ _deps = [
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "uvicorn",
-    "detectron2@git+https://github.com/facebookresearch/detectron2.git",
 ]
 
 
@@ -160,6 +159,7 @@ _deps = [
 #
 # some of the values are versioned whereas others aren't.
 deps = {b: a for a, b in (re.findall(r"^(([^!=<>]+)(?:[!=<>].*)?$)", x)[0] for x in _deps)}
+deps["detectron2"] = "detectron2@git+https://github.com/facebookresearch/detectron2.git"
 
 # since we save this data in src/transformers/dependency_versions_table.py it can be easily accessed from
 # anywhere. If you need to quickly access the data from this table in a shell, you can do so easily with:
