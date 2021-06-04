@@ -205,6 +205,53 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
 
     # --- These tests are enough to run on one of zero stages --- #
 
+    def test_hf_ds_config_mismatch(self):
+
+        ds_config = self.get_config_dict(ZERO2)
+
+        # purposefully configure these values to mismatch TrainingArguments values
+        # this is currently only covers several keys (not exhaustive)
+        per_device_train_batch_size = 2
+        ds_config["train_micro_batch_size_per_gpu"] = per_device_train_batch_size + 2
+
+        ds_config["train_batch_size"] = 1000
+
+        gradient_accumulation_steps = 2
+        ds_config["gradient_accumulation_steps"] = gradient_accumulation_steps + 2
+
+        max_grad_norm = 1.0
+        ds_config["gradient_clipping"] = max_grad_norm + 0.1
+
+        adam_beta1, adam_beta2 = 0.9, 0.99
+        ds_config["optimizer"]["params"]["betas"] = [adam_beta1-0.1, adam_beta2-0.1]
+
+        fp16=True
+        ds_config["fp16"]["enabled"] = not fp16
+
+        keys = ["per_device_train_batch_size", "train_batch_size", "gradient_accumulation_steps", "max_grad_norm", "betas", "fp16"]
+
+        with mockenv_context(**self.dist_env_1_gpu):
+            trainer = get_regression_trainer(
+                local_rank=0,
+                deepspeed=ds_config,
+                per_device_train_batch_size=per_device_train_batch_size,
+                gradient_accumulation_steps=gradient_accumulation_steps,
+                max_grad_norm=max_grad_norm,
+                adam_beta1=adam_beta1,
+                adam_beta2=adam_beta2,
+                fp16=fp16,
+            )
+            with self.assertRaises(Exception) as context:
+                trainer.train()
+
+        for key in keys:
+            self.assertTrue(
+                key in str(context.exception),
+                f"{key} is not in the exception message:\n{context.exception}",
+            )
+
+        print(context.exception)
+
     # Test various combos
     # 1. DS scheduler + DS optimizer: this is already tested by most other tests
     # 2. HF scheduler + HF optimizer:
