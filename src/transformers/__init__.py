@@ -199,6 +199,7 @@ _import_structure = {
     "models.herbert": ["HerbertTokenizer"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
+    "models.layoutlmv2": ["LAYOUTLMv2_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMv2Config", "LayoutLMv2Tokenizer"],
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
     "models.luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig", "LukeTokenizer"],
@@ -344,6 +345,7 @@ if is_tokenizers_available():
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
+    _import_structure["models.layoutlmv2"].append("LayoutLMv2TokenizerFast")
     _import_structure["models.led"].append("LEDTokenizerFast")
     _import_structure["models.longformer"].append("LongformerTokenizerFast")
     _import_structure["models.lxmert"].append("LxmertTokenizerFast")
@@ -775,6 +777,15 @@ if is_torch_available():
             "LayoutLMModel",
         ]
     )
+    _import_structure["models.layoutlmv2"].extend(
+        [
+            "LAYOUTLMv2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LayoutLMv2ForMaskedLM",
+            "LayoutLMv2ForSequenceClassification",
+            "LayoutLMv2ForTokenClassification",
+            "LayoutLMv2Model",
+        ]
+    )   
     _import_structure["models.led"].extend(
         [
             "LED_PRETRAINED_MODEL_ARCHIVE_LIST",

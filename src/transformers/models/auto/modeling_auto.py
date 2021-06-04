@@ -160,6 +160,12 @@ from ..layoutlm.modeling_layoutlm import (
     LayoutLMForTokenClassification,
     LayoutLMModel,
 )
+from ..layoutlmv2.modeling_layoutlmv2 import (
+    LayoutLMv2ForMaskedLM,
+    LayoutLMv2ForSequenceClassification,
+    LayoutLMv2ForTokenClassification,
+    LayoutLMv2Model,
+)
 from ..led.modeling_led import (
     LEDForConditionalGeneration,
     LEDForQuestionAnswering,
@@ -266,7 +272,6 @@ from ..tapas.modeling_tapas import (
     TapasModel,
 )
 from ..transfo_xl.modeling_transfo_xl import TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
-from ..visual_bert.modeling_visual_bert import VisualBertForPreTraining, VisualBertModel
 from ..vit.modeling_vit import ViTForImageClassification, ViTModel
 from ..wav2vec2.modeling_wav2vec2 import Wav2Vec2ForMaskedLM, Wav2Vec2Model
 from ..xlm.modeling_xlm import (
@@ -350,7 +355,6 @@ from .configuration_auto import (
     T5Config,
     TapasConfig,
     TransfoXLConfig,
-    VisualBertConfig,
     ViTConfig,
     Wav2Vec2Config,
     XLMConfig,
@@ -366,7 +370,6 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
-        (VisualBertConfig, VisualBertModel),
         (RoFormerConfig, RoFormerModel),
         (CLIPConfig, CLIPModel),
         (BigBirdPegasusConfig, BigBirdPegasusModel),
@@ -396,6 +399,7 @@ MODEL_MAPPING = OrderedDict(
         (LongformerConfig, LongformerModel),
         (RobertaConfig, RobertaModel),
         (LayoutLMConfig, LayoutLMModel),
+        (LayoutLMv2Config, LayoutLMv2Model),
         (SqueezeBertConfig, SqueezeBertModel),
         (BertConfig, BertModel),
         (OpenAIGPTConfig, OpenAIGPTModel),
@@ -428,8 +432,8 @@ MODEL_MAPPING = OrderedDict(
 MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
         # Model for pre-training mapping
-        (VisualBertConfig, VisualBertForPreTraining),
         (LayoutLMConfig, LayoutLMForMaskedLM),
+        (LayoutLMv2Config, LayoutLMv2ForMaskedLM),
         (RetriBertConfig, RetriBertModel),
         (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
@@ -477,6 +481,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (LEDConfig, LEDForConditionalGeneration),
         (BlenderbotSmallConfig, BlenderbotSmallForConditionalGeneration),
         (LayoutLMConfig, LayoutLMForMaskedLM),
+        (LayoutLMv2Config, LayoutLMv2ForMaskedLM),
         (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForMaskedLM),
@@ -561,6 +566,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
         (ConvBertConfig, ConvBertForMaskedLM),
         (LayoutLMConfig, LayoutLMForMaskedLM),
+        (LayoutLMv2Config, LayoutLMv2ForMaskedLM),
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForMaskedLM),
         (BartConfig, BartForConditionalGeneration),
@@ -625,6 +631,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (RobertaConfig, RobertaForSequenceClassification),
         (SqueezeBertConfig, SqueezeBertForSequenceClassification),
         (LayoutLMConfig, LayoutLMForSequenceClassification),
+        (LayoutLMv2Config, LayoutLMv2ForSequenceClassification),
         (BertConfig, BertForSequenceClassification),
         (XLNetConfig, XLNetForSequenceClassification),
         (MegatronBertConfig, MegatronBertForSequenceClassification),
@@ -695,6 +702,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (BigBirdConfig, BigBirdForTokenClassification),
         (ConvBertConfig, ConvBertForTokenClassification),
         (LayoutLMConfig, LayoutLMForTokenClassification),
+        (LayoutLMv2Config, LayoutLMv2ForTokenClassification),
         (DistilBertConfig, DistilBertForTokenClassification),
         (CamembertConfig, CamembertForTokenClassification),
         (FlaubertConfig, FlaubertForTokenClassification),

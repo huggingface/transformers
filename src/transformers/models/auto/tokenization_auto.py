@@ -27,7 +27,6 @@ from ..bert_japanese.tokenization_bert_japanese import BertJapaneseTokenizer
 from ..bertweet.tokenization_bertweet import BertweetTokenizer
 from ..blenderbot.tokenization_blenderbot import BlenderbotTokenizer
 from ..blenderbot_small.tokenization_blenderbot_small import BlenderbotSmallTokenizer
-from ..byt5.tokenization_byt5 import ByT5Tokenizer
 from ..convbert.tokenization_convbert import ConvBertTokenizer
 from ..ctrl.tokenization_ctrl import CTRLTokenizer
 from ..deberta.tokenization_deberta import DebertaTokenizer
@@ -40,6 +39,7 @@ from ..funnel.tokenization_funnel import FunnelTokenizer
 from ..gpt2.tokenization_gpt2 import GPT2Tokenizer
 from ..herbert.tokenization_herbert import HerbertTokenizer
 from ..layoutlm.tokenization_layoutlm import LayoutLMTokenizer
+from ..layoutlmv2.tokenization_layoutlmv2 import LayoutLMv2Tokenizer
 from ..led.tokenization_led import LEDTokenizer
 from ..longformer.tokenization_longformer import LongformerTokenizer
 from ..luke.tokenization_luke import LukeTokenizer
@@ -83,6 +83,7 @@ from .configuration_auto import (
     GPT2Config,
     IBertConfig,
     LayoutLMConfig,
+    LayoutLMv2Config,
     LEDConfig,
     LongformerConfig,
     LukeConfig,
@@ -172,6 +173,7 @@ if is_tokenizers_available():
     from ..gpt2.tokenization_gpt2_fast import GPT2TokenizerFast
     from ..herbert.tokenization_herbert_fast import HerbertTokenizerFast
     from ..layoutlm.tokenization_layoutlm_fast import LayoutLMTokenizerFast
+    from ..layoutlmv2.tokenization_layoutlmv2_fast import LayoutLMv2TokenizerFast
     from ..led.tokenization_led_fast import LEDTokenizerFast
     from ..longformer.tokenization_longformer_fast import LongformerTokenizerFast
     from ..lxmert.tokenization_lxmert_fast import LxmertTokenizerFast
@@ -206,6 +208,7 @@ else:
     GPT2TokenizerFast = None
     HerbertTokenizerFast = None
     LayoutLMTokenizerFast = None
+    LayoutLMv2TokenizerFast = None
     LEDTokenizerFast = None
     LongformerTokenizerFast = None
     LxmertTokenizerFast = None
@@ -252,6 +255,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (FunnelConfig, (FunnelTokenizer, FunnelTokenizerFast)),
         (LxmertConfig, (LxmertTokenizer, LxmertTokenizerFast)),
         (LayoutLMConfig, (LayoutLMTokenizer, LayoutLMTokenizerFast)),
+        (LayoutLMv2Config, (LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast)),
         (DPRConfig, (DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast)),
         (SqueezeBertConfig, (SqueezeBertTokenizer, SqueezeBertTokenizerFast)),
         (BertConfig, (BertTokenizer, BertTokenizerFast)),
@@ -288,7 +292,6 @@ TOKENIZER_MAPPING = OrderedDict(
 NO_CONFIG_TOKENIZER = [
     BertJapaneseTokenizer,
     BertweetTokenizer,
-    ByT5Tokenizer,
     CpmTokenizer,
     HerbertTokenizer,
     HerbertTokenizerFast,
@@ -322,7 +325,6 @@ class AutoTokenizer:
     r"""
     This is a generic tokenizer class that will be instantiated as one of the tokenizer classes of the library when
     created with the :meth:`AutoTokenizer.from_pretrained` class method.
-
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
 
@@ -337,17 +339,13 @@ class AutoTokenizer:
     def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
         r"""
         Instantiate one of the tokenizer classes of the library from a pretrained model vocabulary.
-
         The tokenizer class to instantiate is selected based on the :obj:`model_type` property of the config object
         (either passed as an argument or loaded from :obj:`pretrained_model_name_or_path` if possible), or when it's
         missing, by falling back to using pattern matching on :obj:`pretrained_model_name_or_path`:
-
         List options
-
         Params:
             pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
                 Can be either:
-
                     - A string, the `model id` of a predefined tokenizer hosted inside a model repo on huggingface.co.
                       Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
                       a user or organization name, like ``dbmdz/bert-base-german-cased``.
@@ -386,20 +384,14 @@ class AutoTokenizer:
                 Will be passed to the Tokenizer ``__init__()`` method. Can be used to set special tokens like
                 ``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``,
                 ``mask_token``, ``additional_special_tokens``. See parameters in the ``__init__()`` for more details.
-
         Examples::
-
             >>> from transformers import AutoTokenizer
-
             >>> # Download vocabulary from huggingface.co and cache.
             >>> tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
-
             >>> # Download vocabulary from huggingface.co (user-uploaded) and cache.
             >>> tokenizer = AutoTokenizer.from_pretrained('dbmdz/bert-base-german-cased')
-
             >>> # If vocabulary files are in a directory (e.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`)
             >>> tokenizer = AutoTokenizer.from_pretrained('./test/bert_saved_model/')
-
         """
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
