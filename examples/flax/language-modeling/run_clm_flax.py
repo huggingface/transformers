@@ -430,7 +430,7 @@ if __name__ == "__main__":
         len(train_dataset),
         train_batch_size,
         training_args.num_train_epochs,
-        training_args.num_warmup_steps,
+        training_args.warmup_steps,
         training_args.learning_rate,
     )
 
@@ -516,7 +516,7 @@ if __name__ == "__main__":
         # train
         for _ in tqdm(range(steps_per_epoch), desc="Training...", position=1):
             batch = next(train_loader)
-            state, train_metric, dropout_rngs = p_train_step(state.params, batch, dropout_rngs)
+            state, train_metric, dropout_rngs = p_train_step(state, batch, dropout_rngs)
             train_metrics.append(train_metric)
 
         train_time += time.time() - train_start
