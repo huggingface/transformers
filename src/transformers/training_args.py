@@ -689,6 +689,8 @@ class TrainingArguments:
         attrs_as_str = [f"{k}={v},\n" for k, v in sorted(self_as_dict.items())]
         return f"{self.__class__.__name__}(\n{''.join(attrs_as_str)})"
 
+    __repr__ = __str__
+
     @property
     def train_batch_size(self) -> int:
         """
