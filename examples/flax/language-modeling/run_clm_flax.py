@@ -19,6 +19,8 @@ Fine-tuning the library models for causal language modeling (GPT, GPT-2, CTRL, .
 Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
 https://huggingface.co/models?filter=causal-lm
 """
+# You can also adapt this script on your own causal language modeling task. Pointers for this are left as comments.
+
 import logging
 import math
 import os
@@ -26,7 +28,6 @@ import sys
 import time
 from dataclasses import dataclass, field
 
-# You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -440,8 +441,6 @@ if __name__ == "__main__":
     train_batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
     eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
 
-    num_train_steps = len(train_dataset) // train_batch_size * num_epochs
-
     # Create learning rate schedule
     linear_decay_lr_schedule_fn = create_learning_rate_fn(
         len(train_dataset),
@@ -562,14 +561,14 @@ if __name__ == "__main__":
         # normalize eval metrics
         eval_metrics = get_metrics(eval_metrics)
         eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
-        eval_metrics["perplexity"] = math.exp(eval_metrics["loss"])
 
-        epochs.write(
-            f"Epoch... ({epoch + 1}/{num_epochs} | Eval Loss: {eval_metrics['loss']}, Eval Perplexity: {eval_metrics['perplexity']})"
-        )
-
+        try:
+            eval_metrics["perplexity"] = math.exp(eval_metrics["loss"])
+        except OverflowError:
+           eval_metrics["perplexity"] = float("inf") 
+        
         # Update progress bar
-        epochs.desc = f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {eval_metrics['loss']} | Perplexity: {eval_metrics['perplexity']})"
+        epochs.desc = f"Epoch... ({epoch + 1}/{num_epochs} | Eval Loss: {eval_metrics['loss']} | Eval Perplexity: {eval_metrics['perplexity']})"
 
         # Save metrics
         if has_tensorboard and jax.process_index() == 0:
