@@ -17,7 +17,13 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_torch_available
+from ...file_utils import  (
+    _BaseLazyModule,
+    is_flax_available,
+    is_tf_available,
+    is_tokenizers_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
@@ -33,6 +39,8 @@ if is_torch_available():
         "load_tf_weights_in_gpt_neo",
     ]
 
+if is_flax_available():
+    _import_structure["modeling_flax_gpt_neo"] = ["FlaxGPTNeoLMHeadModel", "FlaxGPTNeoModel"]
 
 if TYPE_CHECKING:
     from .configuration_gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
@@ -45,6 +53,9 @@ if TYPE_CHECKING:
             GPTNeoPreTrainedModel,
             load_tf_weights_in_gpt_neo,
         )
+
+    if is_flax_available():
+        from .modeling_flax_gpt_neo import FlaxGPTNeoLMHeadModel, FlaxGPTNeoModel
 
 
 else:
