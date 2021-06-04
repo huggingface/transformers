@@ -74,13 +74,12 @@ class HfDeepSpeedConfig:
         # zero stage - this is done as early as possible, before model is created, to allow
         # ``is_deepspeed_zero3_enabled`` query and getting to the early deepspeed config object
         # during ``zero.Init()`` which needs whether fp16 is enabled, dtype, etc.
-        stage = self.get_value("zero_optimization.stage")
-        self.stage = stage if stage is not None else 0
+        self._stage = self.get_value("zero_optimization.stage", -1)
 
         # offload
-        self.offload = False
+        self._offload = False
         if self.is_zero2():
-            self.offload = self.is_true("zero_optimization.cpu_offload")
+            self._offload = self.is_true("zero_optimization.cpu_offload")
         elif self.is_zero3():
             offload_devices_valid = set(["cpu", "nvme"])
             offload_devices = set(
@@ -90,7 +89,7 @@ class HfDeepSpeedConfig:
                 ]
             )
             if offload_devices | offload_devices_valid:
-                self.offload = True
+                self._offload = True
 
     def find_config_node(self, ds_key_long):
         config = self.config
@@ -105,17 +104,20 @@ class HfDeepSpeedConfig:
 
         return config, ds_key
 
-    def get_value(self, ds_key_long):
+    def get_value(self, ds_key_long, default=None):
+        """
+        Returns the set value or ``default`` if no value is set
+        """
         config, ds_key = self.find_config_node(ds_key_long)
         if config is None:
-            return None
-        return config.get(ds_key)
+            return default
+        return config.get(ds_key, default)
 
     def is_true(self, ds_key_long):
         """
         Returns :obj:`True`/:obj:`False` only if the value is set, always :obj:`False` otherwise. So use this method to
         ask the very specific question of whether the value is set to :obj:`True` (and it's not set to :obj:`False` or
-        wasn't set).
+        isn't set).
 
         """
         value = self.get_value(ds_key_long)
@@ -127,7 +129,7 @@ class HfDeepSpeedConfig:
         """
         Returns :obj:`True`/:obj:`False` only if the value is set, always :obj:`False` otherwise. So use this method to
         ask the very specific question of whether the value is set to :obj:`False` (and it's not set to :obj:`True` or
-        wasn't set).
+        isn't set).
         """
         value = self.get_value(ds_key_long)
         if value is None:
@@ -135,13 +137,13 @@ class HfDeepSpeedConfig:
         return not bool(value)
 
     def is_zero2(self):
-        return self.stage == 2
+        return self._stage == 2
 
     def is_zero3(self):
-        return self.stage == 3
+        return self._stage == 3
 
     def is_offload(self):
-        return self.offload
+        return self._offload
 
 
 class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
