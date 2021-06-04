@@ -269,11 +269,11 @@ class HFTracer(Tracer):
         idx = 0
         path = f"{mod.__class__.__name__.lower()}_{idx}"
         while hasattr(self.root, path):
-            name = f"{path}_{idx}"
+            path = f"{path}_{idx}"
             idx += 1
 
         self.root.add_module(path, mod)
-        return name
+        return path
 
     def path_of_module(self, mod: nn.Module) -> str:
         """
