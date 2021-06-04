@@ -536,10 +536,9 @@ if __name__ == "__main__":
 
         # Replicate the train state on each device
         state = jax_utils.replicate(state)
-
     else:
-        train_step = jax.jit(_train_step, "batch", donate_argnums=(0,))
-        eval_step = jax.jit(_eval_step, "batch", donate_argnums=(0,))
+        train_step = jax.jit(_train_step, donate_argnums=(0,))
+        eval_step = jax.jit(_eval_step, donate_argnums=(0,))
 
     train_metrics = []
     train_time = 0
