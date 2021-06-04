@@ -52,8 +52,7 @@ from utils_qa import postprocess_qa_predictions
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.5.0.dev0")
-
+check_min_version("4.7.0.dev0")
 
 logger = logging.getLogger(__name__)
 # You should update this to your particular problem to have better documentation of `model_type`
@@ -693,7 +692,11 @@ def main():
             if completed_steps >= args.max_train_steps:
                 break
 
-    # Validation
+    # Evaluation
+    logger.info("***** Running Evaluation *****")
+    logger.info(f"  Num examples = {len(eval_dataset)}")
+    logger.info(f"  Batch size = {args.per_device_eval_batch_size}")
+
     all_start_logits = []
     all_end_logits = []
     for step, batch in enumerate(eval_dataloader):
@@ -726,6 +729,10 @@ def main():
 
     # Prediction
     if args.do_predict:
+        logger.info("***** Running Prediction *****")
+        logger.info(f"  Num examples = {len(predict_dataset)}")
+        logger.info(f"  Batch size = {args.per_device_eval_batch_size}")
+
         all_start_logits = []
         all_end_logits = []
         for step, batch in enumerate(predict_dataloader):

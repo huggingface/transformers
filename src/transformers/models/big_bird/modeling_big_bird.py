@@ -647,13 +647,13 @@ class BigBirdBlockSparseAttention(nn.Module):
             [
                 to_mask[:, :, :, : 3 * to_block_size],
                 to_mask[:, :, :, -to_block_size:],
-                first_context_layer.new_ones([bsz, 1, 1, n_rand_blocks * to_block_size]),
+                to_mask.new_ones([bsz, 1, 1, n_rand_blocks * to_block_size]),
             ],
             dim=3,
         )
         second_rand_pad = torch.cat(
             [
-                first_context_layer.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]),
+                rand_mask.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]),
                 rand_mask[:, :, 0],
             ],
             dim=3,
@@ -781,13 +781,13 @@ class BigBirdBlockSparseAttention(nn.Module):
             [
                 to_mask[:, :, :, :to_block_size],
                 to_mask[:, :, :, -3 * to_block_size :],
-                context_layer.new_ones([bsz, 1, 1, n_rand_blocks * to_block_size]),
+                to_mask.new_ones([bsz, 1, 1, n_rand_blocks * to_block_size]),
             ],
             dim=3,
         )
         second_last_rand_pad = torch.cat(
             [
-                context_layer.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]),
+                rand_mask.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]),
                 rand_mask[:, :, -1],
             ],
             dim=3,
@@ -2671,7 +2671,10 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
 
             if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels)
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
@@ -2980,8 +2983,8 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
             logits = logits - logits_mask * 1e6
 
         start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
+        start_logits = start_logits.squeeze(-1).contiguous()
+        end_logits = end_logits.squeeze(-1).contiguous()
 
         total_loss = None
         if start_positions is not None and end_positions is not None:

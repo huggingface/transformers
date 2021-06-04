@@ -136,6 +136,7 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         processed = self.feature_extractor(
             inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
         )
+        processed = self.ensure_tensor_on_device(**processed)
 
         name = self.model.__class__.__name__
         if name.endswith("ForConditionalGeneration"):

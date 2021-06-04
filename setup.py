@@ -97,7 +97,7 @@ _deps = [
     "fastapi",
     "filelock",
     "flake8>=3.8.3",
-    "flax>=0.3.2",
+    "flax>=0.3.4",
     "fugashi>=1.0",
     "huggingface-hub==0.0.8",
     "importlib_metadata",
@@ -112,6 +112,7 @@ _deps = [
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
+    "optuna",
     "packaging",
     "parameterized",
     "protobuf",
@@ -121,6 +122,7 @@ _deps = [
     "pytest-sugar",
     "pytest-xdist",
     "python>=3.6.0",
+    "ray",
     "recommonmark",
     "regex!=2019.12.17",
     "requests",
@@ -239,6 +241,10 @@ extras["modelcreation"] = deps_list("cookiecutter")
 extras["sagemaker"] = deps_list("sagemaker")
 extras["deepspeed"] = deps_list("deepspeed")
 extras["fairscale"] = deps_list("fairscale")
+extras["optuna"] = deps_list("optuna")
+extras["ray"] = deps_list("ray")
+
+extras["integrations"] = extras["optuna"] + extras["ray"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["speech"] = deps_list("soundfile", "torchaudio")
@@ -263,6 +269,7 @@ extras["all"] = (
     + extras["tokenizers"]
     + extras["speech"]
     + extras["vision"]
+    + extras["integrations"]
 )
 
 extras["docs_specific"] = deps_list(
@@ -320,7 +327,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.6.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.7.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Suraj Patil, Stas Bekman, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",

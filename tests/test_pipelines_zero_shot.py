@@ -45,25 +45,25 @@ class ZeroShotClassificationPipelineTests(CustomInputPipelineCommonMixin, unitte
             sum += score
         self.assertAlmostEqual(sum, 1.0, places=5)
 
-    def _test_entailment_id(self, nlp: Pipeline):
-        config = nlp.model.config
+    def _test_entailment_id(self, zero_shot_classifier: Pipeline):
+        config = zero_shot_classifier.model.config
         original_config = deepcopy(config)
 
         config.label2id = {"LABEL_0": 0, "LABEL_1": 1, "LABEL_2": 2}
-        self.assertEqual(nlp.entailment_id, -1)
+        self.assertEqual(zero_shot_classifier.entailment_id, -1)
 
         config.label2id = {"entailment": 0, "neutral": 1, "contradiction": 2}
-        self.assertEqual(nlp.entailment_id, 0)
+        self.assertEqual(zero_shot_classifier.entailment_id, 0)
 
         config.label2id = {"ENTAIL": 0, "NON-ENTAIL": 1}
-        self.assertEqual(nlp.entailment_id, 0)
+        self.assertEqual(zero_shot_classifier.entailment_id, 0)
 
         config.label2id = {"ENTAIL": 2, "NEUTRAL": 1, "CONTR": 0}
-        self.assertEqual(nlp.entailment_id, 2)
+        self.assertEqual(zero_shot_classifier.entailment_id, 2)
 
-        nlp.model.config = original_config
+        zero_shot_classifier.model.config = original_config
 
-    def _test_pipeline(self, nlp: Pipeline):
+    def _test_pipeline(self, zero_shot_classifier: Pipeline):
         output_keys = {"sequence", "labels", "scores"}
         valid_mono_inputs = [
             {"sequences": "Who are you voting for in 2020?", "candidate_labels": "politics"},
@@ -102,12 +102,12 @@ class ZeroShotClassificationPipelineTests(CustomInputPipelineCommonMixin, unitte
                 "hypothesis_template": "Template without formatting syntax.",
             },
         ]
-        self.assertIsNotNone(nlp)
+        self.assertIsNotNone(zero_shot_classifier)
 
-        self._test_entailment_id(nlp)
+        self._test_entailment_id(zero_shot_classifier)
 
         for mono_input in valid_mono_inputs:
-            mono_result = nlp(**mono_input)
+            mono_result = zero_shot_classifier(**mono_input)
             self.assertIsInstance(mono_result, dict)
             if len(mono_result["labels"]) > 1:
                 self._test_scores_sum_to_one(mono_result)
@@ -115,7 +115,7 @@ class ZeroShotClassificationPipelineTests(CustomInputPipelineCommonMixin, unitte
             for key in output_keys:
                 self.assertIn(key, mono_result)
 
-        multi_result = nlp(**valid_multi_input)
+        multi_result = zero_shot_classifier(**valid_multi_input)
         self.assertIsInstance(multi_result, list)
         self.assertIsInstance(multi_result[0], dict)
         self.assertEqual(len(multi_result), len(valid_multi_input["sequences"]))
@@ -128,9 +128,9 @@ class ZeroShotClassificationPipelineTests(CustomInputPipelineCommonMixin, unitte
                 self._test_scores_sum_to_one(result)
 
         for bad_input in invalid_inputs:
-            self.assertRaises(Exception, nlp, **bad_input)
+            self.assertRaises(Exception, zero_shot_classifier, **bad_input)
 
-        if nlp.model.name_or_path in self.large_models:
+        if zero_shot_classifier.model.name_or_path in self.large_models:
             # We also check the outputs for the large models
             inputs = [
                 {
@@ -158,7 +158,7 @@ class ZeroShotClassificationPipelineTests(CustomInputPipelineCommonMixin, unitte
             ]
 
             for input, expected_output in zip(inputs, expected_outputs):
-                output = nlp(**input)
+                output = zero_shot_classifier(**input)
                 for key in output:
                     if key == "scores":
                         for output_score, expected_score in zip(output[key], expected_output[key]):

@@ -19,12 +19,14 @@ import os
 from copy import deepcopy
 
 from parameterized import parameterized
-from transformers import TrainingArguments, is_torch_available
+from transformers import AutoModel, TrainingArguments, is_torch_available, logging
+from transformers.deepspeed import HfDeepSpeedConfig, is_deepspeed_available
 from transformers.file_utils import WEIGHTS_NAME
-from transformers.integrations import is_deepspeed_available
 from transformers.testing_utils import (
     CaptureLogger,
+    CaptureStderr,
     ExtendSysPath,
+    LoggingLevel,
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
@@ -55,14 +57,80 @@ def load_json(path):
     with open(path) as f:
         return json.load(f)
 
+def require_deepspeed_aio(test_case):
+    """
+    Decorator marking a test that requires deepspeed aio (nvme)
+    """
+    if not is_deepspeed_available():
+        return unittest.skip("test requires deepspeed")(test_case)
+
+    import deepspeed
+    from deepspeed.ops.aio import AsyncIOBuilder
+
+    if not deepspeed.ops.__compatible_ops__[AsyncIOBuilder.NAME]:
+        return unittest.skip("test requires deepspeed async-io")(test_case)
+    else:
+        return test_case
+
+
 
 if is_deepspeed_available():
     from deepspeed.utils import logger as deepspeed_logger  # noqa
-    from transformers.integrations import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
+    from transformers.deepspeed import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
 
 ZERO2 = "zero2"
 ZERO3 = "zero3"
 stages = [ZERO2, ZERO3]
+
+
+@require_deepspeed
+@require_torch_gpu
+class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
+    """
+    Testing non-Trainer DeepSpeed integration
+    """
+
+    def setUp(self):
+        super().setUp()
+
+        self.dist_env_1_gpu = dict(
+            MASTER_ADDR="localhost", MASTER_PORT="10999", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
+        )
+
+    def test_init_zero3(self):
+        # test that zero.Init() works correctly under zero3
+        ds_config = {
+            "train_batch_size": 1,
+            "zero_optimization": {
+                "stage": 3,
+            },
+        }
+
+        dschf = HfDeepSpeedConfig(ds_config)
+
+        self.assertTrue(dschf.is_zero3())
+        self.assertTrue(is_deepspeed_zero3_enabled())
+
+        with LoggingLevel(logging.INFO):
+            with mockenv_context(**self.dist_env_1_gpu):
+                logger = logging.get_logger("transformers.modeling_utils")
+                with CaptureLogger(logger) as cl:
+                    AutoModel.from_pretrained(T5_TINY)
+        self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
+
+        # now remove zero optimization
+        del ds_config["zero_optimization"]
+        dschf = HfDeepSpeedConfig(ds_config)
+
+        self.assertFalse(dschf.is_zero3())
+        self.assertFalse(is_deepspeed_zero3_enabled())
+
+        with LoggingLevel(logging.INFO):
+            with mockenv_context(**self.dist_env_1_gpu):
+                logger = logging.get_logger("transformers.modeling_utils")
+                with CaptureLogger(logger) as cl:
+                    AutoModel.from_pretrained(T5_TINY)
+        self.assertNotIn("Detected DeepSpeed ZeRO-3", cl.out)
 
 
 @require_deepspeed
@@ -172,6 +240,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             f"got exception: {context.exception}",
         )
 
+    @require_deepspeed_aio
     def test_stage3_nvme_offload(self):
         with mockenv_context(**self.dist_env_1_gpu):
             # this actually doesn't have to be on NVMe, any storage will do since this test only
@@ -182,9 +251,9 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             ds_config_zero3_dict["zero_optimization"]["offload_optimizer"] = nvme_config
             ds_config_zero3_dict["zero_optimization"]["offload_param"] = nvme_config
             trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_zero3_dict)
-            with CaptureLogger(deepspeed_logger) as cs:
+            with CaptureLogger(deepspeed_logger) as cl:
                 trainer.train()
-            self.assertIn("DeepSpeed info", cs.out, "expected DeepSpeed logger output but got none")
+            self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
 
     # --- These tests need to run on both zero stages --- #
 
@@ -218,9 +287,9 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # to reset `deepspeed_logger.handlers[0].setStream(sys.stdout)` or directly capture from the deepspeed_logger.
         with mockenv_context(**self.dist_env_1_gpu):
             trainer = get_regression_trainer(local_rank=0, deepspeed=self.get_config_dict(stage))
-            with CaptureLogger(deepspeed_logger) as cs:
+            with CaptureLogger(deepspeed_logger) as cl:
                 trainer.train()
-            self.assertIn("DeepSpeed info", cs.out, "expected DeepSpeed logger output but got none")
+            self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
 
     @parameterized.expand(stages)
     def test_early_get_last_lr(self, stage):
@@ -729,6 +798,39 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         # keep for quick debug
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
         execute_subprocess_async(cmd, env=self.get_env())
+
+    def test_clm_from_config_zero3(self):
+        # this test exercises AutoModel.from_config(config) - to ensure zero.Init is called
+
+        data_dir = self.tests_dir / "fixtures"
+        output_dir = self.get_auto_remove_tmp_dir()
+        args = f"""
+            --model_type gpt2
+            --tokenizer_name sshleifer/tiny-gpt2
+            --train_file {data_dir}/sample_text.txt
+            --validation_file {data_dir}/sample_text.txt
+            --output_dir {output_dir}
+            --overwrite_output_dir
+            --do_train
+            --max_train_samples 4
+            --per_device_train_batch_size 2
+            --num_train_epochs 1
+            --warmup_steps 8
+            --block_size 8
+            --fp16
+            --report_to none
+            """.split()
+
+        ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_zero3.json".split()
+        script = [f"{self.examples_dir_str}/pytorch/language-modeling/run_clm.py"]
+        launcher = self.get_launcher(distributed=True)
+
+        cmd = launcher + script + args + ds_args
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        with CaptureStderr() as cs:
+            execute_subprocess_async(cmd, env=self.get_env())
+        assert "Detected DeepSpeed ZeRO-3" in cs.err
 
     def get_launcher(self, distributed=False):
         # 1. explicitly set --num_nodes=1 just in case these tests end up run on a multi-node setup
