@@ -482,24 +482,23 @@ if __name__ == "__main__":
     # Setup train state
     state = train_state.TrainState.create(apply_fn=model.__call__, params=model.params, tx=adamw)
 
+    def loss_fn(logits, labels):
+        shift_logits = logits[..., :-1, :]
+        shift_labels = labels[..., 1:]
+        loss = optax.softmax_cross_entropy(shift_logits, onehot(shift_labels, shift_logits.shape[-1]))
+        return loss.mean()
+
     # Define gradient update step fn
     def train_step(state, batch, dropout_rng):
         dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
 
-        def loss_fn(params):
+        def compute_loss(params):
             labels = batch.pop("labels")
-
             logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
-
-            # compute loss
-            shift_logits = logits[..., :-1, :]
-            shift_labels = labels[..., 1:]
-            loss = optax.softmax_cross_entropy(shift_logits, onehot(shift_labels, shift_logits.shape[-1]))
-            loss = loss.mean()
-
+            loss = loss_fn(logits, labels)
             return loss
 
-        grad_fn = jax.value_and_grad(loss_fn)
+        grad_fn = jax.value_and_grad(compute_loss)
         loss, grad = grad_fn(state.params)
         grad = jax.lax.pmean(grad, "batch")
         new_state = state.apply_gradients(grads=grad)
@@ -510,25 +509,18 @@ if __name__ == "__main__":
 
         return new_state, metrics, new_dropout_rng
 
-    # Create parallel version of the train step
-    p_train_step = jax.pmap(train_step, "batch", donate_argnums=(0,))
-
     # Define eval fn
     def eval_step(params, batch):
         labels = batch.pop("labels")
-
         logits = model(**batch, params=params, train=False)[0]
-
-        # compute loss
-        shift_logits = logits[..., :-1, :]
-        shift_labels = labels[..., 1:]
-        loss = optax.softmax_cross_entropy(shift_logits, onehot(shift_labels, shift_logits.shape[-1]))
+        loss = loss_fn(logits, labels)
 
         # summarize metrics
-        metrics = jax.lax.pmean({"loss": loss.mean()}, axis_name="batch")
-
+        metrics = jax.lax.pmean({"loss": loss}, axis_name="batch")
         return metrics
 
+    # Create parallel version of the train and eval step
+    p_train_step = jax.pmap(train_step, "batch", donate_argnums=(0,))
     p_eval_step = jax.pmap(eval_step, "batch", donate_argnums=(0,))
 
     # Replicate the train state on each device
