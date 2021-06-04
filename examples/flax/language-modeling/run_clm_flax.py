@@ -180,15 +180,23 @@ class DataTrainingArguments:
                 assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
 
 
-def data_collator(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int):
-    """Returns shuffled batches of size `batch_size` from truncated `train dataset`, sharded over all local devices."""
+def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuffle: bool = False):
+    """
+    Returns batches of size `batch_size` from truncated `train dataset`, sharded over all local devices.
+    Shuffle batches if `shuffle` is `True`.
+    """
     steps_per_epoch = len(dataset) // batch_size
-    perms = jax.random.permutation(rng, len(dataset))
-    perms = perms[: steps_per_epoch * batch_size]  # Skip incomplete batch.
-    perms = perms.reshape((steps_per_epoch, batch_size))
 
-    for perm in perms:
-        batch = dataset[perm]
+    if shuffle:
+        batch_idx = jax.random.permutation(rng, len(dataset))
+    else:
+        batch_idx = jnp.arange(len(dataset))
+
+    batch_idx = batch_idx[: steps_per_epoch * batch_size]  # Skip incomplete batch.
+    batch_idx = batch_idx.reshape((steps_per_epoch, batch_size))
+
+    for idx in batch_idx:
+        batch = dataset[idx]
         batch = {k: jnp.array(v) for k, v in batch.items()}
         batch = shard(batch)
 
@@ -537,7 +545,7 @@ if __name__ == "__main__":
         rng, input_rng = jax.random.split(rng)
 
         # Generate an epoch by shuffling sampling indices from the train dataset
-        train_loader = data_collator(input_rng, train_dataset, train_batch_size)
+        train_loader = data_loader(input_rng, train_dataset, train_batch_size, shuffle=True)
         steps_per_epoch = len(train_dataset) // train_batch_size
         # train
         for _ in tqdm(range(steps_per_epoch), desc="Training...", position=1):
@@ -553,7 +561,7 @@ if __name__ == "__main__":
 
         # ======================== Evaluating ==============================
         eval_metrics = []
-        eval_loader = data_collator(input_rng, eval_dataset, eval_batch_size)
+        eval_loader = data_loader(input_rng, eval_dataset, eval_batch_size)
         eval_steps = len(eval_dataset) // eval_batch_size
         for _ in tqdm(range(eval_steps), desc="Evaluating...", position=2):
             # Model forward
