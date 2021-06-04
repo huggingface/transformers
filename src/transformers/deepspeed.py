@@ -112,7 +112,7 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         super().__init__(config_file_or_dict)
         self.mismatches = []
 
-    def auto(self, ds_key_long, hf_val, hf_key=None, must_match=False):
+    def fill_match(self, ds_key_long, hf_val, hf_key=None, must_match=True):
         """
         A utility method that massages the config file and can optionally verify that the values match.
 
@@ -124,28 +124,28 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
         """
 
-        c = self.config
+        config = self.config
 
         # find the config node of interest if it exists
         nodes = ds_key_long.split(".")
         ds_key = nodes.pop()
         for node in nodes:
-            c = c.get(node)
-            if c is None:
+            config = config.get(node)
+            if config is None:
                 return
 
-        if c.get(ds_key) == "auto":
-            c[ds_key] = hf_val
+        if config.get(ds_key) == "auto":
+            config[ds_key] = hf_val
             return
 
         if not must_match:
             return
 
-        ds_val = c.get(ds_key)
+        ds_val = config.get(ds_key)
         if ds_val is not None and ds_val != hf_val:
             self.mismatches.append(f"- ds {ds_key_long}={ds_val} vs hf {hf_key}={hf_val}")
 
-    auto_match = partialmethod(auto, must_match=True)
+    fill_only = partialmethod(fill_match, must_match=False)
 
     def trainer_config_process(self, args):
         """
@@ -155,21 +155,21 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         # DeepSpeed does:
         # train_batch_size = world_size * train_micro_batch_size_per_gpu * gradient_accumulation_steps
         train_batch_size = args.world_size * args.per_device_train_batch_size * args.gradient_accumulation_steps
-        self.auto_match(
+        self.fill_match(
             "train_micro_batch_size_per_gpu", args.per_device_train_batch_size, "per_device_train_batch_size"
         )
-        self.auto_match("gradient_accumulation_steps", args.gradient_accumulation_steps, "gradient_accumulation_steps")
-        self.auto_match("train_batch_size", train_batch_size, "train_batch_size (calculated)")
-        self.auto_match("gradient_clipping", args.max_grad_norm, "max_grad_norm")
+        self.fill_match("gradient_accumulation_steps", args.gradient_accumulation_steps, "gradient_accumulation_steps")
+        self.fill_match("train_batch_size", train_batch_size, "train_batch_size (calculated)")
+        self.fill_match("gradient_clipping", args.max_grad_norm, "max_grad_norm")
 
-        self.auto_match("optimizer.params.lr", args.learning_rate, "learning_rate")
-        self.auto_match("optimizer.params.betas", [args.adam_beta1, args.adam_beta2], "adam_beta1+adam_beta2")
-        self.auto_match("optimizer.params.eps", args.adam_epsilon, "adam_epsilon")
-        self.auto_match("optimizer.params.weight_decay", args.weight_decay, "weight_decay")
+        self.fill_match("optimizer.params.lr", args.learning_rate, "learning_rate")
+        self.fill_match("optimizer.params.betas", [args.adam_beta1, args.adam_beta2], "adam_beta1+adam_beta2")
+        self.fill_match("optimizer.params.eps", args.adam_epsilon, "adam_epsilon")
+        self.fill_match("optimizer.params.weight_decay", args.weight_decay, "weight_decay")
 
-        self.auto("scheduler.params.warmup_min_lr", 0)  # not a trainer arg
-        self.auto_match("scheduler.params.warmup_max_lr", args.learning_rate, "learning_rate")
-        self.auto_match("scheduler.params.warmup_num_steps", args.warmup_steps, "warmup_steps")
+        self.fill_only("scheduler.params.warmup_min_lr", 0)  # not a trainer arg
+        self.fill_match("scheduler.params.warmup_max_lr", args.learning_rate, "learning_rate")
+        self.fill_match("scheduler.params.warmup_num_steps", args.warmup_steps, "warmup_steps")
         # total_num_steps - will get set in trainer_config_finalize
 
         # fp16
@@ -180,12 +180,12 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
         # amp: similar to the pytorch native amp - it has a bunch of optional params but we won't set
         # any here unless the user did the work
-        self.auto_match("fp16.enabled", fp16_backend == "amp", "fp16+fp16_backend(amp)")
+        self.fill_match("fp16.enabled", fp16_backend == "amp", "fp16+fp16_backend(amp)")
 
         # apex: delegates amp work to apex (which needs to be available), but it cannot be used with any
         # ZeRO features
-        self.auto_match("amp.enabled", fp16_backend == "apex", "fp16+fp16_backend(apex)")
-        self.auto_match("amp.opt_level", args.fp16_opt_level, "fp16_opt_level")
+        self.fill_match("amp.enabled", fp16_backend == "apex", "fp16+fp16_backend(apex)")
+        self.fill_match("amp.opt_level", args.fp16_opt_level, "fp16_opt_level")
 
     def trainer_config_finalize(self, args, model, num_training_steps):
         """
@@ -197,12 +197,12 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         if self.is_zero3():
             # automatically assign the optimal config values based on model config
             hidden_size = model.config.hidden_size
-            self.auto("zero_optimization.reduce_bucket_size", hidden_size * hidden_size)
-            self.auto("zero_optimization.stage3_prefetch_bucket_size", 0.9 * hidden_size * hidden_size)
-            self.auto("zero_optimization.stage3_param_persistence_threshold", 10 * hidden_size)
+            self.fill_only("zero_optimization.reduce_bucket_size", hidden_size * hidden_size)
+            self.fill_only("zero_optimization.stage3_prefetch_bucket_size", 0.9 * hidden_size * hidden_size)
+            self.fill_only("zero_optimization.stage3_param_persistence_threshold", 10 * hidden_size)
 
         # scheduler
-        self.auto_match("scheduler.params.total_num_steps", num_training_steps, "num_training_steps (calculated)")
+        self.fill_match("scheduler.params.total_num_steps", num_training_steps, "num_training_steps (calculated)")
 
         if len(self.mismatches) > 0:
             mismatches = "\n".join(self.mismatches)
