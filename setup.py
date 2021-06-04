@@ -92,6 +92,7 @@ _deps = [
     "datasets",
     "deepspeed>=0.3.16",
     "docutils==0.16.0",
+    "einops",
     "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
