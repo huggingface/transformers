@@ -5,7 +5,7 @@ from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
 
-LAYOUTLMv2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "layoutlmv2-base-uncased": "https://huggingface.co/microsoft/layoutlmv2-base-uncased/resolve/main/config.json",
     "layoutlmv2-large-uncased": "https://huggingface.co/microsoft/layoutlmv2-large-uncased/resolve/main/config.json",
 }
@@ -82,7 +82,7 @@ class LayoutLMv2Config(LayoutLMConfig):
         max_2d_position_embeddings=1024,
         max_rel_pos=128,
         rel_pos_bins=32,
-        fast_qkv=True,
+        fast_qkv=False,
         max_rel_2d_pos=256,
         rel_2d_pos_bins=64,
         convert_sync_batchnorm=True,

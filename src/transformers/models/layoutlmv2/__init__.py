@@ -19,13 +19,13 @@
 from typing import TYPE_CHECKING
 
 from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_available, is_torch_available
-from .configuration_layoutlmv2 import LAYOUTLMv2_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv2Config
+from .configuration_layoutlmv2 import LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv2Config
 from .tokenization_layoutlmv2 import LayoutLMv2Tokenizer
 
 
 _import_structure = {
-    "configuration_layoutlmv2": ["LAYOUTLMv2_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMv2Config"],
-    "tokenization_layoutlmv2": ["LayoutLMv2Tokenizer"],
+    "configuration_layoutlmv2": ["LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMv2Config"],
+    "tokenization_layoutlmv2": ["LayoutLMV2Tokenizer"],
 }
 
 if is_tokenizers_available():
@@ -41,16 +41,16 @@ if is_torch_available():
     ]
 
 if TYPE_CHECKING:
-    from .configuration_layoutlmv2 import LAYOUTLMv2_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig
-    from .tokenization_layoutlmv2 import LayoutLMv2Tokenizer
+    from .configuration_layoutlmv2 import LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig
+    from .tokenization_layoutlmv2 import LayoutLMV2Tokenizer
 
     if is_tokenizers_available():
-        from .tokenization_layoutlmv2_fast import LayoutLMv2TokenizerFast
+        from .tokenization_layoutlmv2_fast import LayoutLMV2TokenizerFast
 
     if is_torch_available():
         from .modeling_layoutlmv2 import (
-            LAYOUTLMv2_PRETRAINED_MODEL_ARCHIVE_LIST,
-            # LayoutLMv2ForMaskedLM,
+            LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LayoutLMv2ForMaskedLM,
             LayoutLMv2ForSequenceClassification,
             LayoutLMv2ForTokenClassification,
             LayoutLMv2Model,

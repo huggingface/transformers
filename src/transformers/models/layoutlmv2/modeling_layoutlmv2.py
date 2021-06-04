@@ -23,7 +23,7 @@ from transformers.models.layoutlm.modeling_layoutlm import LayoutLMIntermediate 
 from transformers.models.layoutlm.modeling_layoutlm import LayoutLMOutput as LayoutLMv2Output
 from transformers.models.layoutlm.modeling_layoutlm import LayoutLMPooler as LayoutLMv2Pooler
 from transformers.models.layoutlm.modeling_layoutlm import LayoutLMSelfOutput as LayoutLMv2SelfOutput
-from transformers.models.layoutlm.modeling_layoutlm import LayoutLMSelfOutput as LayoutLMv2OnlyMLMHead
+from transformers.models.layoutlm.modeling_layoutlm import LayoutLMOnlyMLMHead as LayoutLMv2OnlyMLMHead
 from transformers.utils import logging
 
 from .configuration_layoutlmv2 import LayoutLMv2Config
@@ -438,8 +438,8 @@ class LayoutLMv2Encoder(nn.Module):
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
-                    rel_pos=rel_pos,
-                    rel_2d_pos=rel_2d_pos,
+                    rel_pos,
+                    rel_2d_pos,
                 )
             else:
                 layer_outputs = layer_module(
@@ -915,7 +915,7 @@ class LayoutLMv2ForMaskedLM(LayoutLMv2PreTrainedModel):
         self.init_weights()
 
     def get_input_embeddings(self):
-        return self.layoutlm.embeddings.word_embeddings
+        return self.layoutlmv2.embeddings.word_embeddings
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
@@ -990,8 +990,6 @@ class LayoutLMv2ForMaskedLM(LayoutLMv2PreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1031,7 +1029,7 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
         self.init_weights()
 
     def get_input_embeddings(self):
-        return self.layoutlm.embeddings.word_embeddings
+        return self.layoutlmv2.embeddings.word_embeddings
 
     def forward(
         self,

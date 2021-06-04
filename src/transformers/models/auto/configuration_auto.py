@@ -50,7 +50,7 @@ from ..gpt2.configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Co
 from ..gpt_neo.configuration_gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
 from ..ibert.configuration_ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
 from ..layoutlm.configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig
-from ..layoutlmv2.configuration_layoutlmv2 import LAYOUTLMv2_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv2Config
+from ..layoutlmv2.configuration_layoutlmv2 import LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv2Config
 from ..led.configuration_led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig
 from ..longformer.configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
 from ..luke.configuration_luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig
@@ -134,7 +134,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        LAYOUTLMv2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP,
