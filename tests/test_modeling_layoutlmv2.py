@@ -15,6 +15,8 @@
 
 
 import unittest
+import copy
+from detectron2.structures.image_list import ImageList
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
@@ -28,10 +30,16 @@ if is_torch_available():
 
     from transformers import (
         LayoutLMv2Config,
-        LayoutLMv2ForSequenceClassification,
         LayoutLMv2ForTokenClassification,
         LayoutLMv2Model,
     )
+
+def _config_zero_init(config):
+    configs_no_init = copy.deepcopy(config)
+    for key in configs_no_init.__dict__.keys():
+        if "_range" in key or "_std" in key or "initializer_factor" in key:
+            setattr(configs_no_init, key, 1e-10)
+    return configs_no_init
 
 
 class LayoutLMv2ModelTester:
@@ -103,7 +111,7 @@ class LayoutLMv2ModelTester:
                     bbox[i, j, 2] = bbox[i, j, 0]
                     bbox[i, j, 0] = t
         
-        image = torch.zeros(1, 3, 256, 256)
+        image = ImageList(torch.zeros(self.batch_size, 3, 256, 256), 256)
         position_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         input_mask = None
@@ -144,21 +152,9 @@ class LayoutLMv2ModelTester:
         model = LayoutLMv2Model(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, bbox, image=image, attention_mask=input_mask, token_type_ids=token_type_ids, position_ids=position_ids)
+        result = model(input_ids=input_ids, bbox=bbox, image=image, attention_mask=input_mask, token_type_ids=token_type_ids, position_ids=position_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
-
-    def create_and_check_for_sequence_classification(
-        self, config, input_ids, bbox, image, token_type_ids, position_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        config.num_labels = self.num_labels
-        model = LayoutLMv2ForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids, bbox, image=image, attention_mask=input_mask, token_type_ids=token_type_ids, position_ids=position_ids
-        )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_for_token_classification(
         self, config, input_ids, bbox, image, token_type_ids, position_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -167,7 +163,7 @@ class LayoutLMv2ModelTester:
         model = LayoutLMv2ForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, bbox, image=image, attention_mask=input_mask, token_type_ids=token_type_ids, position_ids=position_ids)
+        result = model(input_ids=input_ids, bbox=bbox, image=image, attention_mask=input_mask, token_type_ids=token_type_ids, position_ids=position_ids)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def prepare_config_and_inputs_for_common(self):
@@ -201,7 +197,6 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             LayoutLMv2Model,
-            LayoutLMv2ForSequenceClassification,
             LayoutLMv2ForTokenClassification,
         )
         if is_torch_available()
@@ -225,13 +220,29 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_sequence_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
-
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
+
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    if "visual.backbone" in name:
+                        self.assertTrue(
+                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    else:
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
 
 
 def prepare_layoutlmv2_batch_inputs():
@@ -243,7 +254,7 @@ def prepare_layoutlmv2_batch_inputs():
     token_type_ids = torch.tensor([[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]],device=torch_device)  # noqa: E231
     # these are sequence labels (i.e. at the token level)
     labels = torch.tensor([[-100,10,10,10,9,1,-100,7,7,-100,7,7,4,2,5,2,8,8,-100,-100,5,0,3,2,-100],[-100,12,12,12,-100,12,10,-100,-100,-100,-100,10,12,9,-100,-100,-100,10,10,10,9,12,-100,10,-100]],device=torch_device)  # noqa: E231
-    image=torch.zeros(1, 3, 256, 256)
+    image = ImageList(torch.zeros(13, 3, 256, 256), 256)
     position_ids = token_type_ids
     # fmt: on
 
@@ -275,38 +286,9 @@ class LayoutLMv2ModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.pooler_output[1, :3], expected_slice, atol=1e-3))
 
     @slow
-    def test_forward_pass_sequence_classification(self):
-        # initialize model with randomly initialized sequence classification head
-        model = LayoutLMv2ForSequenceClassification.from_pretrained("microsoft/layoutlmv2-base-uncased", num_labels=2).to(
-            torch_device
-        )
-
-        input_ids, attention_mask, bbox, image, token_type_ids, position_ids, _ = prepare_layoutlmv2_batch_inputs()
-
-        # forward pass
-        outputs = model(
-            input_ids=input_ids,
-            bbox=bbox,
-            image=image,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-        )
-
-        # test whether we get a loss as a scalar
-        loss = outputs.loss
-        expected_shape = torch.Size([])
-        self.assertEqual(loss.shape, expected_shape)
-
-        # test the shape of the logits
-        logits = outputs.logits
-        expected_shape = torch.Size((2, 2))
-        self.assertEqual(logits.shape, expected_shape)
-
-    @slow
     def test_forward_pass_token_classification(self):
         # initialize model with randomly initialized token classification head
-        model = LayoutLMv2ForTokenClassification.from_pretrained("microsoft/layoutlmv2-base-uncased", num_labels=13).to(
+        model = LayoutLMv2ForTokenClassification.from_pretrained("microsoft/layoutlmv2-base-uncased", num_labels=3).to(
             torch_device
         )
 

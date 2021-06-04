@@ -12,55 +12,6 @@ LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 
 class LayoutLMv2Config(LayoutLMConfig):
-    r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.LayoutLMv2Model`. It is used to
-    instantiate a LayoutLMv2 model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the LayoutLM `layoutlm-base-uncased
-    <https://huggingface.co/microsoft/layoutlmv2-base-uncased>`__ architecture.
-    Configuration objects inherit from :class:`~transformers.BertConfig` and can be used to control the model outputs.
-    Read the documentation from :class:`~transformers.BertConfig` for more information.
-    Args:
-        vocab_size (:obj:`int`, `optional`, defaults to 30522):
-            Vocabulary size of the LayoutLM model. Defines the different tokens that can be represented by the
-            `inputs_ids` passed to the forward method of :class:`~transformers.LayoutLMModel`.
-        hidden_size (:obj:`int`, `optional`, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (:obj:`int`, `optional`, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (:obj:`int`, `optional`, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
-        hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
-        max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (:obj:`int`, `optional`, defaults to 2):
-            The vocabulary size of the :obj:`token_type_ids` passed into :class:`~transformers.LayoutLMModel`.
-        initializer_range (:obj:`float`, `optional`, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
-        max_2d_position_embeddings (:obj:`int`, `optional`, defaults to 1024):
-            The maximum value that the 2D position embedding might ever used. Typically set this to something large
-            just in case (e.g., 1024).
-    Examples::
-        >>> from transformers import LayoutLMv2Model, LayoutLMv2Config
-        >>> # Initializing a LayoutLMv2 configuration
-        >>> configuration = LayoutLMv2Config()
-        >>> # Initializing a model from the configuration
-        >>> model = LayoutLMv2Model(configuration)
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-    """
     model_type = "layoutlmv2"
 
     def __init__(
@@ -89,6 +40,9 @@ class LayoutLMv2Config(LayoutLMConfig):
         image_feature_pool_shape=[7, 7, 256],
         coordinate_size=128,
         shape_size=128,
+        has_relative_attention_bias=False,
+        has_spatial_attention_bias=False,
+        has_visual_segment_embedding=False,
         **kwargs
     ):
         super().__init__(
@@ -118,3 +72,6 @@ class LayoutLMv2Config(LayoutLMConfig):
         self.image_feature_pool_shape = image_feature_pool_shape
         self.coordinate_size = coordinate_size
         self.shape_size = shape_size
+        self.has_relative_attention_bias = has_relative_attention_bias
+        self.has_spatial_attention_bias = has_spatial_attention_bias
+        self.has_visual_segment_embedding = has_visual_segment_embedding

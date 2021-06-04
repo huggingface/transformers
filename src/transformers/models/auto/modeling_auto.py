@@ -161,7 +161,6 @@ from ..layoutlm.modeling_layoutlm import (
     LayoutLMModel,
 )
 from ..layoutlmv2.modeling_layoutlmv2 import (
-    LayoutLMv2ForSequenceClassification,
     LayoutLMv2ForTokenClassification,
     LayoutLMv2Model,
 )
@@ -628,7 +627,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (RobertaConfig, RobertaForSequenceClassification),
         (SqueezeBertConfig, SqueezeBertForSequenceClassification),
         (LayoutLMConfig, LayoutLMForSequenceClassification),
-        (LayoutLMv2Config, LayoutLMv2ForSequenceClassification),
         (BertConfig, BertForSequenceClassification),
         (XLNetConfig, XLNetForSequenceClassification),
         (MegatronBertConfig, MegatronBertForSequenceClassification),

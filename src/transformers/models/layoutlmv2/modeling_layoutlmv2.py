@@ -5,17 +5,14 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
 import detectron2
 from detectron2.modeling import META_ARCH_REGISTRY
-from .detectron2_config import add_layoutlmv2_config
 from transformers import PreTrainedModel
-from ...modeling_outputs import (
+from transformers.modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
-    MaskedLMOutput,
-    SequenceClassifierOutput,
     TokenClassifierOutput,
 )
 from transformers.modeling_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
@@ -23,15 +20,15 @@ from transformers.models.layoutlm.modeling_layoutlm import LayoutLMIntermediate 
 from transformers.models.layoutlm.modeling_layoutlm import LayoutLMOutput as LayoutLMv2Output
 from transformers.models.layoutlm.modeling_layoutlm import LayoutLMPooler as LayoutLMv2Pooler
 from transformers.models.layoutlm.modeling_layoutlm import LayoutLMSelfOutput as LayoutLMv2SelfOutput
-from transformers.models.layoutlm.modeling_layoutlm import LayoutLMOnlyMLMHead as LayoutLMv2OnlyMLMHead
 from transformers.utils import logging
 
 from .configuration_layoutlmv2 import LayoutLMv2Config
+from .detectron2_config import add_layoutlmv2_config
 
 
 logger = logging.get_logger(__name__)
 
-LAYOUTLMv2_PRETRAINED_MODEL_ARCHIVE_LIST = [
+LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "layoutlmv2-base-uncased",
     "layoutlmv2-large-uncased",
 ]
@@ -98,6 +95,9 @@ class LayoutLMv2SelfAttention(nn.Module):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
+        self.has_relative_attention_bias = config.has_relative_attention_bias
+        self.has_spatial_attention_bias = config.has_spatial_attention_bias
+
         if config.fast_qkv:
             self.qkv_linear = nn.Linear(config.hidden_size, 3 * self.all_head_size, bias=False)
             self.q_bias = nn.Parameter(torch.zeros(1, 1, self.all_head_size))
@@ -153,7 +153,10 @@ class LayoutLMv2SelfAttention(nn.Module):
         query_layer = query_layer / math.sqrt(self.attention_head_size)
         # [BSZ, NAT, L, L]
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-        attention_scores = attention_scores + rel_pos + rel_2d_pos
+        if self.has_relative_attention_bias:
+            attention_scores += rel_pos
+        if self.has_spatial_attention_bias:
+            attention_scores += rel_2d_pos
         attention_scores = attention_scores.float().masked_fill_(attention_mask.to(torch.bool), float("-inf"))
         attention_probs = F.softmax(attention_scores, dim=-1, dtype=torch.float32).type_as(value_layer)
         # This is actually dropping out entire tokens to attend to, which might
@@ -338,16 +341,21 @@ class LayoutLMv2Encoder(nn.Module):
         self.config = config
         self.layer = nn.ModuleList([LayoutLMv2Layer(config) for _ in range(config.num_hidden_layers)])
 
-        self.rel_pos_bins = config.rel_pos_bins
-        self.max_rel_pos = config.max_rel_pos
-        self.rel_pos_onehot_size = config.rel_pos_bins
-        self.rel_pos_bias = nn.Linear(self.rel_pos_onehot_size, config.num_attention_heads, bias=False)
+        self.has_relative_attention_bias = config.has_relative_attention_bias
+        self.has_spatial_attention_bias = config.has_spatial_attention_bias
 
-        self.max_rel_2d_pos = config.max_rel_2d_pos
-        self.rel_2d_pos_bins = config.rel_2d_pos_bins
-        self.rel_2d_pos_onehot_size = config.rel_2d_pos_bins
-        self.rel_pos_x_bias = nn.Linear(self.rel_2d_pos_onehot_size, config.num_attention_heads, bias=False)
-        self.rel_pos_y_bias = nn.Linear(self.rel_2d_pos_onehot_size, config.num_attention_heads, bias=False)
+        if self.has_relative_attention_bias:
+            self.rel_pos_bins = config.rel_pos_bins
+            self.max_rel_pos = config.max_rel_pos
+            self.rel_pos_onehot_size = config.rel_pos_bins
+            self.rel_pos_bias = nn.Linear(self.rel_pos_onehot_size, config.num_attention_heads, bias=False)
+
+        if self.has_spatial_attention_bias:
+            self.max_rel_2d_pos = config.max_rel_2d_pos
+            self.rel_2d_pos_bins = config.rel_2d_pos_bins
+            self.rel_2d_pos_onehot_size = config.rel_2d_pos_bins
+            self.rel_pos_x_bias = nn.Linear(self.rel_2d_pos_onehot_size, config.num_attention_heads, bias=False)
+            self.rel_pos_y_bias = nn.Linear(self.rel_2d_pos_onehot_size, config.num_attention_heads, bias=False)
 
     def _cal_1d_pos_emb(self, hidden_states, position_ids):
         rel_pos_mat = position_ids.unsqueeze(-2) - position_ids.unsqueeze(-1)
@@ -406,8 +414,8 @@ class LayoutLMv2Encoder(nn.Module):
 
         next_decoder_cache = () if use_cache else None
 
-        rel_pos = self._cal_1d_pos_emb(hidden_states, position_ids)
-        rel_2d_pos = self._cal_2d_pos_emb(hidden_states, bbox)
+        rel_pos = self._cal_1d_pos_emb(hidden_states, position_ids) if self.has_relative_attention_bias else None
+        rel_2d_pos = self._cal_2d_pos_emb(hidden_states, bbox) if self.has_spatial_attention_bias else None
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -493,7 +501,7 @@ class LayoutLMv2PreTrainedModel(PreTrainedModel):
     """
 
     config_class = LayoutLMv2Config
-    pretrained_model_archive_map = LAYOUTLMv2_PRETRAINED_MODEL_ARCHIVE_LIST
+    pretrained_model_archive_map = LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST
     base_model_prefix = "layoutlmv2"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
@@ -594,7 +602,7 @@ class VisualBackbone(nn.Module):
         assert self.backbone.output_shape()[self.out_feature_key].channels == config.image_feature_pool_shape[2]
 
     def forward(self, images):
-        images_input = (images - self.pixel_mean) / self.pixel_std
+        images_input = (images.tensor - self.pixel_mean) / self.pixel_std
         features = self.backbone(images_input)
         features = features[self.out_feature_key]
         features = self.pool(features).flatten(start_dim=2).transpose(1, 2).contiguous()
@@ -605,11 +613,13 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
     def __init__(self, config):
         super(LayoutLMv2Model, self).__init__(config)
         self.config = config
-
+        self.has_visual_segment_embedding = config.has_visual_segment_embedding
         self.embeddings = LayoutLMv2Embeddings(config)
 
         self.visual = VisualBackbone(config)
         self.visual_proj = nn.Linear(config.image_feature_pool_shape[-1], config.hidden_size)
+        if self.has_visual_segment_embedding:
+            self.visual_segment_embedding = nn.Parameter(nn.Embedding(1, config.hidden_size).weight[0])
         self.visual_LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.visual_dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -654,6 +664,8 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         position_embeddings = self.embeddings.position_embeddings(position_ids)
         spatial_position_embeddings = self.embeddings._cal_spatial_position_embeddings(bbox)
         embeddings = visual_embeddings + position_embeddings + spatial_position_embeddings
+        if self.has_visual_segment_embedding:
+            embeddings += self.visual_segment_embedding
         embeddings = self.visual_LayerNorm(embeddings)
         embeddings = self.visual_dropout(embeddings)
         return embeddings
@@ -744,14 +756,13 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
             position_ids = self.embeddings.position_ids[:, :seq_length]
             position_ids = position_ids.expand_as(input_ids)
 
-        visual_position_ids = torch.arange(0, visual_shape[1], dtype=torch.long, device=input_ids.device).repeat(
+        visual_position_ids = torch.arange(0, visual_shape[1], dtype=torch.long, device=device).repeat(
             input_shape[0], 1
         )
         final_position_ids = torch.cat([position_ids, visual_position_ids], dim=1)
 
         if bbox is None:
             bbox = torch.zeros(tuple(list(input_shape) + [4]), dtype=torch.long, device=device)
-
         text_layout_emb = self._calc_text_embeddings(
             input_ids=input_ids,
             bbox=bbox,
@@ -813,6 +824,7 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
         self.layoutlmv2 = LayoutLMv2Model(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
         self.init_weights()
 
     def get_input_embeddings(self):
@@ -833,35 +845,6 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
-        r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
-            1]``.
-        Returns:
-        Examples::
-            >>> from transformers import LayoutLMTokenizer, LayoutLMForTokenClassification
-            >>> import torch
-            >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
-            >>> model = LayoutLMForTokenClassification.from_pretrained('microsoft/layoutlm-base-uncased')
-            >>> words = ["Hello", "world"]
-            >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
-            >>> token_boxes = []
-            >>> for word, box in zip(words, normalized_word_boxes):
-            ...     word_tokens = tokenizer.tokenize(word)
-            ...     token_boxes.extend([box] * len(word_tokens))
-            >>> # add bounding boxes of cls + sep tokens
-            >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
-            >>> encoding = tokenizer(' '.join(words), return_tensors="pt")
-            >>> input_ids = encoding["input_ids"]
-            >>> attention_mask = encoding["attention_mask"]
-            >>> token_type_ids = encoding["token_type_ids"]
-            >>> bbox = torch.tensor([token_boxes])
-            >>> token_labels = torch.tensor([1,1,0,0]).unsqueeze(0) # batch size of 1
-            >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
-            ...                 labels=token_labels)
-            >>> loss = outputs.loss
-            >>> logits = outputs.logits
-        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.layoutlmv2(
@@ -899,107 +882,6 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.layoutlmv2 = LayoutLMv2Model(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-
-        self.init_weights()
-
-    def get_input_embeddings(self):
-        return self.layoutlmv2.embeddings.word_embeddings
-
-    def forward(
-        self,
-        input_ids=None,
-        bbox=None,
-        image=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        Returns:
-        Examples::
-            >>> from transformers import LayoutLMTokenizer, LayoutLMForSequenceClassification
-            >>> import torch
-            >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
-            >>> model = LayoutLMForSequenceClassification.from_pretrained('microsoft/layoutlm-base-uncased')
-            >>> words = ["Hello", "world"]
-            >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
-            >>> token_boxes = []
-            >>> for word, box in zip(words, normalized_word_boxes):
-            ...     word_tokens = tokenizer.tokenize(word)
-            ...     token_boxes.extend([box] * len(word_tokens))
-            >>> # add bounding boxes of cls + sep tokens
-            >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
-            >>> encoding = tokenizer(' '.join(words), return_tensors="pt")
-            >>> input_ids = encoding["input_ids"]
-            >>> attention_mask = encoding["attention_mask"]
-            >>> token_type_ids = encoding["token_type_ids"]
-            >>> bbox = torch.tensor([token_boxes])
-            >>> sequence_label = torch.tensor([1])
-            >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
-            ...                 labels=sequence_label)
-            >>> loss = outputs.loss
-            >>> logits = outputs.logits
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.layoutlmv2(
-            input_ids=input_ids,
-            bbox=bbox,
-            image=image,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        pooled_output = outputs[1]
-
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
-
-        loss = None
-        if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
-                loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
-        return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
