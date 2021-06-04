@@ -60,7 +60,7 @@ class LayoutLMv2Config(LayoutLMConfig):
         >>> model = LayoutLMv2Model(configuration)
         >>> # Accessing the model configuration
         >>> configuration = model.config
-    """    
+    """
     model_type = "layoutlmv2"
 
     def __init__(

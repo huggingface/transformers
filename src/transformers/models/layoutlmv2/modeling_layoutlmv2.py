@@ -861,7 +861,7 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
             ...                 labels=token_labels)
             >>> loss = outputs.loss
             >>> logits = outputs.logits
-        """    
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.layoutlmv2(
@@ -904,6 +904,7 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
 
 class LayoutLMv2ForMaskedLM(LayoutLMv2PreTrainedModel):
     def __init__(self, config):
@@ -1018,6 +1019,7 @@ class LayoutLMv2ForMaskedLM(LayoutLMv2PreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1030,7 +1032,7 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
 
     def get_input_embeddings(self):
         return self.layoutlm.embeddings.word_embeddings
-        
+
     def forward(
         self,
         input_ids=None,

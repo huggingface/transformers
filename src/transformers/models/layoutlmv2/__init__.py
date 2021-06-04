@@ -50,7 +50,7 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_layoutlmv2 import (
             LAYOUTLMv2_PRETRAINED_MODEL_ARCHIVE_LIST,
-            #LayoutLMv2ForMaskedLM,
+            # LayoutLMv2ForMaskedLM,
             LayoutLMv2ForSequenceClassification,
             LayoutLMv2ForTokenClassification,
             LayoutLMv2Model,

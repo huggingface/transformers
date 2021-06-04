@@ -785,7 +785,7 @@ if is_torch_available():
             "LayoutLMv2ForTokenClassification",
             "LayoutLMv2Model",
         ]
-    )   
+    )
     _import_structure["models.led"].extend(
         [
             "LED_PRETRAINED_MODEL_ARCHIVE_LIST",

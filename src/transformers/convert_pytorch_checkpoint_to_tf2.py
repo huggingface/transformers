@@ -230,7 +230,7 @@ MODEL_CLASSES = {
         TFLayoutLMForMaskedLM,
         LayoutLMForMaskedLM,
         LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-    ),    
+    ),
     "roberta-large-mnli": (
         RobertaConfig,
         TFRobertaForSequenceClassification,
