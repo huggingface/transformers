@@ -48,8 +48,6 @@ from transformers import (
     AutoTokenizer,
     FlaxAutoModelForCausalLM,
     HfArgumentParser,
-    PreTrainedTokenizerBase,
-    TensorType,
     TrainingArguments,
     is_tensorboard_available,
     set_seed,
@@ -141,11 +139,12 @@ class DataTrainingArguments:
             "help": "The percentage of the train set used as validation set in case there's no validation split"
         },
     )
-    max_seq_length: Optional[int] = field(
+    block_size: Optional[int] = field(
         default=None,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated. Default to the max input length of the model."
+            "help": "Optional input sequence length after tokenization. "
+            "The training dataset will be truncated in block of this size for training. "
+            "Default to the model max input length for single sentence inputs (take into account special tokens)."
         },
     )
     preprocessing_num_workers: Optional[int] = field(
