@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import csv
+import importlib
 import json
 import os
 import pickle
@@ -21,7 +22,7 @@ import warnings
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from os.path import abspath, exists
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
@@ -49,8 +50,103 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+def infer_framework_load_model(
+    model,
+    config: AutoConfig,
+    model_classes: Optional[Dict[str, Tuple[type]]] = None,
+    task: Optional[str] = None,
+    framework: Optional[str] = None,
+    **model_kwargs
+):
+    """
+    Select framework (TensorFlow or PyTorch) to use from the :obj:`model` passed. Returns a tuple (framework, model).
+
+    If :obj:`model` is instantiated, this function will just infer the framework from the model class. Otherwise
+    :obj:`model` is actually a checkpoint name and this method will try to instantiate it using :obj:`model_classes`.
+    Since we don't want to instantiate the model twice, this model is returned for use by the pipeline.
+
+    If both frameworks are installed and available for :obj:`model`, PyTorch is selected.
+
+    Args:
+        model (:obj:`str`, :class:`~transformers.PreTrainedModel` or :class:`~transformers.TFPreTrainedModel`):
+            The model to infer the framework from. If :obj:`str`, a checkpoint name. The model to infer the framewrok
+            from.
+        config (:class:`~transformers.AutoConfig`):
+            The config associated with the model to help using the correct class
+        model_classes (dictionary :obj:`str` to :obj:`type`, `optional`):
+            A mapping framework to class.
+        task (:obj:`str`):
+            The task defining which pipeline will be returned.
+        model_kwargs:
+            Additional dictionary of keyword arguments passed along to the model's :obj:`from_pretrained(...,
+            **model_kwargs)` function.
+
+    Returns:
+        :obj:`Tuple`: A tuple framework, model.
+    """
+    if not is_tf_available() and not is_torch_available():
+        raise RuntimeError(
+            "At least one of TensorFlow 2.0 or PyTorch should be installed. "
+            "To install TensorFlow 2.0, read the instructions at https://www.tensorflow.org/install/ "
+            "To install PyTorch, read the instructions at https://pytorch.org/."
+        )
+    if isinstance(model, str):
+        model_kwargs["_from_pipeline"] = task
+        class_tuple = ()
+        if config.architectures:
+            klasses = []
+            for architecture in config.architectures:
+                trans = importlib.import_module("transformers")
+                if is_torch_available() and framework in {"pt", None}:
+                    klass = getattr(trans, architecture)
+                    klasses.append(klass)
+                if is_tf_available() and framework in {"tf", None}:
+                    klass = getattr(trans, f"TF{architecture}")
+                    klasses.append(klass)
+            class_tuple = class_tuple + tuple(klasses)
+        if is_torch_available() and model_classes:
+            class_tuple = class_tuple + model_classes.get("pt", (AutoModel,))
+        elif is_tf_available() and model_classes:
+            class_tuple = class_tuple + model_classes.get("tf", (TFAutoModel,))
+
+        if len(class_tuple) == 0 and not config.architectures:
+            raise ValueError(f"Pipeline cannot infer suitable model classes from {model}")
+
+        for model_class in class_tuple:
+            kwargs = model_kwargs.copy()
+            if framework == "pt" and model.endswith(".h5"):
+                kwargs["from_tf"] = True
+                logger.warning(
+                    "Model might be a TensorFlow model (ending with `.h5`) but TensorFlow is not available. "
+                    "Trying to load the model with PyTorch."
+                )
+            elif framework == "tf" and model.endswith(".bin"):
+                kwargs["from_pt"] = True
+                logger.warning(
+                    "Model might be a PyTorch model (ending with `.bin`) but PyTorch is not available. "
+                    "Trying to load the model with Tensorflow."
+                )
+
+            try:
+                model = model_class.from_pretrained(model, **kwargs)
+                # Stop loading on the first successful load.
+                break
+            except OSError:
+                continue
+
+        if isinstance(model, str):
+            raise ValueError(f"Could not load model {model} with any of the following classes: {class_tuple}.")
+
+    framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
+    return framework, model
+
+
 def infer_framework_from_model(
-    model, model_classes: Optional[Dict[str, type]] = None, task: Optional[str] = None, **model_kwargs
+    model,
+    model_classes: Optional[Dict[str, Tuple[type]]] = None,
+    task: Optional[str] = None,
+    framework: Optional[str] = None,
+    **model_kwargs
 ):
     """
     Select framework (TensorFlow or PyTorch) to use from the :obj:`model` passed. Returns a tuple (framework, model).
@@ -76,30 +172,13 @@ def infer_framework_from_model(
     Returns:
         :obj:`Tuple`: A tuple framework, model.
     """
-    if not is_tf_available() and not is_torch_available():
-        raise RuntimeError(
-            "At least one of TensorFlow 2.0 or PyTorch should be installed. "
-            "To install TensorFlow 2.0, read the instructions at https://www.tensorflow.org/install/ "
-            "To install PyTorch, read the instructions at https://pytorch.org/."
-        )
     if isinstance(model, str):
-        model_kwargs["_from_pipeline"] = task
-        if is_torch_available() and not is_tf_available():
-            model_class = model_classes.get("pt", AutoModel)
-            model = model_class.from_pretrained(model, **model_kwargs)
-        elif is_tf_available() and not is_torch_available():
-            model_class = model_classes.get("tf", TFAutoModel)
-            model = model_class.from_pretrained(model, **model_kwargs)
-        else:
-            try:
-                model_class = model_classes.get("pt", AutoModel)
-                model = model_class.from_pretrained(model, **model_kwargs)
-            except OSError:
-                model_class = model_classes.get("tf", TFAutoModel)
-                model = model_class.from_pretrained(model, **model_kwargs)
-
-    framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
-    return framework, model
+        config = AutoConfig.from_pretrained(model, _from_pipeline=task, **model_kwargs)
+    else:
+        config = model.config
+    return infer_framework_load_model(
+        model, config, model_classes=model_classes, _from_pipeline=task, task=task, framework=framework, **model_kwargs
+    )
 
 
 def get_framework(model, revision: Optional[str] = None):
@@ -134,85 +213,6 @@ def get_framework(model, revision: Optional[str] = None):
 
     framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
     return framework
-
-
-def set_model_class_from_tuple(
-    pretrained_model_name_or_path: str,
-    targeted_task: Dict,
-    revision: Optional[str],
-    task_options: Optional[Any],
-    **model_kwargs
-) -> Dict:
-    """
-    Overwrite tuple of model classes by single model class in :obj:`targeted_task`.
-
-    Args:
-        pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`, `optional`):
-            Can be either:
-
-                - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co. Valid
-                  model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under a user or
-                  organization name, like ``dbmdz/bert-base-german-cased``.
-                - A path to a `directory` containing model weights saved using
-                  :func:`~transformers.PreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
-        targeted_task (:obj:`Dict`):
-           Dictionary representing the given task, that should contain default models
-        revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
-            When passing a task name or a string model identifier: The specific model version to use. It can be a
-            branch name, a tag name, or a commit id, since we use a git-based system for storing models and other
-            artifacts on huggingface.co, so ``revision`` can be any identifier allowed by git.
-        task_options (:obj:`Any`, None)
-           Any further value required by the task to get fully specified, for instance (SRC, TGT) languages for
-           translation task.
-    """
-    # we are overwriting `targeted_task` so let's make a copy first
-    # to avoid strange errors
-    targeted_task = targeted_task.copy()
-    config = AutoConfig.from_pretrained(
-        pretrained_model_name_or_path, revision=revision, _from_pipeline=task_options, **model_kwargs
-    )
-
-    if config.architectures is None or len(config.architectures) == 0:
-        raise ValueError(
-            f"Cannot guess correct architecture from {pretrained_model_name_or_path}. Please consider directly passing a model instance to `pipeline(...)`"
-        )
-
-    # architecture classes are always PyTorch
-    # and correct class should be in first spot
-    pt_model_class_name = config.architectures[0]
-
-    # extract correct PyTorch auto model class
-    if isinstance(targeted_task.get("pt"), tuple):
-        pt_model_class = None
-        for pt_model_class_candidate in targeted_task["pt"]:
-            if pt_model_class_name in set(cls.__name__ for cls in pt_model_class_candidate._model_mapping.values()):
-                pt_model_class = pt_model_class_candidate
-                break
-
-        if pt_model_class is None:
-            raise ValueError(
-                f"{pretrained_model_name_or_path} expects to be loaded by {pt_model_class_name}, but {pt_model_class_name} is not supported by possible auto models {targeted_task.get('pt')}"
-            )
-
-        targeted_task["pt"] = pt_model_class
-
-    # extract correct TensorFlow auto model class
-    if isinstance(targeted_task.get("tf"), tuple):
-        tf_model_class = None
-        tf_model_class_name = "TF" + pt_model_class_name
-        for tf_model_class_candidate in targeted_task["tf"]:
-            if tf_model_class_name in set(cls.__name__ for cls in tf_model_class_candidate._model_mapping.values()):
-                tf_model_class = tf_model_class_candidate
-                break
-
-        if tf_model_class is None:
-            raise ValueError(
-                f"{pretrained_model_name_or_path} expects to be loaded by {tf_model_class_name}, but {tf_model_class_name} is not supported by possible auto models {targeted_task.get('tf')}"
-            )
-
-        targeted_task["tf"] = tf_model_class
-
-    return targeted_task
 
 
 def get_default_model(targeted_task: Dict, framework: Optional[str], task_options: Optional[Any]) -> str:
@@ -614,7 +614,7 @@ class Pipeline(_ScikitCompat):
     ):
 
         if framework is None:
-            framework, model = infer_framework_from_model(model)
+            framework, model = infer_framework_load_model(model, config=model.config)
 
         self.task = task
         self.model = model
