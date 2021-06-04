@@ -592,7 +592,7 @@ if __name__ == "__main__":
         # Save metrics
         if has_tensorboard and jax.process_index() == 0:
             cur_step = epoch * (len(train_dataset) // train_batch_size)
-            write_metric(train_metrics, eval_metrics, train_time, cur_step)
+            write_metric(train_metrics, eval_metrics, train_time, cur_step, distributed)
 
     # save last checkpoint
     if jax.process_index() == 0:
