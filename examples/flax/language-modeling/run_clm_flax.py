@@ -28,18 +28,16 @@ from dataclasses import dataclass, field
 
 # You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Optional
 
-import numpy as np
 from datasets import Dataset, load_dataset
 from tqdm import tqdm
 
-import flax
 import jax
 import jax.numpy as jnp
 import optax
 import transformers
-from flax import jax_utils
+from flax import jax_utils, traverse_util
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
 from transformers import (
@@ -453,12 +451,21 @@ if __name__ == "__main__":
         training_args.learning_rate,
     )
 
+    # We use Optax's "masking" functionality to not apply weight decay
+    # to bias and LayerNorm scale parameters. decay_mask_fn returns a
+    # mask boolean with the same structure as the parameters.
+    # The mask is True for parameters that should be decayed.
+    def decay_mask_fn(params):
+        flat_params = traverse_util.flatten_dict(params)
+        flat_mask = {path: (path[-1] != "bias" and path[-2:] != ("LayerNorm", "scale")) for path in flat_params}
+        return traverse_util.unflatten_dict(flat_mask)
+
     # create adam optimizer
     adamw = optax.adamw(
         learning_rate=linear_decay_lr_schedule_fn,
         b1=training_args.adam_beta1,
         b2=training_args.adam_beta2,
-        eps=1e-8,
+        eps=training_args.adam_epsilon,
         weight_decay=training_args.weight_decay,
     )
 
