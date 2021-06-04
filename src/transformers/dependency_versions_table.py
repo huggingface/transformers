@@ -8,6 +8,7 @@ deps = {
     "dataclasses": "dataclasses",
     "datasets": "datasets",
     "deepspeed": "deepspeed>=0.3.16",
+    "detectron2 @ git+https://github.com/facebookresearch/detectron2.git": "git+https://github.com/facebookresearch/detectron2.git@v0.4#egg=detectron2",
     "docutils": "docutils==0.16.0",
     "fairscale": "fairscale>0.3",
     "faiss-cpu": "faiss-cpu",
@@ -66,5 +67,4 @@ deps = {
     "unidic": "unidic>=1.0.2",
     "unidic_lite": "unidic_lite>=1.0.7",
     "uvicorn": "uvicorn",
-    "detectron2" : "detectron2",
 }
