@@ -429,9 +429,9 @@ if __name__ == "__main__":
     linear_decay_lr_schedule_fn = create_learning_rate_fn(
         len(train_dataset),
         train_batch_size,
-        data_args.num_train_epochs,
-        data_args.num_warmup_steps,
-        data_args.learning_rate,
+        training_args.num_train_epochs,
+        training_args.num_warmup_steps,
+        training_args.learning_rate,
     )
 
     # create adam optimizer
