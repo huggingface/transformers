@@ -324,7 +324,7 @@ install_requires = [
     deps["sacremoses"],  # for XLM
     deps["tokenizers"],
     deps["tqdm"],  # progress bars in model download and training scripts
-    deps["detectron2"],  # detectron2 for image embedding
+    deps["detectron2@git+https://github.com/facebookresearch/detectron2.git"],  # detectron2 for image embedding
 ]
 
 setup(
