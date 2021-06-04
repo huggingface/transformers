@@ -458,10 +458,8 @@ if __name__ == "__main__":
             # compute loss
             shift_logits = logits[..., :-1, :]
             shift_labels = labels[..., 1:]
-            loss = optax.softmax_cross_entropy(shift_logits, onehot(shift_labels, shift_logits.shape[-1]))
+            loss = optax.softmax_cross_entropy(shift_logits, onehot(shift_labels, shift_logits.shape[-1])).mean()
 
-            # take average
-            loss = loss.sum()
             return loss
 
         grad_fn = jax.value_and_grad(loss_fn)
@@ -490,7 +488,7 @@ if __name__ == "__main__":
         loss = optax.softmax_cross_entropy(shift_logits, onehot(shift_labels, shift_logits.shape[-1]))
 
         # summarize metrics
-        metrics = {"loss": loss.sum()}
+        metrics = {"loss": loss}
         metrics = jax.lax.psum(metrics, axis_name="batch")
 
         return metrics
