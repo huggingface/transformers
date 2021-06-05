@@ -59,20 +59,19 @@ On the task other than MRPC and WNLI we train for 3 these epochs because this is
 but looking at the training curves of some of them (e.g., SST-2, STS-b), it appears the models
 are undertrained and we could get better results when training longer.
 
-In the Tensorboard results linked below, the random seed of each model is equal to the ID of the run. So in order to reproduce run 1, run the command above with `--seed=1`. The best run used random seed 2, which is the default in the script. The results of all runs are in [this Google Sheet](https://docs.google.com/spreadsheets/d/1zKL_xn32HwbxkFMxB3ftca-soTHAuBFgIhYhOhCnZ4E/edit?usp=sharing).
-
+In the Tensorboard results linked below, the random seed of each model is equal to the ID of the run. So in order to reproduce run 1, run the command above with `--seed=1`. The best run used random seed 3, which is the default in the script. The results of all runs are in [this Google Sheet](https://docs.google.com/spreadsheets/d/1p3XzReMO75m_XdEJvPue-PIq_PN-96J2IJpJW1yS-10/edit?usp=sharing).
 
 | Task  | Metric                       | Acc (best run) | Acc (avg/5runs) | Stdev     | Metrics                                                                  |
 |-------|------------------------------|----------------|-----------------|-----------|--------------------------------------------------------------------------|
-| CoLA  | Matthew's corr               | 59.57          | 58.04           | 1.81      | [tfhub.dev](https://tensorboard.dev/experiment/f4OvQpWtRq6CvddpxGBd0A/)  |
-| SST-2 | Accuracy                     | 92.43          | 91.79           | 0.59      | [tfhub.dev](https://tensorboard.dev/experiment/BYFwa49MRTaLIn93DgAEtA/)  |
-| MRPC  | F1/Accuracy                  | 89.50/84.8     | 88.70/84.02     | 0.56/0.48 | [tfhub.dev](https://tensorboard.dev/experiment/9ZWH5xwXRS6zEEUE4RaBhQ/)  |
-| STS-B | Pearson/Spearman corr.       | 90.00/88.71    | 89.09/88.61     | 0.51/0.07 | [tfhub.dev](https://tensorboard.dev/experiment/mUlI5B9QQ0WGEJip7p3Tng/)  |
-| QQP   | Accuracy/F1                  | 90.88/87.64    | 90.75/87.53     | 0.11/0.13 | [tfhub.dev](https://tensorboard.dev/experiment/pO6h75L3SvSXSWRcgljXKA/)  |
-| MNLI  | Matched acc.                 | 84.06          | 83.88           | 0.16      | [tfhub.dev](https://tensorboard.dev/experiment/LKwaOH18RMuo7nJkESrpKg/)  |
-| QNLI  | Accuracy                     | 91.01          | 90.86           | 0.18      | [tfhub.dev](https://tensorboard.dev/experiment/qesXxNcaQhmKxPmbw1sOoA/)  |
-| RTE   | Accuracy                     | 66.80          | 65.27           | 1.07      | [tfhub.dev](https://tensorboard.dev/experiment/Z84xC0r6RjyzT4SLqiAbzQ/)  |
-| WNLI  | Accuracy                     | 39.44          | 32.96           | 5.85      | [tfhub.dev](https://tensorboard.dev/experiment/gV73w9v0RIKrqVw32PZbAQ/)  |
+| CoLA  | Matthew's corr               | 60.57          | 59.04           | 1.06      | [tfhub.dev](https://tensorboard.dev/experiment/lfr2adVpRtmLDALKrElkzg/)  |
+| SST-2 | Accuracy                     | 92.66          | 92.23           | 0.57      | [tfhub.dev](https://tensorboard.dev/experiment/jYvfv2trRHKMjoWnXVwrZA/)  |
+| MRPC  | F1/Accuracy                  | 89.90/85.78    | 88.97/84.36     | 0.72/1.09 | [tfhub.dev](https://tensorboard.dev/experiment/bo3W3DEoRw2Q7YXjWrJkfg/)  |
+| STS-B | Pearson/Spearman corr.       | 89.04/88.70    | 88.94/88.63     | 0.07/0.07 | [tfhub.dev](https://tensorboard.dev/experiment/fxVwbLD7QpKhbot0r9rn2w/)  |
+| QQP   | Accuracy/F1                  | 90.81/87.58    | 90.76/87.51     | 0.05/0.06 | [tfhub.dev](https://tensorboard.dev/experiment/di089Rc9TZmsnKRMrYNLsA/)  |
+| MNLI  | Matched acc.                 | 84.10          | 83.80           | 0.16      | [tfhub.dev](https://tensorboard.dev/experiment/JgNCGHDJSRaW6HBx6YQFYQ/)  |
+| QNLI  | Accuracy                     | 91.01          | 90.82           | 0.17      | [tfhub.dev](https://tensorboard.dev/experiment/Bq7cMGJnQMSggYgL8qNGeQ/)  |
+| RTE   | Accuracy                     | 66.06          | 64.76           | 1.04      | [tfhub.dev](https://tensorboard.dev/experiment/66Eq24bhRjqN6CEhgDSGqQ/)  |
+| WNLI  | Accuracy                     | 46.48          | 37.01           | 6.83      | [tfhub.dev](https://tensorboard.dev/experiment/TAqcnddqTkWvVEeGaWwIdQ/)  |
 
 Some of these results are significantly different from the ones reported on the test set of GLUE benchmark on the
 website. For QQP and WNLI, please refer to [FAQ #12](https://gluebenchmark.com/faq) on the website.
@@ -83,24 +82,27 @@ We also ran each task once on a single V100 GPU, 8 V100 GPUs, and 8 Cloud v3 TPU
 overall training time below. For comparison we ran Pytorch's [run_glue.py](https://github.com/huggingface/transformers/blob/master/examples/pytorch/text-classification/run_glue.py) on a single GPU (last column).
 
 
-| Task  | TPU v3-8  | 8 GPU      | 1 GPU      | 1 GPU (Pytorch) |
+| Task  | TPU v3-8  | 8 GPU      | [1 GPU](https://tensorboard.dev/experiment/mkPS4Zh8TnGe1HB6Yzwj4Q)  | 1 GPU (Pytorch) |
 |-------|-----------|------------|------------|-----------------|
-| CoLA  |  1m 46s   |  1m 26s    | 3m 6s      | 4m 6s           |
-| SST-2 |  5m 30s   |  6m 28s    | 22m 6s     | 34m 37s         |
-| MRPC  |  1m 32s   |  1m 14s    | 2m 17s     | 2m 56s          |
-| STS-B |  1m 33s   |  1m 12s    | 2m 11s     | 2m 48s          |
-| QQP   | 24m 40s   | 31m 48s    | 1h 20m 15s | 2h 54m          |
-| MNLI  | 26m 30s   | 33m 55s    | 2h 7m 30s  | 3h 7m 6s        |
-| QNLI  |  8m       |  9m 40s    | 34m 20s    | 49m 8s          |
-| RTE   |  1m 21s   |     55s    | 1m 8s      | 1m 16s          |
-| WNLI  |  1m 12s   |     48s    | 38s        | 36s             |
+| CoLA  |  1m 42s   |  1m 26s    | 3m 9s      | 4m 6s           |
+| SST-2 |  5m 12s   |  6m 28s    | 22m 33s    | 34m 37s         |
+| MRPC  |  1m 29s   |  1m 14s    | 2m 20s     | 2m 56s          |
+| STS-B |  1m 30s   |  1m 12s    | 2m 16s     | 2m 48s          |
+| QQP   | 22m 50s   | 31m 48s    | 1h 59m 41s | 2h 54m          |
+| MNLI  | 25m 03s   | 33m 55s    | 2h 9m 37s  | 3h 7m 6s        |
+| QNLI  |  7m30s    |  9m 40s    | 34m 40s    | 49m 8s          |
+| RTE   |  1m 20s   |     55s    | 1m 10s     | 1m 16s          |
+| WNLI  |  1m 11s   |     48s    | 39s        | 36s             |
 |-------|
-| **TOTAL** | 1h 13m | 1h 28m | 4h 34m | 6h 37m      |
-| **COST*** | $9.60     | $29.10     | $11.33     | $16.41          |
+| **TOTAL** | 1h 03m | 1h 28m | 5h 16m | 6h 37m      |
+| **COST*** | $8.56  | $29.10 | $13.06 | $16.41      |
 
 
 *All experiments are ran on Google Cloud Platform. Prices are on-demand prices
-(not preemptible), obtained from the following tables:
-[TPU pricing table](https://cloud.google.com/tpu/pricing),
-[GPU pricing table](https://cloud.google.com/compute/gpus-pricing). GPU
-experiments are ran without further optimizations besides JAX transformations.
+(not preemptible), obtained on May 12, 2021 for zone Iowa (us-central1) using
+the following tables:
+[TPU pricing table](https://cloud.google.com/tpu/pricing) ($2.40/h for v3-8),
+[GPU pricing table](https://cloud.google.com/compute/gpus-pricing) ($2.48/h per
+V100 GPU). GPU experiments are ran without further optimizations besides JAX
+transformations. GPU experiments are ran with full precision (fp32). "TPU v3-8"
+are 8 TPU cores on 4 chips (each chips has 2 cores), while "8 GPU" are 8 GPU chips.

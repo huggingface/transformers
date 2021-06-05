@@ -21,6 +21,7 @@ import random
 import re
 import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 
@@ -45,6 +46,7 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
 )
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
 from transformers.utils.hp_naming import TrialShortNamer
 
 
@@ -309,11 +311,11 @@ class TrainerIntegrationCommon:
         log_history = state.pop("log_history", None)
         log_history1 = state1.pop("log_history", None)
         self.assertEqual(state, state1)
+        skip_log_keys = ["train_runtime", "train_samples_per_second", "train_steps_per_second", "train_loss"]
         for log, log1 in zip(log_history, log_history1):
-            _ = log.pop("train_runtime", None)
-            _ = log1.pop("train_runtime", None)
-            _ = log.pop("train_samples_per_second", None)
-            _ = log1.pop("train_samples_per_second", None)
+            for key in skip_log_keys:
+                _ = log.pop(key, None)
+                _ = log1.pop(key, None)
             self.assertEqual(log, log1)
 
 
@@ -1048,6 +1050,35 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
         self.assertTrue(isinstance(trainer.state.total_flos, float))
 
+    def check_checkpoint_deletion(self, trainer, output_dir, expected):
+        # Make fake checkpoints
+        for n in [5, 10, 15, 20, 25]:
+            os.makedirs(os.path.join(output_dir, f"{PREFIX_CHECKPOINT_DIR}-{n}"), exist_ok=True)
+        trainer._rotate_checkpoints(output_dir=output_dir)
+        glob_checkpoints = [str(x) for x in Path(output_dir).glob(f"{PREFIX_CHECKPOINT_DIR}-*")]
+        values = [int(re.match(f".*{PREFIX_CHECKPOINT_DIR}-([0-9]+)", d).groups()[0]) for d in glob_checkpoints]
+        self.assertSetEqual(set(values), set(expected))
+
+    def test_checkpoint_rotation(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Without best model at end
+            trainer = get_regression_trainer(output_dir=tmp_dir, save_total_limit=2)
+            self.check_checkpoint_deletion(trainer, tmp_dir, [20, 25])
+
+            # With best model at end
+            trainer = get_regression_trainer(output_dir=tmp_dir, load_best_model_at_end=True, save_total_limit=2)
+            trainer.state.best_model_checkpoint = os.path.join(tmp_dir, "checkpoint-5")
+            self.check_checkpoint_deletion(trainer, tmp_dir, [5, 25])
+
+            # Edge case: we don't always honor save_total_limit=1 if load_best_model_at_end=True to be able to resume
+            # from checkpoint
+            trainer = get_regression_trainer(output_dir=tmp_dir, load_best_model_at_end=True, save_total_limit=1)
+            trainer.state.best_model_checkpoint = os.path.join(tmp_dir, "checkpoint-25")
+            self.check_checkpoint_deletion(trainer, tmp_dir, [25])
+
+            trainer.state.best_model_checkpoint = os.path.join(tmp_dir, "checkpoint-5")
+            self.check_checkpoint_deletion(trainer, tmp_dir, [5, 25])
+
     def check_mem_metrics(self, trainer, check_func):
         metrics = trainer.train().metrics
         check_func("init_mem_cpu_alloc_delta", metrics)
@@ -1069,7 +1100,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_mem_metrics(self):
 
         # with mem metrics enabled
-        trainer = get_regression_trainer()
+        trainer = get_regression_trainer(skip_memory_metrics=False)
         self.check_mem_metrics(trainer, self.assertIn)
 
         # with mem metrics disabled
@@ -1090,7 +1121,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         b = torch.ones(1000, bs) - 0.001
 
         # 1. with mem metrics enabled
-        trainer = get_regression_trainer(a=a, b=b, eval_len=16)
+        trainer = get_regression_trainer(a=a, b=b, eval_len=16, skip_memory_metrics=False)
         metrics = trainer.evaluate()
         del trainer
         gc.collect()
@@ -1111,7 +1142,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertLess(fp32_eval, 5_000)
 
         # 2. with mem metrics disabled
-        trainer = get_regression_trainer(a=a, b=b, eval_len=16, fp16_full_eval=True)
+        trainer = get_regression_trainer(a=a, b=b, eval_len=16, fp16_full_eval=True, skip_memory_metrics=False)
         metrics = trainer.evaluate()
         fp16_init = metrics["init_mem_gpu_alloc_delta"]
         fp16_eval = metrics["eval_mem_gpu_alloc_delta"]

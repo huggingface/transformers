@@ -265,6 +265,15 @@ def is_torch_cuda_available():
         return False
 
 
+_torch_fx_available = False
+if _torch_available:
+    _torch_fx_available = version.parse(_torch_version) >= version.parse("1.8")
+
+
+def is_torch_fx_available():
+    return _torch_fx_available
+
+
 def is_tf_available():
     return _tf_available
 
@@ -604,18 +613,18 @@ def add_end_docstrings(*docstr):
 
 PT_RETURN_INTRODUCTION = r"""
     Returns:
-        :class:`~{full_output_type}` or :obj:`tuple(torch.FloatTensor)`: A :class:`~{full_output_type}` (if
-        ``return_dict=True`` is passed or when ``config.return_dict=True``) or a tuple of :obj:`torch.FloatTensor`
-        comprising various elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
+        :class:`~{full_output_type}` or :obj:`tuple(torch.FloatTensor)`: A :class:`~{full_output_type}` or a tuple of
+        :obj:`torch.FloatTensor` (if ``return_dict=False`` is passed or when ``config.return_dict=False``) comprising
+        various elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
 
 """
 
 
 TF_RETURN_INTRODUCTION = r"""
     Returns:
-        :class:`~{full_output_type}` or :obj:`tuple(tf.Tensor)`: A :class:`~{full_output_type}` (if
-        ``return_dict=True`` is passed or when ``config.return_dict=True``) or a tuple of :obj:`tf.Tensor` comprising
-        various elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
+        :class:`~{full_output_type}` or :obj:`tuple(tf.Tensor)`: A :class:`~{full_output_type}` or a tuple of
+        :obj:`tf.Tensor` (if ``return_dict=False`` is passed or when ``config.return_dict=False``) comprising various
+        elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
 
 """
 
@@ -1029,6 +1038,20 @@ FLAX_MULTIPLE_CHOICE_SAMPLE = r"""
         >>> logits = outputs.logits
 """
 
+FLAX_CAUSAL_LM_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {tokenizer_class}, {model_class}
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
+        >>> outputs = model(**inputs, labels=inputs["input_ids"])
+
+        >>> logits = outputs.logits
+"""
+
 FLAX_SAMPLE_DOCSTRINGS = {
     "SequenceClassification": FLAX_SEQUENCE_CLASSIFICATION_SAMPLE,
     "QuestionAnswering": FLAX_QUESTION_ANSWERING_SAMPLE,
@@ -1036,6 +1059,7 @@ FLAX_SAMPLE_DOCSTRINGS = {
     "MultipleChoice": FLAX_MULTIPLE_CHOICE_SAMPLE,
     "MaskedLM": FLAX_MASKED_LM_SAMPLE,
     "BaseModel": FLAX_BASE_MODEL_SAMPLE,
+    "LMHead": FLAX_CAUSAL_LM_SAMPLE,
 }
 
 
@@ -1597,11 +1621,21 @@ def tf_required(func):
     return wrapper
 
 
+def is_torch_fx_proxy(x):
+    if is_torch_fx_available():
+        import torch.fx
+
+        return isinstance(x, torch.fx.Proxy)
+    return False
+
+
 def is_tensor(x):
     """
     Tests if ``x`` is a :obj:`torch.Tensor`, :obj:`tf.Tensor`, obj:`jaxlib.xla_extension.DeviceArray` or
     :obj:`np.ndarray`.
     """
+    if is_torch_fx_proxy(x):
+        return True
     if is_torch_available():
         import torch
 

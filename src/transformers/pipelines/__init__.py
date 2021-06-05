@@ -48,7 +48,12 @@ from .table_question_answering import TableQuestionAnsweringArgumentHandler, Tab
 from .text2text_generation import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
 from .text_classification import TextClassificationPipeline
 from .text_generation import TextGenerationPipeline
-from .token_classification import NerPipeline, TokenClassificationArgumentHandler, TokenClassificationPipeline
+from .token_classification import (
+    AggregationStrategy,
+    NerPipeline,
+    TokenClassificationArgumentHandler,
+    TokenClassificationPipeline,
+)
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 
 

@@ -15,6 +15,7 @@
 
 
 import inspect
+import itertools
 import os
 import pickle
 import re
@@ -23,7 +24,7 @@ import tempfile
 import unittest
 from collections import OrderedDict
 from itertools import takewhile
-from typing import TYPE_CHECKING, Dict, List, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
 from huggingface_hub import HfApi
 from requests.exceptions import HTTPError
@@ -100,6 +101,13 @@ class TokenizerTesterMixin:
     from_pretrained_vocab_key = "vocab_file"
     test_seq2seq = True
 
+    # set to True to test a sentencepiece tokenizer
+    test_sentencepiece = False
+
+    # set to True to ignore casing when testing a sentencepiece tokenizer
+    # test_sentencepiece must also be set to True
+    test_sentencepiece_ignore_case = False
+
     def setUp(self) -> None:
         # Tokenizer.filter makes it possible to filter which Tokenizer to case based on all the
         # information available in Tokenizer (name, rust class, python class, vocab key name)
@@ -167,13 +175,74 @@ class TokenizerTesterMixin:
     def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
         return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
-    # def get_input_output_texts(self) -> Tuple[str, str]:
-    #     """Feel free to overwrite"""
-    #     # TODO: @property
-    #     return (
-    #         "This is a test",
-    #         "This is a test",
-    #     )
+    def tokenizer_integration_test_util(
+        self,
+        expected_encoding: Dict,
+        model_name: str,
+        revision: str = None,
+        sequences: List[str] = None,
+        decode_kwargs: Dict[str, Any] = None,
+        padding: bool = True,
+    ):
+        """
+        Util for integration test.
+
+        Text is tokenized and then reverted back to text. Both results are then checked.
+
+        Args:
+            expected_encoding:
+                The expected result of the tokenizer output.
+            model_name:
+                The model name of the tokenizer to load and use.
+            revision:
+                The full git revision number of the model. This is to pin the
+                tokenizer config and to avoid that tests start to fail if the
+                config gets changed upstream.
+            sequences:
+                Can overwrite the texts that are used to check the tokenizer.
+                This is useful if the tokenizer supports non english languages
+                like france.
+            decode_kwargs:
+                Additional args for the ``decode`` function which reverts the
+                tokenized text back to a string.
+            padding:
+                Activates and controls padding of the tokenizer.
+        """
+        decode_kwargs = {} if decode_kwargs is None else decode_kwargs
+
+        if sequences is None:
+            sequences = [
+                "Transformers (formerly known as pytorch-transformers and pytorch-pretrained-bert) provides "
+                "general-purpose architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural "
+                "Language Understanding (NLU) and Natural Language Generation (NLG) with over 32+ pretrained "
+                "models in 100+ languages and deep interoperability between Jax, PyTorch and TensorFlow.",
+                "BERT is designed to pre-train deep bidirectional representations from unlabeled text by jointly "
+                "conditioning on both left and right context in all layers.",
+                "The quick brown fox jumps over the lazy dog.",
+            ]
+
+        tokenizer_classes = [self.tokenizer_class]
+        if self.test_rust_tokenizer:
+            tokenizer_classes.append(self.rust_tokenizer_class)
+
+        for tokenizer_class in tokenizer_classes:
+            tokenizer = tokenizer_class.from_pretrained(
+                model_name,
+                revision=revision,  # to pin the tokenizer version
+            )
+
+            encoding = tokenizer(sequences, padding=padding)
+            decoded_sequences = [
+                tokenizer.decode(seq, skip_special_tokens=True, **decode_kwargs) for seq in encoding["input_ids"]
+            ]
+
+            encoding_data = encoding.data
+            self.assertDictEqual(encoding_data, expected_encoding)
+
+            for expected, decoded in zip(sequences, decoded_sequences):
+                if self.test_sentencepiece_ignore_case:
+                    expected = expected.lower()
+                self.assertEqual(expected, decoded)
 
     def assert_padded_input_match(self, input_r: list, input_p: list, max_length: int, pad_token_id: int):
         # Ensure we match max_length
@@ -215,6 +284,62 @@ class TokenizerTesterMixin:
             {value: batch_encode_plus_sequences[value][i] for value in batch_encode_plus_sequences.keys()}
             for i in range(len(batch_encode_plus_sequences["input_ids"]))
         ]
+
+    # TODO: this test could be extended to all tokenizers - not just the sentencepiece
+    def test_sentencepiece_tokenize_and_convert_tokens_to_string(self):
+        """Test ``_tokenize`` and ``convert_tokens_to_string``."""
+        if not self.test_sentencepiece:
+            return
+
+        tokenizer = self.get_tokenizer()
+        text = "This is text to test the tokenizer."
+
+        if self.test_sentencepiece_ignore_case:
+            text = text.lower()
+
+        tokens = tokenizer.tokenize(text)
+
+        self.assertTrue(len(tokens) > 0)
+
+        # check if converting back to original text works
+        reverse_text = tokenizer.convert_tokens_to_string(tokens)
+
+        if self.test_sentencepiece_ignore_case:
+            reverse_text = reverse_text.lower()
+
+        self.assertEqual(reverse_text, text)
+
+    def test_subword_regularization_tokenizer(self) -> None:
+        if not self.test_sentencepiece:
+            return
+
+        # Subword regularization is only available for the slow tokenizer.
+        sp_model_kwargs = {"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
+        tokenizer = self.get_tokenizer(sp_model_kwargs=sp_model_kwargs)
+
+        self.assertTrue(hasattr(tokenizer, "sp_model_kwargs"))
+        self.assertIsNotNone(tokenizer.sp_model_kwargs)
+        self.assertTrue(isinstance(tokenizer.sp_model_kwargs, dict))
+        self.assertEqual(tokenizer.sp_model_kwargs, sp_model_kwargs)
+        self.check_subword_sampling(tokenizer)
+
+    def test_pickle_subword_regularization_tokenizer(self) -> None:
+        if not self.test_sentencepiece:
+            return
+
+        """Google pickle __getstate__ __setstate__ if you are struggling with this."""
+        # Subword regularization is only available for the slow tokenizer.
+        sp_model_kwargs = {"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
+        tokenizer = self.get_tokenizer(sp_model_kwargs=sp_model_kwargs)
+        tokenizer_bin = pickle.dumps(tokenizer)
+        del tokenizer
+        tokenizer_new = pickle.loads(tokenizer_bin)
+
+        self.assertTrue(hasattr(tokenizer_new, "sp_model_kwargs"))
+        self.assertIsNotNone(tokenizer_new.sp_model_kwargs)
+        self.assertTrue(isinstance(tokenizer_new.sp_model_kwargs, dict))
+        self.assertEqual(tokenizer_new.sp_model_kwargs, sp_model_kwargs)
+        self.check_subword_sampling(tokenizer_new)
 
     def test_model_input_names_signature(self):
         accepted_model_main_input_names = [
@@ -1726,6 +1851,46 @@ class TokenizerTesterMixin:
 
             # add pad_token_id to pass subsequent tests
             tokenizer.add_special_tokens({"pad_token": "<PAD>"})
+
+    def check_subword_sampling(
+        self,
+        tokenizer: PreTrainedTokenizer,
+        text: str = None,
+    ) -> None:
+        """
+        Check if the tokenizer generates different results when subword regularization is enabled.
+
+        Subword regularization augments training data with subword sampling.
+        This has a random component.
+
+        Args:
+            tokenizer: The tokenizer to check.
+            text: The text to use for the checks.
+        """
+        text = "This is a test for subword regularization." if text is None else text
+        if self.test_sentencepiece_ignore_case:
+            text = text.lower()
+
+        tokens_list = []
+        for _ in range(5):
+            tokens_list.append(tokenizer.tokenize(text))
+
+        # the list of different pairs of tokens_list
+        combinations = itertools.combinations(tokens_list, 2)
+
+        # check of sampling is done
+        subword_sampling_found = False
+        for combination in combinations:
+            if combination[0] != combination[1]:
+                subword_sampling_found = True
+        self.assertTrue(subword_sampling_found)
+
+        # check if converting back to original text works
+        for tokens in tokens_list:
+            if self.test_sentencepiece_ignore_case:
+                self.assertEqual(text, tokenizer.convert_tokens_to_string(tokens).lower())
+            else:
+                self.assertEqual(text, tokenizer.convert_tokens_to_string(tokens))
 
     @require_torch
     @slow

@@ -26,6 +26,8 @@ from io import StringIO
 from pathlib import Path
 from typing import Iterator, Union
 
+from transformers import logging as transformers_logging
+
 from .file_utils import (
     is_datasets_available,
     is_faiss_available,
@@ -649,6 +651,26 @@ class CaptureLogger:
 
 
 @contextlib.contextmanager
+def LoggingLevel(level):
+    """
+    This is a context manager to temporarily change transformers modules logging level to the desired value and have it
+    restored to the original setting at the end of the scope.
+
+    For example ::
+
+        with LoggingLevel(logging.INFO):
+            AutoModel.from_pretrained("gpt2") # calls logger.info() several times
+
+    """
+    orig_level = transformers_logging.get_verbosity()
+    try:
+        transformers_logging.set_verbosity(level)
+        yield
+    finally:
+        transformers_logging.set_verbosity(orig_level)
+
+
+@contextlib.contextmanager
 # adapted from https://stackoverflow.com/a/64789046/9201239
 def ExtendSysPath(path: Union[str, os.PathLike]) -> Iterator[None]:
     """
@@ -1207,19 +1229,25 @@ def nested_simplify(obj, decimals=3):
     Simplifies an object by rounding float numbers, and downcasting tensors/numpy arrays to get simple equality test
     within tests.
     """
+    import numpy as np
+
     from transformers.tokenization_utils import BatchEncoding
 
     if isinstance(obj, list):
         return [nested_simplify(item, decimals) for item in obj]
+    elif isinstance(obj, np.ndarray):
+        return nested_simplify(obj.tolist())
     elif isinstance(obj, (dict, BatchEncoding)):
         return {nested_simplify(k, decimals): nested_simplify(v, decimals) for k, v in obj.items()}
-    elif isinstance(obj, (str, int)):
+    elif isinstance(obj, (str, int, np.int64)):
         return obj
     elif is_torch_available() and isinstance(obj, torch.Tensor):
-        return nested_simplify(obj.tolist())
+        return nested_simplify(obj.tolist(), decimals)
     elif is_tf_available() and tf.is_tensor(obj):
         return nested_simplify(obj.numpy().tolist())
     elif isinstance(obj, float):
         return round(obj, decimals)
+    elif isinstance(obj, np.float32):
+        return nested_simplify(obj.item(), decimals)
     else:
         raise Exception(f"Not supported: {type(obj)}")
