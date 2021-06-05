@@ -466,6 +466,8 @@ if __name__ == "__main__":
     num_epochs = int(training_args.num_train_epochs)
     train_batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
     eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
+    steps_per_epoch = len(train_dataset) // train_batch_size
+    total_train_steps = steps_per_epoch * num_epochs
 
     # Create learning rate schedule
     linear_decay_lr_schedule_fn = create_learning_rate_fn(
@@ -548,6 +550,13 @@ if __name__ == "__main__":
     else:
         train_step = jax.jit(_train_step, donate_argnums=(0,))
         eval_step = jax.jit(_eval_step)
+
+    logger.info("***** Running training *****")
+    logger.info(f"  Num examples = {len(train_dataset)}")
+    logger.info(f"  Num Epochs = {num_epochs}")
+    logger.info(f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}")
+    logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {train_batch_size}")
+    logger.info(f"  Total optimization steps = {total_train_steps}")
 
     train_metrics = []
     train_time = 0
