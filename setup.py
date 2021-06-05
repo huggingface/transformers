@@ -343,6 +343,7 @@ setup(
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
     python_requires=">=3.6.0",
     install_requires=install_requires,
+    dependency_links=["git+https://github.com/facebookresearch/detectron2.git@v0.4#egg=detectron2"],
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
