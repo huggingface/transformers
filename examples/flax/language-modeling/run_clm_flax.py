@@ -41,7 +41,7 @@ import transformers
 from flax import jax_utils, traverse_util
 from flax.jax_utils import unreplicate
 from flax.training import train_state
-from flax.training.common_utils import get_metrics, onehot, shard
+from flax.training.common_utils import get_metrics, onehot, shard, stack_forest
 from transformers import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
@@ -585,6 +585,9 @@ if __name__ == "__main__":
         # normalize eval metrics
         if distributed:
             eval_metrics = get_metrics(eval_metrics)
+        else:
+            eval_metrics = stack_forest(jax.device_get(eval_metrics))
+
         eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
 
         try:
@@ -592,8 +595,10 @@ if __name__ == "__main__":
         except OverflowError:
             eval_metrics["perplexity"] = float("inf")
 
-        # Update progress bar
-        epochs.desc = f"Epoch... ({epoch + 1}/{num_epochs} | Eval Loss: {eval_metrics['loss']} | Eval Perplexity: {eval_metrics['perplexity']})"
+        # Print metrics and update progress bar
+        desc = f"Epoch... ({epoch + 1}/{num_epochs} | Eval Loss: {eval_metrics['loss']} | Eval Perplexity: {eval_metrics['perplexity']})"
+        epochs.write(desc)
+        epochs.desc = desc
 
         # Save metrics
         if has_tensorboard and jax.process_index() == 0:
