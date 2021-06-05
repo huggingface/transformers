@@ -132,6 +132,14 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 shutil.rmtree(tmpdirname)
 
+    # CanineModel does not support the get_input_embeddings nor the get_vocab method
+    def test_np_encode_plus_sent_to_model(self):
+        pass
+
+    # CanineModel does not support the get_input_embeddings nor the get_vocab method
+    def test_torch_encode_plus_sent_to_model(self):
+        pass
+    
     # tokenizer can be instantiated without any pretrained files, so no need for pretrained tokenizer list
     def test_pretrained_model_lists(self):
         pass
