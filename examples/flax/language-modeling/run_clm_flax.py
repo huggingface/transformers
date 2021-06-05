@@ -211,7 +211,7 @@ def data_loader(
         yield batch
 
 
-def write_metric(train_metrics, eval_metrics, train_time, step, distributed):
+def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step, distributed):
     summary_writer.scalar("train_time", train_time, step)
 
     if distributed:
@@ -239,7 +239,7 @@ def create_learning_rate_fn(
     return schedule_fn
 
 
-if __name__ == "__main__":
+def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
@@ -295,18 +295,18 @@ if __name__ == "__main__":
     # download the dataset.
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        datasets = load_dataset(
+        dataset = load_dataset(
             data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir, keep_in_memory=False
         )
 
-        if "validation" not in datasets.keys():
-            datasets["validation"] = load_dataset(
+        if "validation" not in dataset.keys():
+            dataset["validation"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[:{data_args.validation_split_percentage}%]",
                 cache_dir=model_args.cache_dir,
             )
-            datasets["train"] = load_dataset(
+            dataset["train"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[{data_args.validation_split_percentage}%:]",
@@ -321,7 +321,7 @@ if __name__ == "__main__":
         extension = data_args.train_file.split(".")[-1]
         if extension == "txt":
             extension = "text"
-        datasets = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
+        dataset = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
@@ -364,9 +364,9 @@ if __name__ == "__main__":
     # Preprocessing the datasets.
     # First we tokenize all the texts.
     if training_args.do_train:
-        column_names = datasets["train"].column_names
+        column_names = dataset["train"].column_names
     else:
-        column_names = datasets["validation"].column_names
+        column_names = dataset["validation"].column_names
     text_column_name = "text" if "text" in column_names else column_names[0]
 
     # since this will be pickled to avoid _LazyModule error in Hasher force logger loading before tokenize_function
@@ -382,7 +382,7 @@ if __name__ == "__main__":
             )
         return output
 
-    tokenized_datasets = datasets.map(
+    tokenized_datasets = dataset.map(
         tokenize_function,
         batched=True,
         num_proc=data_args.preprocessing_num_workers,
@@ -617,7 +617,7 @@ if __name__ == "__main__":
         # Save metrics
         if has_tensorboard and jax.process_index() == 0:
             cur_step = epoch * (len(train_dataset) // train_batch_size)
-            write_metric(train_metrics, eval_metrics, train_time, cur_step, distributed)
+            write_metric(summary_writer, train_metrics, eval_metrics, train_time, cur_step, distributed)
 
     # save last checkpoint
     if jax.process_index() == 0:
@@ -626,3 +626,7 @@ if __name__ == "__main__":
         else:
             params = state.params
         model.save_pretrained(training_args.output_dir, params=params)
+
+
+if __name__ == "__main__":
+    main()
