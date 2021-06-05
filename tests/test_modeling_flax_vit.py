@@ -14,7 +14,6 @@
 
 import inspect
 import unittest
-from typing import List, Tuple
 
 import numpy as np
 
@@ -22,7 +21,7 @@ from transformers import ViTConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor
+from .test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor
 
 
 if is_flax_available():
@@ -125,7 +124,7 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
-        num_patches = (config.image_size // config.patch_size)**2
+        num_patches = (config.image_size // config.patch_size) ** 2
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -145,7 +144,7 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, num_patches+1, num_patches+1],
+                [self.model_tester.num_attention_heads, num_patches + 1, num_patches + 1],
             )
             out_len = len(outputs)
 
@@ -161,7 +160,7 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, num_patches+1, num_patches+1],
+                [self.model_tester.num_attention_heads, num_patches + 1, num_patches + 1],
             )
 
     def test_forward_signature(self):
@@ -209,10 +208,9 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
             self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
 
-
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [num_patches+1, self.model_tester.hidden_size],
+                [num_patches + 1, self.model_tester.hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -226,7 +224,6 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
-
 
     @slow
     def test_model_from_pretrained(self):

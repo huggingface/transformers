@@ -13,9 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Optional, Tuple
-
-import numpy as np
+from typing import Optional, Tuple
 
 import flax.linen as nn
 import jax
@@ -100,14 +98,14 @@ class FlaxViTEmbeddings(nn.Module):
 
     config: ViTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    zero_init: Callable[..., np.ndarray] = jax.nn.initializers.zeros
+    # zero_init: Callable[..., np.ndarray] = jax.nn.initializers.zeros
 
     def setup(self):
-        self.cls_token = self.param("cls_token", self.zero_init, (1, 1, self.config.hidden_size))
+        self.cls_token = self.param("cls_token", nn.initializers.zeros, (1, 1, self.config.hidden_size))
         self.patch_embeddings = PatchEmbeddings(self.config, dtype=self.dtype)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = self.param(
-            "pos_embeddings", self.zero_init, (1, num_patches + 1, self.config.hidden_size)
+            "pos_embeddings", nn.initializers.zeros, (1, num_patches + 1, self.config.hidden_size)
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
