@@ -50,10 +50,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--tf_checkpoint_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."
+        "--tf_checkpoint_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint. Should end with model.ckpt"
     )
     parser.add_argument(
-        "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch_dump_path", default=None, type=str, required=True, help="Path to a folder where the PyTorch model will be placed."
     )
     args = parser.parse_args()
     convert_tf_checkpoint_to_pytorch(args.tf_checkpoint_path, args.pytorch_dump_path)
