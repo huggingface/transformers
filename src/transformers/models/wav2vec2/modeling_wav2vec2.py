@@ -806,6 +806,8 @@ class Wav2Vec2Quantizer(nn.Module):
             transformer_hidden_states = transformer_hidden_states[mask_time_indices].view(
                 transformer_hidden_states.size(0), -1, transformer_hidden_states.size(-1)
             )
+        else:
+            raise ValueError("Pretraining on unmasked doesn't make too much sense")
 
         quantized_states, num_vars, _, prob_perplexity = self.quantizer(extractor_hidden_states)
         quantized_states = self.project_q(quantized_states)
@@ -962,6 +964,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        mask_time_indices=None,
     ):
         """
 
@@ -1018,7 +1021,9 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
             batch_size, sequence_length, hidden_size = hidden_states.size()
 
             # apply SpecAugment along time axis
-            if self.config.mask_time_prob > 0:
+            if mask_time_indices is not None:
+                hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+            elif self.config.mask_time_prob > 0:
                 mask_time_indices = _compute_mask_indices(
                     (batch_size, sequence_length),
                     self.config.mask_time_prob,
@@ -1093,6 +1098,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        mask_time_indices=None,
     ):
         r"""
         TODO: docs
@@ -1110,6 +1116,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            mask_time_indices=mask_time_indices,
             return_dict=return_dict,
         )
         extractor_features = self.dropout_features(encoder_outputs.extracted_features)
@@ -1117,7 +1124,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
         # 1. quantize unmasked features
         quantized_extractor_features, transformer_features, negatives, num_vars, prob_perplexity = self.quantizer(
-            extractor_features, transformer_features, encoder_outputs.mask_time_indices
+            extractor_features, transformer_features, mask_time_indices
         )
 
         # if a negative vector is identical to the positive (i.e. when codebook utilization is low),
@@ -1148,10 +1155,13 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         # sample_size = encoder_outputs.mask_time_indices.sum()
         # diversity_loss *= sample_size
         loss = contrastive_loss + self.config.diversity_loss_weight * diversity_loss
+        logits = logits.transpose(0, 1)
 
         if not return_dict:
             output = (logits,) + encoder_outputs[1:]
             return output
+
+        import ipdb; ipdb.set_trace()
 
         return Wav2VecForPreTrainingOutput(
             logits=logits,

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import logging
 import sys
+import librosa
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
@@ -13,6 +14,7 @@ from transformers import (
     HfArgumentParser,
     Trainer,
     TrainingArguments,
+    Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
     Wav2Vec2ForPreTraining,
     is_apex_available,
@@ -160,7 +162,7 @@ class DataCollatorWav2Vec2Pretraining:
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         # split inputs and labels since they have to be of different lenghts and need
-        batch = self.processor.pad(
+        batch = self.feature_extractor.pad(
             features,
             padding=self.padding,
             max_length=self.max_length,
@@ -234,11 +236,12 @@ def main():
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
     configure_logger(model_args, training_args)
 
-    model = Wav2Vec2ForPreTraining.from_pretrained(
+    config = Wav2Vec2Config.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         gradient_checkpointing=model_args.gradient_checkpointing,
     )
+    model = Wav2Vec2ForPreTraining(config)
 
     feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
         model_args.model_name_or_path,
@@ -251,31 +254,27 @@ def main():
     val_dataset = datasets.load_dataset(
         data_args.dataset_name, data_args.dataset_config_name, split=data_args.validation_split_name
     )
+    train_dataset = train_dataset.select(range(1000))
+    val_dataset = val_dataset.select(range(100))
 
     def prepare_dataset(batch):
         # check that all files have the correct sampling rate
-        assert (
-            len(set(batch["sampling_rate"])) == 1
-        ), f"Make sure all inputs have the same sampling rate of {feature_extractor.sampling_rate}."
-
-        batch["input_values"] = feature_extractor(batch["speech"], sampling_rate=batch["sampling_rate"][0]).input_values
+        batch["input_values"], batch["sampling_rate"] = librosa.load(batch[data_args.speech_file_column], sr=feature_extractor.sampling_rate)
 
         return batch
 
     train_dataset = train_dataset.map(
         prepare_dataset,
         batch_size=training_args.per_device_train_batch_size,
-        batched=True,
         num_proc=data_args.preprocessing_num_workers,
     )
     val_dataset = val_dataset.map(
         prepare_dataset,
         batch_size=training_args.per_device_train_batch_size,
-        batched=True,
         num_proc=data_args.preprocessing_num_workers,
     )
 
-    data_collator = DataCollatorWav2Vec2Pretraining(feature_extractor=feature_extractor, padding=True)
+    data_collator = DataCollatorWav2Vec2Pretraining(feature_extractor=feature_extractor, padding="longest")
 
     trainer = Wav2Vec2Trainer(
         model=model,
