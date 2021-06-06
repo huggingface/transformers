@@ -742,7 +742,7 @@ class GumbelVectorQuantizer(nn.Module):
 
         return self.curr_temp
 
-    def forward(self, x):
+    def forward(self, x, mask_time_indices):
         num_vars = self.num_vars * self.num_groups
 
         bsz, tsz, fsz = x.shape
@@ -756,7 +756,14 @@ class GumbelVectorQuantizer(nn.Module):
         hard_probs = torch.mean(hard_x.float(), dim=0)
         code_perplexity = torch.exp(-torch.sum(hard_probs * torch.log(hard_probs + 1e-7), dim=-1)).sum()
 
-        avg_probs = torch.softmax(x.view(bsz * tsz, self.num_groups, -1).float(), dim=-1).mean(dim=0)
+        # can be done with torch.where as well
+        perplexity_probs = torch.softmax(x.view(bsz * tsz, self.num_groups, -1).float(), dim=-1)
+
+        # to make sure perplexity only counts for masked indices
+        # can be done with torch.where as well
+        perplexity_probs[~mask_time_indices.flatten()] = 0.0
+        avg_probs = perplexity_probs.sum(dim=0) / mask_time_indices.sum()
+
         prob_perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs + 1e-7), dim=-1)).sum()
 
         if self.training:
@@ -793,23 +800,12 @@ class Wav2Vec2Quantizer(nn.Module):
 
         self.num_negatives = config.num_negatives
 
-    def forward(self, extractor_hidden_states, transformer_hidden_states, mask_time_indices=None):
-#    def forward(self, extractor_hidden_states, transformer_hidden_states):
-        if mask_time_indices is not None:
-            # quantize only the masked timeframes
-            extractor_hidden_states = extractor_hidden_states[mask_time_indices].view(
-                extractor_hidden_states.size(0), -1, extractor_hidden_states.size(-1)
-            )
-            transformer_hidden_states = transformer_hidden_states[mask_time_indices].view(
-                transformer_hidden_states.size(0), -1, transformer_hidden_states.size(-1)
-            )
-
-        quantized_states, num_vars, _, prob_perplexity = self.quantizer(extractor_hidden_states)
+    def forward(self, extractor_hidden_states, transformer_hidden_states, mask_time_indices):
+        quantized_states, num_vars, _, prob_perplexity = self.quantizer(extractor_hidden_states, mask_time_indices)
         quantized_states = self.project_q(quantized_states)
 
         negatives, _ = self.sample_negatives(quantized_states)
         transformer_hidden_states = self.final_proj(transformer_hidden_states)
-
         return transformer_hidden_states, quantized_states, negatives, num_vars, prob_perplexity
 
     def sample_negatives(self, y):
@@ -1011,7 +1007,8 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         hidden_states, extract_features = self.feature_projection(extract_features)
 
-        if self.config.apply_spec_augment and self.training:
+# TODO:       if self.config.apply_spec_augment and self.training:
+        if self.config.apply_spec_augment:
             batch_size, sequence_length, hidden_size = hidden_states.size()
 
             # apply SpecAugment along time axis
@@ -1092,6 +1089,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         mask_time_indices=None,
+        fsq_negs=None,
     ):
         r"""
         TODO: docs
@@ -1116,36 +1114,49 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         transformer_features = encoder_outputs.last_hidden_state
 
         # 1. quantize unmasked features
-        quantized_extractor_features, transformer_features, negatives, num_vars, prob_perplexity = self.quantizer(extractor_features, transformer_features)
+        transformer_features, quantized_extractor_features, negatives, num_vars, prob_perplexity = self.quantizer(extractor_features, transformer_features, mask_time_indices)
+
+        negatives[mask_time_indices[None, :].broadcast_to(negatives.shape[:-1])] = fsq_negs.reshape(-1, fsq_negs.shape[-1])
+
+        x = transformer_features[mask_time_indices].reshape(transformer_features.size(0), -1, transformer_features.size(-1))
+        y = quantized_extractor_features[mask_time_indices].reshape(quantized_extractor_features.size(0), -1, quantized_extractor_features.size(-1))
+        negs = negatives[mask_time_indices[None, :].broadcast_to(negatives.shape[:-1])].reshape(negatives.size(0), mask_time_indices.shape[0], -1, negatives.size(-1))
 
         # if a negative vector is identical to the positive (i.e. when codebook utilization is low),
         # its cosine similarity will be masked
-        neg_is_pos = (transformer_features == negatives).all(-1)
+        neg_is_pos = (quantized_extractor_features == negatives).all(-1)
+        neg_is_pos_fsq = (y == negs).all(-1)
 
-        target_states = torch.cat([transformer_features[None, :], negatives], dim=0)
-        logits = torch.cosine_similarity(quantized_extractor_features.float(), target_states.float(), dim=-1).type_as(
+        target_states = torch.cat([quantized_extractor_features[None, :], negatives], dim=0)
+        logits = torch.cosine_similarity(transformer_features.float(), target_states.float(), dim=-1).type_as(
             target_states
         )
         logits = logits / self.config.contrastive_logit_temperature
 
+        logs = logits.permute(1, 2, 0)[mask_time_indices].reshape(y.shape[:-1] + (-1,)).permute(2, 0, 1)
+
         if neg_is_pos.any():
             logits[1:][neg_is_pos] = float("-inf")
+
+        if neg_is_pos_fsq.any():
+            logs[1:][neg_is_pos_fsq] = float("-inf")
 
         preds = logits.transpose(0, 2).reshape(-1, logits.size(0))
         # the goal is to maximize the cosine similarities at index `0` (the positives),
         # the other indices 1..num_negatives+1 are for the sampled negative vectors
-        target = logits.new_zeros(logits.shape[1:], dtype=torch.long)
-
         # ignore unmasked features
         if mask_time_indices is not None:
-            target = target + (1 - mask_time_indices[None, :].long()) * -100
+            target = (1 - mask_time_indices.long()) * -100
+            target = target.transpose(0, 1).flatten()
+        else:
+            target = logits.new_zeros(logits.shape[1] * logits.shape[2], dtype=torch.long)
 
-        target = target.transpose(0, 1).flatten()
         contrastive_loss = F.cross_entropy(
             preds.float(),
             target,
             reduction="sum",
         )
+
         # maximize the codebook perplexity
         diversity_loss = (num_vars - prob_perplexity) / num_vars
         # sample_size = encoder_outputs.mask_time_indices.sum()
