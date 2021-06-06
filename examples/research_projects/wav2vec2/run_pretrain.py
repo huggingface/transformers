@@ -20,6 +20,7 @@ from transformers import (
     is_apex_available,
     trainer_utils,
 )
+from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices
 
 
 if is_apex_available():
@@ -156,6 +157,7 @@ class DataCollatorWav2Vec2Pretraining:
     """
 
     feature_extractor: Wav2Vec2FeatureExtractor
+    config: Wav2Vec2Config
     padding: Union[bool, str] = True
     max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
@@ -169,8 +171,23 @@ class DataCollatorWav2Vec2Pretraining:
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="pt",
         )
+        features_shape = (batch["input_values"].shape[0], self._get_feat_extract_output_lengths(batch["input_values"].shape[1]))
+
+#        batch["mask_time_indices"] = _compute_mask_indices(features_shape, self.config.mask_time_prob, self.config.mask_time_length, device=batch["input_values"].device, min_masks=2)[:1].broadcast_to(features_shape).clone()
+        batch["mask_time_indices"] = _compute_mask_indices(features_shape, self.config.mask_time_prob, self.config.mask_time_length, device=batch["input_values"].device, min_masks=2)
 
         return batch
+
+    def _get_feat_extract_output_lengths(self, input_length: int) -> int:
+
+        def _conv_out_length(input_length, kernel_size, stride):
+            # 1D convolutional layer output length formula taken
+            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+            return (input_length - kernel_size) // stride + 1
+
+        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
+            input_length = _conv_out_length(input_length, kernel_size, stride)
+        return input_length
 
 
 class Wav2Vec2Trainer(Trainer):
@@ -274,7 +291,7 @@ def main():
         num_proc=data_args.preprocessing_num_workers,
     )
 
-    data_collator = DataCollatorWav2Vec2Pretraining(feature_extractor=feature_extractor, padding="longest")
+    data_collator = DataCollatorWav2Vec2Pretraining(feature_extractor=feature_extractor, config=config, padding="longest")
 
     trainer = Wav2Vec2Trainer(
         model=model,

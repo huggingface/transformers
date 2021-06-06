@@ -794,6 +794,7 @@ class Wav2Vec2Quantizer(nn.Module):
         self.num_negatives = config.num_negatives
 
     def forward(self, extractor_hidden_states, transformer_hidden_states, mask_time_indices=None):
+#    def forward(self, extractor_hidden_states, transformer_hidden_states):
         if mask_time_indices is not None:
             # quantize only the masked timeframes
             extractor_hidden_states = extractor_hidden_states[mask_time_indices].view(
@@ -802,8 +803,6 @@ class Wav2Vec2Quantizer(nn.Module):
             transformer_hidden_states = transformer_hidden_states[mask_time_indices].view(
                 transformer_hidden_states.size(0), -1, transformer_hidden_states.size(-1)
             )
-        else:
-            raise ValueError("Pretraining on unmasked doesn't make too much sense")
 
         quantized_states, num_vars, _, prob_perplexity = self.quantizer(extractor_hidden_states)
         quantized_states = self.project_q(quantized_states)
@@ -1012,7 +1011,6 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         hidden_states, extract_features = self.feature_projection(extract_features)
 
-        mask_time_indices = None
         if self.config.apply_spec_augment and self.training:
             batch_size, sequence_length, hidden_size = hidden_states.size()
 
@@ -1118,9 +1116,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         transformer_features = encoder_outputs.last_hidden_state
 
         # 1. quantize unmasked features
-        quantized_extractor_features, transformer_features, negatives, num_vars, prob_perplexity = self.quantizer(
-            extractor_features, transformer_features, mask_time_indices
-        )
+        quantized_extractor_features, transformer_features, negatives, num_vars, prob_perplexity = self.quantizer(extractor_features, transformer_features)
 
         # if a negative vector is identical to the positive (i.e. when codebook utilization is low),
         # its cosine similarity will be masked
@@ -1135,11 +1131,16 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         if neg_is_pos.any():
             logits[1:][neg_is_pos] = float("-inf")
 
-        preds = logits.transpose(0, 2)
-        preds = preds.reshape(-1, preds.size(-1))
+        preds = logits.transpose(0, 2).reshape(-1, logits.size(0))
         # the goal is to maximize the cosine similarities at index `0` (the positives),
         # the other indices 1..num_negatives+1 are for the sampled negative vectors
-        target = logits.new_zeros(logits.size(1) * logits.size(2), dtype=torch.long)
+        target = logits.new_zeros(logits.shape[1:], dtype=torch.long)
+
+        # ignore unmasked features
+        if mask_time_indices is not None:
+            target = target + (1 - mask_time_indices[None, :].long()) * -100
+
+        target = target.transpose(0, 1).flatten()
         contrastive_loss = F.cross_entropy(
             preds.float(),
             target,
@@ -1150,13 +1151,11 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         # sample_size = encoder_outputs.mask_time_indices.sum()
         # diversity_loss *= sample_size
         loss = contrastive_loss + self.config.diversity_loss_weight * diversity_loss
-        logits = logits.transpose(0, 1)
+#        logits = logits.transpose(0, 1)
 
         if not return_dict:
             output = (logits,) + encoder_outputs[1:]
             return output
-
-        import ipdb; ipdb.set_trace()
 
         return Wav2VecForPreTrainingOutput(
             logits=logits,
