@@ -108,7 +108,7 @@ _deps = [
     "jieba",
     "keras2onnx",
     "nltk",
-    "numpy>=1.17",
+    "numpy>=1.20.0",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
