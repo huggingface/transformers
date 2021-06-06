@@ -92,7 +92,7 @@ _deps = [
     "datasets",
     "deepspeed>=0.3.16",
     "docutils==0.16.0",
-    "einops",
+    "einops==0.3.0",
     "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
@@ -308,6 +308,7 @@ extras["torchhub"] = deps_list(
 install_requires = [
     deps["dataclasses"] + ";python_version<'3.7'",  # dataclasses for Python versions that don't have it
     deps["importlib_metadata"] + ";python_version<'3.8'",  # importlib_metadata for Python versions that don't have it
+    deps["einops"], # required for rotary
     deps["filelock"],  # filesystem locks, e.g., to prevent parallel downloads
     deps["huggingface-hub"],
     deps["numpy"],
