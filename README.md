@@ -1,10 +1,5 @@
 # Patches
 
-Make sure to:
-```
-pip install einops
-```
-
 This branch has the following patches:
 
 * gpt-neo model is loaded directly on GPU to save system memory (Colab or 8GB+ VRAM only)
