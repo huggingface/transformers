@@ -173,7 +173,6 @@ class DataCollatorWav2Vec2Pretraining:
         )
         features_shape = (batch["input_values"].shape[0], self._get_feat_extract_output_lengths(batch["input_values"].shape[1]))
 
-#        batch["mask_time_indices"] = _compute_mask_indices(features_shape, self.config.mask_time_prob, self.config.mask_time_length, device=batch["input_values"].device, min_masks=2)[:1].broadcast_to(features_shape).clone()
         batch["mask_time_indices"] = _compute_mask_indices(features_shape, self.config.mask_time_prob, self.config.mask_time_length, device=batch["input_values"].device, min_masks=2)
 
         return batch
@@ -191,6 +190,11 @@ class DataCollatorWav2Vec2Pretraining:
 
 
 class Wav2Vec2Trainer(Trainer):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.num_update_step = 0
+
     def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
@@ -223,7 +227,7 @@ class Wav2Vec2Trainer(Trainer):
             if model.module.config.ctc_loss_reduction == "mean":
                 loss = loss.mean()
             elif model.module.config.ctc_loss_reduction == "sum":
-                loss = loss.sum() / (inputs["labels"] >= 0).sum()
+                loss = loss.sum() / (inputs["mask_time_indices"]).sum()
             else:
                 raise ValueError(f"{model.config.ctc_loss_reduction} is not valid. Choose one of ['mean', 'sum']")
 
@@ -239,6 +243,9 @@ class Wav2Vec2Trainer(Trainer):
             self.deepspeed.backward(loss)
         else:
             loss.backward()
+
+        self.num_update_step += 1
+        model.module.update_gumbel_temperature(self.num_update_step)
 
         return loss.detach()
 
@@ -257,6 +264,8 @@ def main():
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         gradient_checkpointing=model_args.gradient_checkpointing,
+        do_stable_layer_norm=True,
+        feat_extract_norm="layer",
     )
     model = Wav2Vec2ForPreTraining(config)
 
@@ -271,8 +280,6 @@ def main():
     val_dataset = datasets.load_dataset(
         data_args.dataset_name, data_args.dataset_config_name, split=data_args.validation_split_name
     )
-    train_dataset = train_dataset.select(range(1000))
-    val_dataset = val_dataset.select(range(100))
 
     def prepare_dataset(batch):
         # check that all files have the correct sampling rate
