@@ -77,7 +77,7 @@ CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # https://github.com/allenai/allennlp/blob/main/allennlp/modules/highway.py
 class Highway(torch.nn.Module):
     """
-    A [Highway layer](https://arxiv.org/abs/1505.00387) does a gated combination of a linear
+    A `Highway layer <https://arxiv.org/abs/1505.00387)>`__ does a gated combination of a linear
     transformation and a non-linear transformation of its input.  :math:`y = g * x + (1 - g) *
     f(A(x))`, where :math:`A` is a linear transformation, :math:`f` is an element-wise
     non-linearity, and :math:`g` is an element-wise gate, computed as :math:`sigmoid(B(x))`.
