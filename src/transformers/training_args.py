@@ -578,15 +578,11 @@ class TrainingArguments:
     )
     early_stopping_patience: int = field(
         default=1,
-        metadata={
-            "help": "The number of evaluation calls to wait before stopping training while metric worsens."
-        },
+        metadata={"help": "The number of evaluation calls to wait before stopping training while metric worsens."},
     )
     early_stopping_threshold: float = field(
         default=0.0,
-        metadata={
-            "help": "How much the metric must improve to satisfy early stopping conditions."
-        },
+        metadata={"help": "How much the metric must improve to satisfy early stopping conditions."},
     )
 
     def __post_init__(self):
