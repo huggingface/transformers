@@ -182,13 +182,28 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         return image.crop((crop_left, crop_top, crop_left + crop_width, crop_top + crop_height))
 
     def resize(self, image, size, resample=Image.BICUBIC):
-        width, height = image.size
+        """
+        Resizes :obj:`image`. Note that this will trigger a conversion of :obj:`image` to a PIL Image.
 
-        short, long = (width, height) if width <= height else (height, width)
-        if short == size:
-            return image
+        Args:
+            image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+                The image to resize.
+            size (:obj:`int` or :obj:`Tuple[int, int]`):
+                The size to use for resizing the image. If :obj:`int` it will be resized to match the shorter side
+            resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BILINEAR`):
+                The filter to user for resampling.
+        """
+        self._ensure_format_supported(image)
 
-        new_short, new_long = size, int(size * long / short)
-
-        new_w, new_h = (new_short, new_long) if width <= height else (new_long, new_short)
+        if not isinstance(image, Image.Image):
+            image = self.to_pil_image(image)
+        if isinstance(size, tuple):
+            new_w, new_h = size
+        else:
+            width, height = image.size
+            short, long = (width, height) if width <= height else (height, width)
+            if short == size:
+                return image
+            new_short, new_long = size, int(size * long / short)
+            new_w, new_h = (new_short, new_long) if width <= height else (new_long, new_short)
         return image.resize((new_w, new_h), resample)
