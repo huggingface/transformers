@@ -33,6 +33,7 @@ from ...file_utils import (
     is_timm_available,
     is_vision_available,
     replace_return_docstrings,
+    requires_backends,
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -339,6 +340,9 @@ class TimmBackbone(nn.Module):
         kwargs = {}
         if dilation:
             kwargs["output_stride"] = 16
+
+        requires_backends(self, ["timm"])
+
         backbone = create_model(name, pretrained=True, features_only=True, out_indices=(1, 2, 3, 4), **kwargs)
         # replace batch norm by frozen batch norm
         with torch.no_grad():
@@ -437,11 +441,6 @@ class DetrLearnedPositionEmbedding(nn.Module):
         super().__init__()
         self.row_embeddings = nn.Embedding(50, embedding_dim)
         self.column_embeddings = nn.Embedding(50, embedding_dim)
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        nn.init.uniform_(self.row_embeddings.weight)
-        nn.init.uniform_(self.column_embeddings.weight)
 
     def forward(self, pixel_values, pixel_mask=None):
         h, w = pixel_values.shape[-2:]
@@ -789,6 +788,16 @@ class DetrPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.init_std
+        xavier_std = self.config.init_xavier_std
+
+        if isinstance(module, DetrMHAttentionMap):
+            nn.init.zeros_(module.k_linear.bias)
+            nn.init.zeros_(module.q_linear.bias)
+            nn.init.xavier_uniform_(module.k_linear.weight, gain=xavier_std)
+            nn.init.xavier_uniform_(module.q_linear.weight, gain=xavier_std)
+        elif isinstance(module, DetrLearnedPositionEmbedding):
+            nn.init.uniform_(module.row_embeddings.weight)
+            nn.init.uniform_(module.column_embeddings.weight)
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -1496,13 +1505,11 @@ class DetrForSegmentation(DetrPreTrainedModel):
             hidden_size + number_of_heads, intermediate_channel_sizes[::-1][-3:], hidden_size
         )
 
-        self.init_weights()
-
-        # The DetrMHAttentionMap has a custom layer initialization scheme which must not get overwritten by the
-        # self.init_weights()
         self.bbox_attention = DetrMHAttentionMap(
             hidden_size, hidden_size, number_of_heads, dropout=0.0, std=config.init_xavier_std
         )
+
+        self.init_weights()
 
     @add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=DetrSegmentationOutput, config_class=_CONFIG_FOR_DOC)
@@ -1789,10 +1796,6 @@ class DetrMHAttentionMap(nn.Module):
         self.q_linear = nn.Linear(query_dim, hidden_dim, bias=bias)
         self.k_linear = nn.Linear(query_dim, hidden_dim, bias=bias)
 
-        nn.init.zeros_(self.k_linear.bias)
-        nn.init.zeros_(self.q_linear.bias)
-        nn.init.xavier_uniform_(self.k_linear.weight, gain=std)
-        nn.init.xavier_uniform_(self.q_linear.weight, gain=std)
         self.normalize_fact = float(hidden_dim / self.num_heads) ** -0.5
 
     def forward(self, q, k, mask: Optional[Tensor] = None):
@@ -2092,6 +2095,9 @@ class DetrHungarianMatcher(nn.Module):
             giou_cost: This is the relative weight of the giou loss of the bounding box in the matching cost
         """
         super().__init__()
+
+        requires_backends(self, ["scipy"])
+
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost
         self.giou_cost = giou_cost

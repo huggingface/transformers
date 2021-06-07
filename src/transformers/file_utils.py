@@ -563,6 +563,11 @@ SPEECH_IMPORT_ERROR = """
 `pip install torchaudio`
 """
 
+# docstyle-ignore
+TIMM_IMPORT_ERROR = """
+{0} requires the timm library but it was not found in your environment. You can install it with pip:
+`pip install timm`
+"""
 
 # docstyle-ignore
 VISION_IMPORT_ERROR = """
@@ -583,6 +588,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
         ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
         ("tf", (is_tf_available, TENSORFLOW_IMPORT_ERROR)),
+        ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
