@@ -14,7 +14,7 @@
 # limitations under the License.
 """Feature extractor class for CLIP."""
 
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Union
 
 import numpy as np
 from PIL import Image
@@ -26,20 +26,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-
-def _get_scaled_size(size: Tuple[int, int], smaller_side_length: int) -> Tuple[int, int]:
-    """
-    Calculates a new size where the smaller side is of a specific length
-
-    Args:
-        size (:obj:`tuple`):
-            The width and height of the current size
-        smaller_side_length (:obj:`int`):
-            The desired size of the smaller side of :obj:`size`
-    """
-    factor = smaller_side_length / min(*size)
-    return (int(size[0] * factor), int(size[1] * factor))
 
 
 class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
@@ -157,11 +143,7 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         # transformations (resizing + center cropping + normalization)
         if self.do_resize and self.size is not None and self.resample is not None:
-            for i, image in enumerate(images):
-                # PIL Image has "size" while np array and tensor has "shape"
-                image_size = image.size if isinstance(image, Image.Image) else tuple(image.shape)
-                scaled_size = _get_scaled_size(image_size, smaller_side_length=self.size)
-                images[i] = self.resize(image=image, size=scaled_size, resample=self.resample)
+            images = [self.resize(image=image, size=self.size, resample=self.resample) for image in images]
         if self.do_center_crop and self.crop_size is not None:
             images = [self.center_crop(image, self.crop_size) for image in images]
         if self.do_normalize:
@@ -172,3 +154,41 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         return encoded_inputs
+
+    def center_crop(self, image, size):
+        """
+        Crops :obj:`image` to the given size using a center crop. Note that if the image is too small to be cropped to
+        the size is given, it will be padded (so the returned result has the size asked).
+
+        Args:
+            image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+                The image to resize.
+            size (:obj:`int` or :obj:`Tuple[int, int]`):
+                The size to which crop the image.
+        """
+        self._ensure_format_supported(image)
+        if not isinstance(size, tuple):
+            size = (size, size)
+
+        if not isinstance(image, Image.Image):
+            image = self.to_pil_image(image)
+
+        image_width, image_height = image.size
+        crop_height, crop_width = size
+
+        crop_top = int((image_height - crop_height + 1) * 0.5)
+        crop_left = int((image_width - crop_width + 1) * 0.5)
+
+        return image.crop((crop_left, crop_top, crop_left + crop_width, crop_top + crop_height))
+
+    def resize(self, image, size, resample=Image.BICUBIC):
+        width, height = image.size
+
+        short, long = (width, height) if width <= height else (height, width)
+        if short == size:
+            return image
+
+        new_short, new_long = size, int(size * long / short)
+
+        new_w, new_h = (new_short, new_long) if width <= height else (new_long, new_short)
+        return image.resize((new_w, new_h), resample)
