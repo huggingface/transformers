@@ -98,7 +98,6 @@ class FlaxViTEmbeddings(nn.Module):
 
     config: ViTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    # zero_init: Callable[..., np.ndarray] = jax.nn.initializers.zeros
 
     def setup(self):
         self.cls_token = self.param("cls_token", nn.initializers.zeros, (1, 1, self.config.hidden_size))
@@ -423,6 +422,7 @@ class FlaxViTPreTrainedModel(FlaxPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
+        pixel_values = jnp.transpose(pixel_values, (0, 2, 3, 1))
         # Handle any PRNG if needed
         rngs = {}
         if dropout_rng is not None:

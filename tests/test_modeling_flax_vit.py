@@ -69,7 +69,7 @@ class FlaxViTModelTester(unittest.TestCase):
         self.initializer_range = initializer_range
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.image_size, self.image_size, self.num_channels])
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
         config = ViTConfig(
             image_size=self.image_size,
@@ -228,6 +228,6 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("vit-base", from_pt=True)
-            outputs = model(np.ones((1, 1)))
+            model = model_class_name.from_pretrained("google/vit-base-patch16-224", from_pt=True)
+            outputs = model(np.ones((1, 3, 224, 224)))
             self.assertIsNotNone(outputs)
