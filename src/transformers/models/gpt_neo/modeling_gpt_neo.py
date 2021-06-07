@@ -401,7 +401,8 @@ class GPTNeoBlock(nn.Module):
         inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * hidden_size
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.attn = GPTNeoAttention(config, layer_id)
-        self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        if config.jax:
+            self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.mlp = GPTNeoMLP(inner_dim, config)
 
     def forward(
@@ -427,14 +428,19 @@ class GPTNeoBlock(nn.Module):
         )
         attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attn_outputs[1:]
-        # residual connection
-        hidden_states = attn_output + residual
+        
+        if config.jax:
+            feed_forward_hidden_states = self.mlp(hidden_states)
+            hidden_states = attn_output + feed_forward_hidden_states
+        else:
+            # residual connection
+            hidden_states = attn_output + residual
 
-        residual = hidden_states
-        hidden_states = self.ln_2(hidden_states)
-        feed_forward_hidden_states = self.mlp(hidden_states)
-        # residual connection
-        hidden_states = residual + feed_forward_hidden_states
+            residual = hidden_states
+            hidden_states = self.ln_2(hidden_states)
+            feed_forward_hidden_states = self.mlp(hidden_states)
+            # residual connection
+            hidden_states = residual + feed_forward_hidden_states
 
         if use_cache:
             outputs = (hidden_states,) + outputs
@@ -567,8 +573,12 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
-        self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
-        self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
+        if config.jax:
+            self.wte = nn.Linear(config.vocab_size, self.embed_dim)
+        else:
+            self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
+        if not config.rotary:
+            self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
         self.drop = nn.Dropout(config.embed_dropout)
         self.h = nn.ModuleList([to_gpu(GPTNeoBlock(config, layer_id=i).half()) for i in range(config.num_layers)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
@@ -778,7 +788,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.transformer = to_gpu(GPTNeoModel(config).half())
-        self.lm_head = to_gpu(nn.Linear(config.hidden_size, config.vocab_size, bias=False).half())
+        self.lm_head = to_gpu(nn.Linear(config.hidden_size, config.vocab_size, bias=config.jax).half())
 
         self.init_weights()
 
