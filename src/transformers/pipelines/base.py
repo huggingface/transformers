@@ -101,18 +101,18 @@ def infer_framework_load_model(
             if look_tf:
                 class_tuple = class_tuple + model_classes.get("tf", (TFAutoModel,))
         if config.architectures:
-            klasses = []
+            classes = []
             for architecture in config.architectures:
-                trans = importlib.import_module("transformers")
+                transformers_module = importlib.import_module("transformers")
                 if look_tf:
-                    klass = getattr(trans, architecture, None)
-                    if klass is not None:
-                        klasses.append(klass)
+                    _class = getattr(transformers_module, architecture, None)
+                    if _class is not None:
+                        classes.append(_class)
                 if look_pt:
-                    klass = getattr(trans, f"TF{architecture}", None)
-                    if klass is not None:
-                        klasses.append(klass)
-            class_tuple = class_tuple + tuple(klasses)
+                    _class = getattr(transformers_module, f"TF{architecture}", None)
+                    if _class is not None:
+                        classes.append(_class)
+            class_tuple = class_tuple + tuple(classes)
 
         if len(class_tuple) == 0 and not config.architectures:
             raise ValueError(f"Pipeline cannot infer suitable model classes from {model}")
