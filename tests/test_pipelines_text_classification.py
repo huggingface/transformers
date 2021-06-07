@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import unittest
+import numpy as np
 
 from transformers import (
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
