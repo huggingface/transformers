@@ -318,6 +318,10 @@ class TrainingArguments:
             details.
         log_on_each_node (:obj:`bool`, `optional`, defaults to :obj:`True`):
             In multinode distributed training, whether to log once per node, or only on the main node.
+        early_stopping_patience (:obj:`int`, `optional`, defaults to 1):
+            The number of evaluation calls to wait before stopping training while metric worsens.
+        early_stopping_threshold(:obj:`float`, `optional`, defaults  to 0.0):
+            How much the metric must improve to satisfy early stopping conditions.
     """
 
     output_dir: str = field(
@@ -571,6 +575,18 @@ class TrainingArguments:
     mp_parameters: str = field(
         default="",
         metadata={"help": "Used by the SageMaker launcher to send mp-specific args. Ignored in Trainer"},
+    )
+    early_stopping_patience: int = field(
+        default=1,
+        metadata={
+            "help": "The number of evaluation calls to wait before stopping training while metric worsens."
+        },
+    )
+    early_stopping_threshold: float = field(
+        default=0.0,
+        metadata={
+            "help": "How much the metric must improve to satisfy early stopping conditions."
+        },
     )
 
     def __post_init__(self):
