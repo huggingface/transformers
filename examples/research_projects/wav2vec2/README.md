@@ -144,6 +144,8 @@ and then use the default configuration files in this directory:
 
 Here are examples of how you can use DeepSpeed:
 
+(edit the value for `--num_gpus` to match number of GPUs you have)
+
 ZeRO-2:
 
 ```
@@ -168,7 +170,7 @@ For ZeRO-2 with more than 1 gpu must use:
     }
 ```
 
-ZeRO-2:
+ZeRO-3:
 
 ```
 PYTHONPATH=../../../src deepspeed --num_gpus 2 \
