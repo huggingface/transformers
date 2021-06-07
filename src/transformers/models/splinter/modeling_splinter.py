@@ -60,6 +60,7 @@ _TOKENIZER_FOR_DOC = "SplinterTokenizer"
 
 SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "splinter-base",
+    "splinter-large",
     # See all Splinter models at https://huggingface.co/models?filter=splinter
 ]
 
@@ -729,18 +730,9 @@ SPLINTER_INPUTS_DOCSTRING = r"""
 )
 class SplinterModel(SplinterPreTrainedModel):
     """
-
-    The model can behave as an encoder (with only self-attention) as well
-    as a decoder, in which case a layer of cross-attention is added between
-    the self-attention layers, following the architecture described in `Attention is
+    The model is an encoder (with only self-attention) following the architecture described in `Attention is
     all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani,
     Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
-
-    To behave as an decoder the model needs to be initialized with the
-    :obj:`is_decoder` argument of the configuration set to :obj:`True`.
-    To be used in a Seq2Seq model, the model needs to initialized with both :obj:`is_decoder`
-    argument and :obj:`add_cross_attention` set to :obj:`True`; an
-    :obj:`encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
     def __init__(self, config):
@@ -1143,6 +1135,7 @@ class SplinterForCausalLM(SplinterPreTrainedModel):
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],)
         return reordered_past
 
+
 class SplinterClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
@@ -1423,7 +1416,8 @@ def gather_positions(input_tensor, positions):
     :param input_tensor: shape [batch_size, seq_length, dim]
     :param positions: shape [batch_size, num_positions]
     :return: [batch_size, num_positions, dim]
-    # TODO(Ori/Yuval): document
+
+    Gathers specific vectors along the sequence dimension for classification
     """
     _, _, dim = input_tensor.size()
     index = positions.unsqueeze(-1).repeat(1, 1, dim)  # [batch_size, num_positions, dim]
@@ -1432,7 +1426,7 @@ def gather_positions(input_tensor, positions):
 
 
 class FullyConnectedLayer(nn.Module):
-    # TODO(Ori/Yuval): document
+
     def __init__(self, input_dim, output_dim, hidden_act="gelu"):
         super(FullyConnectedLayer, self).__init__()
 
@@ -1451,7 +1445,10 @@ class FullyConnectedLayer(nn.Module):
 
 
 class QuestionAwareSpanSelectionHead(nn.Module):
-    # TODO(Ori/Yuval): document
+    """
+    Implementation of Question-Aware Span Selection (QASS) head, described in Splinter's paper:
+
+    """
     def __init__(self, config):
         super().__init__()
 
@@ -1509,8 +1506,8 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
 
         self.init_weights()
 
-    def get_cls(self):
-        # TODO(Ori/Yuval): document
+    def _get_cls(self):
+        """ Controls whether we use the pretrained QASS layer's parameters, or randomly initialized ones """
         return self.cls if not self.initialize_new_qass else self.new_cls
 
     @add_start_docstrings_to_model_forward(SPLINTER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
@@ -1533,7 +1530,7 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        masked_positions=None
+        question_positions=None
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1544,18 +1541,22 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (:obj:`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
-        TODO(Ori/Yuval): document masked positions
+        question_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_questions)`, `optional`):
+            The positions of all question tokens.
+            If given, start_logits and end_logits will be of shape :obj:`(batch_size, num_questions, sequence_length)`.
+            If None, the first question token in each sequence in the batch will be the only one for which
+            start_logits and end_logits are calculated and they will be of shape :obj:`(batch_size, sequence_length)`.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         mask_positions_were_none = False
-        if masked_positions is None:
+        if question_positions is None:
             if input_ids is not None:
                 masked_position_for_each_example = torch.argmax((torch.eq(input_ids, self.question_token_id)).int(), dim=-1)
             else:
                 masked_position_for_each_example = torch.zeros(inputs_embeds.size(0), dtype=torch.int64,
                                                                layout=inputs_embeds.layout, device=inputs_embeds.device)
-            masked_positions = masked_position_for_each_example.unsqueeze(-1)
+            question_positions = masked_position_for_each_example.unsqueeze(-1)
             mask_positions_were_none = True
 
         outputs = self.splinter(
@@ -1571,8 +1572,8 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         )
 
         sequence_output = outputs[0]
-        cls = self.get_cls()
-        start_logits, end_logits = cls(sequence_output, masked_positions)
+        cls = self._get_cls()
+        start_logits, end_logits = cls(sequence_output, question_positions)
 
         if mask_positions_were_none:
             start_logits, end_logits = start_logits.squeeze(1), end_logits.squeeze(1)

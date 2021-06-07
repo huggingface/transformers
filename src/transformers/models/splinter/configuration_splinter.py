@@ -73,6 +73,9 @@ class SplinterConfig(PretrainedConfig):
             relevant if ``config.is_decoder=True``.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
+        initialize_new_qass (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            If :obj:`True`, use randomly initialized paraeters for the Question-Aware Span Selection head on top of
+            Splinter.
         Example::
 
         >>> from transformers import SplinterModel, SplinterConfig
@@ -104,7 +107,6 @@ class SplinterConfig(PretrainedConfig):
         use_cache=True,
         pad_token_id=0,
         initialize_new_qass=True,
-        question_token_id=104,
         **kwargs
     ):
         super().__init__(
@@ -126,4 +128,3 @@ class SplinterConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         self.initialize_new_qass = initialize_new_qass
-        self.question_token_id = question_token_id
