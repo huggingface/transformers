@@ -15,9 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-PyTorch CharacterBERT model: this is a variant of BERT that uses the
-CharacterCNN module from ELMo instead of a WordPiece embedding matrix.
-See: “CharacterBERT: Reconciling ELMo and BERT for Word-Level Open-Vocabulary
+PyTorch CharacterBERT model: this is a variant of BERT that uses the CharacterCNN module from ELMo instead of a
+WordPiece embedding matrix. See: “CharacterBERT: Reconciling ELMo and BERT for Word-Level Open-Vocabulary
 Representations From Characters“ https://www.aclweb.org/anthology/2020.coling-main.609/
 """
 
@@ -77,23 +76,19 @@ CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # https://github.com/allenai/allennlp/blob/main/allennlp/modules/highway.py
 class Highway(torch.nn.Module):
     """
-    A `Highway layer <https://arxiv.org/abs/1505.00387)>`__ does a gated combination of a linear
-    transformation and a non-linear transformation of its input.  :math:`y = g * x + (1 - g) *
-    f(A(x))`, where :math:`A` is a linear transformation, :math:`f` is an element-wise
-    non-linearity, and :math:`g` is an element-wise gate, computed as :math:`sigmoid(B(x))`.
+    A `Highway layer <https://arxiv.org/abs/1505.00387)>`__ does a gated combination of a linear transformation and a
+    non-linear transformation of its input. :math:`y = g * x + (1 - g) * f(A(x))`, where :math:`A` is a linear
+    transformation, :math:`f` is an element-wise non-linearity, and :math:`g` is an element-wise gate, computed as
+    :math:`sigmoid(B(x))`.
 
-    This module will apply a fixed number of highway layers to its input, returning the final
-    result.
+    This module will apply a fixed number of highway layers to its input, returning the final result.
 
     # Parameters
 
-    input_dim : `int`, required
-        The dimensionality of :math:`x`.  We assume the input has shape `(batch_size, ...,
-        input_dim)`.
-    num_layers : `int`, optional (default=`1`)
-        The number of highway layers to apply to the input.
-    activation : `Callable[[torch.Tensor], torch.Tensor]`, optional (default=`torch.nn.functional.relu`)
-        The non-linearity to use in the highway layers.
+    input_dim : `int`, required The dimensionality of :math:`x`. We assume the input has shape `(batch_size, ...,
+    input_dim)`. num_layers : `int`, optional (default=`1`) The number of highway layers to apply to the input.
+    activation : `Callable[[torch.Tensor], torch.Tensor]`, optional (default=`torch.nn.functional.relu`) The
+    non-linearity to use in the highway layers.
     """
 
     def __init__(
@@ -104,9 +99,7 @@ class Highway(torch.nn.Module):
     ) -> None:
         super().__init__()
         self._input_dim = input_dim
-        self._layers = torch.nn.ModuleList(
-            [torch.nn.Linear(input_dim, input_dim * 2) for _ in range(num_layers)]
-        )
+        self._layers = torch.nn.ModuleList([torch.nn.Linear(input_dim, input_dim * 2) for _ in range(num_layers)])
         self._activation = activation
         for layer in self._layers:
             # We should bias the highway layer to just carry its input forward.  We do that by
@@ -128,15 +121,16 @@ class Highway(torch.nn.Module):
             current_input = gate * linear_part + (1 - gate) * nonlinear_part
         return current_input
 
+
 # NOTE: The CharacterCnn was adapted from `_ElmoCharacterEncoder`:
 # https://github.com/allenai/allennlp/blob/main/allennlp/modules/elmo.py#L254
 class CharacterCnn(torch.nn.Module):
     """
-    Computes context insensitive token representation using multiple CNNs.
-    This embedder has input character ids of size (batch_size, sequence_length, 50)
-    and returns (batch_size, sequence_length, hidden_size), where hidden_size
-    is typically 768.
+    Computes context insensitive token representation using multiple CNNs. This embedder has input character ids of
+    size (batch_size, sequence_length, 50) and returns (batch_size, sequence_length, hidden_size), where hidden_size is
+    typically 768.
     """
+
     def __init__(self, config):
         super().__init__()
         self.character_embeddings_dim = config.character_embeddings_dim
@@ -161,23 +155,18 @@ class CharacterCnn(torch.nn.Module):
         self._init_projection()
 
     def _init_char_embedding(self):
-        weights = torch.empty((
-            self.character_vocab_size,
-            self.character_embeddings_dim))
+        weights = torch.empty((self.character_vocab_size, self.character_embeddings_dim))
         nn.init.normal_(weights)
-        weights[0].fill_(0.)  # token padding
-        weights[CharacterMapper.padding_character + 1].fill_(0.)  # character padding
-        self._char_embedding_weights = torch.nn.Parameter(
-            torch.FloatTensor(weights),
-            requires_grad=True
-        )
+        weights[0].fill_(0.0)  # token padding
+        weights[CharacterMapper.padding_character + 1].fill_(0.0)  # character padding
+        self._char_embedding_weights = torch.nn.Parameter(torch.FloatTensor(weights), requires_grad=True)
 
     def _init_cnn_weights(self):
         convolutions = []
         for i, (width, num) in enumerate(self.cnn_filters):
             conv = torch.nn.Conv1d(
-                in_channels=self.character_embeddings_dim,
-                out_channels=num, kernel_size=width, bias=True)
+                in_channels=self.character_embeddings_dim, out_channels=num, kernel_size=width, bias=True
+            )
             conv.weight.requires_grad = True
             conv.bias.requires_grad = True
             convolutions.append(conv)
@@ -187,10 +176,7 @@ class CharacterCnn(torch.nn.Module):
     def _init_highway(self):
         # the highway layers have same dimensionality as the number of cnn filters
         n_filters = sum(f[1] for f in self.cnn_filters)
-        self._highways = Highway(
-            n_filters,
-            self.num_highway_layers,
-            activation=nn.functional.relu)
+        self._highways = Highway(n_filters, self.num_highway_layers, activation=nn.functional.relu)
         for k in range(self.num_highway_layers):
             # The AllenNLP highway is one matrix multplication with concatenation of
             # transform and carry weights.
@@ -205,21 +191,17 @@ class CharacterCnn(torch.nn.Module):
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         """
-        Compute context insensitive token embeddings from characters.
-        # Parameters
-        inputs : `torch.Tensor`
-            Shape `(batch_size, sequence_length, 50)` of character ids
-            representing the current batch.
-        # Returns
-        output: `torch.Tensor`
-            Shape `(batch_size, sequence_length, embedding_dim)` tensor with
-            context insensitive token representations.
+        Compute context insensitive token embeddings from characters. # Parameters inputs : `torch.Tensor` Shape
+        `(batch_size, sequence_length, 50)` of character ids representing the current batch. # Returns output:
+        `torch.Tensor` Shape `(batch_size, sequence_length, embedding_dim)` tensor with context insensitive token
+        representations.
         """
 
         # character embeddings
         # (batch_size * sequence_length, max_word_length, embed_dim)
         character_embedding = torch.nn.functional.embedding(
-            inputs.view(-1, self.max_word_length), self._char_embedding_weights)
+            inputs.view(-1, self.max_word_length), self._char_embedding_weights
+        )
 
         # CNN representations
         if self.cnn_activation == "tanh":
@@ -798,8 +780,8 @@ class CharacterBertPreTrainingHeads(nn.Module):
 
 class CharacterBertPreTrainedModel(PreTrainedModel):
     """
-    An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = CharacterBertConfig
@@ -808,15 +790,14 @@ class CharacterBertPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, CharacterCnn):
             # We need to handle the case of these parameters since it is not an actual module
             module._char_embedding_weights.data.normal_()
             # token padding
-            module._char_embedding_weights.data[0].fill_(0.)
+            module._char_embedding_weights.data[0].fill_(0.0)
             # character padding
-            module._char_embedding_weights.data[
-                CharacterMapper.padding_character + 1].fill_(0.)
+            module._char_embedding_weights.data[CharacterMapper.padding_character + 1].fill_(0.0)
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -868,14 +849,15 @@ class CharacterBertForPreTrainingOutput(ModelOutput):
 
 
 CHARACTER_BERT_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config (:class:`~transformers.CharacterBertConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 CHARACTER_BERT_INPUTS_DOCSTRING = r"""
@@ -883,9 +865,9 @@ CHARACTER_BERT_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens.
 
-            Indices can be obtained using :class:`transformers.CharacterBertTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`transformers.CharacterBertTokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{1}`, `optional`):
@@ -904,8 +886,8 @@ CHARACTER_BERT_INPUTS_DOCSTRING = r"""
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`{1}`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
@@ -936,17 +918,15 @@ CHARACTER_BERT_INPUTS_DOCSTRING = r"""
 class CharacterBertModel(CharacterBertPreTrainedModel):
     """
 
-    The model can behave as an encoder (with only self-attention) as well
-    as a decoder, in which case a layer of cross-attention is added between
-    the self-attention layers, following the architecture described in `Attention is
-    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani,
-    Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
+    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
+    cross-attention is added between the self-attention layers, following the architecture described in `Attention is
+    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
-    To behave as an decoder the model needs to be initialized with the
-    :obj:`is_decoder` argument of the configuration set to :obj:`True`.
-    To be used in a Seq2Seq model, the model needs to initialized with both :obj:`is_decoder`
-    argument and :obj:`add_cross_attention` set to :obj:`True`; an
-    :obj:`encoder_hidden_states` is then expected as an input to the forward pass.
+    To behave as an decoder the model needs to be initialized with the :obj:`is_decoder` argument of the configuration
+    set to :obj:`True`. To be used in a Seq2Seq model, the model needs to initialized with both :obj:`is_decoder`
+    argument and :obj:`add_cross_attention` set to :obj:`True`; an :obj:`encoder_hidden_states` is then expected as an
+    input to the forward pass.
     """
 
     def __init__(self, config, add_pooling_layer=True):
@@ -970,17 +950,18 @@ class CharacterBertModel(CharacterBertPreTrainedModel):
         raise NotImplementedError("Cannot resize CharacterBERT's token embeddings.")
 
     def _prune_heads(self, heads_to_prune):
-        """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-        See base class PreTrainedModel
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(
         CHARACTER_BERT_INPUTS_DOCSTRING.format(
-            "(batch_size, sequence_length, maximum_token_length)",
-            "(batch_size, sequence_length)"))
+            "(batch_size, sequence_length, maximum_token_length)", "(batch_size, sequence_length)"
+        )
+    )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1005,12 +986,11 @@ class CharacterBertModel(CharacterBertPreTrainedModel):
     ):
         r"""
         encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-            if the model is configured as a decoder.
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
         encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask
-            is used in the cross-attention if the model is configured as a decoder.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -1114,8 +1094,8 @@ class CharacterBertModel(CharacterBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    CharacterBert Model with two heads on top as done during the pretraining: a `masked language modeling` head and a `next
-    sentence prediction (classification)` head.
+    CharacterBert Model with two heads on top as done during the pretraining: a `masked language modeling` head and a
+    `next sentence prediction (classification)` head.
     """,
     CHARACTER_BERT_START_DOCSTRING,
 )
@@ -1136,8 +1116,9 @@ class CharacterBertForPreTraining(CharacterBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(
         CHARACTER_BERT_INPUTS_DOCSTRING.format(
-            "(batch_size, sequence_length, maximum_token_length)",
-            "(batch_size, sequence_length)"))
+            "(batch_size, sequence_length, maximum_token_length)", "(batch_size, sequence_length)"
+        )
+    )
     @replace_return_docstrings(output_type=CharacterBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1221,7 +1202,8 @@ class CharacterBertForPreTraining(CharacterBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """CharacterBert Model with a `language modeling` head on top for CLM fine-tuning. """, CHARACTER_BERT_START_DOCSTRING
+    """CharacterBert Model with a `language modeling` head on top for CLM fine-tuning. """,
+    CHARACTER_BERT_START_DOCSTRING,
 )
 class CharacterBertLMHeadModel(CharacterBertPreTrainedModel):
 
@@ -1247,8 +1229,9 @@ class CharacterBertLMHeadModel(CharacterBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(
         CHARACTER_BERT_INPUTS_DOCSTRING.format(
-            "(batch_size, sequence_length, maximum_token_length)",
-            "(batch_size, sequence_length)"))
+            "(batch_size, sequence_length, maximum_token_length)", "(batch_size, sequence_length)"
+        )
+    )
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1279,8 +1262,9 @@ class CharacterBertLMHeadModel(CharacterBertPreTrainedModel):
             - 0 for tokens that are **masked**.
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
-            ``[-100, 0, ..., config.mlm_vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are
-            ignored (masked), the loss is only computed for the tokens with labels n ``[0, ..., config.mlm_vocab_size]``
+            ``[-100, 0, ..., config.mlm_vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100``
+            are ignored (masked), the loss is only computed for the tokens with labels n ``[0, ...,
+            config.mlm_vocab_size]``
         past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
 
@@ -1371,7 +1355,9 @@ class CharacterBertLMHeadModel(CharacterBertPreTrainedModel):
         return reordered_past
 
 
-@add_start_docstrings("""CharacterBert Model with a `language modeling` head on top. """, CHARACTER_BERT_START_DOCSTRING)
+@add_start_docstrings(
+    """CharacterBert Model with a `language modeling` head on top. """, CHARACTER_BERT_START_DOCSTRING
+)
 class CharacterBertForMaskedLM(CharacterBertPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1398,8 +1384,9 @@ class CharacterBertForMaskedLM(CharacterBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(
         CHARACTER_BERT_INPUTS_DOCSTRING.format(
-            "(batch_size, sequence_length, maximum_token_length)",
-            "(batch_size, sequence_length)"))
+            "(batch_size, sequence_length, maximum_token_length)", "(batch_size, sequence_length)"
+        )
+    )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1493,8 +1480,9 @@ class CharacterBertForNextSentencePrediction(CharacterBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(
         CHARACTER_BERT_INPUTS_DOCSTRING.format(
-            "(batch_size, sequence_length, maximum_token_length)",
-            "(batch_size, sequence_length)"))
+            "(batch_size, sequence_length, maximum_token_length)", "(batch_size, sequence_length)"
+        )
+    )
     @replace_return_docstrings(output_type=NextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1580,8 +1568,10 @@ class CharacterBertForNextSentencePrediction(CharacterBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """CharacterBERT Model transformer with a sequence classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for GLUE tasks. """,
+    """
+    CharacterBERT Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
+    """,
     CHARACTER_BERT_START_DOCSTRING,
 )
 class CharacterBertForSequenceClassification(CharacterBertPreTrainedModel):
@@ -1596,8 +1586,9 @@ class CharacterBertForSequenceClassification(CharacterBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(
         CHARACTER_BERT_INPUTS_DOCSTRING.format(
-            "(batch_size, sequence_length, maximum_token_length)",
-            "(batch_size, sequence_length)"))
+            "(batch_size, sequence_length, maximum_token_length)", "(batch_size, sequence_length)"
+        )
+    )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1605,17 +1596,17 @@ class CharacterBertForSequenceClassification(CharacterBertPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1665,8 +1656,10 @@ class CharacterBertForSequenceClassification(CharacterBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """CharacterBERT Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    """
+    CharacterBERT Model with a multiple choice classification head on top (a linear layer on top of the pooled output
+    and a softmax) e.g. for RocStories/SWAG tasks.
+    """,
     CHARACTER_BERT_START_DOCSTRING,
 )
 class CharacterBertForMultipleChoice(CharacterBertPreTrainedModel):
@@ -1681,8 +1674,9 @@ class CharacterBertForMultipleChoice(CharacterBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(
         CHARACTER_BERT_INPUTS_DOCSTRING.format(
-            "(batch_size, sequence_length, maximum_token_length)",
-            "(batch_size, sequence_length)"))
+            "(batch_size, sequence_length, maximum_token_length)", "(batch_size, sequence_length)"
+        )
+    )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1690,17 +1684,17 @@ class CharacterBertForMultipleChoice(CharacterBertPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1757,8 +1751,10 @@ class CharacterBertForMultipleChoice(CharacterBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """CharacterBERT Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    """
+    CharacterBERT Model with a token classification head on top (a linear layer on top of the hidden-states output)
+    e.g. for Named-Entity-Recognition (NER) tasks.
+    """,
     CHARACTER_BERT_START_DOCSTRING,
 )
 class CharacterBertForTokenClassification(CharacterBertPreTrainedModel):
@@ -1774,8 +1770,9 @@ class CharacterBertForTokenClassification(CharacterBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(
         CHARACTER_BERT_INPUTS_DOCSTRING.format(
-            "(batch_size, sequence_length, maximum_token_length)",
-            "(batch_size, sequence_length)"))
+            "(batch_size, sequence_length, maximum_token_length)", "(batch_size, sequence_length)"
+        )
+    )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1797,8 +1794,8 @@ class CharacterBertForTokenClassification(CharacterBertPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1846,8 +1843,10 @@ class CharacterBertForTokenClassification(CharacterBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """CharacterBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """
+    CharacterBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a
+    linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
     CHARACTER_BERT_START_DOCSTRING,
 )
 class CharacterBertForQuestionAnswering(CharacterBertPreTrainedModel):
@@ -1864,8 +1863,9 @@ class CharacterBertForQuestionAnswering(CharacterBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(
         CHARACTER_BERT_INPUTS_DOCSTRING.format(
-            "(batch_size, sequence_length, maximum_token_length)",
-            "(batch_size, sequence_length)"))
+            "(batch_size, sequence_length, maximum_token_length)", "(batch_size, sequence_length)"
+        )
+    )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1889,12 +1889,12 @@ class CharacterBertForQuestionAnswering(CharacterBertPreTrainedModel):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

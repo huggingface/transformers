@@ -187,7 +187,11 @@ _import_structure = {
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
-    "models.character_bert": ["CHARACTER_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CharacterBertConfig", "CharacterBertTokenizer"],
+    "models.character_bert": [
+        "CHARACTER_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CharacterBertConfig",
+        "CharacterBertTokenizer",
+    ],
     "models.clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPConfig",

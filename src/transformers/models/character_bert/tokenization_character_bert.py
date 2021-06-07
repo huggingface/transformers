@@ -93,11 +93,11 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
 
     Args:
         mlm_vocab_file (:obj:`str`, `optional`, defaults to :obj:`None`):
-            Path to the Masked Language Modeling vocabulary. This is used for
-            converting the output (token ids) of the MLM model into tokens.
+            Path to the Masked Language Modeling vocabulary. This is used for converting the output (token ids) of the
+            MLM model into tokens.
         max_word_length (:obj:`int`, `optional`, defaults to :obj:`50`):
-            The maximum token length in characters (actually, in bytes as any
-            non-ascii characters will be converted to a sequence of utf-8 bytes).
+            The maximum token length in characters (actually, in bytes as any non-ascii characters will be converted to
+            a sequence of utf-8 bytes).
         do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to lowercase the input when tokenizing.
         do_basic_tokenize (:obj:`bool`, `optional`, defaults to :obj:`True`):
@@ -163,13 +163,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
         # This prevents splitting special tokens during tokenization
-        self.unique_no_split_tokens = [
-            self.cls_token,
-            self.mask_token,
-            self.pad_token,
-            self.sep_token,
-            self.unk_token
-        ]
+        self.unique_no_split_tokens = [self.cls_token, self.mask_token, self.pad_token, self.sep_token, self.unk_token]
         # This is used for converting MLM ids into tokens
         if mlm_vocab_file is None:
             self.ids_to_tokens = None
@@ -225,7 +219,8 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
                 "CharacterBertTokenizer was initialized without a MLM "
                 "vocabulary. You can either pass one manually or load a "
                 "pre-trained tokenizer using: "
-                "`tokenizer = CharacterBertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`")
+                "`tokenizer = CharacterBertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+            )
         return len(self.ids_to_tokens)
 
     def add_special_tokens(self, *args, **kwargs):
@@ -245,19 +240,18 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
     def _tokenize(self, text):
         split_tokens = []
         if self.do_basic_tokenize:
-            split_tokens = self.basic_tokenizer.tokenize(
-                text=text, never_split=self.all_special_tokens)
+            split_tokens = self.basic_tokenizer.tokenize(text=text, never_split=self.all_special_tokens)
         else:
             split_tokens = whitespace_tokenize(text)  # Default to whitespace tokenization
         return split_tokens
 
     def convert_tokens_to_string(self, tokens):
-        """ Converts a sequence of tokens (string) in a single string. """
+        """Converts a sequence of tokens (string) in a single string."""
         out_string = " ".join(tokens).strip()
         return out_string
 
     def _convert_token_to_id(self, token):
-        """ Converts a token (str) into a sequence of character ids. """
+        """Converts a token (str) into a sequence of character ids."""
         return self._mapper.convert_word_to_char_ids(token)
 
     def _convert_id_to_token(self, index: List[int]):
@@ -267,13 +261,11 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         return self._mapper.convert_char_ids_to_word(index)
 
     def convert_ids_to_tokens(
-        self,
-        ids: Union[List[int], List[List[int]]],
-        skip_special_tokens: bool = False
+        self, ids: Union[List[int], List[List[int]]], skip_special_tokens: bool = False
     ) -> Union[str, List[str]]:
         """
-        Converts a single sequence of character indices or a sequence of
-        character id sequences in a token or a sequence of tokens.
+        Converts a single sequence of character indices or a sequence of character id sequences in a token or a
+        sequence of tokens.
 
         Args:
             ids (:obj:`int` or :obj:`List[int]`):
@@ -307,9 +299,11 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
                 "CharacterBertTokenizer was initialized without a MLM "
                 "vocabulary. You can either pass one manually or load a "
                 "pre-trained tokenizer using: "
-                "`tokenizer = CharacterBertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`")
-        assert mlm_id < self.mlm_vocab_size, \
-            "Attempting to convert a MLM id that is greater than the MLM vocabulary size."
+                "`tokenizer = CharacterBertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+            )
+        assert (
+            mlm_id < self.mlm_vocab_size
+        ), "Attempting to convert a MLM id that is greater than the MLM vocabulary size."
         return self.ids_to_tokens[mlm_id]
 
     def build_inputs_with_special_tokens(
@@ -338,9 +332,10 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[List[int]],
+        self,
+        token_ids_0: List[List[int]],
         token_ids_1: Optional[List[List[int]]] = None,
-        already_has_special_tokens: bool = False
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -373,8 +368,8 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[List[int]], token_ids_1: Optional[List[List[int]]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
-        A CharacterBERT sequence pair mask has the following format:
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A CharacterBERT
+        sequence pair mask has the following format:
 
         ::
 
@@ -635,10 +630,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         return encoded_inputs
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        logger.warning(
-            "CharacterBERT does not have a token vocabulary. "
-            "Skipping saving `vocab.txt`."
-        )
+        logger.warning("CharacterBERT does not have a token vocabulary. " "Skipping saving `vocab.txt`.")
         return ()
 
     def save_mlm_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
@@ -646,13 +638,13 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         # saving tokenizer configuration via CharacterBertTokenizer.save_pretrained
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
-                save_directory, (filename_prefix + "-" if filename_prefix else "") + 'mlm_vocab.txt'
+                save_directory, (filename_prefix + "-" if filename_prefix else "") + "mlm_vocab.txt"
             )
         else:
             vocab_file = (filename_prefix + "-" if filename_prefix else "") + save_directory
         with open(vocab_file, "w", encoding="utf-8") as f:
             for _, token in self.ids_to_tokens.items():
-                f.write(token + '\n')
+                f.write(token + "\n")
         return (vocab_file,)
 
     def _save_pretrained(
@@ -842,8 +834,8 @@ class BasicTokenizer(object):
 class CharacterMapper:
     """
     NOTE: Adapted from ElmoCharacterMapper:
-    https://github.com/allenai/allennlp/blob/main/allennlp/data/token_indexers/elmo_indexer.py
-    Maps individual tokens to sequences of character ids, compatible with CharacterBERT.
+    https://github.com/allenai/allennlp/blob/main/allennlp/data/token_indexers/elmo_indexer.py Maps individual tokens
+    to sequences of character ids, compatible with CharacterBERT.
     """
 
     # char ids 0-255 come from utf-8 encoding bytes
@@ -865,12 +857,9 @@ class CharacterMapper:
         max_word_length: int = 50,
     ):
         self.max_word_length = max_word_length
-        self.beginning_of_sentence_characters = \
-            self._make_char_id_sequence(self.beginning_of_sentence_character)
-        self.end_of_sentence_characters = \
-            self._make_char_id_sequence(self.end_of_sentence_character)
-        self.mask_characters = \
-            self._make_char_id_sequence(self.mask_character)
+        self.beginning_of_sentence_characters = self._make_char_id_sequence(self.beginning_of_sentence_character)
+        self.end_of_sentence_characters = self._make_char_id_sequence(self.end_of_sentence_character)
+        self.mask_characters = self._make_char_id_sequence(self.mask_character)
         # This is the character id sequence for the pad token (i.e. [PAD]).
         # We remove 1 because we will add 1 later on and it will be equal to 0.
         self.pad_characters = [PAD_TOKEN_CHAR_ID - 1] * self.max_word_length
@@ -893,9 +882,7 @@ class CharacterMapper:
             char_ids = self.pad_characters
         else:
             # Convert characters to indices
-            word_encoded = word.encode("utf-8", "ignore")[
-                : (self.max_word_length - 2)
-            ]
+            word_encoded = word.encode("utf-8", "ignore")[: (self.max_word_length - 2)]
             # Initialize character_ids with padding
             char_ids = [self.padding_character] * self.max_word_length
             # First character is BeginningOfWord
@@ -914,9 +901,9 @@ class CharacterMapper:
     def convert_char_ids_to_word(self, char_ids: List[int]) -> str:
         "Converts a sequence of character ids into its corresponding word."
 
-        assert len(char_ids) == self.max_word_length, \
-            f"Got character sequence of length {len(char_ids)} while " \
-            "`max_word_length={self.max_word_length}`"
+        assert len(char_ids) == self.max_word_length, (
+            f"Got character sequence of length {len(char_ids)} while " "`max_word_length={self.max_word_length}`"
+        )
 
         char_ids_ = [(i - 1) for i in char_ids]
         if char_ids_ == self.beginning_of_sentence_characters:
@@ -928,11 +915,12 @@ class CharacterMapper:
         elif char_ids_ == self.pad_characters:  # token padding
             return self.pad_token
         else:
-            utf8_codes = list(filter(
-                lambda x:
-                    (x != self.padding_character)
+            utf8_codes = list(
+                filter(
+                    lambda x: (x != self.padding_character)
                     and (x != self.beginning_of_word_character)
                     and (x != self.end_of_word_character),
-                char_ids_
-            ))
+                    char_ids_,
+                )
+            )
             return bytes(utf8_codes).decode("utf-8")

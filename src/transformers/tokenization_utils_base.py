@@ -2298,12 +2298,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     max_length = self.model_max_length
 
         # Test if we have a padding token
-        if padding_strategy != PaddingStrategy.DO_NOT_PAD \
-            and (
-                not self.pad_token
-                or ((not isinstance(self.pad_token_id, list)) and self.pad_token_id < 0)
-                or (isinstance(self.pad_token_id, list) and all(i < 0 for i in self.pad_token_id))
-            ):
+        if padding_strategy != PaddingStrategy.DO_NOT_PAD and (
+            not self.pad_token
+            or ((not isinstance(self.pad_token_id, list)) and self.pad_token_id < 0)
+            or (isinstance(self.pad_token_id, list) and all(i < 0 for i in self.pad_token_id))
+        ):
 
             raise ValueError(
                 "Asking to pad but the tokenizer does not have a padding token. "

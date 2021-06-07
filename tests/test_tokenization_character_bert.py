@@ -50,32 +50,28 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        tokenizer = self.tokenizer_class.from_pretrained('helboukkouri/character-bert')
+        tokenizer = self.tokenizer_class.from_pretrained("helboukkouri/character-bert")
         tokenizer.save_pretrained(self.tmpdirname)
         logger.info(
-            'Loaded pre-trained CharacterBertTokenizer '
-            f'& saved it in: {self.tmpdirname}',
+            "Loaded pre-trained CharacterBertTokenizer " f"& saved it in: {self.tmpdirname}",
         )
 
-    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> Tuple[str, List[List[int]]]:
+    def get_clean_sequence(
+        self, tokenizer, with_prefix_space=False, max_length=20, min_length=5
+    ) -> Tuple[str, List[List[int]]]:
         # All the "words" that are represented as a single character (utf-8 code)
         toks = [(i + 1, chr(i)) for i in range(128)]
 
         toks = list(filter(lambda t: re.match(r"^[ a-zA-Z]+$", t[1]), toks))
-        toks = list(filter(
-            lambda t:
-                (t[1] != ' ') and (t[0] == tokenizer.encode(t[1], add_special_tokens=False)[0][1]),
-            toks
-        ))
+        toks = list(
+            filter(lambda t: (t[1] != " ") and (t[0] == tokenizer.encode(t[1], add_special_tokens=False)[0][1]), toks)
+        )
         if max_length is not None and len(toks) > max_length:
             toks = toks[:max_length]
         if min_length is not None and len(toks) < min_length and len(toks) > 0:
             while len(toks) < min_length:
                 toks = toks + toks
-        toks_ids = [
-            [i + 1 for i in tokenizer._mapper._make_char_id_sequence(t[0] - 1)]
-            for t in toks
-        ]
+        toks_ids = [[i + 1 for i in tokenizer._mapper._make_char_id_sequence(t[0] - 1)] for t in toks]
 
         # Ensure consistency
         output_txt = tokenizer.decode(toks_ids, clean_up_tokenization_spaces=False)
@@ -131,13 +127,9 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertEqual(tokenizer.convert_ids_to_tokens(character_ids), character)
 
     def test_encode_decode(self):
-        text = '[CLS] Test this : 您 [SEP]'
+        text = "[CLS] Test this : 您 [SEP]"
         tokenizer = self.get_tokenizer(do_lower_case=False)
-        self.assertEqual(
-            text,
-            tokenizer.decode(
-                tokenizer.encode(text, add_special_tokens=False))
-        )
+        self.assertEqual(text, tokenizer.decode(tokenizer.encode(text, add_special_tokens=False)))
 
     def test_save_and_load_tokenizer(self):
         # safety check on max_len default value so we are sure the test works
@@ -171,7 +163,7 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
 
         for parameter_name, parameter in signature.parameters.items():
-            if (parameter_name != 'mlm_vocab_file') and (parameter.default != inspect.Parameter.empty):
+            if (parameter_name != "mlm_vocab_file") and (parameter.default != inspect.Parameter.empty):
                 self.assertIn(parameter_name, tokenizer.init_kwargs)
 
     def test_maximum_encoding_length_single_input(self):
@@ -504,7 +496,7 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # Test default (lowercase)
         tokenizer = self.tokenizer_class()
-        expected_tokens = ['hi', '!']  # Same as BasicTokenizer
+        expected_tokens = ["hi", "!"]  # Same as BasicTokenizer
         expected_ids = [
             # Each word is represented as a sequence of characters
             # beginning with special beginning of word character,
@@ -513,14 +505,17 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             # to fill a `max_word_length` (default=50) sequence
             [
                 CharacterMapper.beginning_of_word_character + 1,
-                105, 106,
+                105,
+                106,
                 CharacterMapper.end_of_word_character + 1,
-            ] + [CharacterMapper.padding_character + 1] * (tokenizer.max_word_length - 4),
+            ]
+            + [CharacterMapper.padding_character + 1] * (tokenizer.max_word_length - 4),
             [
                 CharacterMapper.beginning_of_word_character + 1,
                 34,
                 CharacterMapper.end_of_word_character + 1,
-            ] + [CharacterMapper.padding_character + 1] * (tokenizer.max_word_length - 3)
+            ]
+            + [CharacterMapper.padding_character + 1] * (tokenizer.max_word_length - 3),
         ]
         tokens = tokenizer.tokenize(sequence)
         self.assertListEqual(tokens, expected_tokens)
@@ -529,8 +524,8 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(ids, expected_ids)
 
         # Test UpperCase
-        tokenizer = self.tokenizer_class.from_pretrained('helboukkouri/character-bert', do_lower_case=False)
-        expected_tokens = ['Hi', '!']  # Same as BasicTokenizer
+        tokenizer = self.tokenizer_class.from_pretrained("helboukkouri/character-bert", do_lower_case=False)
+        expected_tokens = ["Hi", "!"]  # Same as BasicTokenizer
         expected_ids = [
             # Each word is represented as a sequence of characters
             # beginning with special beginning of word character,
@@ -539,14 +534,17 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             # to fill a `max_word_length` (default=50) sequence
             [
                 CharacterMapper.beginning_of_word_character + 1,
-                73, 106,
+                73,
+                106,
                 CharacterMapper.end_of_word_character + 1,
-            ] + [CharacterMapper.padding_character + 1] * (tokenizer.max_word_length - 4),
+            ]
+            + [CharacterMapper.padding_character + 1] * (tokenizer.max_word_length - 4),
             [
                 CharacterMapper.beginning_of_word_character + 1,
                 34,
                 CharacterMapper.end_of_word_character + 1,
-            ] + [CharacterMapper.padding_character + 1] * (tokenizer.max_word_length - 3)
+            ]
+            + [CharacterMapper.padding_character + 1] * (tokenizer.max_word_length - 3),
         ]
         tokens = tokenizer.tokenize(sequence)
         self.assertListEqual(tokens, expected_tokens)
@@ -556,16 +554,12 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("helboukkouri/character-bert")
-        CLS = [
-            CharacterMapper.beginning_of_word_character + 1,
-            257,
-            CharacterMapper.end_of_word_character + 1,
-        ] + [CharacterMapper.padding_character + 1] * (tokenizer.max_word_length - 3)
-        SEP = [
-            CharacterMapper.beginning_of_word_character + 1,
-            258,
-            CharacterMapper.end_of_word_character + 1,
-        ] + [CharacterMapper.padding_character + 1] * (tokenizer.max_word_length - 3)
+        CLS = [CharacterMapper.beginning_of_word_character + 1, 257, CharacterMapper.end_of_word_character + 1,] + [
+            CharacterMapper.padding_character + 1
+        ] * (tokenizer.max_word_length - 3)
+        SEP = [CharacterMapper.beginning_of_word_character + 1, 258, CharacterMapper.end_of_word_character + 1,] + [
+            CharacterMapper.padding_character + 1
+        ] * (tokenizer.max_word_length - 3)
 
         text = tokenizer.encode("sequence builders", add_special_tokens=False)
         text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
