@@ -71,8 +71,7 @@ class Wav2VecForPreTrainingOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     latent_predicted_features: torch.FloatTensor = None
     latent_quantized_features: torch.FloatTensor = None
-    prob_perplexity: torch.FloatTensor = None
-    code_perplexity: torch.FloatTensor = None
+    codevector_perplexity: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -695,11 +694,11 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
 
 
 class GumbelVectorQuantizer(nn.Module):
-    def __init__(self, config):
-        """
-        Vector quantization using gumbel softmax. See `CATEGORICAL REPARAMETERIZATION
+    """
+    Vector quantization using gumbel softmax. See `CATEGORICAL REPARAMETERIZATION
 WITH GUMBEL-SOFTMAX <https://arxiv.org/pdf/1611.01144.pdf>`__ for more information.
-        """
+    """
+    def __init__(self, config):
         super().__init__()
         self.num_groups = config.num_latent_groups
         self.num_vars = config.num_latent_vars
@@ -712,6 +711,7 @@ WITH GUMBEL-SOFTMAX <https://arxiv.org/pdf/1611.01144.pdf>`__ for more informati
         self.vars = nn.Parameter(torch.FloatTensor(1, self.num_groups * self.num_vars, config.vq_latent_dim // self.num_groups))
         self.weight_proj = nn.Linear(config.conv_dim[-1], self.num_groups * self.num_vars)
 
+        # REMEMBER TO PUT THIS INTO INIT
         nn.init.uniform_(self.vars)
         nn.init.normal_(self.weight_proj.weight, mean=0, std=1)
         nn.init.zeros_(self.weight_proj.bias)
@@ -719,6 +719,7 @@ WITH GUMBEL-SOFTMAX <https://arxiv.org/pdf/1611.01144.pdf>`__ for more informati
         # can be decayed for training
         self.temperature = 1
 
+# REMEMBER TO PUT THIS IN PRETRAINING SCRIPT
 #        assert len(temperature) == 3, f"{temperature}, {len(temperature)}"
 #        self.max_temp, self.min_temp, self.temp_decay = temperature
 #        self.curr_temp = self.max_temp
@@ -731,46 +732,47 @@ WITH GUMBEL-SOFTMAX <https://arxiv.org/pdf/1611.01144.pdf>`__ for more informati
     def set_temperature(self, temperature: int):
         self.temperature = temperature
 
-    def forward(self, x, mask_time_indices=None):
-        total_num_vars = self.num_vars * self.num_groups
-
-        bsz, tsz, fsz = x.shape
-        x = x.reshape(-1, fsz)
-        x = self.weight_proj(x)
-        x = x.view(bsz * tsz * self.num_groups, -1)
-
-        # argmax to one-hot codeword probabilities
-        _, k = x.max(-1)
-        hard_x = x.new_zeros(*x.shape).scatter_(-1, k.view(-1, 1), 1.0).view(bsz * tsz, self.num_groups, -1)
-        hard_probs = torch.mean(hard_x.float(), dim=0)
-        code_perplexity = torch.exp(-torch.sum(hard_probs * torch.log(hard_probs + 1e-7), dim=-1)).sum()
-
-        perplexity_probs = torch.softmax(x.view(bsz * tsz, self.num_groups, -1).float(), dim=-1)
-
-        # to make sure perplexity only counts for masked indices
-        # can be done with torch.where as well
-        if mask_time_indices is not None:
-            mask_time_indices_expanded = mask_time_indices.flatten()[:, None, None].expand(perplexity_probs.shape)
-            perplexity_probs = torch.where(mask_time_indices_expanded, perplexity_probs, torch.zeros_like(perplexity_probs))
-            avg_probs = perplexity_probs.sum(dim=0) / mask_time_indices.sum()
+    @staticmethod
+    def _compute_perplexity(probs, mask):
+        if mask is not None:
+            mask = mask.flatten()[:, None, None].expand(probs.shape)
+            probs = torch.where(mask, probs, torch.zeros_like(probs))
+            marginal_probs = probs.sum(dim=0) / mask.sum()
         else:
-            avg_probs = perplexity_probs.mean(dim=0)
+            marginal_probs = probs.mean(dim=0)
 
-        prob_perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs + 1e-7), dim=-1)).sum()
+        perplexity = torch.exp(-torch.sum(marginal_probs * torch.log(marginal_probs + 1e-7), dim=-1)).sum()
+        return perplexity
+
+    def forward(self, hidden_states, mask_time_indices=None):
+        batch_size, sequence_length, hidden_size = hidden_states.shape
+
+        # project to codevector dim
+        hidden_states = self.weight_proj(hidden_states)
+        hidden_states = hidden_states.view(batch_size * sequence_length * self.num_groups, -1)
 
         if self.training:
-            codeword_probs = F.gumbel_softmax(x.float(), tau=self.temperature, hard=True).type_as(x)
+            # sample code vector probs via gumbel in differentiateable way
+            codevector_probs = F.gumbel_softmax(hidden_states.float(), tau=self.temperature, hard=True).type_as(hidden_states)
+
+            # compute perplexity
+            codevector_soft_dist = torch.softmax(hidden_states.view(batch_size * sequence_length, self.num_groups, -1).float(), dim=-1)
+            perplexity = self._compute_perplexity(codevector_soft_dist, mask_time_indices)
         else:
-            codeword_probs = hard_x
+            # take argmax in non-differentiable way
+            # comptute hard codevector distribution (one hot)
+            codevector_idx = hidden_states.argmax(dim=-1)
+            codevector_probs = hidden_states.new_zeros(*hidden_states.shape).scatter_(-1, codevector_idx.view(-1, 1), 1.0)
+            codevector_probs = codevector_probs.view(batch_size * sequence_length, self.num_groups, -1)
 
-        codeword_probs = codeword_probs.view(bsz * tsz, -1)
+            perplexity = self._compute_perplexity(codevector_probs, mask_time_indices)
 
-        x = codeword_probs.unsqueeze(-1) * self.vars
-        x = x.view(bsz * tsz, self.num_groups, self.num_vars, -1)
-        x = x.sum(-2)
-        x = x.view(bsz, tsz, -1)
+        codevector_probs = codevector_probs.view(batch_size * sequence_length, -1)
+        # use probs to retrieve codevectors
+        codevectors_per_group = codevector_probs.unsqueeze(-1) * self.vars
+        codevectors = codevectors_per_group.view(batch_size * sequence_length, self.num_groups, self.num_vars, -1).sum(-2).view(batch_size, sequence_length, -1)
 
-        return x, total_num_vars, code_perplexity, prob_perplexity
+        return codevectors, perplexity
 
 
 class Wav2Vec2PreTrainedModel(PreTrainedModel):
@@ -1022,12 +1024,6 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         self.dropout_features = nn.Dropout(config.feat_quantizer_dropout)
 
         self.quantizer = GumbelVectorQuantizer(config)
-#            input_dim=config.conv_dim[-1],
-#            num_vars=config.num_latent_vars,
-#            temperature=config.gumbel_softmax_temperature,
-#            num_groups=config.num_latent_groups,
-#            vq_dim=config.vq_latent_dim,
-#        )
         self.project_q = nn.Linear(config.vq_latent_dim, config.vq_final_dim)
         self.project_hid = nn.Linear(config.hidden_size, config.vq_final_dim)
 
@@ -1116,7 +1112,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
         # 2. quantize all (unmasked) extracted features and project to final vq dim
         extract_features = self.dropout_features(outputs[1])
-        quantized_features, num_vars, code_perplexity, prob_perplexity = self.quantizer(extract_features, mask_time_indices)
+        quantized_features, codevector_perplexity = self.quantizer(extract_features, mask_time_indices)
         quantized_features = self.project_q(quantized_features)
 
         loss = None
@@ -1144,22 +1140,22 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             )
 
             # 7. compute diversity loss: \mathbf{L}_d
-            diversity_loss = (num_vars - prob_perplexity) / num_vars
+            num_codevectors = self.config.num_latent_vars * self.config.num_latent_groups
+            diversity_loss = (num_codevectors - codevector_perplexity) / num_codevectors
 
             # 8. \mathbf{L} = \mathbf{L}_m + \alpha * \mathbf{L}_d
             loss = contrastive_loss + self.config.diversity_loss_weight * diversity_loss
 
         if not return_dict:
             if loss is not None:
-                return (loss, transformer_features, quantized_features, prob_perplexity, code_perplexity) + outputs[2:]
-            return (transformer_features, quantized_features, prob_perplexity, code_perplexity) + outputs[2:]
+                return (loss, transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
+            return (transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
 
         return Wav2VecForPreTrainingOutput(
             loss=loss,
             latent_predicted_features=transformer_features,
             latent_quantized_features=quantized_features,
-            prob_perplexity=prob_perplexity,
-            code_perplexity=code_perplexity,
+            codevector_perplexity=codevector_perplexity,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

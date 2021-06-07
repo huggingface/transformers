@@ -697,4 +697,5 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             loss = model(inputs_dict.input_values.to(torch_device), attention_mask=inputs_dict.attention_mask.to(torch_device), mask_time_indices=mask_time_indices).loss
 
+        import ipdb; ipdb.set_trace()
         self.assertTrue(abs(loss.item() - 49.7099) < 1e-3)
