@@ -401,7 +401,8 @@ class GPTNeoBlock(nn.Module):
         inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * hidden_size
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.attn = GPTNeoAttention(config, layer_id)
-        if not config.jax:
+        self.jax = config.jax
+        if not self.jax:
             self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.mlp = GPTNeoMLP(inner_dim, config)
 
@@ -429,7 +430,7 @@ class GPTNeoBlock(nn.Module):
         attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attn_outputs[1:]
         
-        if config.jax:
+        if self.jax:
             feed_forward_hidden_states = self.mlp(hidden_states)
             hidden_states = attn_output + feed_forward_hidden_states
         else:
@@ -573,7 +574,9 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
-        if config.jax:
+        self.jax = config.jax
+        self.vocab_size = config.vocab_size
+        if self.jax:
             self.wte = nn.Linear(config.vocab_size, self.embed_dim)
         else:
             self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
@@ -687,7 +690,13 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_layers)
 
         if inputs_embeds is None:
-            inputs_embeds = self.wte(input_ids)
+            if self.jax:
+              one_hot = torch.zeros(input_ids.shape[0] * input_ids.shape[1], self.vocab_size, device=self.device, dtype=self.dtype)
+              one_hot.scatter_(1, input_ids.view(-1, 1), 1)
+              one_hot = one_hot.view(input_ids.shape[0], input_ids.shape[1], self.vocab_size)
+              inputs_embeds = self.wte(one_hot)
+            else:
+              inputs_embeds = self.wte(input_ids)
 
         if self.rotary is not None:
             hidden_states = inputs_embeds
