@@ -221,6 +221,9 @@ class TokenizerTesterMixin:
                 "The quick brown fox jumps over the lazy dog.",
             ]
 
+        if self.test_sentencepiece_ignore_case:
+            sequences = [sequence.lower() for sequence in sequences]
+
         tokenizer_classes = [self.tokenizer_class]
         if self.test_rust_tokenizer:
             tokenizer_classes.append(self.rust_tokenizer_class)
