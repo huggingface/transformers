@@ -182,5 +182,5 @@ run_asr.py \
 --dataset_name=patrickvonplaten/librispeech_asr_dummy --dataset_config_name=clean \
 --train_split_name=validation --validation_split_name=validation --orthography=timit \
 --preprocessing_num_workers=1 --group_by_length --freeze_feature_extractor --verbose_logging \
---deepspeed ds_config_wav2vec2_zero2.json
+--deepspeed ds_config_wav2vec2_zero3.json
 ```
