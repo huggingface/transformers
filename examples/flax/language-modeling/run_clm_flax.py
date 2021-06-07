@@ -51,7 +51,6 @@ from transformers import (
     HfArgumentParser,
     TrainingArguments,
     is_tensorboard_available,
-    set_seed,
 )
 from transformers.testing_utils import CaptureLogger
 
