@@ -114,7 +114,7 @@ def infer_framework_load_model(
                         classes.append(_class)
             class_tuple = class_tuple + tuple(classes)
 
-        if len(class_tuple) == 0 and not config.architectures:
+        if len(class_tuple) == 0:
             raise ValueError(f"Pipeline cannot infer suitable model classes from {model}")
 
         for model_class in class_tuple:
