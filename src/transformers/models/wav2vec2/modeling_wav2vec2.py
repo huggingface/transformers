@@ -57,10 +57,9 @@ class Wav2VecBaseModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
+    extract_features: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    extracted_features: torch.FloatTensor = None
-    mask_time_indices: torch.LongTensor = None
 
 
 @dataclass
@@ -69,9 +68,11 @@ class Wav2VecForPreTrainingOutput(ModelOutput):
     TODO: docs
     """
 
-    logits: torch.FloatTensor = None
     loss: Optional[torch.FloatTensor] = None
-    prob_perplexity: Optional[torch.FloatTensor] = None
+    latent_predicted_features: torch.FloatTensor = None
+    latent_quantized_features: torch.FloatTensor = None
+    prob_perplexity: torch.FloatTensor = None
+    code_perplexity: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -694,56 +695,44 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
 
 
 class GumbelVectorQuantizer(nn.Module):
-    def __init__(
-        self,
-        input_dim,
-        num_vars,
-        temperature,
-        num_groups,
-        vq_dim,
-    ):
+    def __init__(self, config):
         """
-        Vector quantization using gumbel softmax
-
-        Args:
-            input_dim: input dimension (channels)
-            num_vars: number of quantized vectors per group
-            temperature: temperature for training. this should be a tuple of 3 elements: (start, stop, decay factor)
-            num_groups: number of codebooks (groups) for vector quantization
-            vq_dim: dimensionality of the resulting quantized vector
+        Vector quantization using gumbel softmax. See `CATEGORICAL REPARAMETERIZATION
+WITH GUMBEL-SOFTMAX <https://arxiv.org/pdf/1611.01144.pdf>`__ for more information.
         """
         super().__init__()
-
-        self.num_groups = num_groups
-        self.input_dim = input_dim
-        self.num_vars = num_vars
+        self.num_groups = config.num_latent_groups
+        self.num_vars = config.num_latent_vars
 
         assert (
-            vq_dim % num_groups == 0
-        ), f"vq_dim {vq_dim} must be divisible by num_groups {num_groups} for concatenation"
-
-        var_dim = vq_dim // num_groups
+            config.vq_latent_dim % self.num_groups == 0
+        ), f"`config.vq_latent_dim {config.vq_latent_dim} must be divisible by `config.num_latent_groups` {self.num_groups} for concatenation"
 
         # storage for codebook variables (codewords)
-        self.vars = nn.Parameter(torch.FloatTensor(1, num_groups * num_vars, var_dim))
-        nn.init.uniform_(self.vars)
+        self.vars = nn.Parameter(torch.FloatTensor(1, self.num_groups * self.num_vars, config.vq_latent_dim // self.num_groups))
+        self.weight_proj = nn.Linear(config.conv_dim[-1], self.num_groups * self.num_vars)
 
-        self.weight_proj = nn.Linear(self.input_dim, num_groups * num_vars)
+        nn.init.uniform_(self.vars)
         nn.init.normal_(self.weight_proj.weight, mean=0, std=1)
         nn.init.zeros_(self.weight_proj.bias)
 
-        assert len(temperature) == 3, f"{temperature}, {len(temperature)}"
+        # can be decayed for training
+        self.temperature = 1
 
-        self.max_temp, self.min_temp, self.temp_decay = temperature
-        self.curr_temp = self.max_temp
+#        assert len(temperature) == 3, f"{temperature}, {len(temperature)}"
+#        self.max_temp, self.min_temp, self.temp_decay = temperature
+#        self.curr_temp = self.max_temp
 
-    def update_temperature(self, num_updates):
-        self.curr_temp = max(self.max_temp * self.temp_decay ** num_updates, self.min_temp)
+#    def update_temperature(self, num_updates):
+#        self.curr_temp = max(self.max_temp * self.temp_decay ** num_updates, self.min_temp)
+#
+#        return self.curr_temp
 
-        return self.curr_temp
+    def set_temperature(self, temperature: int):
+        self.temperature = temperature
 
-    def forward(self, x, mask_time_indices):
-        num_vars = self.num_vars * self.num_groups
+    def forward(self, x, mask_time_indices=None):
+        total_num_vars = self.num_vars * self.num_groups
 
         bsz, tsz, fsz = x.shape
         x = x.reshape(-1, fsz)
@@ -760,14 +749,17 @@ class GumbelVectorQuantizer(nn.Module):
 
         # to make sure perplexity only counts for masked indices
         # can be done with torch.where as well
-        mask_time_indices_expanded = mask_time_indices.flatten()[:, None, None].broadcast_to(perplexity_probs.shape)
-        perplexity_probs = torch.where(mask_time_indices_expanded, perplexity_probs, torch.zeros_like(perplexity_probs))
-        avg_probs = perplexity_probs.sum(dim=0) / mask_time_indices.sum()
+        if mask_time_indices is not None:
+            mask_time_indices_expanded = mask_time_indices.flatten()[:, None, None].expand(perplexity_probs.shape)
+            perplexity_probs = torch.where(mask_time_indices_expanded, perplexity_probs, torch.zeros_like(perplexity_probs))
+            avg_probs = perplexity_probs.sum(dim=0) / mask_time_indices.sum()
+        else:
+            avg_probs = perplexity_probs.mean(dim=0)
 
         prob_perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs + 1e-7), dim=-1)).sum()
 
         if self.training:
-            codeword_probs = F.gumbel_softmax(x.float(), tau=0.00001, hard=True).type_as(x)
+            codeword_probs = F.gumbel_softmax(x.float(), tau=self.temperature, hard=True).type_as(x)
         else:
             codeword_probs = hard_x
 
@@ -778,56 +770,7 @@ class GumbelVectorQuantizer(nn.Module):
         x = x.sum(-2)
         x = x.view(bsz, tsz, -1)
 
-        return x, num_vars, code_perplexity, prob_perplexity
-
-
-class Wav2Vec2Quantizer(nn.Module):
-    def __init__(self, config: Wav2Vec2Config):
-        super().__init__()
-        self.config = config
-
-        final_dim = config.vq_final_dim
-        vq_dim = config.vq_latent_dim
-        self.quantizer = GumbelVectorQuantizer(
-            input_dim=config.conv_dim[-1],
-            num_vars=config.num_latent_vars,
-            temperature=config.gumbel_softmax_temperature,
-            num_groups=config.num_latent_groups,
-            vq_dim=vq_dim,
-        )
-        self.project_q = nn.Linear(vq_dim, final_dim)
-        self.final_proj = nn.Linear(config.hidden_size, final_dim)
-
-        self.num_negatives = config.num_negatives
-
-    def forward(self, extractor_hidden_states, transformer_hidden_states, mask_time_indices):
-        quantized_states, num_vars, _, prob_perplexity = self.quantizer(extractor_hidden_states, mask_time_indices)
-        quantized_states = self.project_q(quantized_states)
-
-        negatives, _ = self.sample_negatives(quantized_states)
-        transformer_hidden_states = self.final_proj(transformer_hidden_states)
-        return transformer_hidden_states, quantized_states, negatives, num_vars, prob_perplexity
-
-    def sample_negatives(self, y):
-        bsz, tsz, fsz = y.shape
-        y = y.view(-1, fsz)  # BTC => (BxT)C
-
-        with torch.no_grad():
-            assert tsz > 1, f"{bsz,tsz,fsz}"
-            # get `num_negatives` random vector indices from the same utterance
-            neg_idxs = torch.randint(low=0, high=tsz - 1, size=(bsz, self.num_negatives * tsz))
-            # generate indices of the positive vectors themselves, repeat them `num_negatives` times
-            same_idx = torch.arange(tsz).unsqueeze(-1).expand(-1, self.num_negatives).flatten()
-            # avoid sampling the same positive vector, but keep the distribution uniform
-            neg_idxs[neg_idxs >= same_idx] += 1
-
-        # correct for batch size to index flattened features
-        for i in range(1, bsz):
-            neg_idxs[i] += i * tsz
-
-        negs = y[neg_idxs.view(-1)]
-        negs = negs.view(bsz, tsz, self.num_negatives, fsz).permute(2, 0, 1, 3)  # to NxBxTxC
-        return negs, neg_idxs
+        return x, total_num_vars, code_perplexity, prob_perplexity
 
 
 class Wav2Vec2PreTrainedModel(PreTrainedModel):
@@ -946,16 +889,54 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         self.init_weights()
 
+    def _mask_hidden_states(self, hidden_states: torch.FloatTensor, mask_time_indices: Optional[torch.FloatTensor] = None):
+        """
+        Masks extracted features along time axis and/or along feature axis
+        according to `SpecAugment <https://arxiv.org/abs/1904.08779>`__ .
+        """
+
+        # `config.apply_spec_augment` can set masking to False
+        if not getattr(self.config, "apply_spec_augment", True):
+            return hidden_states
+
+        if mask_time_indices is not None:
+            # apply SpecAugment along time axis with given mask_time_indices
+            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+        elif self.config.mask_time_prob > 0 and self.training:
+            # generate indices & apply SpecAugment along time axis
+            batch_size, sequence_length, hidden_size = hidden_states.size()
+
+            mask_time_indices = _compute_mask_indices(
+                (batch_size, sequence_length),
+                mask_prob=self.config.mask_time_prob,
+                mask_length=self.config.mask_time_length,
+                device=hidden_states.device,
+                min_masks=2,
+            )
+            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+
+        if self.config.mask_feature_prob > 0 and self.training:
+            # generate indices & apply SpecAugment along feature axis
+            mask_feature_indices = _compute_mask_indices(
+                (batch_size, hidden_size),
+                mask_prob=self.config.mask_feature_prob,
+                mask_length=self.config.mask_feature_length,
+                device=hidden_states.device,
+            )
+            hidden_states[mask_feature_indices[:, None].expand(-1, sequence_length, -1)] = 0
+
+        return hidden_states
+
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_values,
         attention_mask=None,
+        mask_time_indices=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        mask_time_indices=None,
     ):
         """
 
@@ -1007,32 +988,10 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         hidden_states, extract_features = self.feature_projection(extract_features)
 
-# TODO:       if self.config.apply_spec_augment and self.training:
-        if self.config.apply_spec_augment:
-            batch_size, sequence_length, hidden_size = hidden_states.size()
+        if mask_time_indices is not None:  # apply SpecAugment along time axis with given indices
+            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
 
-            # apply SpecAugment along time axis
-            if mask_time_indices is not None:
-                hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
-            elif self.config.mask_time_prob > 0:
-                mask_time_indices = _compute_mask_indices(
-                    (batch_size, sequence_length),
-                    mask_prob=self.config.mask_time_prob,
-                    mask_length=self.config.mask_time_length,
-                    device=hidden_states.device,
-                    min_masks=2,
-                )
-                hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
-
-            # apply SpecAugment along feature axis
-            if self.config.mask_feature_prob > 0:
-                mask_feature_indices = _compute_mask_indices(
-                    (batch_size, hidden_size),
-                    mask_prob=self.config.mask_feature_prob,
-                    mask_length=self.config.mask_feature_length,
-                    device=hidden_states.device,
-                )
-                hidden_states[mask_feature_indices[:, None].expand(-1, sequence_length, -1)] = 0
+        hidden_states = self._mask_hidden_states(hidden_states)
 
         encoder_outputs = self.encoder(
             hidden_states,
@@ -1045,14 +1004,13 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         hidden_states = encoder_outputs[0]
 
         if not return_dict:
-            return (hidden_states,) + encoder_outputs[1:]
+            return (hidden_states, extract_features) + encoder_outputs[1:]
 
         return Wav2VecBaseModelOutput(
             last_hidden_state=hidden_states,
+            extract_features=extract_features,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-            extracted_features=extract_features,
-            mask_time_indices=mask_time_indices,
         )
 
 
@@ -1062,15 +1020,24 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         super().__init__(config)
         self.wav2vec2 = Wav2Vec2Model(config)
         self.dropout_features = nn.Dropout(config.feat_quantizer_dropout)
-        self.quantizer = Wav2Vec2Quantizer(config)
+
+        self.quantizer = GumbelVectorQuantizer(config)
+#            input_dim=config.conv_dim[-1],
+#            num_vars=config.num_latent_vars,
+#            temperature=config.gumbel_softmax_temperature,
+#            num_groups=config.num_latent_groups,
+#            vq_dim=config.vq_latent_dim,
+#        )
+        self.project_q = nn.Linear(config.vq_latent_dim, config.vq_final_dim)
+        self.project_hid = nn.Linear(config.hidden_size, config.vq_final_dim)
 
         self.init_weights()
 
-    def update_gumbel_temperature(self, num_updates):
+    def set_gumbel_temperature(self, temperature: int):
         """
-        Updates the Gumbel softmax temperature at a given number of batch updates
+        Set the Gumbel softmax temperature to a given value. Only necessary for training
         """
-        return self.quantizer.quantizer.update_temperature(num_updates)
+        return self.quantizer.set_gumbel_temperature(temperature)
 
     def freeze_feature_extractor(self):
         """
@@ -1078,6 +1045,40 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         will not be updated during training.
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
+
+    def sample_negatives(self, y):
+        bsz, tsz, fsz = y.shape
+        y = y.view(-1, fsz)  # BTC => (BxT)C
+
+        with torch.no_grad():
+            assert tsz > 1, f"{bsz,tsz,fsz}"
+            # get `num_negatives` random vector indices from the same utterance
+            neg_idxs = torch.randint(low=0, high=tsz - 1, size=(bsz, self.config.num_negatives * tsz))
+            # generate indices of the positive vectors themselves, repeat them `num_negatives` times
+            same_idx = torch.arange(tsz).unsqueeze(-1).expand(-1, self.config.num_negatives).flatten()
+            # avoid sampling the same positive vector, but keep the distribution uniform
+            neg_idxs[neg_idxs >= same_idx] += 1
+
+        # correct for batch size to index flattened features
+        for i in range(1, bsz):
+            neg_idxs[i] += i * tsz
+
+        negs = y[neg_idxs.view(-1)]
+        negs = negs.view(bsz, tsz, self.config.num_negatives, fsz).permute(2, 0, 1, 3)  # to NxBxTxC
+        return negs, neg_idxs
+
+    @staticmethod
+    def compute_contrastive_logits(target_features: torch.FloatTensor, predicted_features: torch.FloatTensor, negative_features, temperature: int = 1):
+        """
+        Compute logits for contrastive loss based using cosine similarity as the distance measure between `[positive_feature, negative_features]` and `[predicted_features]`. Additionally, temperature can be applied.
+        """
+        target_features = torch.cat([target_features, negative_features], dim=0)
+
+        logits = torch.cosine_similarity(predicted_features.float(), target_features.float(), dim=-1).type_as(target_features)
+
+        # apply temperature
+        logits = logits / temperature
+        return logits
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1101,7 +1102,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        encoder_outputs = self.wav2vec2(
+        outputs = self.wav2vec2(
             input_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
@@ -1109,57 +1110,58 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             mask_time_indices=mask_time_indices,
             return_dict=return_dict,
         )
-        extractor_features = self.dropout_features(encoder_outputs.extracted_features)
-        transformer_features = encoder_outputs.last_hidden_state
 
-        # 1. quantize unmasked features
-        transformer_features, quantized_extractor_features, negatives, num_vars, prob_perplexity = self.quantizer(extractor_features, transformer_features, mask_time_indices)
+        # 1. project all transformed features (including masked) to final vq dim
+        transformer_features = self.project_hid(outputs[0])
 
-        # if a negative vector is identical to the positive (i.e. when codebook utilization is low),
-        # its cosine similarity will be masked
-        neg_is_pos = (quantized_extractor_features == negatives).all(-1)
+        # 2. quantize all (unmasked) extracted features and project to final vq dim
+        extract_features = self.dropout_features(outputs[1])
+        quantized_features, num_vars, code_perplexity, prob_perplexity = self.quantizer(extract_features, mask_time_indices)
+        quantized_features = self.project_q(quantized_features)
 
-        target_states = torch.cat([quantized_extractor_features[None, :], negatives], dim=0)
-        logits = torch.cosine_similarity(transformer_features.float(), target_states.float(), dim=-1).type_as(
-            target_states
-        )
-        logits = logits / self.config.contrastive_logit_temperature
+        loss = None
+        if self.training:
+            # for training, we sample negatives
+            # 3. sample K negatives (distractors) quantized states for contrastive loss
+            negative_quantized_features, _ = self.sample_negatives(quantized_features)
 
-        if neg_is_pos.any():
-            logits[1:][neg_is_pos] = float("-inf")
+            # 4. compute logits, corresponding to `logs = sim(c_t, [q_t, \sim{q}_t]) / \kappa` of equation (3) in https://arxiv.org/pdf/2006.11477.pdf
+            logits = self.compute_contrastive_logits(quantized_features[None, :], transformer_features, negative_quantized_features, self.config.contrastive_logit_temperature)
 
-        preds = logits.transpose(0, 2).reshape(-1, logits.size(0))
-        # the goal is to maximize the cosine similarities at index `0` (the positives),
-        # the other indices 1..num_negatives+1 are for the sampled negative vectors
-        # ignore unmasked features
-        if mask_time_indices is not None:
-            target = (1 - mask_time_indices.long()) * -100
-            target = target.transpose(0, 1).flatten()
-        else:
-            target = logits.new_zeros(logits.shape[1] * logits.shape[2], dtype=torch.long)
+            # 5. if a negative vector is identical to the positive (i.e. when codebook utilization is low),
+            # its cosine similarity will be masked
+            neg_is_pos = (quantized_features == negative_quantized_features).all(-1)
+            if neg_is_pos.any():
+                logits[1:][neg_is_pos] = float("-inf")
 
-        contrastive_loss = F.cross_entropy(
-            preds.float(),
-            target,
-            reduction="sum",
-        )
+            # 6. compute contrastive loss \mathbf{L}_m = cross_entropy(logs) = -log(exp(sim(c_t, q_t)/\kappa) / \sum_{\sim{q}} exp(sim(c_t, \sim{q})/\kappa))
+            preds = logits.transpose(0, 2).reshape(-1, logits.size(0))
+            target = ((1 - mask_time_indices.long()) * -100).transpose(0, 1).flatten()
+            contrastive_loss = F.cross_entropy(
+                preds.float(),
+                target,
+                reduction="sum",
+            )
 
-        # maximize the codebook perplexity
-        diversity_loss = (num_vars - prob_perplexity) / num_vars
+            # 7. compute diversity loss: \mathbf{L}_d
+            diversity_loss = (num_vars - prob_perplexity) / num_vars
 
-        loss = contrastive_loss + self.config.diversity_loss_weight * diversity_loss
-        logits = logits.transpose(0, 1)
+            # 8. \mathbf{L} = \mathbf{L}_m + \alpha * \mathbf{L}_d
+            loss = contrastive_loss + self.config.diversity_loss_weight * diversity_loss
 
         if not return_dict:
-            output = (logits,) + encoder_outputs[1:]
-            return output
+            if loss is not None:
+                return (loss, transformer_features, quantized_features, prob_perplexity, code_perplexity) + outputs[2:]
+            return (transformer_features, quantized_features, prob_perplexity, code_perplexity) + outputs[2:]
 
         return Wav2VecForPreTrainingOutput(
-            logits=logits,
             loss=loss,
+            latent_predicted_features=transformer_features,
+            latent_quantized_features=quantized_features,
             prob_perplexity=prob_perplexity,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+            code_perplexity=code_perplexity,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1233,7 +1235,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         logits = self.lm_head(hidden_states)
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[2:]
             return output
 
         return MaskedLMOutput(logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
@@ -1358,7 +1360,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
                 )
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(

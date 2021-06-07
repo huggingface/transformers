@@ -1,0 +1,43 @@
+{
+    "os": "Linux-5.4.0-1043-gcp-x86_64-with-glibc2.10",
+    "python": "3.8.5",
+    "heartbeatAt": "2021-06-07T14:57:25.076966",
+    "startedAt": "2021-06-07T14:57:21.449950",
+    "docker": null,
+    "gpu": "Tesla V100-SXM2-16GB",
+    "gpu_count": 1,
+    "cpu_count": 8,
+    "cuda": null,
+    "args": [
+        "--output_dir=./wav2vec2-base",
+        "--num_train_epochs=1",
+        "--per_device_train_batch_size=8",
+        "--gradient_accumulation_steps=8",
+        "--save_total_limit=3",
+        "--save_steps=500",
+        "--logging_steps=50",
+        "--learning_rate=5e-3",
+        "--weight_decay=0.01",
+        "--warmup_steps=3000",
+        "--model_name_or_path=facebook/wav2vec2-base",
+        "--fp16",
+        "--dataset_name=librispeech_asr",
+        "--dataset_config_name=clean",
+        "--train_split_name=train.100",
+        "--preprocessing_num_workers=1",
+        "--group_by_length",
+        "--gradient_checkpointing"
+    ],
+    "state": "running",
+    "codePath": "examples/research_projects/wav2vec2/run_pretrain.py",
+    "program": "run_pretrain.py",
+    "git": {
+        "remote": "https://github.com/anton-l/transformers.git",
+        "commit": "fd35b7370f521d1c5bff52763a13ceb28525a161"
+    },
+    "email": "patrick.v.platen@gmail.com",
+    "root": "/home/patrick/hugging_face/transformers",
+    "host": "patrick-general-gpu",
+    "username": "patrick",
+    "executable": "/home/patrick/miniconda3/envs/hugging_face/bin/python"
+}

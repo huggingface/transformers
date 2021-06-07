@@ -50,19 +50,19 @@ MAPPING = {
     "final_layer_norm": "encoder.layers.*.final_layer_norm",
     "encoder.layer_norm": "encoder.layer_norm",
     "w2v_model.layer_norm": "feature_projection.layer_norm",
-    "quantizer.weight_proj": "quantizer.quantizer.weight_proj",
-    "quantizer.vars": "quantizer.quantizer.vars",
-    "project_q": "quantizer.project_q",
-    "final_proj": "quantizer.final_proj",
+    "quantizer.weight_proj": "quantizer.weight_proj",
+    "quantizer.vars": "quantizer.vars",
+    "project_q": "project_q",
+    "final_proj": "project_hid",
     "w2v_encoder.proj": "lm_head",
     "mask_emb": "masked_spec_embed",
 }
 TOP_LEVEL_KEYS = [
     "lm_head",
-    "quantizer.quantizer.weight_proj",
-    "quantizer.quantizer.vars",
-    "quantizer.project_q",
-    "quantizer.final_proj",
+    "quantizer.weight_proj",
+    "quantizer.vars",
+    "project_q",
+    "project_hid",
 ]
 
 

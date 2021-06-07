@@ -245,7 +245,7 @@ class Wav2Vec2Trainer(Trainer):
             loss.backward()
 
         self.num_update_step += 1
-        model.module.update_gumbel_temperature(self.num_update_step)
+        model.update_gumbel_temperature(self.num_update_step)
 
         return loss.detach()
 

@@ -36,6 +36,7 @@ if is_torch_available():
         Wav2Vec2ForPreTraining,
         Wav2Vec2Model,
         Wav2Vec2Processor,
+        Wav2Vec2FeatureExtractor,
     )
     from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices
 
@@ -467,6 +468,22 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         if hasattr(module, "bias") and module.bias is not None:
             module.bias.data.fill_(3)
 
+    def test_model_for_pretraining(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Wav2Vec2ForPreTraining(config).to(torch_device)
+
+        features_shape = (inputs_dict["input_values"].shape[0], model._get_feat_extract_output_lengths(torch.tensor(inputs_dict["input_values"].shape[1])))
+
+        mask_time_indices = _compute_mask_indices(features_shape, model.config.mask_time_prob, model.config.mask_time_length, device=inputs_dict["input_values"].device, min_masks=2).to(torch_device)
+
+        loss = model(inputs_dict["input_values"], attention_mask=inputs_dict["attention_mask"], mask_time_indices=mask_time_indices).loss
+
+        mask_time_indices[:, :mask_time_indices.shape[-1] // 2] = True
+        loss_more_masked = model(inputs_dict["input_values"], attention_mask=inputs_dict["attention_mask"], mask_time_indices=mask_time_indices).loss
+
+        # loss_more_masked has to be bigger or equal loss since more masked inputs have to be predicted
+        self.assertTrue(loss.detach().item() <= loss_more_masked.detach().item())
+
     @slow
     def test_model_from_pretrained(self):
         model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
@@ -504,6 +521,7 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
 @require_torch
 @require_datasets
 @require_soundfile
+@slow
 class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
@@ -589,23 +607,94 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
-    def test_inference_pretraining(self):
-        model = Wav2Vec2ForPreTraining.from_pretrained("anton-l/wav2vec2-base-960h")
-        model.to(torch_device).eval()
-        processor = Wav2Vec2Processor.from_pretrained("anton-l/wav2vec2-base-960h")
+    def test_inference_integration(self):
+        model = Wav2Vec2ForPreTraining.from_pretrained("patrickvonplaten/wav2vec2-base")
+        model.to(torch_device)
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("patrickvonplaten/wav2vec2-base", return_attention_mask=True)
         input_speech = self._load_datasamples(2)
 
-        input_values = processor(input_speech, return_tensors="pt", padding=True).input_values.to(torch_device)
+        inputs_dict = feature_extractor(input_speech, return_tensors="pt", padding=True)
+
+        features_shape = (inputs_dict["input_values"].shape[0], model._get_feat_extract_output_lengths(torch.tensor(inputs_dict["input_values"].shape[1])))
+
+        torch.manual_seed(0)
+        mask_time_indices = _compute_mask_indices(features_shape, model.config.mask_time_prob, model.config.mask_time_length, device=inputs_dict["input_values"].device, min_masks=2).to(torch_device)
 
         with torch.no_grad():
-            logits = model(input_values).logits
+            outputs = model(inputs_dict.input_values.to(torch_device), attention_mask=inputs_dict.attention_mask.to(torch_device), mask_time_indices=mask_time_indices)
 
-        # fmt: off
-        expected_logits = torch.tensor([
-            [6.6907, 1.4053, 1.0851, -1.2404, 1.4979, 1.5350, 1.8366, -0.0889, 1.0697, 0.8635, 1.8594, 0.7124, -0.7738, 0.7378, 0.9588, -0.5237, 4.5066, -1.5240, 4.3916, 2.0915, -2.1298, 1.6082, -1.9616, -1.6807, 2.1234, -2.0304, 1.7671, 1.2398, 1.2167, 1.3665, 7.0616, 7.0554],  # noqa: E231
-            [4.1121, -2.9582, -1.4431, -2.1215, -2.1317, 1.4962, 3.0845, 0.4857, 1.6397, 1.2999, 1.3486, 2.2505, 0.4338, 1.8848, 1.3722, 0.5974, 1.3401, 1.7750, -2.1933, 4.2322, -1.8338, 4.6845, 4.3277, 5.8094, 4.3873, 4.8047, 0.1528, 7.7661, 4.2549, -1.1348, -2.5336, -1.6874]  # noqa: E231
+        # compute cosine similarity
+        cosine_sim = torch.cosine_similarity(outputs.latent_predicted_features, outputs.latent_quantized_features, dim=-1)
+
+        # retrieve cosine sim of masked features
+        cosine_sim_masked = cosine_sim[mask_time_indices]
+
+        expected_cosine_sim_masked = torch.tensor([
+            0.7458, 0.7188, 0.6418, 0.3729, 0.3741, 0.3694, 0.3110, 0.2257, 0.4403,
+            0.5415, 0.3950, 0.3701, 0.8831, 0.8613, 0.5229, 0.6696, 0.7206, 0.7877,
+            0.6758, 0.8746, 0.6596, 0.6282, 0.6178, 0.5839, 0.5926, 0.6651, 0.4635,
+            0.6332, 0.6572, 0.8776, 0.4999, 0.7001, 0.7257, 0.5098, 0.6229, 0.4566,
+            0.5261, 0.6363, 0.5371, 0.6997,
         ], device=torch_device)
-        # fmt: on
 
-        # logits are only deterministic at index 0 (positive), since negatives are sampled randomly
-        self.assertTrue(torch.allclose(logits[0, :, :32], expected_logits, atol=1e-4))
+        self.assertTrue(torch.allclose(cosine_sim_masked, expected_cosine_sim_masked, atol=1e-3))
+
+    def test_inference_pretrained(self):
+        model = Wav2Vec2ForPreTraining.from_pretrained("patrickvonplaten/wav2vec2-base")
+        model.to(torch_device)
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("patrickvonplaten/wav2vec2-base", return_attention_mask=True)
+        input_speech = self._load_datasamples(2)
+
+        inputs_dict = feature_extractor(input_speech, return_tensors="pt", padding=True)
+
+        features_shape = (inputs_dict["input_values"].shape[0], model._get_feat_extract_output_lengths(torch.tensor(inputs_dict["input_values"].shape[1])))
+
+        torch.manual_seed(0)
+        mask_time_indices = _compute_mask_indices(features_shape, model.config.mask_time_prob, model.config.mask_time_length, device=inputs_dict["input_values"].device, min_masks=2).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(inputs_dict.input_values.to(torch_device), attention_mask=inputs_dict.attention_mask.to(torch_device), mask_time_indices=mask_time_indices)
+
+        # compute cosine similarity
+        cosine_sim = torch.cosine_similarity(outputs.latent_predicted_features, outputs.latent_quantized_features, dim=-1)
+
+        # retrieve cosine sim of masked features
+        cosine_sim_masked = cosine_sim[mask_time_indices]
+
+        # ... now compare to randomly initialized model
+
+        config = Wav2Vec2Config.from_pretrained("patrickvonplaten/wav2vec2-base")
+        model_rand = Wav2Vec2ForPreTraining(config).to(torch_device).eval()
+
+        with torch.no_grad():
+            outputs_rand = model_rand(inputs_dict.input_values.to(torch_device), attention_mask=inputs_dict.attention_mask.to(torch_device), mask_time_indices=mask_time_indices)
+
+        # compute cosine similarity
+        cosine_sim_rand = torch.cosine_similarity(outputs_rand.latent_predicted_features, outputs_rand.latent_quantized_features, dim=-1)
+
+        # retrieve cosine sim of masked features
+        cosine_sim_masked_rand = cosine_sim_rand[mask_time_indices]
+
+        # a pretrained wav2vec2 model has learned to predict the quantized latent states
+        # => the cosine similarity between quantized states and predicted states > 0.5
+        # a random wav2vec2 model has not learned to predict the quantized latent states
+        # => the cosine similarity between quantized states and predicted states is very likely < 0.1
+        self.assertTrue(cosine_sim_masked.mean().item() - 5 * cosine_sim_masked_rand.mean().item() > 0)
+
+    def test_loss_pretraining(self):
+        model = Wav2Vec2ForPreTraining.from_pretrained("patrickvonplaten/wav2vec2-base", attention_dropout=0.0, feat_proj_dropout=0.0, hidden_dropout=0.0, layerdrop=0.0)
+        model.to(torch_device).train()
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("patrickvonplaten/wav2vec2-base", return_attention_mask=True)
+        input_speech = self._load_datasamples(2)
+
+        inputs_dict = feature_extractor(input_speech, return_tensors="pt", padding=True)
+
+        features_shape = (inputs_dict["input_values"].shape[0], model._get_feat_extract_output_lengths(torch.tensor(inputs_dict["input_values"].shape[1])))
+
+        torch.manual_seed(0)
+        mask_time_indices = _compute_mask_indices(features_shape, model.config.mask_time_prob, model.config.mask_time_length, device=inputs_dict["input_values"].device, min_masks=2).to(torch_device)
+
+        with torch.no_grad():
+            loss = model(inputs_dict.input_values.to(torch_device), attention_mask=inputs_dict.attention_mask.to(torch_device), mask_time_indices=mask_time_indices).loss
+
+        self.assertTrue(abs(loss.item() - 49.7099) < 1e-3)
