@@ -245,7 +245,6 @@ class RagPreTrainedModel(PreTrainedModel):
         question_encoder_pretrained_model_name_or_path: str = None,
         generator_pretrained_model_name_or_path: str = None,
         retriever: RagRetriever = None,
-        *model_args,
         **kwargs
     ) -> PreTrainedModel:
         r"""
@@ -310,7 +309,7 @@ class RagPreTrainedModel(PreTrainedModel):
         """
 
         kwargs_question_encoder = {
-            argument[len("question_question_encoder_") :]: value
+            argument[len("question_encoder_") :]: value
             for argument, value in kwargs.items()
             if argument.startswith("question_encoder_")
         }
@@ -340,11 +339,15 @@ class RagPreTrainedModel(PreTrainedModel):
             if "config" not in kwargs_question_encoder:
                 from ..auto.configuration_auto import AutoConfig
 
-                question_encoder_config = AutoConfig.from_pretrained(question_encoder_pretrained_model_name_or_path)
+                question_encoder_config, kwargs_question_encoder = AutoConfig.from_pretrained(
+                    question_encoder_pretrained_model_name_or_path,
+                    **kwargs_question_encoder,
+                    return_unused_kwargs=True,
+                )
                 kwargs_question_encoder["config"] = question_encoder_config
 
             question_encoder = AutoModel.from_pretrained(
-                question_encoder_pretrained_model_name_or_path, *model_args, **kwargs_question_encoder
+                question_encoder_pretrained_model_name_or_path, **kwargs_question_encoder
             )
 
         generator = kwargs_generator.pop("model", None)
@@ -357,7 +360,10 @@ class RagPreTrainedModel(PreTrainedModel):
             if "config" not in kwargs_generator:
                 from ..auto.configuration_auto import AutoConfig
 
-                generator_config = AutoConfig.from_pretrained(generator_pretrained_model_name_or_path)
+                generator_config, kwargs_generator = AutoConfig.from_pretrained(
+                    generator_pretrained_model_name_or_path, **kwargs_generator, return_unused_kwargs=True
+                )
+
                 kwargs_generator["config"] = generator_config
 
             generator = AutoModelForSeq2SeqLM.from_pretrained(
@@ -900,8 +906,9 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         **model_kwargs
     ):
         """
-        Implements RAG sequence "thorough" decoding. Read the :meth:`~transformers.PreTrainedModel.generate``
-        documentation for more information on how to set other generate input parameters.
+        Implements RAG sequence "thorough" decoding. Read the
+        :meth:`~transformers.generation_utils.GenerationMixin.generate`` documentation for more information on how to
+        set other generate input parameters.
 
         Args:
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -936,14 +943,15 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 to be set to :obj:`False` if used while training with distributed backend.
             num_return_sequences(:obj:`int`, `optional`, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch. Note that this
-                is not the value we pass to the ``generator``'s `:func:`~transformers.PreTrainedModel.generate``
-                function, where we set ``num_return_sequences`` to :obj:`num_beams`.
+                is not the value we pass to the ``generator``'s
+                `:func:`~transformers.generation_utils.GenerationMixin.generate`` function, where we set
+                ``num_return_sequences`` to :obj:`num_beams`.
             num_beams (:obj:`int`, `optional`, defaults to 1):
                 Number of beams for beam search. 1 means no beam search.
             n_docs (:obj:`int`, `optional`, defaults to :obj:`config.n_docs`)
                 Number of documents to retrieve and/or number of documents for which to generate an answer.
             kwargs:
-                Additional kwargs will be passed to :meth:`~transformers.PreTrainedModel.generate`.
+                Additional kwargs will be passed to :meth:`~transformers.generation_utils.GenerationMixin.generate`.
 
         Return:
             :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
@@ -1446,8 +1454,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 enabled.
             num_return_sequences(:obj:`int`, `optional`, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch. Note that this
-                is not the value we pass to the ``generator``'s `:func:`~transformers.PreTrainedModel.generate`
-                function, where we set ``num_return_sequences`` to :obj:`num_beams`.
+                is not the value we pass to the ``generator``'s
+                `:func:`~transformers.generation_utils.GenerationMixin.generate` function, where we set
+                ``num_return_sequences`` to :obj:`num_beams`.
             decoder_start_token_id (:obj:`int`, `optional`):
                 If an encoder-decoder model starts decoding with a different token than `bos`, the id of that token.
             n_docs (:obj:`int`, `optional`, defaults to :obj:`config.n_docs`)
