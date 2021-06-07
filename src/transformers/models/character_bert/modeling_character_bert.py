@@ -14,10 +14,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch CharacterBERT model: this is a variant of BERT that uses the
+"""
+PyTorch CharacterBERT model: this is a variant of BERT that uses the
 CharacterCNN module from ELMo instead of a WordPiece embedding matrix.
 See: “CharacterBERT: Reconciling ELMo and BERT for Word-Level Open-Vocabulary
-Representations From Characters“ https://www.aclweb.org/anthology/2020.coling-main.609/ """
+Representations From Characters“ https://www.aclweb.org/anthology/2020.coling-main.609/
+"""
+
 import math
 import warnings
 from dataclasses import dataclass
