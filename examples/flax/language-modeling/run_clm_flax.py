@@ -195,7 +195,7 @@ def data_loader(
     rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuffle: bool = False, distributed: bool = False
 ):
     """
-    Returns batches of size `batch_size` from truncated `train dataset`, sharded over all local devices.
+    Returns batches of size `batch_size` from truncated `dataset`, sharded over all local devices.
     Shuffle batches if `shuffle` is `True`.
     """
     steps_per_epoch = len(dataset) // batch_size
