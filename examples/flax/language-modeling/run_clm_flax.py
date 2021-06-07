@@ -41,7 +41,7 @@ import transformers
 from flax import jax_utils, traverse_util
 from flax.jax_utils import unreplicate
 from flax.training import train_state
-from flax.training.common_utils import get_metrics, onehot, shard, stack_forest
+from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key, stack_forest
 from transformers import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
@@ -182,6 +182,13 @@ class DataTrainingArguments:
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
                 assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
+
+
+class TrainState(train_state.TrainState):
+    dropout_rng: jnp.ndarray
+
+    def replicate(self):
+        return jax_utils.replicate(self).replace(dropout_rng=shard_prng_key(self.dropout_rng))
 
 
 def data_loader(
@@ -457,10 +464,7 @@ def main():
     # Initialize our training
     distributed = jax.local_device_count() > 1
     rng = jax.random.PRNGKey(training_args.seed)
-    if distributed:
-        dropout_rngs = jax.random.split(rng, jax.local_device_count())
-    else:
-        rng, dropout_rngs = jax.random.split(rng)
+    rng, dropout_rng = jax.random.split(rng)
 
     # Store some constant
     num_epochs = int(training_args.num_train_epochs)
@@ -497,7 +501,7 @@ def main():
     )
 
     # Setup train state
-    state = train_state.TrainState.create(apply_fn=model.__call__, params=model.params, tx=adamw)
+    state = TrainState.create(apply_fn=model.__call__, params=model.params, tx=adamw, dropout_rng=dropout_rng)
 
     def loss_fn(logits, labels):
         shift_logits = logits[..., :-1, :]
@@ -506,8 +510,8 @@ def main():
         return loss.mean()
 
     # Define gradient update step fn
-    def _train_step(state, batch, dropout_rng):
-        dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
+    def _train_step(state, batch):
+        dropout_rng, new_dropout_rng = jax.random.split(state.dropout_rng)
 
         def compute_loss(params):
             labels = batch.pop("labels")
@@ -521,12 +525,13 @@ def main():
             grad = jax.lax.pmean(grad, "batch")
 
         new_state = state.apply_gradients(grads=grad)
+        new_state.replace(dropout_rng=new_dropout_rng)
 
         metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}
         if distributed:
             metrics = jax.lax.pmean(metrics, axis_name="batch")
 
-        return new_state, metrics, new_dropout_rng
+        return new_state, metrics
 
     # Define eval fn
     def _eval_step(params, batch):
@@ -543,10 +548,10 @@ def main():
     # Create parallel version of the train and eval step
     if distributed:
         train_step = jax.pmap(_train_step, "batch", donate_argnums=(0,))
-        eval_step = jax.pmap(_eval_step, "batch", donate_argnums=(0,))
+        eval_step = jax.pmap(_eval_step, "batch")
 
         # Replicate the train state on each device
-        state = jax_utils.replicate(state)
+        state = state.replicate()
     else:
         train_step = jax.jit(_train_step, donate_argnums=(0,))
         eval_step = jax.jit(_eval_step)
@@ -574,7 +579,7 @@ def main():
         # train
         for _ in tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False):
             batch = next(train_loader)
-            state, train_metric, dropout_rngs = train_step(state, batch, dropout_rngs)
+            state, train_metric = train_step(state, batch)
             train_metrics.append(train_metric)
 
         train_time += time.time() - train_start
@@ -622,7 +627,7 @@ def main():
     # save last checkpoint
     if jax.process_index() == 0:
         if distributed:
-            params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+            params = jax.device_get(unreplicate(state.params))
         else:
             params = state.params
         model.save_pretrained(training_args.output_dir, params=params)
