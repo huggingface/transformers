@@ -53,7 +53,7 @@ VIT_START_DOCSTRING = r"""
 
 VIT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (:obj:`numpy.ndarray` of shape :obj:`(batch_size, height, width, num_channels)`):
+        pixel_values (:obj:`numpy.ndarray` of shape :obj:`(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using :class:`~transformers.ViTFeatureExtractor`. See
             :meth:`transformers.ViTFeatureExtractor.__call__` for details.
 
