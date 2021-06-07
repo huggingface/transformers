@@ -845,6 +845,48 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
+
+        Returns:
+
+        Examples::
+
+            >>> from transformers import LayoutLMv2Tokenizer, LayoutLMv2ForTokenClassification
+            >>> import torch
+
+            >>> tokenizer = LayoutLMTv2Tokenizer.from_pretrained('microsoft/layoutlmv2-base-uncased')
+            >>> model = LayoutLMv2ForTokenClassification.from_pretrained('microsoft/layoutlmv2-base-uncased')
+
+            >>> words = ["Hello", "world"]
+            >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
+
+            >>> token_boxes = []
+            >>> for word, box in zip(words, normalized_word_boxes):
+            ...     word_tokens = tokenizer.tokenize(word)
+            ...     token_boxes.extend([box] * len(word_tokens))
+            >>> # add bounding boxes of cls + sep tokens
+            >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
+
+            >>> encoding = tokenizer(' '.join(words), return_tensors="pt")
+            >>> input_ids = encoding["input_ids"]
+            >>> attention_mask = encoding["attention_mask"]
+            >>> token_type_ids = encoding["token_type_ids"]
+            >>> bbox = torch.tensor([token_boxes])
+            >>> token_labels = torch.tensor([1,1,0,0]).unsqueeze(0) # batch size of 1
+            >>> from detectron2.structures.image_list import ImageList
+            >>> image = ImageList(torch.zeros(self.batch_size, 3, 256, 256), 256)
+            >>> position_ids = torch.zeros_like(token_type_ids)
+
+
+            >>> outputs = model(input_ids=input_ids, bbox=bbox, image=image, attention_mask=attention_mask, token_type_ids=token_type_ids, position_ids=position_ids,
+            ...                 labels=token_labels)
+
+            >>> loss = outputs.loss
+            >>> logits = outputs.logits
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.layoutlmv2(

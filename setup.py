@@ -91,7 +91,7 @@ _deps = [
     "dataclasses",
     "datasets",
     "deepspeed>=0.3.16",
-    "detectron2 @ https://dl.fbaipublicfiles.com/detectron2/wheels/cu111/torch1.8/detectron2-0.4%2Bcu111-cp39-cp39-linux_x86_64.whl",
+    "detectron2 @ git+https://github.com/facebookresearch/detectron2.git",
     "docutils==0.16.0",
     "fairscale>0.3",
     "faiss-cpu",
@@ -227,7 +227,7 @@ extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "keras2on
 
 extras["torch"] = deps_list("torch")
 
-extras["detectron2"] = deps_list("detectron2 @ https://dl.fbaipublicfiles.com/detectron2/wheels/cu111/torch1.8/detectron2-0.4%2Bcu111-cp39-cp39-linux_x86_64.whl")
+extras["detectron2"] = deps_list("detectron2 @ git+https://github.com/facebookresearch/detectron2.git")
 
 if os.name == "nt":  # windows
     extras["retrieval"] = deps_list("datasets")  # faiss is not supported on windows

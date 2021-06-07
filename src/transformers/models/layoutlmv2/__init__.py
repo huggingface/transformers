@@ -25,7 +25,7 @@ from .tokenization_layoutlmv2 import LayoutLMv2Tokenizer
 
 _import_structure = {
     "configuration_layoutlmv2": ["LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMv2Config"],
-    "tokenization_layoutlmv2": ["LayoutLMV2Tokenizer"],
+    "tokenization_layoutlmv2": ["LayoutLMv2Tokenizer"],
 }
 
 if is_tokenizers_available():
@@ -39,11 +39,11 @@ if is_torch_available():
     ]
 
 if TYPE_CHECKING:
-    from .configuration_layoutlmv2 import LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig
-    from .tokenization_layoutlmv2 import LayoutLMV2Tokenizer
+    from .configuration_layoutlmv2 import LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv2Config
+    from .tokenization_layoutlmv2 import LayoutLMv2Tokenizer
 
     if is_tokenizers_available():
-        from .tokenization_layoutlmv2_fast import LayoutLMV2TokenizerFast
+        from .tokenization_layoutlmv2_fast import LayoutLMv2TokenizerFast
 
     if is_torch_available():
         from .modeling_layoutlmv2 import (
