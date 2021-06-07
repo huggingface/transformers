@@ -16,7 +16,7 @@ limitations under the License.
 
 <p align="center">
     <br>
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers_logo_name.png" width="400"/>
+    <img src="https://raw.githubusercontent.com/huggingface/transformers/master/docs/source/imgs/transformers_logo_name.png" width="400"/>
     <br>
 <p>
 <p align="center">
@@ -52,7 +52,7 @@ limitations under the License.
 </h3>
 
 <h3 align="center">
-    <a href="https://hf.co/course"><img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/course_banner.png"></a>
+    <a href="https://hf.co/course"><img src="https://raw.githubusercontent.com/huggingface/transformers/master/docs/source/imgs/course_banner.png"></a>
 </h3>
 
 🤗 Transformers provides thousands of pretrained models to perform tasks on texts such as classification, information extraction, question answering, summarization, translation, text generation and more in over 100 languages. Its aim is to make cutting-edge NLP easier to use for everyone.
@@ -186,7 +186,7 @@ You should install 🤗 Transformers in a [virtual environment](https://docs.pyt
 First, create a virtual environment with the version of Python you're going to use and activate it.
 
 Then, you will need to install at least one of Flax, PyTorch or TensorFlow.
-Please refer to [TensorFlow installation page](https://www.tensorflow.org/install/), [PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) and/or [Flax](https://github.com/google/flax#quick-install) and [Jax](https://github.com/google/jax#installation) installation pages regarding the specific install command for your platform.
+Please refer to [TensorFlow installation page](https://www.tensorflow.org/install/), [PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) and/or [Flax installation page](https://github.com/google/flax#quick-install) regarding the specific install command for your platform.
 
 When one of those backends has been installed, 🤗 Transformers can be installed using pip as follows:
 
