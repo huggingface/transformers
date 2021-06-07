@@ -320,7 +320,7 @@ class TrainingArguments:
             In multinode distributed training, whether to log once per node, or only on the main node.
         early_stopping_patience (:obj:`int`, `optional`, defaults to 1):
             The number of evaluation calls to wait before stopping training while metric worsens.
-        early_stopping_threshold(:obj:`float`, `optional`, defaults  to 0.0):
+        early_stopping_threshold (:obj:`float`, `optional`, defaults  to 0.0):
             How much the metric must improve to satisfy early stopping conditions.
     """
 
