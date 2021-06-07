@@ -17,7 +17,7 @@ from typing import List, Optional
 
 from ...utils import logging
 from ..bert.tokenization_bert_fast import BertTokenizerFast
-
+from .tokenization_splinter import SplinterTokenizer
 
 logger = logging.get_logger(__name__)
 
@@ -34,7 +34,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "splinter-base": 512,
     "splinter-large": 512,
 }
-
 
 PRETRAINED_INIT_CONFIGURATION = {
     "splinter-base": {"do_lower_case": False},
@@ -57,6 +56,7 @@ class SplinterTokenizerFast(BertTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    slow_tokenizer_class = SplinterTokenizer
 
     def __init__(
             self,
@@ -75,6 +75,7 @@ class SplinterTokenizerFast(BertTokenizerFast):
             **kwargs
     ):
         super().__init__(
+            vocab_file=vocab_file,
             do_lower_case=do_lower_case,
             do_basic_tokenize=do_basic_tokenize,
             never_split=never_split,
@@ -85,13 +86,12 @@ class SplinterTokenizerFast(BertTokenizerFast):
             mask_token=mask_token,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
+            additional_special_tokens=(question_token,),
             **kwargs,
         )
 
-        self.question_token = question_token
-
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
                 Build model inputs from a pair of sequence for question answering tasks by concatenating and
@@ -134,4 +134,4 @@ class SplinterTokenizerFast(BertTokenizerFast):
         """
         if self._cls_token is None:
             return None
-        return self.convert_tokens_to_ids(self.cls_token)
+        return self.convert_tokens_to_ids(self.question_token)

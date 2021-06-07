@@ -75,6 +75,7 @@ class SplinterTokenizer(BertTokenizer):
             **kwargs
     ):
         super().__init__(
+            vocab_file=vocab_file,
             do_lower_case=do_lower_case,
             do_basic_tokenize=do_basic_tokenize,
             never_split=never_split,
@@ -85,6 +86,7 @@ class SplinterTokenizer(BertTokenizer):
             mask_token=mask_token,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
+            additional_special_tokens=(question_token,),
             **kwargs,
         )
 
@@ -124,6 +126,32 @@ class SplinterTokenizer(BertTokenizer):
             # Input is context-then-question
             return cls + token_ids_0 + sep + token_ids_1 + question_suffix + sep
 
+    def create_token_type_ids_from_sequences(
+            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Create the token type IDs corresponding to the sequences passed. `What are token type IDs?
+        <../glossary.html#token-type-ids>`__
+
+        Should be overridden in a subclass if the model has a special way of building those.
+
+        Args:
+            token_ids_0 (:obj:`List[int]`): The first tokenized sequence.
+            token_ids_1 (:obj:`List[int]`, `optional`): The second tokenized sequence.
+
+        Returns:
+            :obj:`List[int]`: The token type ids.
+        """
+        if token_ids_1 is None:
+            return [0] + [0] * len(token_ids_0) + [0]
+
+        if self.padding_side == "right":
+            # Input is question-then-context
+            return [0] + [0] * len(token_ids_0) + [0] + [0] + [0] + [1] * len(token_ids_1) + [1]
+        else:
+            # Input is context-then-question
+            return [0] + [0] * len(token_ids_0) + [0] + [1] * len(token_ids_1) + [1] + [1] + [1]
+
     @property
     def question_token_id(self) -> Optional[int]:
         """
@@ -134,4 +162,4 @@ class SplinterTokenizer(BertTokenizer):
         """
         if self._cls_token is None:
             return None
-        return self.convert_tokens_to_ids(self.cls_token)
+        return self.convert_tokens_to_ids(self.question_token)
