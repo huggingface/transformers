@@ -1699,8 +1699,6 @@ class Trainer:
         Prepare :obj:`inputs` before feeding them to the model, converting them to tensors if they are not already and
         handling potential state.
         """
-        # print("PREPARE INPUT")
-        # die
         for k, v in inputs.items():
             if isinstance(v, torch.Tensor):
                 kwargs = dict(device=self.args.device)
@@ -1708,11 +1706,7 @@ class Trainer:
                     # NLP models inputs are int64 and those get adjusted to the right dtype of the
                     # embedding. Other models such as wav2vec2's inputs are already float and thus
                     # may need special handling to match the dtypes of the model
-                    # print(f"Before : {k} {inputs[k].device}")
-                    # print(f"NEW TYPE: {k} {self.args.hf_deepspeed_config.dtype()}")
                     kwargs.update(dict(dtype=self.args.hf_deepspeed_config.dtype()))
-                    # print(f"After : {k} {inputs[k].dtype}")
-                    # print(f"After : {k} {inputs[k].device}")
 
                 inputs[k] = v.to(**kwargs)
 

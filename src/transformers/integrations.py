@@ -25,6 +25,7 @@ from .utils import logging
 
 logger = logging.get_logger(__name__)
 
+
 # comet_ml requires to be imported before any ML frameworks
 _has_comet = importlib.util.find_spec("comet_ml") is not None and os.getenv("COMET_MODE", "").upper() != "DISABLED"
 if _has_comet:
