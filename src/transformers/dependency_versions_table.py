@@ -8,7 +8,7 @@ deps = {
     "dataclasses": "dataclasses",
     "datasets": "datasets",
     "deepspeed": "deepspeed>=0.3.16",
-    "detectron2 @ git+https://github.com/facebookresearch/detectron2.git": "git+https://github.com/facebookresearch/detectron2.git@v0.4#egg=detectron2",
+    "detectron2 @ https://dl.fbaipublicfiles.com/detectron2/wheels/cu111/torch1.8/detectron2-0.4%2Bcu111-cp39-cp39-linux_x86_64.whl": "detectron2 @ https://dl.fbaipublicfiles.com/detectron2/wheels/cu111/torch1.8/detectron2-0.4%2Bcu111-cp39-cp39-linux_x86_64.whl",
     "docutils": "docutils==0.16.0",
     "fairscale": "fairscale>0.3",
     "faiss-cpu": "faiss-cpu",

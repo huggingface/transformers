@@ -62,7 +62,7 @@ import shutil
 from distutils.core import Command
 from pathlib import Path
 
-from setuptools import find_packages, setup
+from setuptools import find_packages, setup     
 
 
 # Remove stale transformers.egg-info directory to avoid https://github.com/pypa/pip/issues/5466
@@ -91,7 +91,7 @@ _deps = [
     "dataclasses",
     "datasets",
     "deepspeed>=0.3.16",
-    "detectron2 @ git+https://github.com/facebookresearch/detectron2.git",
+    "detectron2 @ https://dl.fbaipublicfiles.com/detectron2/wheels/cu111/torch1.8/detectron2-0.4%2Bcu111-cp39-cp39-linux_x86_64.whl",
     "docutils==0.16.0",
     "fairscale>0.3",
     "faiss-cpu",
@@ -227,6 +227,8 @@ extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "keras2on
 
 extras["torch"] = deps_list("torch")
 
+extras["detectron2"] = deps_list("detectron2 @ https://dl.fbaipublicfiles.com/detectron2/wheels/cu111/torch1.8/detectron2-0.4%2Bcu111-cp39-cp39-linux_x86_64.whl")
+
 if os.name == "nt":  # windows
     extras["retrieval"] = deps_list("datasets")  # faiss is not supported on windows
     extras["flax"] = []  # jax is not supported on windows
@@ -271,6 +273,7 @@ extras["all"] = (
     + extras["speech"]
     + extras["vision"]
     + extras["integrations"]
+    + extras["detectron2"]
 )
 
 extras["docs_specific"] = deps_list(
@@ -343,7 +346,6 @@ setup(
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
     python_requires=">=3.6.0",
     install_requires=install_requires,
-    dependency_links=["git+https://github.com/facebookresearch/detectron2.git@v0.4#egg=detectron2"],
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
