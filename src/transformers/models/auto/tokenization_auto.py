@@ -325,6 +325,7 @@ class AutoTokenizer:
     r"""
     This is a generic tokenizer class that will be instantiated as one of the tokenizer classes of the library when
     created with the :meth:`AutoTokenizer.from_pretrained` class method.
+
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
 
@@ -339,13 +340,17 @@ class AutoTokenizer:
     def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
         r"""
         Instantiate one of the tokenizer classes of the library from a pretrained model vocabulary.
+
         The tokenizer class to instantiate is selected based on the :obj:`model_type` property of the config object
         (either passed as an argument or loaded from :obj:`pretrained_model_name_or_path` if possible), or when it's
         missing, by falling back to using pattern matching on :obj:`pretrained_model_name_or_path`:
+
         List options
+
         Params:
             pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
                 Can be either:
+
                     - A string, the `model id` of a predefined tokenizer hosted inside a model repo on huggingface.co.
                       Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
                       a user or organization name, like ``dbmdz/bert-base-german-cased``.
@@ -384,14 +389,20 @@ class AutoTokenizer:
                 Will be passed to the Tokenizer ``__init__()`` method. Can be used to set special tokens like
                 ``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``,
                 ``mask_token``, ``additional_special_tokens``. See parameters in the ``__init__()`` for more details.
+
         Examples::
+
             >>> from transformers import AutoTokenizer
+
             >>> # Download vocabulary from huggingface.co and cache.
             >>> tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
+
             >>> # Download vocabulary from huggingface.co (user-uploaded) and cache.
             >>> tokenizer = AutoTokenizer.from_pretrained('dbmdz/bert-base-german-cased')
+
             >>> # If vocabulary files are in a directory (e.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`)
             >>> tokenizer = AutoTokenizer.from_pretrained('./test/bert_saved_model/')
+
         """
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
