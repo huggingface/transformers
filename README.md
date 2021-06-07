@@ -55,13 +55,13 @@ limitations under the License.
     <a href="https://hf.co/course"><img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/course_banner.png"></a>
 </h3>
 
-🤗 Transformers provides thousands of pretrained models to perform tasks on different modalities such as text, vision, and audio. 
+🤗 Transformers provides thousands of pretrained models to perform tasks on different modalities such as text, vision, and audio.
 
 These models can be applied on:
 
-* 📝 Text, for tasks like text classification, information extraction, question answering, summarization, translation, text generation, in over 100 languages. 
-* 🖼️ Images, for tasks like image classification, object detection, and segmentation. 
-* 🗣️ Audio, for tasks like speech recognition and audio classification. 
+* 📝 Text, for tasks like text classification, information extraction, question answering, summarization, translation, text generation, in over 100 languages.
+* 🖼️ Images, for tasks like image classification, object detection, and segmentation.
+* 🗣️ Audio, for tasks like speech recognition and audio classification.
 
 Transformer models can also perform tasks on **several modalities combined**, such as table question answering, optical character recognition, information extraction from scanned documents, video classification, and visual question answering.
 
@@ -118,7 +118,7 @@ The second line of code downloads and caches the pretrained model used by the pi
 
 Many NLP tasks have a pre-trained `pipeline` ready to go. For example, we can easily extract question answers given context:
 
-``` python
+```python
 >>> from transformers import pipeline
 
 # Allocate a pipeline for question-answering
@@ -134,6 +134,7 @@ Many NLP tasks have a pre-trained `pipeline` ready to go. For example, we can ea
 In addition to the answer, the pretrained model used here returned its confidence score, along with the start position and end position of the answer in the tokenized sentence. You can learn more about the tasks supported by the `pipeline` API in [this tutorial](https://huggingface.co/docs/transformers/task_summary).
 
 To download and use any of the pretrained models on your given task, all it takes is three lines of code. Here is the PyTorch version:
+
 ```python
 >>> from transformers import AutoTokenizer, AutoModel
 
@@ -143,7 +144,9 @@ To download and use any of the pretrained models on your given task, all it take
 >>> inputs = tokenizer("Hello world!", return_tensors="pt")
 >>> outputs = model(**inputs)
 ```
+
 And here is the equivalent code for TensorFlow:
+
 ```python
 >>> from transformers import AutoTokenizer, TFAutoModel
 
@@ -154,7 +157,7 @@ And here is the equivalent code for TensorFlow:
 >>> outputs = model(**inputs)
 ```
 
-The tokenizer is responsible for all the preprocessing the pretrained model expects, and can be called directly on a single string (as in the above examples) or a list. It will output a dictionary that you can use in downstream code or simply directly pass to your model using the ** argument unpacking operator.
+The tokenizer is responsible for all the preprocessing the pretrained model expects, and can be called directly on a single string (as in the above examples) or a list. It will output a dictionary that you can use in downstream code or simply directly pass to your model using the \*\* argument unpacking operator.
 
 The model itself is a regular [Pytorch `nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) or a [TensorFlow `tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) (depending on your backend) which you can use normally. [This tutorial](https://huggingface.co/docs/transformers/training) explains how to integrate such a model into a classic PyTorch or TensorFlow training loop, or how to use our `Trainer` API to quickly fine-tune on a new dataset.
 
@@ -177,9 +180,9 @@ The model itself is a regular [Pytorch `nn.Module`](https://pytorch.org/docs/sta
     - Seamlessly pick the right framework for training, evaluation and production.
 
 1. Easily customize a model or an example to your needs:
-    - We provide examples for each architecture to reproduce the results published by its original authors.
-    - Model internals are exposed as consistently as possible.
-    - Model files can be used independently of the library for quick experiments.
+   - We provide examples for each architecture to reproduce the results published by its original authors.
+   - Model internals are exposed as consistently as possible.
+   - Model files can be used independently of the library for quick experiments.
 
 ## Why shouldn't I use transformers?
 
@@ -244,6 +247,7 @@ Current number of checkpoints: ![](https://img.shields.io/endpoint?url=https://h
 1. **[ByT5](https://huggingface.co/docs/transformers/model_doc/byt5)** (from Google Research) released with the paper [ByT5: Towards a token-free future with pre-trained byte-to-byte models](https://arxiv.org/abs/2105.13626) by Linting Xue, Aditya Barua, Noah Constant, Rami Al-Rfou, Sharan Narang, Mihir Kale, Adam Roberts, Colin Raffel.
 1. **[CamemBERT](https://huggingface.co/docs/transformers/model_doc/camembert)** (from Inria/Facebook/Sorbonne) released with the paper [CamemBERT: a Tasty French Language Model](https://arxiv.org/abs/1911.03894) by Louis Martin*, Benjamin Muller*, Pedro Javier Ortiz Suárez*, Yoann Dupont, Laurent Romary, Éric Villemonte de la Clergerie, Djamé Seddah and Benoît Sagot.
 1. **[CANINE](https://huggingface.co/docs/transformers/model_doc/canine)** (from Google Research) released with the paper [CANINE: Pre-training an Efficient Tokenization-Free Encoder for Language Representation](https://arxiv.org/abs/2103.06874) by Jonathan H. Clark, Dan Garrette, Iulia Turc, John Wieting.
+1. **[CharacterBERT](https://huggingface.co/docs/transformers/model_doc/character_bert)** (from LIMSI/CEA-LIST/AIRC) released with the paper [CharacterBERT: Reconciling ELMo and BERT for Word-Level Open-Vocabulary Representations From Characters](https://arxiv.org/abs/2010.10392) by Hicham El Boukkouri, Olivier Ferret, Thomas Lavergne, Hiroshi Noji, Pierre Zweigenbaum and Junichi Tsujii.
 1. **[CLIP](https://huggingface.co/docs/transformers/model_doc/clip)** (from OpenAI) released with the paper [Learning Transferable Visual Models From Natural Language Supervision](https://arxiv.org/abs/2103.00020) by Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, Ilya Sutskever.
 1. **[ConvBERT](https://huggingface.co/docs/transformers/model_doc/convbert)** (from YituTech) released with the paper [ConvBERT: Improving BERT with Span-based Dynamic Convolution](https://arxiv.org/abs/2008.02496) by Zihang Jiang, Weihao Yu, Daquan Zhou, Yunpeng Chen, Jiashi Feng, Shuicheng Yan.
 1. **[CPM](https://huggingface.co/docs/transformers/model_doc/cpm)** (from Tsinghua University) released with the paper [CPM: A Large-scale Generative Chinese Pre-trained Language Model](https://arxiv.org/abs/2012.00413) by Zhengyan Zhang, Xu Han, Hao Zhou, Pei Ke, Yuxian Gu, Deming Ye, Yujia Qin, Yusheng Su, Haozhe Ji, Jian Guan, Fanchao Qi, Xiaozhi Wang, Yanan Zheng, Guoyang Zeng, Huanqi Cao, Shengqi Chen, Daixuan Li, Zhenbo Sun, Zhiyuan Liu, Minlie Huang, Wentao Han, Jie Tang, Juanzi Li, Xiaoyan Zhu, Maosong Sun.
@@ -331,7 +335,6 @@ To check if each model has an implementation in Flax, PyTorch or TensorFlow, or 
 
 These implementations have been tested on several datasets (see the example scripts) and should match the performance of the original implementations. You can find more details on performance in the Examples section of the [documentation](https://huggingface.co/docs/transformers/examples).
 
-
 ## Learn more
 
 | Section | Description |
@@ -347,6 +350,7 @@ These implementations have been tested on several datasets (see the example scri
 ## Citation
 
 We now have a [paper](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) you can cite for the 🤗 Transformers library:
+
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",

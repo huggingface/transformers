@@ -684,8 +684,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
                 f.write(out_str)
                 logger.info(f"added tokens file saved in {added_tokens_file}")
 
-        vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
-        vocab_files += self.save_mlm_vocabulary(save_directory, filename_prefix=filename_prefix)
+        vocab_files = self.save_mlm_vocabulary(save_directory, filename_prefix=filename_prefix)
 
         return file_names + vocab_files + (added_tokens_file,)
 
@@ -915,8 +914,8 @@ class CharacterMapper:
         "Converts a sequence of character ids into its corresponding word."
 
         assert len(char_ids) == self.max_word_length, \
-            "Got character sequence of length %s while `max_word_length=%s`" \
-            % (len(char_ids), self.max_word_length)
+            f"Got character sequence of length {len(char_ids)} while " \
+            "`max_word_length={self.max_word_length}`"
 
         char_ids_ = [(i - 1) for i in char_ids]
         if char_ids_ == self.beginning_of_sentence_characters:

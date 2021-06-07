@@ -53,8 +53,8 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.tokenizer_class.from_pretrained('helboukkouri/character-bert')
         tokenizer.save_pretrained(self.tmpdirname)
         logger.info(
-            'Loaded pre-trained CharacterBertTokenizer & saved it in: %s',
-            self.tmpdirname
+            'Loaded pre-trained CharacterBertTokenizer '
+            f'& saved it in: {self.tmpdirname}',
         )
 
     def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> Tuple[str, List[List[int]]]:
