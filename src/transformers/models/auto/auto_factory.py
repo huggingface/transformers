@@ -17,8 +17,8 @@
 import types
 
 from ...configuration_utils import PretrainedConfig
+from ...deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
 from ...file_utils import copy_func
-from ...integrations import deepspeed_config, is_deepspeed_zero3_enabled
 from ...utils import logging
 from .configuration_auto import AutoConfig, replace_list_option_in_docstrings
 
