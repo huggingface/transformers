@@ -103,15 +103,7 @@ class CharacterBertConfig(PretrainedConfig):
         self,
         character_embeddings_dim=16,
         cnn_activation="relu",
-        cnn_filters=[
-            [1, 32],
-            [2, 32],
-            [3, 64],
-            [4, 128],
-            [5, 256],
-            [6, 512],
-            [7, 1024]
-        ],
+        cnn_filters=None,
         num_highway_layers=2,
         max_word_length=50,
         hidden_size=768,
@@ -143,6 +135,16 @@ class CharacterBertConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+        if cnn_filters is None:
+            cnn_filters = [
+                [1, 32],
+                [2, 32],
+                [3, 64],
+                [4, 128],
+                [5, 256],
+                [6, 512],
+                [7, 1024]
+            ]
         self.character_embeddings_dim = character_embeddings_dim
         self.cnn_activation = cnn_activation
         self.cnn_filters = cnn_filters

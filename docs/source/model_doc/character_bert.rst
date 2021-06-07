@@ -16,7 +16,7 @@ CharacterBERT
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The CharacterBERT model was proposed in `CharacterBERT: Reconciling ELMo and BERT for Word-Level Open-Vocabulary Representations From Characters <https://www.aclweb.org/anthology/2020.coling-main.609>`__  by Hicham EL BOUKKOURI, Olivier FERRET, Thomas LAVERGNE, Hiroshi NOJI, Pierre ZWEIGENBAUM and Junichi TSUJII. In short, it is a variant of BERT that uses a Character-CNN module instead of WordPieces to achieve a word-level, open-vocabulary model that is more convenient to use as well as more robust to noisy (misspellings) inputs.
+The CharacterBERT model was proposed in `CharacterBERT: Reconciling ELMo and BERT for Word-Level Open-Vocabulary Representations From Characters <https://www.aclweb.org/anthology/2020.coling-main.609>`__  by Hicham El Boukkouri, Olivier Ferret, Thomas Lavergne, Hiroshi Noji, Pierre Zweigenbaum and Junichi Tsujii. In short, it is a variant of BERT that uses a Character-CNN module instead of WordPieces to achieve a word-level, open-vocabulary model that is more convenient to use as well as more robust to noisy (misspellings) inputs.
 
 The abstract from the paper is the following:
 
@@ -28,6 +28,9 @@ Tips:
 - Because the model looks at the characters of each input token, it can be more robust to noise/misspellings than BERT. 
 - Because CharacterBert does not rely on a vocabulary of wordpieces, the same model can be seamlessly re-used in different domains or languages (But keep in mind that it was pre-trained on English texts).
 - If you are working in the medical domain, make sure you use the version of CharacterBERT that is pre-trained on medical corpora.
+
+This model was contributed by `helboukkouri <https://huggingface.co/helboukkouri>`__. The original code can be found `here
+<https://github.com/helboukkouri/character-bert>`__.
 
 CharacterBertConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

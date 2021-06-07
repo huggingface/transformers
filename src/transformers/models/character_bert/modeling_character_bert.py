@@ -60,6 +60,7 @@ from .tokenization_character_bert import CharacterMapper
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "helboukkouri/character-bert"
 _CONFIG_FOR_DOC = "CharacterBertConfig"
 _TOKENIZER_FOR_DOC = "CharacterBertTokenizer"
 
@@ -69,10 +70,10 @@ CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all CharacterBERT models at https://huggingface.co/models?filter=character_bert
 ]
 
-
+# NOTE: the following class is taken from:
+# https://github.com/allenai/allennlp/blob/main/allennlp/modules/highway.py
 class Highway(torch.nn.Module):
     """
-    NOTE: taken from https://github.com/allenai/allennlp/blob/main/allennlp/modules/highway.py
     A [Highway layer](https://arxiv.org/abs/1505.00387) does a gated combination of a linear
     transformation and a non-linear transformation of its input.  :math:`y = g * x + (1 - g) *
     f(A(x))`, where :math:`A` is a linear transformation, :math:`f` is an element-wise
@@ -124,11 +125,10 @@ class Highway(torch.nn.Module):
             current_input = gate * linear_part + (1 - gate) * nonlinear_part
         return current_input
 
-
+# NOTE: The CharacterCnn was adapted from `_ElmoCharacterEncoder`:
+# https://github.com/allenai/allennlp/blob/main/allennlp/modules/elmo.py#L254
 class CharacterCnn(torch.nn.Module):
     """
-    NOTE: Adapted from _ElmoCharacterEncoder:
-    https://github.com/allenai/allennlp/blob/main/allennlp/modules/elmo.py#L254
     Computes context insensitive token representation using multiple CNNs.
     This embedder has input character ids of size (batch_size, sequence_length, 50)
     and returns (batch_size, sequence_length, hidden_size), where hidden_size
@@ -178,7 +178,7 @@ class CharacterCnn(torch.nn.Module):
             conv.weight.requires_grad = True
             conv.bias.requires_grad = True
             convolutions.append(conv)
-            self.add_module("char_conv_{}".format(i), conv)
+            self.add_module(f"char_conv_{i}", conv)
         self._convolutions = convolutions
 
     def _init_highway(self):
@@ -807,20 +807,26 @@ class CharacterBertPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """ Initialize the weights """
         if isinstance(module, CharacterCnn):
-            # We need to handle the case of this parameters since it is not an actual module
+            # We need to handle the case of these parameters since it is not an actual module
             module._char_embedding_weights.data.normal_()
-            module._char_embedding_weights.data[0].fill_(0.)  # token padding
+            # token padding
+            module._char_embedding_weights.data[0].fill_(0.)
+            # character padding
             module._char_embedding_weights.data[
-                CharacterMapper.padding_character + 1].fill_(0.)  # character padding
-        if isinstance(module, (nn.Linear, nn.Embedding)):
+                CharacterMapper.padding_character + 1].fill_(0.)
+        if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
 
 
 @dataclass
@@ -974,7 +980,7 @@ class CharacterBertModel(CharacterBertPreTrainedModel):
             "(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="helboukkouri/character-bert",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1393,7 +1399,7 @@ class CharacterBertForMaskedLM(CharacterBertPreTrainedModel):
             "(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="helboukkouri/character-bert",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1591,7 +1597,7 @@ class CharacterBertForSequenceClassification(CharacterBertPreTrainedModel):
             "(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="helboukkouri/character-bert",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1676,7 +1682,7 @@ class CharacterBertForMultipleChoice(CharacterBertPreTrainedModel):
             "(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="helboukkouri/character-bert",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1769,7 +1775,7 @@ class CharacterBertForTokenClassification(CharacterBertPreTrainedModel):
             "(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="helboukkouri/character-bert",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1859,7 +1865,7 @@ class CharacterBertForQuestionAnswering(CharacterBertPreTrainedModel):
             "(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="helboukkouri/character-bert",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
