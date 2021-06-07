@@ -161,7 +161,7 @@ run_asr.py \
 --deepspeed ds_config_wav2vec2_zero2.json
 ```
 
-For ZeRO-2 with more than 1 gpu must use:
+For ZeRO-2 with more than 1 gpu you need to use (which is already in the example configuration file):
 ```
     "zero_optimization": {
         ...
