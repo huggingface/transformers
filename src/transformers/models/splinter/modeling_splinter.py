@@ -1549,15 +1549,18 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        mask_positions_were_none = False
+        question_positions_were_none = False
         if question_positions is None:
             if input_ids is not None:
-                masked_position_for_each_example = torch.argmax((torch.eq(input_ids, self.question_token_id)).int(), dim=-1)
+                question_position_for_each_example = \
+                    torch.argmax((torch.eq(input_ids, self.question_token_id)).int(), dim=-1)
             else:
-                masked_position_for_each_example = torch.zeros(inputs_embeds.size(0), dtype=torch.int64,
-                                                               layout=inputs_embeds.layout, device=inputs_embeds.device)
-            question_positions = masked_position_for_each_example.unsqueeze(-1)
-            mask_positions_were_none = True
+                question_position_for_each_example = torch.zeros(inputs_embeds.size(0),
+                                                                 dtype=torch.int64,
+                                                                 layout=inputs_embeds.layout,
+                                                                 device=inputs_embeds.device)
+            question_positions = question_position_for_each_example.unsqueeze(-1)
+            question_positions_were_none = True
 
         outputs = self.splinter(
             input_ids,
@@ -1575,7 +1578,7 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         cls = self._get_cls()
         start_logits, end_logits = cls(sequence_output, question_positions)
 
-        if mask_positions_were_none:
+        if question_positions_were_none:
             start_logits, end_logits = start_logits.squeeze(1), end_logits.squeeze(1)
 
         if attention_mask is not None:
