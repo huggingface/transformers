@@ -53,30 +53,30 @@ if is_torch_available():
 
 class CharacterBertModelTester:
     def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_input_mask=True,
-            use_token_type_ids=True,
-            use_labels=True,
-            character_vocab_size=263,
-            mlm_vocab_size=100,
-            hidden_size=32,
-            num_hidden_layers=5,
-            num_attention_heads=4,
-            intermediate_size=37,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=16,
-            type_sequence_label_size=2,
-            initializer_range=0.02,
-            num_labels=3,
-            num_choices=4,
-            scope=None,
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_token_type_ids=True,
+        use_labels=True,
+        character_vocab_size=263,
+        mlm_vocab_size=100,
+        hidden_size=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        intermediate_size=37,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=16,
+        type_sequence_label_size=2,
+        initializer_range=0.02,
+        num_labels=3,
+        num_choices=4,
+        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -166,7 +166,7 @@ class CharacterBertModelTester:
         )
 
     def create_and_check_model(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = CharacterBertModel(config=config)
         model.to(torch_device)
@@ -177,16 +177,16 @@ class CharacterBertModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_model_as_decoder(
-            self,
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
     ):
         config.add_cross_attention = True
         model = CharacterBertModel(config)
@@ -209,16 +209,16 @@ class CharacterBertModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_causal_lm(
-            self,
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
     ):
         model = CharacterBertLMHeadModel(config=config)
         model.to(torch_device)
@@ -227,7 +227,7 @@ class CharacterBertModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.mlm_vocab_size))
 
     def create_and_check_for_masked_lm(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = CharacterBertForMaskedLM(config=config)
         model.to(torch_device)
@@ -357,11 +357,13 @@ class CharacterBertModelTester:
             labels=token_labels,
             next_sentence_label=sequence_labels,
         )
-        self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.mlm_vocab_size))
+        self.parent.assertEqual(
+            result.prediction_logits.shape, (self.batch_size, self.seq_length, self.mlm_vocab_size)
+        )
         self.parent.assertEqual(result.seq_relationship_logits.shape, (self.batch_size, 2))
 
     def create_and_check_for_question_answering(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = CharacterBertForQuestionAnswering(config=config)
         model.to(torch_device)
@@ -377,7 +379,7 @@ class CharacterBertModelTester:
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_for_sequence_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
         model = CharacterBertForSequenceClassification(config)
@@ -387,7 +389,7 @@ class CharacterBertModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_for_token_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
         model = CharacterBertForTokenClassification(config=config)
@@ -397,7 +399,7 @@ class CharacterBertModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_for_multiple_choice(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_choices = self.num_choices
         model = CharacterBertForMultipleChoice(config=config)
@@ -476,11 +478,9 @@ class CharacterBertModelTest(ModelTesterMixin, unittest.TestCase):
             for k, v in inputs_dict.items():
                 if isinstance(v, torch.Tensor) and v.ndim > 1:
                     if k == "input_ids":
-                        inputs_dict[k] = v.unsqueeze(1).expand(
-                            -1, self.model_tester.num_choices, -1, 50).contiguous()
+                        inputs_dict[k] = v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1, 50).contiguous()
                     else:
-                        inputs_dict[k] = v.unsqueeze(1).expand(
-                            -1, self.model_tester.num_choices, -1).contiguous()
+                        inputs_dict[k] = v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
                 else:
                     inputs_dict[k] = v
         if return_labels:
@@ -525,7 +525,7 @@ class CharacterBertModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
-                if 'embeddings.word_embeddings' in name:
+                if "embeddings.word_embeddings" in name:
                     # NOTE: as of this version, the initializer range in config
                     # does not affect the CharacterCnn parameters which are initialized
                     # using the default PyTorch intialization
@@ -693,16 +693,18 @@ class CharacterBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
         model = CharacterBertForMaskedLM.from_pretrained("helboukkouri/character-bert")
-        input_ids = torch.tensor([
+        input_ids = torch.tensor(
             [
-                [259, 1, 260] + [261] * (50 - 3),
-                [259, 2, 260] + [261] * (50 - 3),
-                [259, 3, 260] + [261] * (50 - 3),
-                [259, 4, 260] + [261] * (50 - 3),
-                [259, 5, 260] + [261] * (50 - 3),
-                [259, 6, 260] + [261] * (50 - 3),
+                [
+                    [259, 1, 260] + [261] * (50 - 3),
+                    [259, 2, 260] + [261] * (50 - 3),
+                    [259, 3, 260] + [261] * (50 - 3),
+                    [259, 4, 260] + [261] * (50 - 3),
+                    [259, 5, 260] + [261] * (50 - 3),
+                    [259, 6, 260] + [261] * (50 - 3),
+                ]
             ]
-        ])
+        )
         output = model(input_ids)[0]
 
         # TODO Replace vocab size
@@ -713,9 +715,7 @@ class CharacterBertModelIntegrationTest(unittest.TestCase):
 
         # TODO Replace values below with what was printed above.
         expected_slice = torch.tensor(
-            [[[-0.3252, -0.1871, -1.0703],
-              [-0.7385, -0.0866, -1.1844],
-              [-0.7333, -0.0124, -1.1310]]]
+            [[[-0.3252, -0.1871, -1.0703], [-0.7385, -0.0866, -1.1844], [-0.7333, -0.0124, -1.1310]]]
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))

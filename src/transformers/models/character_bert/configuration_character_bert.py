@@ -31,14 +31,13 @@ CHARACTER_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class CharacterBertConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.CharacterBertModel`.
-    It is used to instantiate an CharacterBERT model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the CharacterBERT `helboukkouri/character-bert <https://huggingface.co/helboukkouri/character-bert>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.CharacterBertModel`. It is
+    used to instantiate an CharacterBERT model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the CharacterBERT
+    `helboukkouri/character-bert <https://huggingface.co/helboukkouri/character-bert>`__ architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
 
     Args:
@@ -51,8 +50,8 @@ class CharacterBertConfig(PretrainedConfig):
         num_highway_layers (:obj:`int`, `optional`, defaults to :obj:`2`):
             The number of Highway layers to apply to the CNNs output.
         max_word_length (:obj:`int`, `optional`, defaults to :obj:`50`):
-            The maximum token length in characters (actually, in bytes as any
-            non-ascii characters will be converted to a sequence of utf-8 bytes).
+            The maximum token length in characters (actually, in bytes as any non-ascii characters will be converted to
+            a sequence of utf-8 bytes).
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
@@ -62,18 +61,18 @@ class CharacterBertConfig(PretrainedConfig):
         intermediate_size (:obj:`int`, `optional`, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-            If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string,
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
-            The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.CharacterBertModel` or
-            :class:`~transformers.TFCharacterBertModel`.
+            The vocabulary size of the :obj:`token_type_ids` passed when calling
+            :class:`~transformers.CharacterBertModel` or :class:`~transformers.TFCharacterBertModel`.
         mlm_vocab_size (:obj:`int`, `optional`, defaults to 100000):
             Size of the output vocabulary for MLM.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
@@ -83,6 +82,7 @@ class CharacterBertConfig(PretrainedConfig):
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if ``config.is_decoder=True``.
+
         Example::
 
         >>> from transformers import CharacterBertModel, CharacterBertConfig
@@ -124,8 +124,7 @@ class CharacterBertConfig(PretrainedConfig):
         tie_word_embeddings = kwargs.pop("tie_word_embeddings", False)
         if tie_word_embeddings:
             raise ValueError(
-                "Cannot tie word embeddings in CharacterBERT. Please set "
-                "`config.tie_word_embeddings=False`."
+                "Cannot tie word embeddings in CharacterBERT. Please set " "`config.tie_word_embeddings=False`."
             )
         super().__init__(
             type_vocab_size=type_vocab_size,
@@ -135,15 +134,7 @@ class CharacterBertConfig(PretrainedConfig):
             **kwargs,
         )
         if cnn_filters is None:
-            cnn_filters = [
-                [1, 32],
-                [2, 32],
-                [3, 64],
-                [4, 128],
-                [5, 256],
-                [6, 512],
-                [7, 1024]
-            ]
+            cnn_filters = [[1, 32], [2, 32], [3, 64], [4, 128], [5, 256], [6, 512], [7, 1024]]
         self.character_embeddings_dim = character_embeddings_dim
         self.cnn_activation = cnn_activation
         self.cnn_filters = cnn_filters
