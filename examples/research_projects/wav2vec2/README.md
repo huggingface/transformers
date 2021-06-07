@@ -144,7 +144,7 @@ and then use the default configuration files in this directory:
 
 Here are examples of how you can use DeepSpeed:
 
-(edit the value for `--num_gpus` to match number of GPUs you have)
+(edit the value for `--num_gpus` to match the number of GPUs you have)
 
 ZeRO-2:
 
