@@ -42,6 +42,7 @@ from .generation_logits_process import (
 )
 from .generation_stopping_criteria import (
     MaxLengthCriteria,
+    MaxNewTokensCriteria,
     MaxTimeCriteria,
     StoppingCriteriaList,
     validate_stopping_criteria,
@@ -64,8 +65,8 @@ class GreedySearchDecoderOnlyOutput(ModelOutput):
             shorter if all batches finished early due to the :obj:`eos_token_id`.
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of
-            shape :obj:`(batch_size, config.vocab_size)`).
+            at each generation step. :obj:`(max_length-input_ids.shape[-1],)`-shaped tuple of :obj:`torch.FloatTensor`
+            with each tensor of shape :obj:`(batch_size, config.vocab_size)`).
         attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             :obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
@@ -94,8 +95,8 @@ class GreedySearchEncoderDecoderOutput(ModelOutput):
             shorter if all batches finished early due to the :obj:`eos_token_id`.
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of
-            shape :obj:`(batch_size, config.vocab_size)`).
+            at each generation step. :obj:`(max_length-1,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor
+            of shape :obj:`(batch_size, config.vocab_size)`).
         encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer of the decoder) of shape :obj:`(batch_size,
             num_heads, sequence_length, sequence_length)`.
@@ -134,8 +135,8 @@ class SampleDecoderOnlyOutput(ModelOutput):
             shorter if all batches finished early due to the :obj:`eos_token_id`.
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of
-            shape :obj:`(batch_size*num_return_sequences, config.vocab_size)`).
+            at each generation step. :obj:`(max_length-input_ids.shape[-1],)`-shaped tuple of :obj:`torch.FloatTensor`
+            with each tensor of shape :obj:`(batch_size*num_return_sequences, config.vocab_size)`).
         attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             :obj:`torch.FloatTensor` of shape :obj:`(num_return_sequences*batch_size, num_heads, generated_length,
@@ -165,8 +166,8 @@ class SampleEncoderDecoderOutput(ModelOutput):
             shorter if all batches finished early due to the :obj:`eos_token_id`.
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of
-            shape :obj:`(batch_size*num_return_sequences, config.vocab_size)`).
+            at each generation step. :obj:`(max_length-1,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor
+            of shape :obj:`(batch_size*num_return_sequences, config.vocab_size)`).
         encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer of the decoder) of shape
             :obj:`(batch_size*num_return_sequences, num_heads, sequence_length, sequence_length)`.
@@ -208,8 +209,8 @@ class BeamSearchDecoderOnlyOutput(ModelOutput):
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of shape
-            :obj:`(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
+            . :obj:`(max_length-input_ids.shape[-1],)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of
+            shape :obj:`(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
         attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             :obj:`torch.FloatTensor` of shape :obj:`(batch_size*num_beams, num_heads, generated_length,
@@ -243,7 +244,7 @@ class BeamSearchEncoderDecoderOutput(ModelOutput):
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of shape
+            . :obj:`(max_length-1,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of shape
             :obj:`(batch_size*num_beams, config.vocab_size)`).
         attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
         encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
@@ -289,8 +290,8 @@ class BeamSampleDecoderOnlyOutput(ModelOutput):
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of shape
-            :obj:`(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
+            . :obj:`(max_length-input_ids.shape[-1],)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of
+            shape :obj:`(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
         attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             :obj:`torch.FloatTensor` of shape :obj:`(batch_size*num_beams, num_heads, generated_length,
@@ -323,7 +324,7 @@ class BeamSampleEncoderDecoderOutput(ModelOutput):
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of shape
+            . :obj:`(max_length-1,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of shape
             :obj:`(batch_size*num_beams, config.vocab_size)`).
         encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer of the decoder) of shape :obj:`(batch_size,
@@ -409,7 +410,9 @@ class GenerationMixin:
             # retrieve encoder hidden states
             encoder = self.get_encoder()
             encoder_kwargs = {
-                argument: value for argument, value in model_kwargs.items() if not argument.startswith("decoder_")
+                argument: value
+                for argument, value in model_kwargs.items()
+                if not (argument.startswith("decoder_") or argument.startswith("cross_attn"))
             }
             model_kwargs["encoder_outputs"]: ModelOutput = encoder(input_ids, return_dict=True, **encoder_kwargs)
         return model_kwargs
@@ -626,15 +629,15 @@ class GenerationMixin:
         return processors
 
     def _get_stopping_criteria(
-        self,
-        max_length: Optional[int],
-        max_time: Optional[float],
+        self, max_length: Optional[int], max_time: Optional[float], max_new_tokens: Optional[int], start_length: int
     ) -> StoppingCriteriaList:
         stopping_criteria = StoppingCriteriaList()
         if max_length is not None:
             stopping_criteria.append(MaxLengthCriteria(max_length=max_length))
         if max_time is not None:
             stopping_criteria.append(MaxTimeCriteria(max_time=max_time))
+        if max_new_tokens is not None:
+            stopping_criteria.append(MaxNewTokensCriteria(start_length=start_length, max_new_tokens=max_new_tokens))
         return stopping_criteria
 
     @torch.no_grad()
@@ -659,6 +662,7 @@ class GenerationMixin:
         encoder_no_repeat_ngram_size: Optional[int] = None,
         num_return_sequences: Optional[int] = None,
         max_time: Optional[float] = None,
+        max_new_tokens: Optional[int] = None,
         decoder_start_token_id: Optional[int] = None,
         use_cache: Optional[bool] = None,
         num_beam_groups: Optional[int] = None,
@@ -690,8 +694,11 @@ class GenerationMixin:
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 The sequence used as a prompt for the generation. If :obj:`None` the method initializes it as an empty
                 :obj:`torch.LongTensor` of shape :obj:`(1,)`.
-            max_length (:obj:`int`, `optional`, defaults to 20):
+            max_length (:obj:`int`, `optional`, defaults to :obj:`model.config.max_length`):
                 The maximum length of the sequence to be generated.
+            max_new_tokens (:obj:`int`, `optional`, defaults to None):
+                The maximum numbers of tokens to generate, ignore the current number of tokens. Use either
+                :obj:`max_new_tokens` or :obj:`max_length` but not both, they serve the same purpose.
             min_length (:obj:`int`, `optional`, defaults to 10):
                 The minimum length of the sequence to be generated.
             do_sample (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -762,7 +769,7 @@ class GenerationMixin:
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
                 returned tensors for more details.
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
                 for more details.
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
@@ -859,6 +866,15 @@ class GenerationMixin:
         """
 
         # set init values
+        if max_length is None and max_new_tokens is None:
+            # Both are None, default
+            max_length = self.config.max_length
+        elif max_length is not None and max_new_tokens is not None:
+            # Both are set, this is odd, raise a warning
+            warnings.warn(
+                "Both `max_length` and `max_new_tokens` have been set but they serve the same purpose.", UserWarning
+            )
+
         max_length = max_length if max_length is not None else self.config.max_length
         num_beams = num_beams if num_beams is not None else self.config.num_beams
         num_beam_groups = num_beam_groups if num_beam_groups is not None else self.config.num_beam_groups
@@ -958,13 +974,10 @@ class GenerationMixin:
             remove_invalid_values=remove_invalid_values,
         )
 
-        stopping_criteria = self._get_stopping_criteria(max_length=max_length, max_time=max_time)
-        if max_length is not None:
-            warnings.warn(
-                "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
-                UserWarning,
-            )
-            stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
+        cur_len = input_ids.shape[-1]
+        stopping_criteria = self._get_stopping_criteria(
+            max_length=max_length, max_time=max_time, max_new_tokens=max_new_tokens, start_length=cur_len
+        )
 
         if is_greedy_gen_mode:
             if num_return_sequences > 1:
@@ -1174,7 +1187,7 @@ class GenerationMixin:
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
                 returned tensors for more details.
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
                 for more details.
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
@@ -1403,7 +1416,7 @@ class GenerationMixin:
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
                 returned tensors for more details.
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
                 for more details.
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
@@ -1644,7 +1657,7 @@ class GenerationMixin:
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
                 returned tensors for more details.
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
                 for more details.
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
@@ -1940,7 +1953,7 @@ class GenerationMixin:
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
                 returned tensors for more details.
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
                 for more details.
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
@@ -2237,7 +2250,7 @@ class GenerationMixin:
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
                 returned tensors for more details.
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
                 for more details.
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.

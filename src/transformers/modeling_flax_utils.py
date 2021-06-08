@@ -41,11 +41,16 @@ from .file_utils import (
     is_remote_url,
     replace_return_docstrings,
 )
+from .generation_flax_utils import FlaxGenerationMixin
 from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
 from .utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+
+def quick_gelu(x):
+    return x * jax.nn.sigmoid(1.702 * x)
 
 
 ACT2FN = {
@@ -54,10 +59,11 @@ ACT2FN = {
     "silu": nn.swish,
     "swish": nn.swish,
     "gelu_new": partial(nn.gelu, approximate=True),
+    "quick_gelu": quick_gelu,
 }
 
 
-class FlaxPreTrainedModel(PushToHubMixin):
+class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     r"""
     Base class for all models.
 
@@ -388,7 +394,7 @@ class FlaxPreTrainedModel(PushToHubMixin):
 
         return model
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub=False, **kwargs):
+    def save_pretrained(self, save_directory: Union[str, os.PathLike], params=None, push_to_hub=False, **kwargs):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
         `:func:`~transformers.FlaxPreTrainedModel.from_pretrained`` class method
@@ -416,7 +422,8 @@ class FlaxPreTrainedModel(PushToHubMixin):
         # save model
         output_model_file = os.path.join(save_directory, FLAX_WEIGHTS_NAME)
         with open(output_model_file, "wb") as f:
-            model_bytes = to_bytes(self.params)
+            params = params if params is not None else self.params
+            model_bytes = to_bytes(params)
             f.write(model_bytes)
 
         logger.info(f"Model weights saved in {output_model_file}")

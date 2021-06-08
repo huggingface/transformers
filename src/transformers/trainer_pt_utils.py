@@ -33,6 +33,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler
 
 from .file_utils import is_sagemaker_dp_enabled, is_sagemaker_mp_enabled, is_torch_tpu_available
+from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
 
@@ -111,7 +112,7 @@ def find_batch_size(tensors):
             result = find_batch_size(t)
             if result is not None:
                 return result
-    elif isinstance(tensors, dict):
+    elif isinstance(tensors, (dict, BatchEncoding)):
         for key, value in tensors.items():
             result = find_batch_size(value)
             if result is not None:
@@ -494,7 +495,7 @@ def get_length_grouped_indices(lengths, batch_size, mega_batch_mult=None, genera
     # Switch to put the longest element in first position
     megabatches[0][0], megabatches[max_idx][0] = megabatches[max_idx][0], megabatches[0][0]
 
-    return sum(megabatches, [])
+    return [i for megabatch in megabatches for i in megabatch]
 
 
 class LengthGroupedSampler(Sampler):
@@ -509,24 +510,29 @@ class LengthGroupedSampler(Sampler):
         batch_size: int,
         lengths: Optional[List[int]] = None,
         model_input_name: Optional[str] = None,
+        generator=None,
     ):
         self.dataset = dataset
         self.batch_size = batch_size
         self.model_input_name = model_input_name if model_input_name is not None else "input_ids"
         if lengths is None:
-            if not isinstance(dataset[0], dict) or self.model_input_name not in dataset[0]:
+            if (
+                not (isinstance(dataset[0], dict) or isinstance(dataset[0], BatchEncoding))
+                or self.model_input_name not in dataset[0]
+            ):
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
                     f"'{self.model_input_name}' key."
                 )
             lengths = [len(feature[self.model_input_name]) for feature in dataset]
         self.lengths = lengths
+        self.generator = generator
 
     def __len__(self):
         return len(self.lengths)
 
     def __iter__(self):
-        indices = get_length_grouped_indices(self.lengths, self.batch_size)
+        indices = get_length_grouped_indices(self.lengths, self.batch_size, generator=self.generator)
         return iter(indices)
 
 
@@ -575,7 +581,10 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         self.model_input_name = model_input_name if model_input_name is not None else "input_ids"
 
         if lengths is None:
-            if not isinstance(dataset[0], dict) or self.model_input_name not in dataset[0]:
+            if (
+                not (isinstance(dataset[0], dict) or isinstance(dataset[0], BatchEncoding))
+                or self.model_input_name not in dataset[0]
+            ):
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
                     f"'{self.model_input_name}' key."

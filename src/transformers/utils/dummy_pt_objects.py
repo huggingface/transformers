@@ -376,6 +376,15 @@ class AutoModelForCausalLM:
         requires_backends(self, ["torch"])
 
 
+class AutoModelForImageClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class AutoModelForMaskedLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -721,6 +730,50 @@ def load_tf_weights_in_big_bird(*args, **kwargs):
     requires_backends(load_tf_weights_in_big_bird, ["torch"])
 
 
+BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class BigBirdPegasusForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class BigBirdPegasusForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class BigBirdPegasusForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class BigBirdPegasusForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class BigBirdPegasusModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -827,6 +880,45 @@ class CamembertForTokenClassification:
 
 
 class CamembertModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class CLIPModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CLIPPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CLIPTextModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CLIPVisionModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -1511,6 +1603,15 @@ class GPTNeoForCausalLM:
         requires_backends(self, ["torch"])
 
 
+class GPTNeoForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class GPTNeoModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -1736,6 +1837,42 @@ class LongformerModel:
 
 class LongformerSelfAttention:
     def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+LUKE_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class LukeForEntityClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LukeForEntityPairClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LukeForEntitySpanClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LukeModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LukePreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
@@ -2425,6 +2562,86 @@ class RobertaModel:
         requires_backends(self, ["torch"])
 
 
+ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class RoFormerForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RoFormerForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RoFormerForMultipleChoice:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RoFormerForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RoFormerForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RoFormerForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RoFormerLayer:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RoFormerModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RoFormerPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+def load_tf_weights_in_roformer(*args, **kwargs):
+    requires_backends(load_tf_weights_in_roformer, ["torch"])
+
+
 SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -2645,6 +2862,65 @@ class TransfoXLPreTrainedModel:
 
 def load_tf_weights_in_transfo_xl(*args, **kwargs):
     requires_backends(load_tf_weights_in_transfo_xl, ["torch"])
+
+
+VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class VisualBertForMultipleChoice:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VisualBertForPreTraining:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VisualBertForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VisualBertForRegionToPhraseAlignment:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VisualBertForVisualReasoning:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VisualBertLayer:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VisualBertModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VisualBertPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 VIT_PRETRAINED_MODEL_ARCHIVE_LIST = None

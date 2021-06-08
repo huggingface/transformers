@@ -195,6 +195,7 @@ class ExamplesTests(TestCasePlus):
             --per_device_train_batch_size=2
             --per_device_eval_batch_size=2
             --num_train_epochs={epochs}
+            --seed 7
         """.split()
 
         if torch_device != "cuda":
@@ -204,7 +205,6 @@ class ExamplesTests(TestCasePlus):
             run_ner.main()
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_accuracy"], 0.75)
-            self.assertGreaterEqual(result["eval_precision"], 0.75)
             self.assertLess(result["eval_loss"], 0.5)
 
     def test_run_squad(self):
@@ -213,7 +213,7 @@ class ExamplesTests(TestCasePlus):
 
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
-            run_squad.py
+            run_qa.py
             --model_name_or_path bert-base-uncased
             --version_2_with_negative
             --train_file tests/fixtures/tests_samples/SQUAD/sample.json
@@ -232,8 +232,8 @@ class ExamplesTests(TestCasePlus):
         with patch.object(sys, "argv", testargs):
             run_squad.main()
             result = get_results(tmp_dir)
-            self.assertGreaterEqual(result["f1"], 30)
-            self.assertGreaterEqual(result["exact"], 30)
+            self.assertGreaterEqual(result["eval_f1"], 30)
+            self.assertGreaterEqual(result["eval_exact"], 30)
 
     def test_run_swag(self):
         stream_handler = logging.StreamHandler(sys.stdout)

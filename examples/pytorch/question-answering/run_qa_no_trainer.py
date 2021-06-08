@@ -52,8 +52,7 @@ from utils_qa import postprocess_qa_predictions
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.5.0.dev0")
-
+check_min_version("4.7.0.dev0")
 
 logger = logging.getLogger(__name__)
 # You should update this to your particular problem to have better documentation of `model_type`
@@ -81,9 +80,12 @@ def parse_args():
     parser.add_argument(
         "--preprocessing_num_workers", type=int, default=4, help="A csv or a json file containing the training data."
     )
-    parser.add_argument("--do_predict", action="store_true", help="Eval the question answering model")
+    parser.add_argument("--do_predict", action="store_true", help="To do prediction on the question answering model")
     parser.add_argument(
         "--validation_file", type=str, default=None, help="A csv or a json file containing the validation data."
+    )
+    parser.add_argument(
+        "--test_file", type=str, default=None, help="A csv or a json file containing the Prediction data."
     )
     parser.add_argument(
         "--max_seq_length",
@@ -231,8 +233,13 @@ def parse_args():
     args = parser.parse_args()
 
     # Sanity checks
-    if args.dataset_name is None and args.train_file is None and args.validation_file is None:
-        raise ValueError("Need either a dataset name or a training/validation file.")
+    if (
+        args.dataset_name is None
+        and args.train_file is None
+        and args.validation_file is None
+        and args.test_file is None
+    ):
+        raise ValueError("Need either a dataset name or a training/validation/test file.")
     else:
         if args.train_file is not None:
             extension = args.train_file.split(".")[-1]
@@ -240,6 +247,9 @@ def parse_args():
         if args.validation_file is not None:
             extension = args.validation_file.split(".")[-1]
             assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+        if args.test_file is not None:
+            extension = args.test_file.split(".")[-1]
+            assert extension in ["csv", "json"], "`test_file` should be a csv or a json file."
 
     if args.output_dir is not None:
         os.makedirs(args.output_dir, exist_ok=True)
@@ -292,8 +302,10 @@ def main():
             data_files["train"] = args.train_file
         if args.validation_file is not None:
             data_files["validation"] = args.validation_file
+        if args.test_file is not None:
+            data_files["test"] = args.test_file
         extension = args.train_file.split(".")[-1]
-        raw_datasets = load_dataset(extension, data_files=data_files)
+        raw_datasets = load_dataset(extension, data_files=data_files, field="data")
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
@@ -540,13 +552,15 @@ def main():
         train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
     )
 
-    eval_dataset.set_format(type="torch", columns=["attention_mask", "input_ids", "token_type_ids"])
-    eval_dataloader = DataLoader(eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size)
+    eval_dataset_for_model = eval_dataset.remove_columns(["example_id", "offset_mapping"])
+    eval_dataloader = DataLoader(
+        eval_dataset_for_model, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
+    )
 
     if args.do_predict:
-        predict_dataset.set_format(type="torch", columns=["attention_mask", "input_ids", "token_type_ids"])
+        predict_dataset_for_model = predict_dataset.remove_columns(["example_id", "offset_mapping"])
         predict_dataloader = DataLoader(
-            predict_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
+            predict_dataset_for_model, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
         )
 
     # Post-processing:
@@ -678,7 +692,11 @@ def main():
             if completed_steps >= args.max_train_steps:
                 break
 
-    # Validation
+    # Evaluation
+    logger.info("***** Running Evaluation *****")
+    logger.info(f"  Num examples = {len(eval_dataset)}")
+    logger.info(f"  Batch size = {args.per_device_eval_batch_size}")
+
     all_start_logits = []
     all_end_logits = []
     for step, batch in enumerate(eval_dataloader):
@@ -704,7 +722,6 @@ def main():
     del all_start_logits
     del all_end_logits
 
-    eval_dataset.set_format(type=None, columns=list(eval_dataset.features.keys()))
     outputs_numpy = (start_logits_concat, end_logits_concat)
     prediction = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
     eval_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)
@@ -712,6 +729,10 @@ def main():
 
     # Prediction
     if args.do_predict:
+        logger.info("***** Running Prediction *****")
+        logger.info(f"  Num examples = {len(predict_dataset)}")
+        logger.info(f"  Batch size = {args.per_device_eval_batch_size}")
+
         all_start_logits = []
         all_end_logits = []
         for step, batch in enumerate(predict_dataloader):
@@ -736,8 +757,6 @@ def main():
         del all_start_logits
         del all_end_logits
 
-        # Now we need to add extra columns which we removed for post processing
-        predict_dataset.set_format(type=None, columns=list(predict_dataset.features.keys()))
         outputs_numpy = (start_logits_concat, end_logits_concat)
         prediction = post_processing_function(predict_examples, predict_dataset, outputs_numpy)
         predict_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)

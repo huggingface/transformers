@@ -24,6 +24,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
+from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -31,6 +32,7 @@ from ...file_utils import (
     DUMMY_MASK,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_torch_fx_proxy,
     replace_return_docstrings,
 )
 from ...modeling_outputs import (
@@ -323,6 +325,7 @@ class T5Attention(nn.Module):
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
         self.pruned_heads = set()
+        self.gradient_checkpointing = getattr(config, "gradient_checkpointing", False)
 
     def prune_heads(self, heads):
         if len(heads) == 0:
@@ -485,6 +488,8 @@ class T5Attention(nn.Module):
                 position_bias = torch.zeros(
                     (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
                 )
+                if self.training and self.gradient_checkpointing:
+                    position_bias.requires_grad = True
             else:
                 position_bias = self.compute_bias(real_seq_length, key_length)
 
@@ -691,8 +696,12 @@ class T5Block(nn.Module):
 
         outputs = (hidden_states,)
 
-        outputs = outputs + (present_key_value_state,) + attention_outputs
-        return outputs  # hidden-states, present_key_value_states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
+        if use_cache:
+            outputs = outputs + (present_key_value_state,) + attention_outputs
+        else:
+            outputs = outputs + attention_outputs
+
+        return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
 
 
 class T5PreTrainedModel(PreTrainedModel):
@@ -768,9 +777,14 @@ class T5PreTrainedModel(PreTrainedModel):
         ), "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id. See T5 docs for more information"
 
         # shift inputs to the right
-        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
-        shifted_input_ids[..., 0] = decoder_start_token_id
+        if is_torch_fx_proxy(input_ids):
+            # Item assignment is not supported natively for proxies.
+            shifted_input_ids = torch.full(input_ids.shape[:-1] + (1,), decoder_start_token_id)
+            shifted_input_ids = torch.cat([shifted_input_ids, input_ids[..., :-1]], dim=-1)
+        else:
+            shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+            shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+            shifted_input_ids[..., 0] = decoder_start_token_id
 
         assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
         # replace possible -100 values in labels by `pad_token_id`
@@ -906,7 +920,13 @@ class T5Stack(T5PreTrainedModel):
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, inputs_embeds.device)
 
-        if self.is_decoder and encoder_attention_mask is not None:
+        # If a 2D or 3D attention mask is provided for the cross-attention
+        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
+        if self.is_decoder and encoder_hidden_states is not None:
+            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
+            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
+            if encoder_attention_mask is None:
+                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=inputs_embeds.device)
             encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
@@ -947,26 +967,57 @@ class T5Stack(T5PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_outputs = layer_module(
-                hidden_states,
-                attention_mask=extended_attention_mask,
-                position_bias=position_bias,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_extended_attention_mask,
-                encoder_decoder_position_bias=encoder_decoder_position_bias,
-                layer_head_mask=layer_head_mask,
-                cross_attn_layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=past_key_value,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-            )
+            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+                if use_cache:
+                    logger.warn(
+                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
+                        "`use_cache=False`..."
+                    )
+                    use_cache = False
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return tuple(module(*inputs, use_cache, output_attentions))
+
+                    return custom_forward
+
+                layer_outputs = checkpoint(
+                    create_custom_forward(layer_module),
+                    hidden_states,
+                    extended_attention_mask,
+                    position_bias,
+                    encoder_hidden_states,
+                    encoder_extended_attention_mask,
+                    encoder_decoder_position_bias,
+                    layer_head_mask,
+                    cross_attn_layer_head_mask,
+                    None,  # past_key_value is always None with gradient checkpointing
+                )
+            else:
+                layer_outputs = layer_module(
+                    hidden_states,
+                    attention_mask=extended_attention_mask,
+                    position_bias=position_bias,
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_extended_attention_mask,
+                    encoder_decoder_position_bias=encoder_decoder_position_bias,
+                    layer_head_mask=layer_head_mask,
+                    cross_attn_layer_head_mask=cross_attn_layer_head_mask,
+                    past_key_value=past_key_value,
+                    use_cache=use_cache,
+                    output_attentions=output_attentions,
+                )
+
             # layer_outputs is a tuple with:
-            # hidden-states, key-value-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
+            # hidden-states, key-value-states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
+            if use_cache is False:
+                layer_outputs = layer_outputs[:1] + (None,) + layer_outputs[1:]
+
             hidden_states, present_key_value_state = layer_outputs[:2]
 
             # We share the position biases between the layers - the first layer store them
-            # layer_outputs = hidden-states, key-value-states (self-attention weights),
-            # (self-attention position bias), (cross-attention weights), (cross-attention position bias)
+            # layer_outputs = hidden-states, key-value-states (self-attention position bias), (self-attention weights),
+            # (cross-attention position bias), (cross-attention weights)
             position_bias = layer_outputs[2]
             if self.is_decoder and encoder_hidden_states is not None:
                 encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
@@ -1605,7 +1656,16 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
+        self,
+        input_ids,
+        past=None,
+        attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
+        use_cache=None,
+        encoder_outputs=None,
+        **kwargs
     ):
 
         # cut decoder_input_ids if past is used
@@ -1617,6 +1677,9 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             "past_key_values": past,
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
+            "head_mask": head_mask,
+            "decoder_head_mask": decoder_head_mask,
+            "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,
         }
 
@@ -1638,7 +1701,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             for layer_past_state in layer_past_states:
                 # need to set correct `past` for each of the four key / value states
                 reordered_layer_past_states = reordered_layer_past_states + (
-                    layer_past_state.index_select(0, beam_idx),
+                    layer_past_state.index_select(0, beam_idx.to(layer_past_state.device)),
                 )
 
             assert reordered_layer_past_states[0].shape == layer_past_states[0].shape

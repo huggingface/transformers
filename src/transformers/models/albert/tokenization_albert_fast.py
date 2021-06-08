@@ -172,7 +172,7 @@ class AlbertTokenizerFast(PreTrainedTokenizerFast):
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of IDs to which the special tokens will be added
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
@@ -201,7 +201,7 @@ class AlbertTokenizerFast(PreTrainedTokenizerFast):
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of ids.
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:

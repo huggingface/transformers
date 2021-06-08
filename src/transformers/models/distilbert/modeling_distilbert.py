@@ -24,7 +24,7 @@ import math
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import gelu
 from ...file_utils import (
@@ -579,6 +579,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
+        self.config = config
 
         self.distilbert = DistilBertModel(config)
         self.pre_classifier = nn.Linear(config.dim, config.dim)
@@ -587,7 +588,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices"))
+    @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -631,12 +632,26 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                loss_fct = nn.MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
-                loss_fct = nn.CrossEntropyLoss()
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
 
         if not return_dict:
             output = (logits,) + distilbert_output[1:]
@@ -713,8 +728,8 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         hidden_states = self.dropout(hidden_states)  # (bs, max_query_len, dim)
         logits = self.qa_outputs(hidden_states)  # (bs, max_query_len, 2)
         start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)  # (bs, max_query_len)
-        end_logits = end_logits.squeeze(-1)  # (bs, max_query_len)
+        start_logits = start_logits.squeeze(-1).contiguous()  # (bs, max_query_len)
+        end_logits = end_logits.squeeze(-1).contiguous()  # (bs, max_query_len)
 
         total_loss = None
         if start_positions is not None and end_positions is not None:
@@ -725,8 +740,8 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
                 end_positions = end_positions.squeeze(-1)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
+            start_positions = start_positions.clamp(0, ignored_index)
+            end_positions = end_positions.clamp(0, ignored_index)
 
             loss_fct = nn.CrossEntropyLoss(ignore_index=ignored_index)
             start_loss = loss_fct(start_logits, start_positions)

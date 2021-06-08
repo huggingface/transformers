@@ -2,6 +2,36 @@
 from ..file_utils import requires_backends
 
 
+class FlaxLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxLogitsProcessorList:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxLogitsWarper:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxTemperatureLogitsWarper:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxTopKLogitsWarper:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxTopPLogitsWarper:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
 class FlaxPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
@@ -9,6 +39,9 @@ class FlaxPreTrainedModel:
     @classmethod
     def from_pretrained(self, *args, **kwargs):
         requires_backends(self, ["flax"])
+
+
+FLAX_MODEL_FOR_CAUSAL_LM_MAPPING = None
 
 
 FLAX_MODEL_FOR_MASKED_LM_MAPPING = None
@@ -36,6 +69,15 @@ FLAX_MODEL_MAPPING = None
 
 
 class FlaxAutoModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxAutoModelForCausalLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
@@ -180,7 +222,183 @@ class FlaxBertPreTrainedModel:
         requires_backends(self, ["flax"])
 
 
+class FlaxCLIPModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxCLIPPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxCLIPTextModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxCLIPVisionModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxElectraForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxElectraForMultipleChoice:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxElectraForPreTraining:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxElectraForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxElectraForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxElectraForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxElectraModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxElectraPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxGPT2LMHeadModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxGPT2Model:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxRobertaForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxRobertaForMultipleChoice:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxRobertaForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxRobertaForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxRobertaForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
 class FlaxRobertaModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxRobertaPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 

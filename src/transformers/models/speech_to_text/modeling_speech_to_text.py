@@ -293,28 +293,26 @@ class Speech2TextAttention(nn.Module):
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
-        assert attn_weights.size() == (
-            bsz * self.num_heads,
-            tgt_len,
-            src_len,
-        ), f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
+            raise ValueError(
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+            )
 
         if attention_mask is not None:
-            assert attention_mask.size() == (
-                bsz,
-                1,
-                tgt_len,
-                src_len,
-            ), f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
+                raise ValueError(
+                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+                )
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = F.softmax(attn_weights, dim=-1)
 
         if layer_head_mask is not None:
-            assert layer_head_mask.size() == (
-                self.num_heads,
-            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+            if layer_head_mask.size() != (self.num_heads,):
+                raise ValueError(
+                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+                )
             attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
@@ -332,17 +330,14 @@ class Speech2TextAttention(nn.Module):
 
         attn_output = torch.bmm(attn_probs, value_states)
 
-        assert attn_output.size() == (
-            bsz * self.num_heads,
-            tgt_len,
-            self.head_dim,
-        ), f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+            )
 
-        attn_output = (
-            attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-            .transpose(1, 2)
-            .reshape(bsz, tgt_len, embed_dim)
-        )
+        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
+        attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
 
         attn_output = self.out_proj(attn_output)
 
@@ -651,8 +646,13 @@ SPEECH_TO_TEXT_INPUTS_DOCSTRING = r"""
             :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
             `optional`) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
             cross-attention of the decoder.
-        past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
+        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+            Tuple of :obj:`tuple(torch.FloatTensor)` of length :obj:`config.n_layers`, with each tuple having 2 tensors
+            of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
+            shape :obj:`(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see :obj:`past_key_values` input) to speed up sequential decoding.
 
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
@@ -944,8 +944,13 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-                Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
+            past_key_values (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+                Tuple of :obj:`tuple(torch.FloatTensor)` of length :obj:`config.n_layers`, with each tuple having 2
+                tensors of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional
+                tensors of shape :obj:`(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+                Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
+                cross-attention blocks) that can be used (see :obj:`past_key_values` input) to speed up sequential
                 decoding.
 
                 If :obj:`past_key_values` are used, the user can optionally input only the last

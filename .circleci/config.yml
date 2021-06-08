@@ -379,6 +379,8 @@ jobs:
                   keys:
                       - v0.4-deploy_doc-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: pip install --upgrade pip
             - run: pip install ."[docs]"
             - save_cache:
                   key: v0.4-deploy_doc-{{ checksum "setup.py" }}
@@ -391,6 +393,8 @@ jobs:
         docker:
             - image: circleci/python:3.6
         resource_class: medium
+        environment:
+            TRANSFORMERS_IS_CI: yes
         parallelism: 1
         steps:
             - checkout

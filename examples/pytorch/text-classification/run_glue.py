@@ -40,12 +40,12 @@ from transformers import (
     default_data_collator,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.6.0.dev0")
+check_min_version("4.7.0.dev0")
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -75,6 +75,12 @@ class DataTrainingArguments:
     task_name: Optional[str] = field(
         default=None,
         metadata={"help": "The name of the task to train on: " + ", ".join(task_to_keys.keys())},
+    )
+    dataset_name: Optional[str] = field(
+        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+    )
+    dataset_config_name: Optional[str] = field(
+        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
     max_seq_length: int = field(
         default=128,
@@ -127,8 +133,10 @@ class DataTrainingArguments:
             self.task_name = self.task_name.lower()
             if self.task_name not in task_to_keys.keys():
                 raise ValueError("Unknown task, you should pick one in " + ",".join(task_to_keys.keys()))
+        elif self.dataset_name is not None:
+            pass
         elif self.train_file is None or self.validation_file is None:
-            raise ValueError("Need either a GLUE task or a training/validation file.")
+            raise ValueError("Need either a GLUE task, a training/validation file or a dataset name.")
         else:
             train_extension = self.train_file.split(".")[-1]
             assert train_extension in ["csv", "json"], "`train_file` should be a csv or a json file."
@@ -208,7 +216,7 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
-    logger.setLevel(logging.INFO if is_main_process(training_args.local_rank) else logging.WARN)
+    logger.setLevel(logging.INFO if training_args.should_log else logging.WARN)
 
     # Log on each process the small summary:
     logger.warning(
@@ -216,7 +224,7 @@ def main():
         + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
     # Set the verbosity to info of the Transformers logger (on main process only):
-    if is_main_process(training_args.local_rank):
+    if training_args.should_log:
         transformers.utils.logging.set_verbosity_info()
         transformers.utils.logging.enable_default_handler()
         transformers.utils.logging.enable_explicit_format()
@@ -240,6 +248,9 @@ def main():
     if data_args.task_name is not None:
         # Downloading and loading a dataset from the hub.
         datasets = load_dataset("glue", data_args.task_name, cache_dir=model_args.cache_dir)
+    elif data_args.dataset_name is not None:
+        # Downloading and loading a dataset from the hub.
+        datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir)
     else:
         # Loading a dataset from your local files.
         # CSV/JSON training and evaluation files are needed.
@@ -408,8 +419,8 @@ def main():
     # Get the metric function
     if data_args.task_name is not None:
         metric = load_metric("glue", data_args.task_name)
-    # TODO: When datasets metrics include regular accuracy, make an else here and remove special branch from
-    # compute_metrics
+    else:
+        metric = load_metric("accuracy")
 
     # You can define your custom compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
     # predictions and label_ids field) and has to return a dictionary string to float.
@@ -516,7 +527,14 @@ def main():
                             writer.write(f"{index}\t{item}\n")
 
     if training_args.push_to_hub:
-        trainer.push_to_hub()
+        kwargs = {"finetuned_from": model_args.model_name_or_path, "tags": "text-classification"}
+        if data_args.task_name is not None:
+            kwargs["language"] = "en"
+            kwargs["dataset_tags"] = "glue"
+            kwargs["dataset_args"] = data_args.task_name
+            kwargs["dataset"] = f"GLUE {data_args.task_name.upper()}"
+
+        trainer.push_to_hub(**kwargs)
 
 
 def _mp_fn(index):

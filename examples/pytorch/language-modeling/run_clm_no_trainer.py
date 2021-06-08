@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning the library models for causal language modeling (BERT, ALBERT, RoBERTa...)
+Fine-tuning the library models for causal language modeling (GPT, GPT-2, CTRL, ...)
 on a text file or a dataset without using HuggingFace Trainer.
 
 Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
@@ -442,7 +442,10 @@ def main():
 
         losses = torch.cat(losses)
         losses = losses[: len(eval_dataset)]
-        perplexity = math.exp(torch.mean(losses))
+        try:
+            perplexity = math.exp(torch.mean(losses))
+        except OverflowError:
+            perplexity = float("inf")
 
         logger.info(f"epoch {epoch}: perplexity: {perplexity}")
 

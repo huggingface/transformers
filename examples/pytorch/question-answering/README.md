@@ -20,7 +20,7 @@ Based on the script [`run_qa.py`](https://github.com/huggingface/transformers/bl
 
 **Note:** This script only works with models that have a fast tokenizer (backed by the 🤗 Tokenizers library) as it
 uses special features of those tokenizers. You can check if your favorite model has a fast tokenizer in
-[this table](https://huggingface.co/transformers/index.html#bigtable), if it doesn't you can still use the old version
+[this table](https://huggingface.co/transformers/index.html#supported-frameworks), if it doesn't you can still use the old version
 of the script.
 
 The old version of this script can be found [here](https://github.com/huggingface/transformers/tree/master/examples/legacy/question-answering).
@@ -172,8 +172,6 @@ accelerate test
 that will check everything is ready for training. Finally, you cna launch training with
 
 ```bash
-export TASK_NAME=mrpc
-
 accelerate launch run_qa_no_trainer.py \
   --model_name_or_path bert-base-uncased \
   --dataset_name squad \

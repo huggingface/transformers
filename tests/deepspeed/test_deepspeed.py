@@ -20,16 +20,19 @@ import unittest
 from copy import deepcopy
 
 from parameterized import parameterized
-from transformers import TrainingArguments, is_torch_available
+from transformers import AutoModel, TrainingArguments, is_torch_available, logging
+from transformers.deepspeed import HfDeepSpeedConfig, is_deepspeed_available
 from transformers.file_utils import WEIGHTS_NAME
-from transformers.integrations import is_deepspeed_available
 from transformers.testing_utils import (
     CaptureLogger,
+    CaptureStderr,
     ExtendSysPath,
+    LoggingLevel,
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
     mockenv_context,
+    require_deepspeed,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
@@ -48,6 +51,7 @@ with ExtendSysPath(f"{bindir}/.."):
 set_seed(42)
 MBART_TINY = "sshleifer/tiny-mbart"
 T5_SMALL = "t5-small"
+T5_TINY = "patrickvonplaten/t5-tiny-random"
 
 
 def load_json(path):
@@ -55,24 +59,79 @@ def load_json(path):
         return json.load(f)
 
 
-# a candidate for testing_utils
-def require_deepspeed(test_case):
+def require_deepspeed_aio(test_case):
     """
-    Decorator marking a test that requires deepspeed
+    Decorator marking a test that requires deepspeed aio (nvme)
     """
     if not is_deepspeed_available():
         return unittest.skip("test requires deepspeed")(test_case)
+
+    import deepspeed
+    from deepspeed.ops.aio import AsyncIOBuilder
+
+    if not deepspeed.ops.__compatible_ops__[AsyncIOBuilder.NAME]:
+        return unittest.skip("test requires deepspeed async-io")(test_case)
     else:
         return test_case
 
 
 if is_deepspeed_available():
     from deepspeed.utils import logger as deepspeed_logger  # noqa
-    from transformers.integrations import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
+    from transformers.deepspeed import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
 
 ZERO2 = "zero2"
 ZERO3 = "zero3"
 stages = [ZERO2, ZERO3]
+
+
+@require_deepspeed
+@require_torch_gpu
+class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
+    """
+    Testing non-Trainer DeepSpeed integration
+    """
+
+    def setUp(self):
+        super().setUp()
+
+        self.dist_env_1_gpu = dict(
+            MASTER_ADDR="localhost", MASTER_PORT="10999", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
+        )
+
+    def test_init_zero3(self):
+        # test that zero.Init() works correctly under zero3
+        ds_config = {
+            "train_batch_size": 1,
+            "zero_optimization": {
+                "stage": 3,
+            },
+        }
+
+        dschf = HfDeepSpeedConfig(ds_config)
+
+        self.assertTrue(dschf.is_zero3())
+        self.assertTrue(is_deepspeed_zero3_enabled())
+
+        with LoggingLevel(logging.INFO):
+            with mockenv_context(**self.dist_env_1_gpu):
+                logger = logging.get_logger("transformers.modeling_utils")
+                with CaptureLogger(logger) as cl:
+                    AutoModel.from_pretrained(T5_TINY)
+        self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
+
+        # now remove zero optimization
+        del ds_config["zero_optimization"]
+        dschf = HfDeepSpeedConfig(ds_config)
+
+        self.assertFalse(dschf.is_zero3())
+        self.assertFalse(is_deepspeed_zero3_enabled())
+
+        with LoggingLevel(logging.INFO):
+            with mockenv_context(**self.dist_env_1_gpu):
+                logger = logging.get_logger("transformers.modeling_utils")
+                with CaptureLogger(logger) as cl:
+                    AutoModel.from_pretrained(T5_TINY)
+        self.assertNotIn("Detected DeepSpeed ZeRO-3", cl.out)
 
 
 @require_deepspeed
@@ -108,27 +167,85 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             MASTER_ADDR="localhost", MASTER_PORT="10999", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
         )
 
-        self.ds_config_file = {}
-        self.ds_config_file[ZERO2] = f"{self.test_file_dir_str}/ds_config_zero2.json"
-        self.ds_config_file[ZERO3] = f"{self.test_file_dir_str}/ds_config_zero3.json"
+        self.ds_config_file = dict(
+            zero2=f"{self.test_file_dir_str}/ds_config_zero2.json",
+            zero3=f"{self.test_file_dir_str}/ds_config_zero3.json",
+        )
 
         # use self.get_config_dict(stage) to use these to ensure the original is not modified
-        self.ds_config_dict = {}
         with io.open(self.ds_config_file[ZERO2], "r", encoding="utf-8") as f:
-            self.ds_config_dict[ZERO2] = json.load(f)
+            config_zero2 = json.load(f)
+            # by default use fp16
+            config_zero2["fp16"]["enabled"] = True
         with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
-            self.ds_config_dict[ZERO3] = json.load(f)
-
-    def get_config_dict(self, stage):
-        """As the tests modify the dict, always make a copy"""
-        config = deepcopy(self.ds_config_dict[stage])
-        if stage == ZERO3:
+            config_zero3 = json.load(f)
+            # by default use fp16
+            config_zero3["fp16"]["enabled"] = True
             # This setting slows things down, so don't enable it by default unless needed by a test.
             # It's in the file as a demo for users since we want everything to work out of the box even if slower.
-            config["zero_optimization"]["stage3_gather_fp16_weights_on_model_save"] = False
-        return config
+            config_zero3["zero_optimization"]["stage3_gather_fp16_weights_on_model_save"] = False
+        self.ds_config_dict = dict(
+            zero2=config_zero2,
+            zero3=config_zero3,
+        )
+
+    def get_config_dict(self, stage):
+        # As some tests modify the dict, always make a copy
+        return deepcopy(self.ds_config_dict[stage])
 
     # --- These tests are enough to run on one of zero stages --- #
+
+    def test_hf_ds_config_mismatch(self):
+
+        ds_config = self.get_config_dict(ZERO2)
+
+        # Purposefully configure these values to mismatch TrainingArguments values.
+        # This currently doesn't cover all keys (but it could)
+        per_device_train_batch_size = 2
+        ds_config["train_micro_batch_size_per_gpu"] = per_device_train_batch_size + 2
+
+        ds_config["train_batch_size"] = 1000
+
+        gradient_accumulation_steps = 2
+        ds_config["gradient_accumulation_steps"] = gradient_accumulation_steps + 2
+
+        max_grad_norm = 1.0
+        ds_config["gradient_clipping"] = max_grad_norm + 0.1
+
+        adam_beta1, adam_beta2 = 0.9, 0.99
+        ds_config["optimizer"]["params"]["betas"] = [adam_beta1 - 0.1, adam_beta2 - 0.1]
+
+        fp16 = True
+        ds_config["fp16"]["enabled"] = not fp16
+
+        keys = [
+            "per_device_train_batch_size",
+            "train_batch_size",
+            "gradient_accumulation_steps",
+            "max_grad_norm",
+            "betas",
+            "fp16",
+        ]
+
+        with mockenv_context(**self.dist_env_1_gpu):
+            trainer = get_regression_trainer(
+                local_rank=0,
+                fp16=fp16,
+                deepspeed=ds_config,
+                per_device_train_batch_size=per_device_train_batch_size,
+                gradient_accumulation_steps=gradient_accumulation_steps,
+                max_grad_norm=max_grad_norm,
+                adam_beta1=adam_beta1,
+                adam_beta2=adam_beta2,
+            )
+            with self.assertRaises(Exception) as context:
+                trainer.train()
+
+        for key in keys:
+            self.assertTrue(
+                key in str(context.exception),
+                f"{key} is not in the exception message:\n{context.exception}",
+            )
 
     # Test various combos
     # 1. DS scheduler + DS optimizer: this is already tested by most other tests
@@ -142,9 +259,9 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             ds_config_zero2_dict = self.get_config_dict(ZERO2)
             del ds_config_zero2_dict["optimizer"]  # force default HF Trainer optimizer
             del ds_config_zero2_dict["scheduler"]  # force default HF Trainer scheduler
-            ds_config_zero2_dict["zero_optimization"]["cpu_offload"] = False
+            ds_config_zero2_dict["zero_optimization"]["offload_optimizer"]["device"] = "none"
             ds_config_zero2_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
-            trainer = get_regression_trainer(a=a, local_rank=0, deepspeed=ds_config_zero2_dict)
+            trainer = get_regression_trainer(a=a, local_rank=0, fp16=True, deepspeed=ds_config_zero2_dict)
             trainer.train()
         new_a = trainer.model.a.item()
         self.assertNotEqual(new_a, a)
@@ -154,9 +271,9 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         with mockenv_context(**self.dist_env_1_gpu):
             ds_config_zero2_dict = self.get_config_dict(ZERO2)
             del ds_config_zero2_dict["optimizer"]  # force default HF Trainer optimizer
-            ds_config_zero2_dict["zero_optimization"]["cpu_offload"] = False
+            ds_config_zero2_dict["zero_optimization"]["offload_optimizer"]["device"] = "none"
             ds_config_zero2_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
-            trainer = get_regression_trainer(a=a, local_rank=0, deepspeed=ds_config_zero2_dict)
+            trainer = get_regression_trainer(a=a, local_rank=0, fp16=True, deepspeed=ds_config_zero2_dict)
             trainer.train()
         new_a = trainer.model.a.item()
         self.assertNotEqual(new_a, a)
@@ -166,9 +283,9 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         with mockenv_context(**self.dist_env_1_gpu):
             ds_config_zero2_dict = self.get_config_dict(ZERO2)
             del ds_config_zero2_dict["scheduler"]  # force default HF Trainer scheduler
-            ds_config_zero2_dict["zero_optimization"]["cpu_offload"] = False
+            ds_config_zero2_dict["zero_optimization"]["offload_optimizer"]["device"] = "none"
             ds_config_zero2_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
-            trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_zero2_dict)
+            trainer = get_regression_trainer(local_rank=0, fp16=True, deepspeed=ds_config_zero2_dict)
             with self.assertRaises(Exception) as context:
                 trainer.train()
         self.assertTrue(
@@ -176,6 +293,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             f"got exception: {context.exception}",
         )
 
+    @require_deepspeed_aio
     def test_stage3_nvme_offload(self):
         with mockenv_context(**self.dist_env_1_gpu):
             # this actually doesn't have to be on NVMe, any storage will do since this test only
@@ -185,30 +303,12 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             ds_config_zero3_dict = self.get_config_dict(ZERO3)
             ds_config_zero3_dict["zero_optimization"]["offload_optimizer"] = nvme_config
             ds_config_zero3_dict["zero_optimization"]["offload_param"] = nvme_config
-            trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_zero3_dict)
-            with CaptureLogger(deepspeed_logger) as cs:
+            trainer = get_regression_trainer(local_rank=0, fp16=True, deepspeed=ds_config_zero3_dict)
+            with CaptureLogger(deepspeed_logger) as cl:
                 trainer.train()
-            self.assertIn("DeepSpeed info", cs.out, "expected DeepSpeed logger output but got none")
+            self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
 
     # --- These tests need to run on both zero stages --- #
-
-    @parameterized.expand(stages)
-    def test_fp32(self, stage):
-        ds_config_dict = self.get_config_dict(stage)
-        ds_config_dict["fp16"]["enabled"] = False  # force non-fp16 mode
-
-        # XXX: do we go via from_pretrained in zero 3 here? need to test zero.Init(dtype=torch.float)
-
-        # XXX: rewrite this test once fp32 is supported by DeepSpeed
-        with mockenv_context(**self.dist_env_1_gpu):
-            trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_dict)
-            with self.assertRaises(Exception) as context:
-                trainer.train()
-            self.assertIn(
-                "ZeRO is only supported if fp16 is enabled",
-                str(context.exception),
-                f"got exception: {context.exception}",
-            )
 
     @parameterized.expand(stages)
     def test_hf_optimizer_with_offload(self, stage):
@@ -216,12 +316,9 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         ds_config_dict = self.get_config_dict(stage)
         del ds_config_dict["optimizer"]  # force default HF Trainer optimizer
         # force cpu offload
-        if stage == "stage2":
-            ds_config_dict["zero_optimization"]["cpu_offload"] = True
-        elif stage == "stage3":
-            ds_config_dict["zero_optimization"]["offload_optimizer"]["device"] = "cpu"
+        ds_config_dict["zero_optimization"]["offload_optimizer"]["device"] = "cpu"
         with mockenv_context(**self.dist_env_1_gpu):
-            trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_dict)
+            trainer = get_regression_trainer(local_rank=0, fp16=True, deepspeed=ds_config_dict)
             with self.assertRaises(Exception) as context:
                 trainer.train()
             self.assertIn(
@@ -239,10 +336,10 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # it's run not as a first test as `sys.stdout` will no longer be the same. So we either have
         # to reset `deepspeed_logger.handlers[0].setStream(sys.stdout)` or directly capture from the deepspeed_logger.
         with mockenv_context(**self.dist_env_1_gpu):
-            trainer = get_regression_trainer(local_rank=0, deepspeed=self.ds_config_file[stage])
-            with CaptureLogger(deepspeed_logger) as cs:
+            trainer = get_regression_trainer(local_rank=0, fp16=True, deepspeed=self.get_config_dict(stage))
+            with CaptureLogger(deepspeed_logger) as cl:
                 trainer.train()
-            self.assertIn("DeepSpeed info", cs.out, "expected DeepSpeed logger output but got none")
+            self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
 
     @parameterized.expand(stages)
     def test_early_get_last_lr(self, stage):
@@ -259,7 +356,8 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 b=b,
                 local_rank=0,
                 train_len=8,
-                deepspeed=self.ds_config_file[stage],
+                fp16=True,
+                deepspeed=self.get_config_dict(stage),
                 per_device_train_batch_size=8,
                 logging_steps=1,
             )
@@ -267,7 +365,11 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             post_train_a = trainer.model.a.item()
 
             # XXX: for some reason the following check fails with zero3 - not a broken but a
-            # different qualitative outcome - need to investigate at some point
+            # different qualitative outcome - as if optimizer did run
+            # oddly getting 1.0 for both a and b from 0.0 - there is a bug somewhere
+            # print(trainer.model.a.item())
+            # print(trainer.model.b.item())
+            # need to investigate at some point
             if stage == ZERO3:
                 return
 
@@ -292,14 +394,19 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         train_len = 64
         a = b = 0.0
 
+        kwargs = dict(
+            a=a,
+            b=b,
+            local_rank=0,
+            train_len=train_len,
+            fp16=True,
+            deepspeed=self.get_config_dict(stage),
+        )
+
         with mockenv_context(**self.dist_env_1_gpu):
             no_grad_accum_trainer = get_regression_trainer(
-                a=a,
-                b=b,
-                local_rank=0,
-                train_len=train_len,
-                deepspeed=self.ds_config_file[stage],
-                per_device_train_batch_size=8,
+                **kwargs,
+                per_device_train_batch_size=16,
                 gradient_accumulation_steps=1,
             )
             no_grad_accum_result = no_grad_accum_trainer.train()
@@ -311,13 +418,9 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
 
         with mockenv_context(**self.dist_env_1_gpu):
             yes_grad_accum_trainer = get_regression_trainer(
-                a=a,
-                b=b,
-                local_rank=0,
-                train_len=train_len,
-                deepspeed=self.ds_config_file[stage],
+                **kwargs,
                 per_device_train_batch_size=4,
-                gradient_accumulation_steps=2,
+                gradient_accumulation_steps=4,
             )
             yes_grad_accum_result = yes_grad_accum_trainer.train()
             yes_grad_accum_loss = yes_grad_accum_result.training_loss
@@ -325,12 +428,13 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             yes_grad_accum_b = yes_grad_accum_trainer.model.b.item()
             self.assertNotEqual(yes_grad_accum_a, a)
 
-        # training with half the batch size but accumulation steps as 2 should give the same weights
-        self.assertEqual(no_grad_accum_a, yes_grad_accum_a)
-        self.assertEqual(no_grad_accum_b, yes_grad_accum_b)
+        # training with half the batch size but accumulation steps as 2 should give the same
+        # weights, but sometimes get a slight difference still of 1e-6
+        self.assertAlmostEqual(no_grad_accum_a, yes_grad_accum_a, places=5)
+        self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, places=5)
 
         # see the note above how to get identical loss on a small bs
-        self.assertAlmostEqual(no_grad_accum_loss, yes_grad_accum_loss, places=5)
+        self.assertAlmostEqual(no_grad_accum_loss, yes_grad_accum_loss, places=2)
 
     def check_saved_checkpoints_deepspeed(self, output_dir, freq, total, stage):
         # adapted from TrainerIntegrationCommon.check_saved_checkpoints
@@ -387,6 +491,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(
                 output_dir=output_dir,
                 save_steps=freq,
+                fp16=True,
                 deepspeed=ds_config_dict,
             )
             trainer.train()
@@ -400,7 +505,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         with mockenv_context(**self.dist_env_1_gpu):
             ds_config_dict = self.get_config_dict(stage)
             output_dir = self.get_auto_remove_tmp_dir()
-            trainer = get_regression_trainer(output_dir=output_dir, deepspeed=ds_config_dict)
+            trainer = get_regression_trainer(output_dir=output_dir, fp16=True, deepspeed=ds_config_dict)
 
             # 1. fail to find any checkpoint - due a fresh output_dir
             with self.assertRaises(Exception) as context:
@@ -428,7 +533,9 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         if stage == ZERO3:
             ds_config_dict["zero_optimization"]["stage3_gather_fp16_weights_on_model_save"] = True
 
-        kwargs = dict(output_dir=output_dir, train_len=128, save_steps=5, learning_rate=0.1, deepspeed=ds_config_dict)
+        kwargs = dict(
+            output_dir=output_dir, train_len=128, save_steps=5, learning_rate=0.1, fp16=True, deepspeed=ds_config_dict
+        )
 
         with mockenv_context(**self.dist_env_1_gpu):
             trainer = get_regression_trainer(**kwargs)
@@ -465,12 +572,12 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # test that we can switch from zero2 to zero3 in the same process for example
         # test is_zero, etc.
         output_dir = self.get_auto_remove_tmp_dir()
-        kwargs = dict(output_dir=output_dir, train_len=8)
+        kwargs = dict(output_dir=output_dir, train_len=8, fp16=True)
+
+        ds_config_zero3_dict = self.get_config_dict("zero3")
+        ds_config_zero2_dict = self.get_config_dict("zero2")
 
         with mockenv_context(**self.dist_env_1_gpu):
-            ds_config_zero3_dict = self.get_config_dict("zero3")
-            ds_config_zero2_dict = self.get_config_dict("zero2")
-
             trainer = get_regression_trainer(deepspeed=ds_config_zero3_dict, **kwargs)
             self.assertTrue(is_deepspeed_zero3_enabled())
 
@@ -533,6 +640,35 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         )
 
     @parameterized.expand(stages)
+    def test_fp32_non_distributed(self, stage):
+        # real model needs too much GPU memory under stage2+fp32, so using tiny random model here -
+        # therefore no quality checks, just basic completion checks are done
+        self.run_and_check(
+            stage=stage,
+            model_name=T5_TINY,
+            distributed=False,
+            do_train=True,
+            do_eval=True,
+            quality_checks=False,
+            fp16=False,
+        )
+
+    @require_torch_multi_gpu
+    @parameterized.expand(stages)
+    def test_fp32_distributed(self, stage):
+        # real model needs too much GPU memory under stage2+fp32, so using tiny random model here -
+        # therefore no quality checks, just basic completion checks are done
+        self.run_and_check(
+            stage=stage,
+            model_name=T5_TINY,
+            distributed=True,
+            do_train=True,
+            do_eval=True,
+            quality_checks=False,
+            fp16=False,
+        )
+
+    @parameterized.expand(stages)
     def test_resume_train_not_from_ds_checkpoint(self, stage):
         # do normal training and then resume not from the deepspeed checkpoint but explicitly from
         # the saved model dir
@@ -550,44 +686,50 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
         self.do_checks(output_dir, do_train=do_train, do_eval=do_eval)
 
-    def do_checks(self, output_dir, do_train=True, do_eval=True):
+    def do_checks(self, output_dir, do_train=True, do_eval=True, quality_checks=True):
 
         if do_train:
             train_metrics = load_json(os.path.join(output_dir, "train_results.json"))
             self.assertIn("train_samples_per_second", train_metrics)
-            self.assertGreater(train_metrics["train_samples_per_second"], 0.5)
+            if quality_checks:
+                self.assertGreater(train_metrics["train_samples_per_second"], 0.5)
 
         if do_eval:
             eval_metrics = load_json(os.path.join(output_dir, "eval_results.json"))
             self.assertIn("eval_bleu", eval_metrics)
-            self.assertGreater(eval_metrics["eval_bleu"], 0)
+            if quality_checks:
+                self.assertGreater(eval_metrics["eval_bleu"], 1)
 
     # XXX: need to do better validation beyond just that the run was successful
     def run_and_check(
         self,
         stage,
-        eval_steps=10,
-        distributed=True,
-        do_train=True,
-        do_eval=True,
-        extra_args_str=None,
-        remove_args_str=None,
+        model_name: str = T5_SMALL,
+        eval_steps: int = 10,
+        distributed: bool = True,
+        do_train: bool = True,
+        do_eval: bool = True,
+        quality_checks: bool = True,
+        fp16: bool = True,
+        extra_args_str: str = None,
+        remove_args_str: str = None,
     ):
 
         # we are doing quality testing so using a small real model
         output_dir = self.run_trainer(
             stage=stage,
-            model_name=T5_SMALL,
+            model_name=model_name,
             eval_steps=eval_steps,
             num_train_epochs=1,
             do_train=do_train,
             do_eval=do_eval,
             distributed=distributed,
+            fp16=fp16,
             extra_args_str=extra_args_str,
             remove_args_str=remove_args_str,
         )
 
-        self.do_checks(output_dir, do_train=do_train, do_eval=do_eval)
+        self.do_checks(output_dir, do_train=do_train, do_eval=do_eval, quality_checks=quality_checks)
 
         return output_dir
 
@@ -600,6 +742,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         do_train: bool = False,
         do_eval: bool = True,
         distributed: bool = True,
+        fp16: bool = True,
         extra_args_str: str = None,
         remove_args_str: str = None,
     ):
@@ -629,6 +772,9 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         """.split()
         args.extend(["--source_prefix", '"translate English to Romanian: "'])
 
+        if fp16:
+            args.extend(["--fp16"])
+
         actions = 0
         if do_train:
             actions += 1
@@ -636,7 +782,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
                 f"""
             --do_train
             --num_train_epochs {str(num_train_epochs)}
-            --max_train_samples 100
+            --max_train_samples 16
             --per_device_train_batch_size 2
             --learning_rate 3e-3
             """.split()
@@ -647,7 +793,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             args.extend(
                 """
             --do_eval
-            --max_eval_samples 100
+            --max_eval_samples 16
             --per_device_eval_batch_size 2
             """.split()
             )
@@ -688,13 +834,14 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --overwrite_output_dir
             --do_train
             --do_eval
-            --max_train_samples 10
-            --max_eval_samples 10
-            --per_device_train_batch_size 5
-            --per_device_eval_batch_size 5
+            --max_train_samples 16
+            --max_eval_samples 16
+            --per_device_train_batch_size 2
+            --per_device_eval_batch_size 2
             --num_train_epochs 1
             --warmup_steps 8
-            --block_size 128
+            --block_size 64
+            --fp16
             --report_to none
             """.split()
 
@@ -707,7 +854,38 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
         execute_subprocess_async(cmd, env=self.get_env())
 
-        return output_dir
+    def test_clm_from_config_zero3(self):
+        # this test exercises AutoModel.from_config(config) - to ensure zero.Init is called
+
+        data_dir = self.tests_dir / "fixtures"
+        output_dir = self.get_auto_remove_tmp_dir()
+        args = f"""
+            --model_type gpt2
+            --tokenizer_name sshleifer/tiny-gpt2
+            --train_file {data_dir}/sample_text.txt
+            --validation_file {data_dir}/sample_text.txt
+            --output_dir {output_dir}
+            --overwrite_output_dir
+            --do_train
+            --max_train_samples 4
+            --per_device_train_batch_size 2
+            --num_train_epochs 1
+            --warmup_steps 8
+            --block_size 8
+            --fp16
+            --report_to none
+            """.split()
+
+        ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_zero3.json".split()
+        script = [f"{self.examples_dir_str}/pytorch/language-modeling/run_clm.py"]
+        launcher = self.get_launcher(distributed=True)
+
+        cmd = launcher + script + args + ds_args
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        with CaptureStderr() as cs:
+            execute_subprocess_async(cmd, env=self.get_env())
+        assert "Detected DeepSpeed ZeRO-3" in cs.err
 
     def get_launcher(self, distributed=False):
         # 1. explicitly set --num_nodes=1 just in case these tests end up run on a multi-node setup

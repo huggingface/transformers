@@ -424,7 +424,7 @@ class LEDEncoderSelfAttention(nn.Module):
         # matrix multiplication
         # bcxd: batch_size * num_heads x chunks x 2window_overlap x head_dim
         # bcyd: batch_size * num_heads x chunks x 2window_overlap x head_dim
-        # bcxy: batch_size * num_heads x chunks x 2window_overlap x window_overlap
+        # bcxy: batch_size * num_heads x chunks x 2window_overlap x 2window_overlap
         diagonal_chunked_attention_scores = torch.einsum("bcxd,bcyd->bcxy", (query, key))  # multiply
 
         # convert diagonals into columns
@@ -1518,8 +1518,13 @@ LED_INPUTS_DOCSTRING = r"""
             :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
             `optional`) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
             cross-attention of the decoder.
-        past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
+        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+            Tuple of :obj:`tuple(torch.FloatTensor)` of length :obj:`config.n_layers`, with each tuple having 2 tensors
+            of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
+            shape :obj:`(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see :obj:`past_key_values` input) to speed up sequential decoding.
 
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
@@ -1928,8 +1933,13 @@ class LEDDecoder(LEDPreTrainedModel):
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-                Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
+            past_key_values (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+                Tuple of :obj:`tuple(torch.FloatTensor)` of length :obj:`config.n_layers`, with each tuple having 2
+                tensors of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional
+                tensors of shape :obj:`(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+                Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
+                cross-attention blocks) that can be used (see :obj:`past_key_values` input) to speed up sequential
                 decoding.
 
                 If :obj:`past_key_values` are used, the user can optionally input only the last
@@ -2356,6 +2366,8 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
         past=None,
         attention_mask=None,
         head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
         **kwargs,
@@ -2371,6 +2383,8 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
+            "decoder_head_mask": decoder_head_mask,
+            "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
@@ -2581,8 +2595,8 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
+        start_logits = start_logits.squeeze(-1).contiguous()
+        end_logits = end_logits.squeeze(-1).contiguous()
 
         total_loss = None
         if start_positions is not None and end_positions is not None:
@@ -2593,8 +2607,8 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
                 end_positions = end_positions.squeeze(-1)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
+            start_positions = start_positions.clamp(0, ignored_index)
+            end_positions = end_positions.clamp(0, ignored_index)
 
             loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
             start_loss = loss_fct(start_logits, start_positions)

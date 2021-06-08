@@ -43,12 +43,12 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.6.0.dev0")
+check_min_version("4.7.0.dev0")
 
 logger = logging.getLogger(__name__)
 MODEL_CONFIG_CLASSES = list(MODEL_FOR_MASKED_LM_MAPPING.keys())
@@ -211,7 +211,7 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
-    logger.setLevel(logging.INFO if is_main_process(training_args.local_rank) else logging.WARN)
+    logger.setLevel(logging.INFO if training_args.should_log else logging.WARN)
 
     # Log on each process the small summary:
     logger.warning(
@@ -219,7 +219,7 @@ def main():
         + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
     # Set the verbosity to info of the Transformers logger (on main process only):
-    if is_main_process(training_args.local_rank):
+    if training_args.should_log:
         transformers.utils.logging.set_verbosity_info()
         transformers.utils.logging.enable_default_handler()
         transformers.utils.logging.enable_explicit_format()
@@ -469,14 +469,26 @@ def main():
 
         max_eval_samples = data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
         metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
-        perplexity = math.exp(metrics["eval_loss"])
+        try:
+            perplexity = math.exp(metrics["eval_loss"])
+        except OverflowError:
+            perplexity = float("inf")
         metrics["perplexity"] = perplexity
 
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
 
     if training_args.push_to_hub:
-        trainer.push_to_hub()
+        kwargs = {"finetuned_from": model_args.model_name_or_path, "tags": "fill-mask"}
+        if data_args.dataset_name is not None:
+            kwargs["dataset_tags"] = data_args.dataset_name
+            if data_args.dataset_config_name is not None:
+                kwargs["dataset_args"] = data_args.dataset_config_name
+                kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+            else:
+                kwargs["dataset"] = data_args.dataset_name
+
+        trainer.push_to_hub(**kwargs)
 
 
 def _mp_fn(index):

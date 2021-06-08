@@ -44,12 +44,12 @@ from transformers import (
     default_data_collator,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.6.0.dev0")
+check_min_version("4.7.0.dev0")
 
 logger = logging.getLogger(__name__)
 
@@ -268,7 +268,7 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
-    logger.setLevel(logging.INFO if is_main_process(training_args.local_rank) else logging.WARN)
+    logger.setLevel(logging.INFO if training_args.should_log else logging.WARN)
 
     # Log on each process the small summary:
     logger.warning(
@@ -276,7 +276,7 @@ def main():
         + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
     # Set the verbosity to info of the Transformers logger (on main process only):
-    if is_main_process(training_args.local_rank):
+    if training_args.should_log:
         transformers.utils.logging.set_verbosity_info()
     logger.info(f"Training/evaluation parameters {training_args}")
 
@@ -336,6 +336,8 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
+
+    model.resize_token_embeddings(len(tokenizer))
 
     # Set decoder_start_token_id
     if model.config.decoder_start_token_id is None and isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
@@ -414,9 +416,9 @@ def main():
         return model_inputs
 
     if training_args.do_train:
-        train_dataset = datasets["train"]
         if "train" not in datasets:
             raise ValueError("--do_train requires a train dataset")
+        train_dataset = datasets["train"]
         if data_args.max_train_samples is not None:
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
         train_dataset = train_dataset.map(
@@ -569,11 +571,24 @@ def main():
                 )
                 predictions = [pred.strip() for pred in predictions]
                 output_prediction_file = os.path.join(training_args.output_dir, "generated_predictions.txt")
-                with open(output_prediction_file, "w") as writer:
+                with open(output_prediction_file, "w", encoding="utf-8") as writer:
                     writer.write("\n".join(predictions))
 
     if training_args.push_to_hub:
-        trainer.push_to_hub()
+        kwargs = {"finetuned_from": model_args.model_name_or_path, "tags": "translation"}
+        if data_args.dataset_name is not None:
+            kwargs["dataset_tags"] = data_args.dataset_name
+            if data_args.dataset_config_name is not None:
+                kwargs["dataset_args"] = data_args.dataset_config_name
+                kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+            else:
+                kwargs["dataset"] = data_args.dataset_name
+
+        languages = [l for l in [data_args.source_lang, data_args.target_lang] if l is not None]
+        if len(languages) > 0:
+            kwargs["language"] = languages
+
+        trainer.push_to_hub(**kwargs)
 
     return results
 
