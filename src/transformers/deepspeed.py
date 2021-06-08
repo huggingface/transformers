@@ -86,7 +86,7 @@ class HfDeepSpeedConfig:
                     self.get_value("zero_optimization.offload_param.device"),
                 ]
             )
-            if offload_devices | offload_devices_valid:
+            if offload_devices & offload_devices_valid:
                 self._offload = True
 
     def find_config_node(self, ds_key_long):
