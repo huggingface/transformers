@@ -48,9 +48,8 @@ def _compute_mask_indices(
     shape: Tuple[int, int],
     mask_prob: float,
     mask_length: int,
-    attention_mask: Optional[tf.Tensor] = None,
     min_masks: int = 0,
-) -> np.ndarray:
+) -> tf.Tensor:
     """
     Computes random mask spans for a given shape
 
@@ -67,52 +66,51 @@ def _compute_mask_indices(
     Adapted from `fairseq's data_utils.py
     <https://github.com/pytorch/fairseq/blob/e0788f7007a8473a76db573985031f3c94201e79/fairseq/data/data_utils.py#L376>`__.
     """
-    bsz, all_sz = shape
-    mask = np.full((bsz, all_sz), False)
+    batch_size, sequence_length = shape
 
-    all_num_mask = int(
-        # add a random number for probabilistic rounding
-        mask_prob * all_sz / float(mask_length)
-        + np.random.rand()
+    if mask_length < 1:
+        raise ValueError("`mask_length` has to be bigger than 0.")
+
+    if mask_length > sequence_length:
+        raise ValueError(
+            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and `sequence_length`: {sequence_length}`"
+        )
+    # compute number of masked spans in batch
+    num_masked_spans = int(mask_prob * sequence_length / mask_length + tf.random.uniform((1,)))
+    num_masked_spans = max(num_masked_spans, min_masks)
+
+    # make sure num masked indices <= sequence_length
+    if num_masked_spans * mask_length > sequence_length:
+        num_masked_spans = sequence_length // mask_length
+
+    # SpecAugment mask to fill
+    spec_aug_mask = tf.zeros((batch_size, sequence_length), dtype=tf.int32)
+
+    # uniform distribution to sample from, make sure that offset samples are < sequence_length
+    uniform_dist = tf.ones((batch_size, sequence_length - (mask_length - 1)))
+
+    # get random indices to mask
+    spec_aug_mask_idxs = tf.random.categorical(uniform_dist, num_masked_spans, dtype=tf.int32)
+
+    # expand masked indices to masked spans
+    spec_aug_mask_idxs = tf.expand_dims(spec_aug_mask_idxs, -1)
+    spec_aug_mask_idxs = tf.tile(spec_aug_mask_idxs, (1, 1, mask_length))
+    spec_aug_mask_idxs = tf.reshape(spec_aug_mask_idxs, (batch_size, num_masked_spans * mask_length))
+
+    offsets = tf.range(mask_length)[tf.newaxis, tf.newaxis, :]
+    offsets = tf.tile(offsets, (batch_size, num_masked_spans, 1))
+    offsets = tf.reshape(offsets, (batch_size, num_masked_spans * mask_length))
+    spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
+
+    # scatter indices to mask
+    spec_aug_mask = tf.tensor_scatter_nd_update(
+        tf.transpose(spec_aug_mask, (1, 0)),
+        tf.expand_dims(spec_aug_mask_idxs, -1),
+        tf.ones((batch_size, spec_aug_mask_idxs.shape[1], batch_size), dtype=tf.int32),
     )
+    spec_aug_mask = tf.transpose(spec_aug_mask, (1, 0))
 
-    all_num_mask = max(min_masks, all_num_mask)
-
-    mask_idcs = []
-    padding_mask = tf.math.not_equal(attention_mask, 1) if attention_mask is not None else None
-    for i in range(bsz):
-        if padding_mask is not None:
-            sz = all_sz - tf.math.reduce_sum(padding_mask[i])
-            num_mask = int(
-                # add a random number for probabilistic rounding
-                mask_prob * sz / float(mask_length)
-                + np.random.rand()
-            )
-            num_mask = max(min_masks, num_mask)
-        else:
-            sz = all_sz
-            num_mask = all_num_mask
-
-        lengths = np.full(num_mask, mask_length)
-
-        if sum(lengths) == 0:
-            lengths[0] = min(mask_length, sz - 1)
-
-        min_len = min(lengths)
-        if sz - min_len <= num_mask:
-            min_len = sz - num_mask - 1
-
-        mask_idc = np.random.choice(sz - min_len, num_mask, replace=False)
-        mask_idc = np.asarray([mask_idc[j] + offset for j in range(len(mask_idc)) for offset in range(lengths[j])])
-        mask_idcs.append(np.unique(mask_idc[mask_idc < sz]))
-
-    min_len = min([len(m) for m in mask_idcs])
-    for i, mask_idc in enumerate(mask_idcs):
-        if len(mask_idc) > min_len:
-            mask_idc = np.random.choice(mask_idc, min_len, replace=False)
-        mask[i, mask_idc] = True
-
-    return tf.cast(mask, tf.float32)
+    return tf.cast(spec_aug_mask, tf.float32)
 
 
 def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
@@ -865,7 +863,7 @@ class TFWav2Vec2Encoder(tf.keras.layers.Layer):
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = np.random.uniform(0, 1)
-            if training and (dropout_probability < self.layerdrop):  # skip the layer
+            if training and (dropout_probability < self.config.layerdrop):  # skip the layer
                 continue
 
             layer_outputs = layer_module(
@@ -968,6 +966,8 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
         self.feature_extractor = TFWav2Vec2FeatureExtractor(config, name="feature_extractor")
         self.feature_projection = TFWav2Vec2FeatureProjection(config, name="feature_projection")
 
+        self.mask_spec_embed = tf.Variable(tf.random.uniform((config.hidden_size,)))
+
         if config.do_stable_layer_norm:
             self.encoder = TFWav2Vec2EncoderStableLayerNorm(config, name="encoder")
         else:
@@ -987,6 +987,44 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
 
         return input_lengths
+
+    def _mask_hidden_states(
+        self, hidden_states: tf.Tensor, mask_time_indices: Optional[tf.Tensor] = None, training: bool = False
+    ):
+        """
+        Masks extracted features along time axis and/or along feature axis according to `SpecAugment
+        <https://arxiv.org/abs/1904.08779>`__ .
+        """
+
+        # `config.apply_spec_augment` can set masking to False
+        if not getattr(self.config, "apply_spec_augment", True):
+            return hidden_states
+
+        if mask_time_indices is not None:
+            # apply SpecAugment along time axis with given mask_time_indices
+            hidden_states = tf.tensor_scatter_nd_update(hidden_states, mask_time_indices, self.masked_spec_embed)
+        elif self.config.mask_time_prob > 0 and training:
+            # generate indices & apply SpecAugment along time axis
+            batch_size, sequence_length, hidden_size = hidden_states.shape
+
+            mask_time_indices = _compute_mask_indices(
+                (batch_size, sequence_length),
+                self.config.mask_time_prob,
+                self.config.mask_time_length,
+                min_masks=2,
+            )
+            hidden_states = tf.tensor_scatter_nd_update(hidden_states, mask_time_indices, self.masked_spec_embed)
+
+        # apply SpecAugment along feature axis
+        if self.config.mask_feature_prob > 0 and training:
+            mask_feature_indices = _compute_mask_indices(
+                (batch_size, hidden_size),
+                mask_prob=self.config.mask_feature_prob,
+                mask_length=self.config.mask_feature_length,
+            )
+            hidden_states = tf.tensor_scatter_nd_update(hidden_states, mask_feature_indices, self.masked_spec_embed)
+
+        return hidden_states
 
     def call(
         self,
@@ -1026,6 +1064,12 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
             attention_mask = tf.sequence_mask(output_lengths, dtype=hidden_states.dtype)
 
         hidden_states = self.feature_projection(hidden_states, training=inputs["training"])
+
+        mask_time_indices = kwargs.get("mask_time_indices", None)
+        if mask_time_indices is not None:  # apply SpecAugment along time axis with given indices
+            hidden_states = tf.tensor_scatter_nd_update(hidden_states, mask_time_indices, self.mask_spec_embed)
+
+        hidden_states = self._mask_hidden_states(hidden_states)
 
         encoder_outputs = self.encoder(
             hidden_states,
@@ -1186,8 +1230,8 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
         position_ids: Optional[tf.Tensor] = None,
         head_mask: Optional[tf.Tensor] = None,
         inputs_embeds: Optional[tf.Tensor] = None,
-        output_attentions: Optional[tf.Tensor] = None,
-        output_hidden_states: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs: Any,
@@ -1286,18 +1330,18 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
     @replace_return_docstrings(output_type=TFCausalLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        labels=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
-        **kwargs,
+        input_ids: tf.Tensor,
+        attention_mask: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        labels: Optional[tf.Tensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
+        **kwargs: Any,
     ) -> Union[TFCausalLMOutput, Tuple[tf.Tensor]]:
         r"""
         labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1317,8 +1361,10 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
             >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
             >>> model = TFWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
 
-            >>> def map_to_array(batch): >>> speech, _ = sf.read(batch["file"]) >>> batch["speech"] = speech
-            >>> return batch
+            >>> def map_to_array(batch):
+            >>>     speech, _ = sf.read(batch["file"])
+            >>>     batch["speech"] = speech
+            >>>     return batch
 
             >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
             >>> ds = ds.map(map_to_array)
@@ -1379,15 +1425,16 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
             )
             input_lengths = self.wav2vec2._get_feat_extract_output_lengths(tf.reduce_sum(attention_mask, axis=-1))
 
+            # assuming that padded tokens are filled with -100
+            # when not being attended to
             labels_mask = tf.cast(labels >= 0, tf.int32)
             target_lengths = tf.reduce_sum(labels_mask, axis=-1)
-            labels = labels * labels_mask
-
-            log_probs = tf.nn.log_softmax(logits, axis=-1)
+            flattened_labels = tf.boolean_mask(labels, labels_mask)
+            flattened_labels = tf.reshape(flattened_labels, [labels.shape[0], -1])
 
             loss = tf.nn.ctc_loss(
-                logits=log_probs,
-                labels=labels,
+                logits=logits,
+                labels=flattened_labels,
                 logit_length=input_lengths,
                 label_length=target_lengths,
                 blank_index=self.config.pad_token_id,

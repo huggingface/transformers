@@ -20,7 +20,6 @@ import unittest
 import numpy as np
 
 from transformers import Wav2Vec2Config, is_tf_available
-from transformers.models.wav2vec2.modeling_tf_wav2vec2 import _compute_mask_indices
 from transformers.testing_utils import require_datasets, require_soundfile, require_tf, slow
 
 from .test_configuration_common import ConfigTester
@@ -31,6 +30,7 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFWav2Vec2ForCTC, TFWav2Vec2Model, Wav2Vec2Processor
+    from transformers.models.wav2vec2.modeling_tf_wav2vec2 import _compute_mask_indices
 
 
 @require_tf
@@ -140,6 +140,7 @@ class TFWav2Vec2ModelTester:
         input_lengths = tf.constant([input_values.shape[-1] // i for i in [4, 2, 1]])
         length_mask = tf.sequence_mask(input_lengths, dtype=tf.float32)
 
+        # convert values that are over input_lengths to padding
         input_values = input_values * length_mask
         attention_mask = attention_mask * length_mask
 
@@ -156,7 +157,7 @@ class TFWav2Vec2ModelTester:
         model = TFWav2Vec2ForCTC(config)
 
         input_values = input_values[:3]
-        attention_mask = tf.ones(input_values.shape)
+        attention_mask = tf.ones_like(input_values)
 
         input_lengths = tf.constant([input_values.shape[-1] // i for i in [4, 2, 1]])
         max_length_labels = model.wav2vec2._get_feat_extract_output_lengths(input_lengths)
@@ -164,6 +165,7 @@ class TFWav2Vec2ModelTester:
 
         length_mask = tf.sequence_mask(input_lengths, dtype=tf.float32)
 
+        # convert values that are over input_lengths to padding
         input_values = input_values * length_mask
         attention_mask = attention_mask * length_mask
 
@@ -173,10 +175,11 @@ class TFWav2Vec2ModelTester:
         model.config.ctc_loss_reduction = "mean"
         mean_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss
 
-        self.parent.assertTrue(abs(labels.shape[0] * labels.shape[1] * mean_loss - sum_loss) < 1e-3)
+        self.parent.assertTrue(abs(labels.shape[0] * labels.shape[1] * mean_loss - sum_loss) < 1e-2)
 
     def check_training(self, config, input_values, *args):
         model = TFWav2Vec2ForCTC(config)
+
         # freeze feature encoder
         model.freeze_feature_extractor()
 
@@ -190,9 +193,11 @@ class TFWav2Vec2ModelTester:
 
         input_values = input_values * length_mask
 
-        labels = tf.pad(labels, ((0, 0), (0, max(max_length_labels))), constant_values=-100)
+        pad_size = max(max_length_labels) - labels.shape[1]
+        labels = tf.pad(labels, ((0, 0), (0, pad_size)), constant_values=-100)
 
-        loss = model(input_values, labels=labels).loss
+        loss = model(input_values, labels=labels, training=True).loss
+
         self.parent.assertFalse(tf.math.is_inf(loss))
 
     def prepare_config_and_inputs_for_common(self):
@@ -275,6 +280,7 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
+@require_tf
 class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFWav2Vec2Model, TFWav2Vec2ForCTC) if is_tf_available() else ()
     test_resize_embeddings = False

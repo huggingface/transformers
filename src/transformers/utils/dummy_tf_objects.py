@@ -1660,8 +1660,8 @@ class TFWav2Vec2Model:
         requires_backends(self, ["tf"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
 
 
 class TFWav2Vec2PreTrainedModel:
@@ -1669,8 +1669,8 @@ class TFWav2Vec2PreTrainedModel:
         requires_backends(self, ["tf"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
 
 
 TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
