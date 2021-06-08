@@ -19,14 +19,18 @@ import unittest
 from transformers import is_torch_available
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
+
 if is_torch_available():
     import torch
+
     from transformers import GPT2LMHeadModel
+
 
 @require_torch
 @require_sentencepiece
 @require_tokenizers
 class MegatronGPT2IntegrationTest(unittest.TestCase):
+    @slow
     def test_inference_no_head(self):
         directory = "nvidia/megatron-gpt2-345m/"
         if "MYDIR" in os.environ:
@@ -48,17 +52,33 @@ class MegatronGPT2IntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_diag = torch.tensor(
-            [ 4.9414, -0.2920, -1.2148, -4.0273, -0.5161,
-             -5.2109, -1.2412, -1.8301, -1.7734, -4.7148,
-             -0.2317, -1.0811, -2.1777,  0.4141, -3.7969,
-             -4.0586, -2.5332, -3.3809,  4.3867],
+            [
+                4.9414,
+                -0.2920,
+                -1.2148,
+                -4.0273,
+                -0.5161,
+                -5.2109,
+                -1.2412,
+                -1.8301,
+                -1.7734,
+                -4.7148,
+                -0.2317,
+                -1.0811,
+                -2.1777,
+                0.4141,
+                -3.7969,
+                -4.0586,
+                -2.5332,
+                -3.3809,
+                4.3867,
+            ],
             device=torch_device,
             dtype=torch.half,
         )
 
         for i in range(19):
-            r, c = 8 * i // 17, 2792 * i # along the diagonal
-            computed, expected = output[0,r,c], expected_diag[i]
+            r, c = 8 * i // 17, 2792 * i  # along the diagonal
+            computed, expected = output[0, r, c], expected_diag[i]
             msg = f"row={r} col={c} computed={computed} expected={expected}"
             self.assertAlmostEqual(computed, expected, delta=1e-4, msg=msg)
-
