@@ -30,16 +30,17 @@ from datasets import load_dataset, load_metric
 import transformers
 from transformers import (
     AutoConfig,
-    TFAutoModelForSequenceClassification,
     AutoTokenizer,
     EvalPrediction,
     HfArgumentParser,
     PretrainedConfig,
+    TFAutoModelForSequenceClassification,
     TFTrainingArguments,
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version
+
 
 # region Helper functions
 
@@ -84,6 +85,7 @@ def convert_dataset_for_tensorflow(
     tf_dataset = tf_dataset.batch(batch_size=batch_size, drop_remainder=drop_remainder).map(densify_ragged_batch)
     return tf_dataset
 
+
 class SavePretrainedCallback(tf.keras.callbacks.Callback):
     # Hugging Face models have a save_pretrained() method that saves both the weights and the necessary
     # metadata to allow them to be loaded as a pretrained model in future. This is a simple Keras callback
@@ -94,6 +96,7 @@ class SavePretrainedCallback(tf.keras.callbacks.Callback):
 
     def on_epoch_end(self, epoch, logs=None):
         self.model.save_pretrained(self.output_dir)
+
 
 # endregion
 
@@ -212,7 +215,10 @@ class ModelArguments:
             "with private models)."
         },
     )
+
+
 # endregion
+
 
 def main():
     # region Argument parsing
@@ -274,7 +280,6 @@ def main():
     # See more about loading any type of standard or custom dataset at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
-
     is_regression = data_args.task_name == "stsb"
     if not is_regression:
         label_list = datasets["train"].features["label"].names
@@ -290,7 +295,7 @@ def main():
         for key in data_files.keys():
             logger.info(f"Loading a local file for {key}: {data_files[key]}")
 
-        if data_args.predict_file.endswith('.csv'):
+        if data_args.predict_file.endswith(".csv"):
             # Loading a dataset from local csv files
             user_dataset = load_dataset("csv", data_files=data_files, cache_dir=model_args.cache_dir)
         else:
@@ -298,8 +303,8 @@ def main():
             user_dataset = load_dataset("json", data_files=data_files, cache_dir=model_args.cache_dir)
         needed_keys = task_to_keys[data_args.task_name]
         for key in needed_keys:
-            assert key in user_dataset['data'].features, f"Your supplied predict_file is missing the {key} key!"
-        datasets['user_data'] = user_dataset['data']
+            assert key in user_dataset["data"].features, f"Your supplied predict_file is missing the {key} key!"
+        datasets["user_data"] = user_dataset["data"]
     # endregion
 
     # region Load model config and tokenizer
@@ -336,10 +341,7 @@ def main():
 
     # Some models have set the order of the labels to use, so let's make sure we do use it.
     label_to_id = None
-    if (
-        config.label2id != PretrainedConfig(num_labels=num_labels).label2id
-        and not is_regression
-    ):
+    if config.label2id != PretrainedConfig(num_labels=num_labels).label2id and not is_regression:
         # Some have all caps in their config, some don't.
         label_name_to_id = {k.lower(): v for k, v in config.label2id.items()}
         if list(sorted(label_name_to_id.keys())) == list(sorted(label_list)):
@@ -375,7 +377,7 @@ def main():
     metric = load_metric("glue", data_args.task_name)
 
     def compute_metrics(preds, label_ids):
-        preds = preds['logits']
+        preds = preds["logits"]
         preds = np.squeeze(preds) if is_regression else np.argmax(preds, axis=1)
         result = metric.compute(predictions=preds, references=label_ids)
         if len(result) > 1:
@@ -431,7 +433,7 @@ def main():
             "test": data_args.max_predict_samples,
             "test_matched": data_args.max_predict_samples,
             "test_mismatched": data_args.max_predict_samples,
-            "user_data": None
+            "user_data": None,
         }
         for key in datasets.keys():
             if key == "train" or key.startswith("validation"):
@@ -462,15 +464,18 @@ def main():
         # region Training and validation
         if training_args.do_train:
             callbacks = [SavePretrainedCallback(output_dir=training_args.output_dir)]
-            if training_args.do_eval and not data_args.task_name == 'mnli':
+            if training_args.do_eval and not data_args.task_name == "mnli":
                 # Do both evaluation and training in the Keras fit loop, unless the task is MNLI
                 # because MNLI has two validation sets
-                validation_data = tf_data['validation']
+                validation_data = tf_data["validation"]
             else:
                 validation_data = None
-            history = model.fit(tf_data['train'], validation_data=validation_data,
-                                epochs=int(training_args.num_train_epochs),
-                                callbacks=callbacks)
+            history = model.fit(
+                tf_data["train"],
+                validation_data=validation_data,
+                epochs=int(training_args.num_train_epochs),
+                callbacks=callbacks,
+            )
         # endregion
 
         # region Evaluation
@@ -483,16 +488,16 @@ def main():
             # Loop to handle MNLI double evaluation (matched, mis-matched)
             if data_args.task_name == "mnli":
                 tasks = ["mnli", "mnli-mm"]
-                tf_datasets = [tf_data['validation_matched'], tf_data['validation_mismatched']]
-                raw_datasets = [datasets['validation_matched'], datasets['validation_mismatched']]
+                tf_datasets = [tf_data["validation_matched"], tf_data["validation_mismatched"]]
+                raw_datasets = [datasets["validation_matched"], datasets["validation_mismatched"]]
             else:
                 tasks = [data_args.task_name]
-                tf_datasets = [tf_data['validation']]
-                raw_datasets = [datasets['validation']]
+                tf_datasets = [tf_data["validation"]]
+                raw_datasets = [datasets["validation"]]
 
             for raw_dataset, tf_dataset, task in zip(raw_datasets, tf_datasets, tasks):
                 eval_predictions = model.predict(tf_dataset)
-                eval_metrics = compute_metrics(eval_predictions, raw_dataset['label'])
+                eval_metrics = compute_metrics(eval_predictions, raw_dataset["label"])
                 print(f"Evaluation metrics ({task}):")
                 print(eval_metrics)
 
@@ -510,27 +515,27 @@ def main():
                 if data_args.task_name == "mnli":
                     tasks.extend(["mnli", "mnli-mm"])
                     tf_datasets.extend([tf_data["test_matched"], tf_data["test_mismatched"]])
-                    raw_datasets.extend([datasets['test_matched'], datasets['test_mismatched']])
+                    raw_datasets.extend([datasets["test_matched"], datasets["test_mismatched"]])
                 else:
                     tasks.append(data_args.task_name)
                     tf_datasets.append(tf_data["test"])
-                    raw_datasets.append(datasets['test'])
+                    raw_datasets.append(datasets["test"])
             if data_args.predict_file:
                 tasks.append("user_data")
                 tf_datasets.append(tf_data["user_data"])
-                raw_datasets.append(datasets['user_data'])
+                raw_datasets.append(datasets["user_data"])
 
             for raw_dataset, tf_dataset, task in zip(raw_datasets, tf_datasets, tasks):
                 test_predictions = model.predict(tf_dataset)
-                if 'label' in raw_dataset:
-                    test_metrics = compute_metrics(test_predictions, raw_dataset['label'])
+                if "label" in raw_dataset:
+                    test_metrics = compute_metrics(test_predictions, raw_dataset["label"])
                     print(f"Test metrics ({task}):")
                     print(test_metrics)
 
                 if is_regression:
-                    predictions_to_write = np.squeeze(test_predictions['logits'])
+                    predictions_to_write = np.squeeze(test_predictions["logits"])
                 else:
-                    predictions_to_write = np.argmax(test_predictions['logits'], axis=1)
+                    predictions_to_write = np.argmax(test_predictions["logits"], axis=1)
 
                 output_predict_file = os.path.join(training_args.output_dir, f"predict_results_{task}.txt")
                 with open(output_predict_file, "w") as writer:
