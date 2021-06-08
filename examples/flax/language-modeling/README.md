@@ -206,9 +206,8 @@ python -m torch.distributed.launch --nproc_per_node ${NUM_GPUS} run_mlm.py \
                         --max_seq_length="128" \
                         --pad_to_max_length \
                         --weight_decay="0.01" \
-                        --per_device_train_batch_size="64" \
-                        --per_device_eval_batch_size="64" \
-                        --gradient_accumulation_steps="2" \
+                        --per_device_train_batch_size="128" \
+                        --per_device_eval_batch_size="128" \
                         --learning_rate="3e-4" \
                         --warmup_steps="1000" \
                         --overwrite_output_dir \
