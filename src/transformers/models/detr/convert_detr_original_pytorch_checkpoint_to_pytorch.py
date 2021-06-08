@@ -17,6 +17,7 @@
 
 import argparse
 from pathlib import Path
+from collections import OrderedDict
 
 import torch
 from PIL import Image
@@ -111,6 +112,18 @@ def rename_key(state_dict, old, new):
     state_dict[new] = val
 
 
+def rename_backbone_keys(state_dict):
+    new_state_dict = OrderedDict()
+    for key, value in state_dict.items():
+        if "backbone.0.body" in key:
+            new_key = key.replace("backbone.0.body", "backbone.conv_encoder.model")
+            new_state_dict[new_key] = value
+        else:
+            new_state_dict[key] = value
+    
+    return new_state_dict
+
+
 def read_in_q_k_v(state_dict, is_panoptic=False):
     prefix = ""
     if is_panoptic:
@@ -202,6 +215,7 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
         if is_panoptic:
             src = "detr." + src
         rename_key(state_dict, src, dest)
+    state_dict = rename_backbone_keys(state_dict)
     # query, key and value matrices need special treatment
     read_in_q_k_v(state_dict, is_panoptic=is_panoptic)
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them

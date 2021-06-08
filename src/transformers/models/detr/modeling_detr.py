@@ -326,9 +326,9 @@ def replace_batch_norm(m, name=""):
         replace_batch_norm(ch, n)
 
 
-class TimmBackbone(nn.Module):
+class DetrTimmConvEncoder(nn.Module):
     """
-    Timm convolutional backbone.
+    Convolutional encoder (backbone) from the timm library.
 
     nn.BatchNorm2d layers are replaced by DetrFrozenBatchNorm2d as defined above.
 
@@ -347,17 +347,17 @@ class TimmBackbone(nn.Module):
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
-        self.body = backbone
-        self.intermediate_channel_sizes = self.body.feature_info.channels()
+        self.model = backbone
+        self.intermediate_channel_sizes = self.model.feature_info.channels()
 
         if "resnet" in name:
-            for name, parameter in self.body.named_parameters():
+            for name, parameter in self.model.named_parameters():
                 if "layer2" not in name and "layer3" not in name and "layer4" not in name:
                     parameter.requires_grad_(False)
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
-        # send pixel_values through the body to get list of feature maps
-        features = self.body(pixel_values)
+        # send pixel_values through the model to get list of feature maps
+        features = self.model(pixel_values)
 
         out = []
         for feature_map in features:
@@ -367,20 +367,27 @@ class TimmBackbone(nn.Module):
         return out
 
 
-class DetrJoiner(nn.Sequential):
-    def __init__(self, backbone, position_embedding):
-        super().__init__(backbone, position_embedding)
+
+class DetrConvModel(nn.Module):
+    """
+    This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
+    """
+
+    def __init__(self, conv_encoder, position_embedding):
+        super().__init__()
+        self.conv_encoder = conv_encoder
+        self.position_embedding = position_embedding
 
     def forward(self, pixel_values, pixel_mask):
         # send pixel_values and pixel_mask through backbone to get list of (feature_map, pixel_mask) tuples
-        out = self[0](pixel_values, pixel_mask)
+        out = self.conv_encoder(pixel_values, pixel_mask)
         pos = []
         for feature_map, mask in out:
             # position encoding
-            pos.append(self[1](feature_map, mask).to(feature_map.dtype))
+            pos.append(self.position_embedding(feature_map, mask).to(feature_map.dtype))
 
         return out, pos
-
+        
 
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
@@ -1182,9 +1189,9 @@ class DetrModel(DetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = TimmBackbone(config.backbone, config.dilation)
+        backbone = DetrTimmConvEncoder(config.backbone, config.dilation)
         position_embeddings = build_position_encoding(config)
-        self.backbone = DetrJoiner(backbone, position_embeddings)
+        self.backbone = DetrConvModel(backbone, position_embeddings)
 
         # Create projection layer
         self.input_projection = nn.Conv2d(backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1)
@@ -1203,11 +1210,11 @@ class DetrModel(DetrPreTrainedModel):
         return self.decoder
 
     def freeze_backbone(self):
-        for name, param in self.backbone[0].body.named_parameters():
+        for name, param in self.backbone.conv_encoder.model.named_parameters():
             param.requires_grad_(False)
 
     def unfreeze_backbone(self):
-        for name, param in self.backbone[0].body.named_parameters():
+        for name, param in self.backbone.conv_encoder.model.named_parameters():
             param.requires_grad_(True)
 
     @add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)
@@ -1499,7 +1506,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
 
         # segmentation head
         hidden_size, number_of_heads = config.d_model, config.encoder_attention_heads
-        intermediate_channel_sizes = self.detr.model.backbone[0].intermediate_channel_sizes
+        intermediate_channel_sizes = self.detr.model.backbone.conv_encoder.intermediate_channel_sizes
 
         self.mask_head = DetrMaskHeadSmallConv(
             hidden_size + number_of_heads, intermediate_channel_sizes[::-1][-3:], hidden_size
