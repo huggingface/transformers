@@ -119,9 +119,7 @@ class HfDeepSpeedConfig:
 
         """
         value = self.get_value(ds_key_long)
-        if value is None:
-            return False
-        return bool(value)
+        return False if value is None else bool(value)
 
     def is_false(self, ds_key_long):
         """
