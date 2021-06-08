@@ -268,7 +268,7 @@ from ..tapas.modeling_tapas import (
 from ..transfo_xl.modeling_transfo_xl import TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
 from ..visual_bert.modeling_visual_bert import VisualBertForPreTraining, VisualBertModel
 from ..vit.modeling_vit import ViTForImageClassification, ViTModel
-from ..wav2vec2.modeling_wav2vec2 import Wav2Vec2ForMaskedLM, Wav2Vec2Model
+from ..wav2vec2.modeling_wav2vec2 import Wav2Vec2ForMaskedLM, Wav2Vec2ForPreTraining, Wav2Vec2Model
 from ..xlm.modeling_xlm import (
     XLMForMultipleChoice,
     XLMForQuestionAnsweringSimple,
@@ -460,6 +460,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (IBertConfig, IBertForMaskedLM),
         (DebertaConfig, DebertaForMaskedLM),
         (DebertaV2Config, DebertaV2ForMaskedLM),
+        (Wav2Vec2Config, Wav2Vec2ForPreTraining),
     ]
 )
 
