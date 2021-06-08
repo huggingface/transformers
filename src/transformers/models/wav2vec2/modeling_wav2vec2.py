@@ -1077,7 +1077,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         """
         Set the Gumbel softmax temperature to a given value. Only necessary for training
         """
-        return self.quantizer.set_gumbel_temperature(temperature)
+        return self.quantizer.set_temperature(temperature)
 
     def freeze_feature_extractor(self):
         """

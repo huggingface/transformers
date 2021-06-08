@@ -1,0 +1,572 @@
+wandb_version: 1
+
+_n_gpu:
+  desc: null
+  value: 1
+_name_or_path:
+  desc: null
+  value: ''
+_wandb:
+  desc: null
+  value:
+    cli_version: 0.10.19
+    framework: huggingface
+    huggingface_version: 4.7.0.dev0
+    is_jupyter_run: false
+    is_kaggle_kernel: false
+    python_version: 3.8.5
+    t:
+      1:
+      - 1
+      - 3
+      - 5
+      - 11
+      2:
+      - 1
+      - 3
+      - 5
+      - 11
+      3:
+      - 1
+      4: 3.8.5
+      5: 0.10.19
+      6: 4.7.0.dev0
+activation_dropout:
+  desc: null
+  value: 0.0
+adafactor:
+  desc: null
+  value: false
+adam_beta1:
+  desc: null
+  value: 0.9
+adam_beta2:
+  desc: null
+  value: 0.999
+adam_epsilon:
+  desc: null
+  value: 1.0e-08
+add_cross_attention:
+  desc: null
+  value: false
+apply_spec_augment:
+  desc: null
+  value: true
+architectures:
+  desc: null
+  value:
+  - Wav2Vec2Model
+attention_dropout:
+  desc: null
+  value: 0.1
+bad_words_ids:
+  desc: null
+  value: null
+bos_token_id:
+  desc: null
+  value: 1
+chunk_size_feed_forward:
+  desc: null
+  value: 0
+contrastive_logit_temperature:
+  desc: null
+  value: 0.1
+conv_bias:
+  desc: null
+  value: false
+conv_dim:
+  desc: null
+  value:
+  - 512
+  - 512
+  - 512
+  - 512
+  - 512
+  - 512
+  - 512
+conv_kernel:
+  desc: null
+  value:
+  - 10
+  - 3
+  - 3
+  - 3
+  - 3
+  - 2
+  - 2
+conv_stride:
+  desc: null
+  value:
+  - 5
+  - 2
+  - 2
+  - 2
+  - 2
+  - 2
+  - 2
+ctc_loss_reduction:
+  desc: null
+  value: sum
+ctc_zero_infinity:
+  desc: null
+  value: false
+dataloader_drop_last:
+  desc: null
+  value: false
+dataloader_num_workers:
+  desc: null
+  value: 0
+dataloader_pin_memory:
+  desc: null
+  value: true
+ddp_find_unused_parameters:
+  desc: null
+  value: None
+debug:
+  desc: null
+  value: '[]'
+decoder_start_token_id:
+  desc: null
+  value: null
+deepspeed:
+  desc: null
+  value: None
+disable_tqdm:
+  desc: null
+  value: false
+diversity_loss_weight:
+  desc: null
+  value: 0.1
+diversity_penalty:
+  desc: null
+  value: 0.0
+do_eval:
+  desc: null
+  value: false
+do_predict:
+  desc: null
+  value: false
+do_sample:
+  desc: null
+  value: false
+do_stable_layer_norm:
+  desc: null
+  value: true
+do_train:
+  desc: null
+  value: false
+early_stopping:
+  desc: null
+  value: false
+encoder_no_repeat_ngram_size:
+  desc: null
+  value: 0
+eos_token_id:
+  desc: null
+  value: 2
+eval_accumulation_steps:
+  desc: null
+  value: None
+eval_batch_size:
+  desc: null
+  value: 8
+eval_steps:
+  desc: null
+  value: 50
+evaluation_strategy:
+  desc: null
+  value: 'no'
+feat_extract_activation:
+  desc: null
+  value: gelu
+feat_extract_norm:
+  desc: null
+  value: layer
+feat_proj_dropout:
+  desc: null
+  value: 0.1
+feat_quantizer_dropout:
+  desc: null
+  value: 0.0
+final_dropout:
+  desc: null
+  value: 0.0
+finetuning_task:
+  desc: null
+  value: null
+forced_bos_token_id:
+  desc: null
+  value: null
+forced_eos_token_id:
+  desc: null
+  value: null
+fp16:
+  desc: null
+  value: true
+fp16_backend:
+  desc: null
+  value: auto
+fp16_full_eval:
+  desc: null
+  value: false
+fp16_opt_level:
+  desc: null
+  value: O1
+freeze_feat_extract_train:
+  desc: null
+  value: true
+gradient_accumulation_steps:
+  desc: null
+  value: 8
+gradient_checkpointing:
+  desc: null
+  value: true
+greater_is_better:
+  desc: null
+  value: None
+group_by_length:
+  desc: null
+  value: false
+gumbel_softmax_temperature:
+  desc: null
+  value:
+  - 2.0
+  - 0.5
+  - 0.999995
+hidden_act:
+  desc: null
+  value: gelu
+hidden_dropout:
+  desc: null
+  value: 0.1
+hidden_size:
+  desc: null
+  value: 768
+id2label:
+  desc: null
+  value:
+    '0': LABEL_0
+    '1': LABEL_1
+ignore_data_skip:
+  desc: null
+  value: false
+initializer_range:
+  desc: null
+  value: 0.02
+intermediate_size:
+  desc: null
+  value: 3072
+is_decoder:
+  desc: null
+  value: false
+is_encoder_decoder:
+  desc: null
+  value: false
+label2id:
+  desc: null
+  value:
+    LABEL_0: 0
+    LABEL_1: 1
+label_names:
+  desc: null
+  value: None
+label_smoothing_factor:
+  desc: null
+  value: 0.0
+layer_norm_eps:
+  desc: null
+  value: 1.0e-05
+layerdrop:
+  desc: null
+  value: 0.05
+learning_rate:
+  desc: null
+  value: 0.005
+length_column_name:
+  desc: null
+  value: length
+length_penalty:
+  desc: null
+  value: 1.0
+load_best_model_at_end:
+  desc: null
+  value: false
+local_rank:
+  desc: null
+  value: -1
+log_on_each_node:
+  desc: null
+  value: true
+logging_dir:
+  desc: null
+  value: runs/Jun08_20-36-26_patrick-general-gpu
+logging_first_step:
+  desc: null
+  value: false
+logging_steps:
+  desc: null
+  value: 50
+logging_strategy:
+  desc: null
+  value: steps
+lr_scheduler_type:
+  desc: null
+  value: linear
+mask_channel_length:
+  desc: null
+  value: 10
+mask_channel_min_space:
+  desc: null
+  value: 1
+mask_channel_other:
+  desc: null
+  value: 0.0
+mask_channel_prob:
+  desc: null
+  value: 0.0
+mask_channel_selection:
+  desc: null
+  value: static
+mask_feature_length:
+  desc: null
+  value: 10
+mask_feature_prob:
+  desc: null
+  value: 0.0
+mask_time_length:
+  desc: null
+  value: 10
+mask_time_min_space:
+  desc: null
+  value: 1
+mask_time_other:
+  desc: null
+  value: 0.0
+mask_time_prob:
+  desc: null
+  value: 0.05
+mask_time_selection:
+  desc: null
+  value: static
+max_grad_norm:
+  desc: null
+  value: 1.0
+max_length:
+  desc: null
+  value: 20
+max_steps:
+  desc: null
+  value: -1
+metric_for_best_model:
+  desc: null
+  value: None
+min_length:
+  desc: null
+  value: 0
+model_type:
+  desc: null
+  value: wav2vec2
+mp_parameters:
+  desc: null
+  value: ''
+no_cuda:
+  desc: null
+  value: false
+no_mask_channel_overlap:
+  desc: null
+  value: false
+no_mask_time_overlap:
+  desc: null
+  value: false
+no_repeat_ngram_size:
+  desc: null
+  value: 0
+num_attention_heads:
+  desc: null
+  value: 12
+num_beam_groups:
+  desc: null
+  value: 1
+num_beams:
+  desc: null
+  value: 1
+num_conv_pos_embedding_groups:
+  desc: null
+  value: 16
+num_conv_pos_embeddings:
+  desc: null
+  value: 128
+num_feat_extract_layers:
+  desc: null
+  value: 7
+num_hidden_layers:
+  desc: null
+  value: 12
+num_latent_groups:
+  desc: null
+  value: 2
+num_latent_vars:
+  desc: null
+  value: 320
+num_negatives:
+  desc: null
+  value: 100
+num_return_sequences:
+  desc: null
+  value: 1
+num_train_epochs:
+  desc: null
+  value: 1.0
+output_attentions:
+  desc: null
+  value: false
+output_dir:
+  desc: null
+  value: ./wav2vec2-base
+output_hidden_states:
+  desc: null
+  value: false
+output_scores:
+  desc: null
+  value: false
+overwrite_output_dir:
+  desc: null
+  value: false
+pad_token_id:
+  desc: null
+  value: 0
+past_index:
+  desc: null
+  value: -1
+per_device_eval_batch_size:
+  desc: null
+  value: 8
+per_device_train_batch_size:
+  desc: null
+  value: 4
+per_gpu_eval_batch_size:
+  desc: null
+  value: None
+per_gpu_train_batch_size:
+  desc: null
+  value: None
+prediction_loss_only:
+  desc: null
+  value: false
+prefix:
+  desc: null
+  value: null
+problem_type:
+  desc: null
+  value: null
+pruned_heads:
+  desc: null
+  value: {}
+push_to_hub:
+  desc: null
+  value: false
+remove_invalid_values:
+  desc: null
+  value: false
+remove_unused_columns:
+  desc: null
+  value: true
+repetition_penalty:
+  desc: null
+  value: 1.0
+report_to:
+  desc: null
+  value: '[''tensorboard'', ''wandb'']'
+resume_from_checkpoint:
+  desc: null
+  value: None
+return_dict:
+  desc: null
+  value: true
+return_dict_in_generate:
+  desc: null
+  value: false
+run_name:
+  desc: null
+  value: ./wav2vec2-base
+save_steps:
+  desc: null
+  value: 500
+save_strategy:
+  desc: null
+  value: steps
+save_total_limit:
+  desc: null
+  value: 3
+seed:
+  desc: null
+  value: 42
+sep_token_id:
+  desc: null
+  value: null
+sharded_ddp:
+  desc: null
+  value: '[]'
+skip_memory_metrics:
+  desc: null
+  value: true
+task_specific_params:
+  desc: null
+  value: null
+temperature:
+  desc: null
+  value: 1.0
+tie_encoder_decoder:
+  desc: null
+  value: false
+tie_word_embeddings:
+  desc: null
+  value: true
+tokenizer_class:
+  desc: null
+  value: null
+top_k:
+  desc: null
+  value: 50
+top_p:
+  desc: null
+  value: 1.0
+torchscript:
+  desc: null
+  value: false
+tpu_metrics_debug:
+  desc: null
+  value: false
+tpu_num_cores:
+  desc: null
+  value: None
+train_batch_size:
+  desc: null
+  value: 4
+transformers_version:
+  desc: null
+  value: 4.7.0.dev0
+use_bfloat16:
+  desc: null
+  value: false
+use_legacy_prediction_loop:
+  desc: null
+  value: false
+vocab_size:
+  desc: null
+  value: 32
+vq_final_dim:
+  desc: null
+  value: 256
+vq_latent_dim:
+  desc: null
+  value: 256
+warmup_ratio:
+  desc: null
+  value: 0.0
+warmup_steps:
+  desc: null
+  value: 3000
+weight_decay:
+  desc: null
+  value: 0.01
