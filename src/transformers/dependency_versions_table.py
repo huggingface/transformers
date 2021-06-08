@@ -21,7 +21,7 @@ deps = {
     "ipadic": "ipadic>=1.0.0,<2.0",
     "isort": "isort>=5.5.4",
     "jax": "jax>=0.2.8",
-    "jaxlib": "jaxlib>=0.1.59",
+    "jaxlib": "jaxlib>=0.1.65",
     "jieba": "jieba",
     "keras2onnx": "keras2onnx",
     "nltk": "nltk",
