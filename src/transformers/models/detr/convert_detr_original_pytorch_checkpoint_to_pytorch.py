@@ -16,8 +16,8 @@
 
 
 import argparse
-from pathlib import Path
 from collections import OrderedDict
+from pathlib import Path
 
 import torch
 from PIL import Image
@@ -120,7 +120,7 @@ def rename_backbone_keys(state_dict):
             new_state_dict[new_key] = value
         else:
             new_state_dict[key] = value
-    
+
     return new_state_dict
 
 

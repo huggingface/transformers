@@ -367,7 +367,6 @@ class DetrTimmConvEncoder(nn.Module):
         return out
 
 
-
 class DetrConvModel(nn.Module):
     """
     This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
@@ -387,7 +386,7 @@ class DetrConvModel(nn.Module):
             pos.append(self.position_embedding(feature_map, mask).to(feature_map.dtype))
 
         return out, pos
-        
+
 
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
