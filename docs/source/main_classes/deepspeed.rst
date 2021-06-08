@@ -355,7 +355,7 @@ cell with:
             },
             "overlap_comm": true,
             "contiguous_gradients": true,
-            "sub_group_size": 1e14,
+            "sub_group_size": 1e9,
             "reduce_bucket_size": "auto",
             "stage3_prefetch_bucket_size": "auto",
             "stage3_param_persistence_threshold": "auto",
@@ -637,7 +637,7 @@ The following is an example configuration for ZeRO stage 3:
             },
             "overlap_comm": true,
             "contiguous_gradients": true,
-            "sub_group_size": 1e14,
+            "sub_group_size": 1e9,
             "reduce_bucket_size": "auto",
             "stage3_prefetch_bucket_size": "auto",
             "stage3_param_persistence_threshold": "auto",
@@ -658,7 +658,6 @@ and its typically accessed much faster than normal CPU memory.
 
 **Performance tuning:**
 
-- ``sub_group_size``: ``1e14``
 - ``stage3_max_live_parameters``: ``1e9``
 - ``stage3_max_reuse_distance``: ``1e9``
 
@@ -691,6 +690,9 @@ If you're migrating from ZeRO-2 configuration note that ``allgather_partitions``
 ``reduce_scatter`` configuration parameters are not used in ZeRO-3. If you keep these in the config file they will just
 be ignored.
 
+- ``sub_group_size``: ``1e9``
+
+This one does impact GPU memory usage. But no docs at the moment on Deepspeed side to explain the tuning.
 
 
 .. _deepspeed-nvme:
@@ -734,7 +736,7 @@ The following configuration example enables NVMe to offload both optimizer state
             }
             "overlap_comm": true,
             "contiguous_gradients": true,
-            "sub_group_size": 1e14,
+            "sub_group_size": 1e9,
             "reduce_bucket_size": "auto",
             "stage3_prefetch_bucket_size": "auto",
             "stage3_param_persistence_threshold": "auto",
@@ -949,7 +951,7 @@ Here is a full ZeRO-3 auto-configuration file ``ds_config_zero3.json``:
             },
             "overlap_comm": true,
             "contiguous_gradients": true,
-            "sub_group_size": 1e14,
+            "sub_group_size": 1e9,
             "reduce_bucket_size": "auto",
             "stage3_prefetch_bucket_size": "auto",
             "stage3_param_persistence_threshold": "auto",
@@ -1012,7 +1014,7 @@ values look like, but we highly recommend using the one with multiple ``auto`` s
             },
             "overlap_comm": true,
             "contiguous_gradients": true,
-            "sub_group_size": 1e14,
+            "sub_group_size": 1e9,
             "reduce_bucket_size": 1e6,
             "stage3_prefetch_bucket_size": 0.94e6,
             "stage3_param_persistence_threshold": 1e4,
