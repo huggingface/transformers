@@ -695,7 +695,13 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         mask_time_indices = _compute_mask_indices(features_shape, model.config.mask_time_prob, model.config.mask_time_length, device=inputs_dict["input_values"].device, min_masks=2).to(torch_device)
 
         with torch.no_grad():
-            loss = model(inputs_dict.input_values.to(torch_device), attention_mask=inputs_dict.attention_mask.to(torch_device), mask_time_indices=mask_time_indices).loss
+            outputs = model(inputs_dict.input_values.to(torch_device), attention_mask=inputs_dict.attention_mask.to(torch_device), mask_time_indices=mask_time_indices)
 
-        import ipdb; ipdb.set_trace()
-        self.assertTrue(abs(loss.item() - 49.7099) < 1e-3)
+        # check diversity loss
+        num_codevectors = model.config.num_latent_vars * model.config.num_latent_groups
+        diversity_loss = (num_codevectors - outputs.codevector_perplexity) / num_codevectors
+        self.assertTrue(abs(diversity_loss.item() - 0.8859) < 1e-3)
+
+        # check overall loss (contrastive loss + diversity loss)
+        self.assertTrue(abs(outputs.loss.item() - 49.7099) < 1e-3)
+
