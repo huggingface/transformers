@@ -678,14 +678,18 @@ class TrainingArguments:
             self.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.deepspeed)
             self.hf_deepspeed_config.trainer_config_process(self)
 
-    def __repr__(self):
-        # We override the default repr to remove deprecated arguments from the repr. This method should be removed once
-        # those deprecated arguments are removed form TrainingArguments. (TODO: v5)
+    def __str__(self):
         self_as_dict = asdict(self)
+
+        # Remove deprecated arguments. That code should be removed once
+        # those deprecated arguments are removed from TrainingArguments. (TODO: v5)
         del self_as_dict["per_gpu_train_batch_size"]
         del self_as_dict["per_gpu_eval_batch_size"]
-        attrs_as_str = [f"{k}={v}" for k, v in self_as_dict.items()]
-        return f"{self.__class__.__name__}({', '.join(attrs_as_str)})"
+
+        attrs_as_str = [f"{k}={v},\n" for k, v in sorted(self_as_dict.items())]
+        return f"{self.__class__.__name__}(\n{''.join(attrs_as_str)})"
+
+    __repr__ = __str__
 
     @property
     def train_batch_size(self) -> int:
