@@ -150,7 +150,7 @@ mkdir -p ${MODEL_DIR}
 , and can start training as follows:
 
 ```bash
-python xla_spawn.py --num_cores ${NUM_TPUS} run_mlm.py --output_dir="./runs" \
+python3 xla_spawn.py --num_cores ${NUM_TPUS} run_mlm.py --output_dir="./runs" \
 										--model_type="roberta" \
 										--config_name="${MODEL_DIR}" \
 										--tokenizer_name="${MODEL_DIR}" \
@@ -159,8 +159,8 @@ python xla_spawn.py --num_cores ${NUM_TPUS} run_mlm.py --output_dir="./runs" \
 										--max_seq_length="128" \
 										--pad_to_max_length \
 										--weight_decay="0.01" \
-										--per_device_train_batch_size="64" \
-										--per_device_eval_batch_size="64" \
+										--per_device_train_batch_size="128" \
+										--per_device_eval_batch_size="128" \
 										--gradient_accumulation_steps="2" \
 										--learning_rate="3e-4" \
 										--warmup_steps="1000" \
