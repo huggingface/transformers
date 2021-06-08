@@ -794,12 +794,13 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head\.weight", r"h\.\d+\.attn\.attention\.bias"]
     _keys_to_ignore_on_save = [r"lm_head.weight"]
 
-    def __init__(self, config, no_init=True):
+    def __init__(self, config, no_init=False):
         super().__init__(config)
         self.transformer = to_gpu(GPTNeoModel(config).half())
         self.lm_head = to_gpu(nn.Linear(config.hidden_size, config.vocab_size, bias=config.jax).half())
 
-        self.init_weights()
+        if not no_init:
+            self.init_weights()
 
     def get_output_embeddings(self):
         return self.lm_head
