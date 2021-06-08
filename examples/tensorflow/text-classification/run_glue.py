@@ -488,8 +488,8 @@ def main():
             # Loop to handle MNLI double evaluation (matched, mis-matched)
             if data_args.task_name == "mnli":
                 tasks = ["mnli", "mnli-mm"]
-                tf_datasets = [tf_data['validation-matched'], tf_data['validation-mismatched']]
-                raw_datasets = [datasets['validation_matched'], datasets['validation-mismatched']]
+                tf_datasets = [tf_data['validation_matched'], tf_data['validation_mismatched']]
+                raw_datasets = [datasets['validation_matched'], datasets['validation_mismatched']]
             else:
                 tasks = [data_args.task_name]
                 tf_datasets = [tf_data['validation']]
@@ -514,8 +514,8 @@ def main():
             if training_args.do_predict:
                 if data_args.task_name == "mnli":
                     tasks.extend(["mnli", "mnli-mm"])
-                    tf_datasets.extend([tf_data["test-matched"], tf_data["test-mismatched"]])
-                    raw_datasets.extend([datasets['test-matched'], datasets['test-mismatched']])
+                    tf_datasets.extend([tf_data["test_matched"], tf_data["test_mismatched"]])
+                    raw_datasets.extend([datasets['test_matched'], datasets['test_mismatched']])
                 else:
                     tasks.append(data_args.task_name)
                     tf_datasets.append(tf_data["test"])
@@ -527,18 +527,21 @@ def main():
 
             for raw_dataset, tf_dataset, task in zip(raw_datasets, tf_datasets, tasks):
                 test_predictions = model.predict(tf_dataset)
-                # TODO Make sure this works for regression problems too!
-                test_class_predictions = np.argmax(test_predictions['logits'], axis=1)
                 if 'label' in raw_dataset:
                     test_metrics = compute_metrics(test_predictions, raw_dataset['label'])
                     print(f"Test metrics ({task}):")
                     print(test_metrics)
 
+                if is_regression:
+                    predictions_to_write = np.squeeze(test_predictions['logits'])
+                else:
+                    predictions_to_write = np.argmax(test_predictions['logits'], axis=1)
+
                 output_predict_file = os.path.join(training_args.output_dir, f"predict_results_{task}.txt")
                 with open(output_predict_file, "w") as writer:
                     logger.info(f"***** Writing prediction results for {task} *****")
                     writer.write("index\tprediction\n")
-                    for index, item in enumerate(test_class_predictions):
+                    for index, item in enumerate(predictions_to_write):
                         if is_regression:
                             writer.write(f"{index}\t{item:3.3f}\n")
                         else:

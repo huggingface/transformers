@@ -205,7 +205,6 @@ class ModelArguments:
             "with private models)."
         },
     )
-    tpu: Optional[str] = field(default=None, metadata={"help": "Name of the TPU resource to use, if available"})
 
 
 # endregion
