@@ -799,6 +799,8 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
         self.transformer = to_gpu(GPTNeoModel(config).half())
         if not config.jax:
             self.lm_head = to_gpu(nn.Linear(config.hidden_size, config.vocab_size, bias=False).half())
+        else:
+            self.lm_head = None
         self.init_weights()
         if config.jax:
             self.lm_head = to_gpu(nn.Linear(config.hidden_size, config.vocab_size, bias=True).half())
