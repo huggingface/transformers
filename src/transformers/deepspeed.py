@@ -128,9 +128,7 @@ class HfDeepSpeedConfig:
         isn't set).
         """
         value = self.get_value(ds_key_long)
-        if value is None:
-            return False
-        return not bool(value)
+        return False if value is None else not bool(value)
 
     def is_zero2(self):
         return self._stage == 2
