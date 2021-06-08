@@ -573,7 +573,7 @@ class LukeModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((1, 1, 768))
         self.assertEqual(outputs.entity_last_hidden_state.shape, expected_shape)
 
-        expected_slice = torch.tensor([[0.1457, 0.1044, 0.0174]])
+        expected_slice = torch.tensor([[0.1457, 0.1044, 0.0174]]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.entity_last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
 
     @slow
@@ -605,5 +605,5 @@ class LukeModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((1, 1, 1024))
         self.assertEqual(outputs.entity_last_hidden_state.shape, expected_shape)
 
-        expected_slice = torch.tensor([[0.0466, -0.0106, -0.0179]])
+        expected_slice = torch.tensor([[0.0466, -0.0106, -0.0179]]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.entity_last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))

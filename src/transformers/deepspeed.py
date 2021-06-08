@@ -78,9 +78,7 @@ class HfDeepSpeedConfig:
 
         # offload
         self._offload = False
-        if self.is_zero2():
-            self._offload = self.is_true("zero_optimization.cpu_offload")
-        elif self.is_zero3():
+        if self.is_zero2() or self.is_zero3():
             offload_devices_valid = set(["cpu", "nvme"])
             offload_devices = set(
                 [
