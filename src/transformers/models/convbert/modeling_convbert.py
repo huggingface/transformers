@@ -473,8 +473,8 @@ class GroupedLinearLayer(nn.Module):
         self.num_groups = num_groups
         self.group_in_dim = self.input_size // self.num_groups
         self.group_out_dim = self.output_size // self.num_groups
-        self.weight = nn.Parameter(torch.Tensor(self.num_groups, self.group_in_dim, self.group_out_dim))
-        self.bias = nn.Parameter(torch.Tensor(output_size))
+        self.weight = nn.Parameter(torch.empty(self.num_groups, self.group_in_dim, self.group_out_dim))
+        self.bias = nn.Parameter(torch.empty(output_size))
 
     def forward(self, hidden_states):
         batch_size = list(hidden_states.size())[0]
