@@ -38,7 +38,7 @@ if is_torch_available():
         Wav2Vec2Model,
         Wav2Vec2Processor,
     )
-    from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices
+    from transformers.models.wav2vec2.modeling_wav2vec2 import Wav2Vec2GumbelVectorQuantizer, _compute_mask_indices
 
 
 class Wav2Vec2ModelTester:
@@ -319,7 +319,17 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    if "conv.weight" in name or "masked_spec_embed" in name:
+                    if any(
+                        [
+                            x in name
+                            for x in [
+                                "conv.weight",
+                                "masked_spec_embed",
+                                "codevectors",
+                                "quantizer.weight_proj.weight",
+                            ]
+                        ]
+                    ):
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
@@ -339,6 +349,8 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
             module.weight_g.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
             module.bias.data.fill_(3)
+        if hasattr(module, "codevectors") and module.codevectors is not None:
+            module.codevectors.data.fill_(3)
 
     @slow
     def test_model_from_pretrained(self):
@@ -447,7 +459,17 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    if "conv.weight" in name or "masked_spec_embed" in name:
+                    if any(
+                        [
+                            x in name
+                            for x in [
+                                "conv.weight",
+                                "masked_spec_embed",
+                                "codevectors",
+                                "quantizer.weight_proj.weight",
+                            ]
+                        ]
+                    ):
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
@@ -467,6 +489,8 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
             module.weight_g.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
             module.bias.data.fill_(3)
+        if hasattr(module, "codevectors") and module.codevectors is not None:
+            module.codevectors.data.fill_(3)
 
     def test_model_for_pretraining(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -521,18 +545,50 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
 
     def test_compute_mask_indices_overlap(self):
         batch_size = 4
-        sequence_length = 60
+        sequence_length = 80
         mask_prob = 0.5
         mask_length = 4
 
         mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length, torch_device)
 
-        # because of overlap there is a range of possible masks
+        # because of overlap mask don't have to add up exactly to `mask_prob * sequence_length`, but have to be smaller or equal
         for batch_sum in mask.sum(axis=-1):
-            self.assertIn(
-                int(batch_sum),
-                list(range(int(mask_prob // mask_length * sequence_length), int(mask_prob * sequence_length))),
-            )
+            self.assertTrue(int(batch_sum) <= mask_prob * sequence_length)
+
+    def test_compute_perplexity(self):
+        probs = torch.arange(100, device=torch_device).reshape(2, 5, 10) / 100
+
+        ppl = Wav2Vec2GumbelVectorQuantizer._compute_perplexity(probs)
+        self.assertTrue(abs(ppl.item() - 141.4291) < 1e-3)
+
+        # mask half of the input
+        mask = torch.ones((2,), device=torch_device, dtype=torch.bool)
+        mask[0] = 0
+
+        ppl = Wav2Vec2GumbelVectorQuantizer._compute_perplexity(probs, mask)
+        self.assertTrue(abs(ppl.item() - 58.6757) < 1e-3)
+
+    def test_sample_negatives(self):
+        batch_size = 2
+        sequence_length = 10
+        hidden_size = 4
+        num_negatives = 3
+
+        features = (torch.arange(sequence_length * hidden_size, device=torch_device) // hidden_size).view(
+            sequence_length, hidden_size
+        )  # each value in vector consits of same value
+        features = features[None, :].expand(batch_size, sequence_length, hidden_size).contiguous()
+
+        negatives = Wav2Vec2ForPreTraining._sample_negatives(features, num_negatives)
+
+        self.assertTrue(negatives.shape == (num_negatives, batch_size, sequence_length, hidden_size))
+
+        # make sure no negatively sampled vector is actually a positive one
+        for negative in negatives:
+            self.assertTrue(((negative - features) == 0).sum() == 0.0)
+
+        # make sure that full vectors are sampled and not values of vectors => this means that `unique()` yields a single value for `hidden_size` dim
+        self.assertTrue(negatives.unique(dim=-1).shape, (num_negatives, batch_size, sequence_length, 1))
 
 
 @require_torch
@@ -656,58 +712,17 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             )
 
         # compute cosine similarity
-        cosine_sim = torch.cosine_similarity(
-            outputs.latent_predicted_features, outputs.latent_quantized_features, dim=-1
-        )
+        cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
 
         # retrieve cosine sim of masked features
         cosine_sim_masked = cosine_sim[mask_time_indices]
 
+        # fmt: off
         expected_cosine_sim_masked = torch.tensor(
-            [
-                0.7458,
-                0.7188,
-                0.6418,
-                0.3729,
-                0.3741,
-                0.3694,
-                0.3110,
-                0.2257,
-                0.4403,
-                0.5415,
-                0.3950,
-                0.3701,
-                0.8831,
-                0.8613,
-                0.5229,
-                0.6696,
-                0.7206,
-                0.7877,
-                0.6758,
-                0.8746,
-                0.6596,
-                0.6282,
-                0.6178,
-                0.5839,
-                0.5926,
-                0.6651,
-                0.4635,
-                0.6332,
-                0.6572,
-                0.8776,
-                0.4999,
-                0.7001,
-                0.7257,
-                0.5098,
-                0.6229,
-                0.4566,
-                0.5261,
-                0.6363,
-                0.5371,
-                0.6997,
-            ],
+            [0.7458, 0.7188, 0.6418, 0.3729, 0.3741, 0.3694, 0.3110, 0.2257, 0.4403, 0.5415, 0.3950, 0.3701, 0.8831, 0.8613, 0.5229, 0.6696, 0.7206, 0.7877, 0.6758, 0.8746, 0.6596, 0.6282, 0.6178, 0.5839, 0.5926, 0.6651, 0.4635, 0.6332, 0.6572, 0.8776, 0.4999, 0.7001, 0.7257, 0.5098, 0.6229, 0.4566, 0.5261, 0.6363, 0.5371, 0.6997],
             device=torch_device,
         )
+        # fmt: on
 
         self.assertTrue(torch.allclose(cosine_sim_masked, expected_cosine_sim_masked, atol=1e-3))
 
@@ -743,9 +758,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             )
 
         # compute cosine similarity
-        cosine_sim = torch.cosine_similarity(
-            outputs.latent_predicted_features, outputs.latent_quantized_features, dim=-1
-        )
+        cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
 
         # retrieve cosine sim of masked features
         cosine_sim_masked = cosine_sim[mask_time_indices]
@@ -764,7 +777,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         # compute cosine similarity
         cosine_sim_rand = torch.cosine_similarity(
-            outputs_rand.latent_predicted_features, outputs_rand.latent_quantized_features, dim=-1
+            outputs_rand.projected_states, outputs_rand.projected_quantized_states, dim=-1
         )
 
         # retrieve cosine sim of masked features
@@ -785,6 +798,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             layerdrop=0.0,
         )
         model.to(torch_device).train()
+
         feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
             "patrickvonplaten/wav2vec2-base", return_attention_mask=True
         )
@@ -794,7 +808,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         features_shape = (
             inputs_dict["input_values"].shape[0],
-            model._get_feat_extract_output_lengths(torch.tensor(inputs_dict["input_values"].shape[1])),
+            model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]),
         )
 
         torch.manual_seed(0)
@@ -819,4 +833,6 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertTrue(abs(diversity_loss.item() - 0.8859) < 1e-3)
 
         # check overall loss (contrastive loss + diversity loss)
-        self.assertTrue(abs(outputs.loss.item() - 49.7099) < 1e-3)
+        expected_loss = 62.5170 if model.device.type == "cpu" else 50.3612
+
+        self.assertTrue(abs(outputs.loss.item() - expected_loss) < 1e-3)
