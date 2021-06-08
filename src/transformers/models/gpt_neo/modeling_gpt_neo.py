@@ -576,10 +576,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         self.embed_dim = config.hidden_size
         self.jax = config.jax
         self.vocab_size = config.vocab_size
-        if self.jax:
-            self.wte = nn.Linear(config.vocab_size, self.embed_dim)
-        else:
-            self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
+        self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         if not config.rotary:
             self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
         self.drop = nn.Dropout(config.embed_dropout)
@@ -690,13 +687,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_layers)
 
         if inputs_embeds is None:
-            if self.jax:
-              one_hot = torch.zeros(input_ids.shape[0] * input_ids.shape[1], self.vocab_size, device=self.device, dtype=self.dtype)
-              one_hot.scatter_(1, input_ids.view(-1, 1), 1)
-              one_hot = one_hot.view(input_ids.shape[0], input_ids.shape[1], self.vocab_size)
-              inputs_embeds = self.wte(one_hot)
-            else:
-              inputs_embeds = self.wte(input_ids)
+            inputs_embeds = self.wte(input_ids)
 
         if self.rotary is not None:
             hidden_states = inputs_embeds
@@ -797,18 +788,18 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.transformer = to_gpu(GPTNeoModel(config).half())
-        if not config.jax:
-            self.lm_head = to_gpu(nn.Linear(config.hidden_size, config.vocab_size, bias=False).half())
-        else:
-            self.lm_head = None
+        self.jax = config.jax
+        self.lm_head = to_gpu(nn.Linear(config.hidden_size, config.vocab_size, bias=self.jax).half())
         self.init_weights()
-        if config.jax:
-            self.lm_head = to_gpu(nn.Linear(config.hidden_size, config.vocab_size, bias=True).half())
 
     def get_output_embeddings(self):
+        if self.jax:
+            return None
         return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
+        if self.jax:
+            return
         self.lm_head = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
