@@ -238,17 +238,20 @@ with DeepSpeed is to have at least the following configuration in the configurat
     {
       "zero_optimization": {
          "stage": 2,
+         "offload_optimizer": {
+             "device": "cpu",
+             "pin_memory": true
+         },
          "allgather_partitions": true,
          "allgather_bucket_size": 2e8,
          "reduce_scatter": true,
          "reduce_bucket_size": 2e8,
          "overlap_comm": true,
-         "contiguous_gradients": true,
-         "cpu_offload": true
+         "contiguous_gradients": true
       }
     }
 
-which enables ``cpu_offload`` and some other important features. You may experiment with the buffer sizes, you will
+which enables optimizer offload and some other important features. You may experiment with the buffer sizes, you will
 find more details in the discussion below.
 
 For a practical usage example of this type of deployment, please, see this `post
@@ -352,7 +355,7 @@ cell with:
             },
             "overlap_comm": true,
             "contiguous_gradients": true,
-            "sub_group_size": 1e14,
+            "sub_group_size": 1e9,
             "reduce_bucket_size": "auto",
             "stage3_prefetch_bucket_size": "auto",
             "stage3_param_persistence_threshold": "auto",
@@ -463,13 +466,16 @@ precision training if ``--fp16`` is passed:
 
         "zero_optimization": {
             "stage": 2,
+            "offload_optimizer": {
+                "device": "cpu",
+                "pin_memory": true
+            },
             "allgather_partitions": true,
             "allgather_bucket_size": 2e8,
             "overlap_comm": true,
             "reduce_scatter": true,
             "reduce_bucket_size": 2e8,
-            "contiguous_gradients": true,
-            "cpu_offload": true
+            "contiguous_gradients": true
         },
 
         "gradient_accumulation_steps": "auto",
@@ -582,19 +588,22 @@ The following is an example configuration for ZeRO stage 2:
     {
         "zero_optimization": {
             "stage": 2,
+            "offload_optimizer": {
+                "device": "cpu",
+                "pin_memory": true
+            },
             "allgather_partitions": true,
             "allgather_bucket_size": 5e8,
             "overlap_comm": true,
             "reduce_scatter": true,
             "reduce_bucket_size": 5e8,
-            "contiguous_gradients": true,
-            "cpu_offload": true
+            "contiguous_gradients": true
         }
     }
 
 **Performance tuning:**
 
-- enabling ``cpu_offload`` should reduce GPU RAM usage (it requires ``"stage": 2``)
+- enabling ``offload_optimizer`` should reduce GPU RAM usage (it requires ``"stage": 2``)
 - ``"overlap_comm": true`` trades off increased GPU RAM usage to lower all-reduce latency. ``overlap_comm`` uses 4.5x
   the ``allgather_bucket_size`` and ``reduce_bucket_size`` values. So if they are set to 5e8, this requires a 9GB
   footprint (``5e8 x 2Bytes x 2 x 4.5``). Therefore, if you have a GPU with 8GB or less RAM, to avoid getting
@@ -628,7 +637,7 @@ The following is an example configuration for ZeRO stage 3:
             },
             "overlap_comm": true,
             "contiguous_gradients": true,
-            "sub_group_size": 1e14,
+            "sub_group_size": 1e9,
             "reduce_bucket_size": "auto",
             "stage3_prefetch_bucket_size": "auto",
             "stage3_param_persistence_threshold": "auto",
@@ -649,7 +658,6 @@ and its typically accessed much faster than normal CPU memory.
 
 **Performance tuning:**
 
-- ``sub_group_size``: ``1e14``
 - ``stage3_max_live_parameters``: ``1e9``
 - ``stage3_max_reuse_distance``: ``1e9``
 
@@ -680,8 +688,11 @@ flexible.
 
 If you're migrating from ZeRO-2 configuration note that ``allgather_partitions``, ``allgather_bucket_size`` and
 ``reduce_scatter`` configuration parameters are not used in ZeRO-3. If you keep these in the config file they will just
-be ignored. Make sure to remove ``cpu_offload`` though, since it has been deprecated in ZeRO-3.
+be ignored.
 
+- ``sub_group_size``: ``1e9``
+
+This one does impact GPU memory usage. But no docs at the moment on Deepspeed side to explain the tuning.
 
 
 .. _deepspeed-nvme:
@@ -725,7 +736,7 @@ The following configuration example enables NVMe to offload both optimizer state
             }
             "overlap_comm": true,
             "contiguous_gradients": true,
-            "sub_group_size": 1e14,
+            "sub_group_size": 1e9,
             "reduce_bucket_size": "auto",
             "stage3_prefetch_bucket_size": "auto",
             "stage3_param_persistence_threshold": "auto",
@@ -766,9 +777,9 @@ It's possible to adjust ZeRO-3 configuration to make it perform closer to ZeRO-2
 
 - set ``stage3_param_persistence_threshold`` to a very large number - larger than the largest parameter, e.g., ``6 *
   hidden_size * hidden_size``. This will keep the parameters on the GPUs.
-- turn off ``cpu_offload_params`` since ZeRO-2 doesn't have that option.
+- turn off ``offload_params`` since ZeRO-2 doesn't have that option.
 
-The performance will likely improve significantly with just ``cpu_offload_params`` turned off, even if you don't change
+The performance will likely improve significantly with just ``offload_params`` turned off, even if you don't change
 ``stage3_param_persistence_threshold``. Of course, these changes will impact the size of the model you can train. So
 these help you to trade scalability for speed depending on your needs.
 
@@ -814,13 +825,16 @@ Here is a full ZeRO-2 auto-configuration file ``ds_config_zero2.json``:
 
         "zero_optimization": {
             "stage": 2,
+            "offload_optimizer": {
+                "device": "cpu",
+                "pin_memory": true
+            },
             "allgather_partitions": true,
             "allgather_bucket_size": 2e8,
             "overlap_comm": true,
             "reduce_scatter": true,
             "reduce_bucket_size": 2e8,
-            "contiguous_gradients": true,
-            "cpu_offload": true
+            "contiguous_gradients": true
         },
 
         "gradient_accumulation_steps": "auto",
@@ -868,13 +882,16 @@ values look like, but we highly recommend using the one with multiple ``auto`` s
 
         "zero_optimization": {
             "stage": 2,
+            "offload_optimizer": {
+                "device": "cpu",
+                "pin_memory": true
+            },
             "allgather_partitions": true,
             "allgather_bucket_size": 2e8,
             "overlap_comm": true,
             "reduce_scatter": true,
             "reduce_bucket_size": 2e8,
-            "contiguous_gradients": true,
-            "cpu_offload": true
+            "contiguous_gradients": true
         },
 
         "steps_per_print": 2000,
@@ -934,7 +951,7 @@ Here is a full ZeRO-3 auto-configuration file ``ds_config_zero3.json``:
             },
             "overlap_comm": true,
             "contiguous_gradients": true,
-            "sub_group_size": 1e14,
+            "sub_group_size": 1e9,
             "reduce_bucket_size": "auto",
             "stage3_prefetch_bucket_size": "auto",
             "stage3_param_persistence_threshold": "auto",
@@ -997,7 +1014,7 @@ values look like, but we highly recommend using the one with multiple ``auto`` s
             },
             "overlap_comm": true,
             "contiguous_gradients": true,
-            "sub_group_size": 1e14,
+            "sub_group_size": 1e9,
             "reduce_bucket_size": 1e6,
             "stage3_prefetch_bucket_size": 0.94e6,
             "stage3_param_persistence_threshold": 1e4,
@@ -1014,8 +1031,8 @@ values look like, but we highly recommend using the one with multiple ``auto`` s
 Optimizer and Scheduler
 =======================================================================================================================
 
-As long as you don't enable ``cpu_offload`` you can mix and match DeepSpeed and HuggingFace schedulers and optimizers,
-with the exception of using the combination of HuggingFace scheduler and DeepSpeed optimizer:
+As long as you don't enable ``offload_optimizer`` you can mix and match DeepSpeed and HuggingFace schedulers and
+optimizers, with the exception of using the combination of HuggingFace scheduler and DeepSpeed optimizer:
 
 +--------------+--------------+--------------+
 | Combos       | HF Scheduler | DS Scheduler |
@@ -1025,7 +1042,7 @@ with the exception of using the combination of HuggingFace scheduler and DeepSpe
 | DS Optimizer | No           | Yes          |
 +--------------+--------------+--------------+
 
-If ``cpu_offload`` is enabled you must use both DeepSpeed scheduler and DeepSpeed optimizer.
+If ``offload_optimizer`` is enabled you must use both DeepSpeed scheduler and DeepSpeed optimizer.
 
 
 
@@ -1546,8 +1563,8 @@ Troubleshooting
 If the ``deepspeed`` process gets killed at launch time without a traceback, that usually means that the program tried
 to allocate more CPU memory than your system has or your process is allowed to allocate and the OS kernel killed that
 process. This is because your configuration file most likely has either ``offload_optimizer`` or ``offload_param`` or
-both configured to offload to ``cpu`` (or under ZeRO-2 ``cpu_offload`` is enabled). If you have NVMe, experiment with
-offloading to NVMe if you're running under ZeRO-3.
+both configured to offload to ``cpu``. If you have NVMe, experiment with offloading to NVMe if you're running under
+ZeRO-3.
 
 Work is being done to enable estimating how much memory is needed for a specific model: `PR
 <https://github.com/microsoft/DeepSpeed/pull/965>`__.
