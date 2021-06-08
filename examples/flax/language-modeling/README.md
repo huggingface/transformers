@@ -161,7 +161,6 @@ python3 xla_spawn.py --num_cores ${NUM_TPUS} run_mlm.py --output_dir="./runs" \
 										--weight_decay="0.01" \
 										--per_device_train_batch_size="128" \
 										--per_device_eval_batch_size="128" \
-										--gradient_accumulation_steps="2" \
 										--learning_rate="3e-4" \
 										--warmup_steps="1000" \
 										--overwrite_output_dir \
