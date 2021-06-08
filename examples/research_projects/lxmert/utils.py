@@ -532,7 +532,7 @@ def load_frcnn_pkl_from_url(url):
     for k, v in model.items():
         new[k] = torch.from_numpy(v)
         if "running_var" in k:
-            zero = torch.Tensor([0])
+            zero = torch.tensor([0])
             k2 = k.replace("running_var", "num_batches_tracked")
             new[k2] = zero
     return new

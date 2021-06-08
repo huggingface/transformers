@@ -461,7 +461,7 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         config = self.model_tester.prepare_config_and_inputs()[0]
         embeddings = RobertaEmbeddings(config=config)
 
-        inputs_embeds = torch.Tensor(2, 4, 30)
+        inputs_embeds = torch.empty(2, 4, 30)
         expected_single_positions = [
             0 + embeddings.padding_idx + 1,
             1 + embeddings.padding_idx + 1,
