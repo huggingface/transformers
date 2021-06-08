@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     execute_subprocess_async,
     get_gpu_count,
     mockenv_context,
+    require_deepspeed,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
@@ -56,17 +57,6 @@ T5_TINY = "patrickvonplaten/t5-tiny-random"
 def load_json(path):
     with open(path) as f:
         return json.load(f)
-
-
-# a candidate for testing_utils
-def require_deepspeed(test_case):
-    """
-    Decorator marking a test that requires deepspeed
-    """
-    if not is_deepspeed_available():
-        return unittest.skip("test requires deepspeed")(test_case)
-    else:
-        return test_case
 
 
 def require_deepspeed_aio(test_case):
@@ -404,15 +394,19 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         train_len = 64
         a = b = 0.0
 
+        kwargs = dict(
+            a=a,
+            b=b,
+            local_rank=0,
+            train_len=train_len,
+            fp16=True,
+            deepspeed=self.get_config_dict(stage),
+        )
+
         with mockenv_context(**self.dist_env_1_gpu):
             no_grad_accum_trainer = get_regression_trainer(
-                a=a,
-                b=b,
-                local_rank=0,
-                train_len=train_len,
-                fp16=True,
-                deepspeed=self.get_config_dict(stage),
-                per_device_train_batch_size=8,
+                **kwargs,
+                per_device_train_batch_size=16,
                 gradient_accumulation_steps=1,
             )
             no_grad_accum_result = no_grad_accum_trainer.train()
@@ -424,14 +418,9 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
 
         with mockenv_context(**self.dist_env_1_gpu):
             yes_grad_accum_trainer = get_regression_trainer(
-                a=a,
-                b=b,
-                local_rank=0,
-                train_len=train_len,
-                fp16=True,
-                deepspeed=self.get_config_dict(stage),
+                **kwargs,
                 per_device_train_batch_size=4,
-                gradient_accumulation_steps=2,
+                gradient_accumulation_steps=4,
             )
             yes_grad_accum_result = yes_grad_accum_trainer.train()
             yes_grad_accum_loss = yes_grad_accum_result.training_loss
@@ -445,7 +434,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, places=5)
 
         # see the note above how to get identical loss on a small bs
-        self.assertAlmostEqual(no_grad_accum_loss, yes_grad_accum_loss, places=5)
+        self.assertAlmostEqual(no_grad_accum_loss, yes_grad_accum_loss, places=2)
 
     def check_saved_checkpoints_deepspeed(self, output_dir, freq, total, stage):
         # adapted from TrainerIntegrationCommon.check_saved_checkpoints

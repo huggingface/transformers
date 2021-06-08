@@ -1701,7 +1701,14 @@ class Trainer:
         """
         for k, v in inputs.items():
             if isinstance(v, torch.Tensor):
-                inputs[k] = v.to(self.args.device)
+                kwargs = dict(device=self.args.device)
+                if self.deepspeed and inputs[k].dtype != torch.int64:
+                    # NLP models inputs are int64 and those get adjusted to the right dtype of the
+                    # embedding. Other models such as wav2vec2's inputs are already float and thus
+                    # may need special handling to match the dtypes of the model
+                    kwargs.update(dict(dtype=self.args.hf_deepspeed_config.dtype()))
+
+                inputs[k] = v.to(**kwargs)
 
         if self.args.past_index >= 0 and self._past is not None:
             inputs["mems"] = self._past

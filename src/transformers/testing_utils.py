@@ -28,6 +28,7 @@ from typing import Iterator, Union
 
 from transformers import logging as transformers_logging
 
+from .deepspeed import is_deepspeed_available
 from .file_utils import (
     is_datasets_available,
     is_faiss_available,
@@ -450,6 +451,16 @@ def require_soundfile(test_case):
     """
     if not is_soundfile_availble():
         return unittest.skip("test requires soundfile")(test_case)
+    else:
+        return test_case
+
+
+def require_deepspeed(test_case):
+    """
+    Decorator marking a test that requires deepspeed
+    """
+    if not is_deepspeed_available():
+        return unittest.skip("test requires deepspeed")(test_case)
     else:
         return test_case
 

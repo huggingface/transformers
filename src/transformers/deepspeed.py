@@ -23,8 +23,12 @@ from copy import deepcopy
 from functools import partialmethod
 
 from .dependency_versions_check import dep_version_check
+from .file_utils import is_torch_available
 from .utils import logging
 
+
+if is_torch_available():
+    import torch
 
 logger = logging.get_logger(__name__)
 
@@ -70,45 +74,85 @@ class HfDeepSpeedConfig:
         # zero stage - this is done as early as possible, before model is created, to allow
         # ``is_deepspeed_zero3_enabled`` query and getting to the early deepspeed config object
         # during ``zero.Init()`` which needs whether fp16 is enabled, dtype, etc.
-        config_zero = config.get("zero_optimization", {})
-        self.stage = config_zero.get("stage", 0)
+        self._stage = self.get_value("zero_optimization.stage", -1)
 
         # offload
-        self.offload = False
-        config_zero = config.get("zero_optimization", {})
+        self._offload = False
         if self.is_zero2() or self.is_zero3():
-            offload_devices = ["cpu", "nvme"]
-            if config_zero.get("offload_optimizer", {}).get("device") in offload_devices:
-                self.offload = True
-            if config_zero.get("offload_param", {}).get("device") in offload_devices:
-                self.offload = True
+            offload_devices_valid = set(["cpu", "nvme"])
+            offload_devices = set(
+                [
+                    self.get_value("zero_optimization.offload_optimizer.device"),
+                    self.get_value("zero_optimization.offload_param.device"),
+                ]
+            )
+            if len(offload_devices & offload_devices_valid) > 0:
+                self._offload = True
+
+    def find_config_node(self, ds_key_long):
+        config = self.config
+
+        # find the config node of interest if it exists
+        nodes = ds_key_long.split(".")
+        ds_key = nodes.pop()
+        for node in nodes:
+            config = config.get(node)
+            if config is None:
+                return None, ds_key
+
+        return config, ds_key
+
+    def get_value(self, ds_key_long, default=None):
+        """
+        Returns the set value or ``default`` if no value is set
+        """
+        config, ds_key = self.find_config_node(ds_key_long)
+        if config is None:
+            return default
+        return config.get(ds_key, default)
+
+    def is_true(self, ds_key_long):
+        """
+        Returns :obj:`True`/:obj:`False` only if the value is set, always :obj:`False` otherwise. So use this method to
+        ask the very specific question of whether the value is set to :obj:`True` (and it's not set to :obj:`False` or
+        isn't set).
+
+        """
+        value = self.get_value(ds_key_long)
+        return False if value is None else bool(value)
+
+    def is_false(self, ds_key_long):
+        """
+        Returns :obj:`True`/:obj:`False` only if the value is set, always :obj:`False` otherwise. So use this method to
+        ask the very specific question of whether the value is set to :obj:`False` (and it's not set to :obj:`True` or
+        isn't set).
+        """
+        value = self.get_value(ds_key_long)
+        return False if value is None else not bool(value)
 
     def is_zero2(self):
-        return self.stage == 2
+        return self._stage == 2
 
     def is_zero3(self):
-        return self.stage == 3
+        return self._stage == 3
 
     def is_offload(self):
-        return self.offload
-
-    @staticmethod
-    def is_true(config, key):
-        if config is None:
-            return False
-        return bool(config.get(key))
+        return self._offload
 
 
 class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
     """
     The ``HfTrainerDeepSpeedConfig`` object is meant to be created during ``TrainingArguments`` object creation and has
     the same lifespan as the latter.
-
     """
 
     def __init__(self, config_file_or_dict):
         super().__init__(config_file_or_dict)
+        self._dtype = torch.float16
         self.mismatches = []
+
+    def dtype(self):
+        return self._dtype
 
     def fill_match(self, ds_key_long, hf_val, hf_key=None, must_match=True):
         """
@@ -121,16 +165,9 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         ``trainer_config_finalize`` for one or more mismatches.
 
         """
-
-        config = self.config
-
-        # find the config node of interest if it exists
-        nodes = ds_key_long.split(".")
-        ds_key = nodes.pop()
-        for node in nodes:
-            config = config.get(node)
-            if config is None:
-                return
+        config, ds_key = self.find_config_node(ds_key_long)
+        if config is None:
+            return
 
         if config.get(ds_key) == "auto":
             config[ds_key] = hf_val
@@ -184,6 +221,13 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         # ZeRO features
         self.fill_match("amp.enabled", fp16_backend == "apex", "fp16+fp16_backend(apex)")
         self.fill_match("amp.opt_level", args.fp16_opt_level, "fp16_opt_level")
+
+        # only if we have an explicit fp16.enabled = False then it's fp32, if it's True or this
+        # whole config section is missing then the fallback is fp16
+        if self.is_false("fp16.enabled"):
+            self._dtype = torch.float32
+        # later there will be other dtypes besides just fp16 and fp32
+        # also not quite sure what dtype should be under apex, defaulting to fp16 for now
 
     def trainer_config_finalize(self, args, model, num_training_steps):
         """
