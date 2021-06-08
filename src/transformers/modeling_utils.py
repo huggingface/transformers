@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import torch
+from datasets import ClassLabel, Dataset
 from torch import Tensor, device, dtype, nn
 from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
@@ -1993,3 +1994,23 @@ def apply_chunking_to_forward(
         return torch.cat(output_chunks, dim=chunk_dim)
 
     return forward_fn(*input_tensors)
+
+
+def align_dataset_labels_with_config(
+    dataset: Dataset, config: PretrainedConfig, label_column: str = "labels"
+) -> Dataset:
+    def _process_labels(batch):
+        int2str_function = dataset.features[label_column].int2str
+        label_name_to_id = {k.lower(): v for k, v in config.label2id.items()}
+        label_names = int2str_function(batch[label_column])
+        # TODO(lewtun): we need to also lowercase dataset label names?
+        batch[label_column] = label_name_to_id[label_names]
+        return batch
+
+    dataset = dataset.map(_process_labels)
+    label_names = [k.lower() for k in config.id2label.values()]
+    features = dataset.features
+    features[label_column] = ClassLabel(num_classes=len(label_names), names=label_names)
+    dataset = dataset.cast(features)
+
+    return dataset
