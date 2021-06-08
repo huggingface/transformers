@@ -13,8 +13,8 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch.distributed as dist
-from pytorch_lightning.accelerators.ddp_accelerator import DDPAccelerator
-from pytorch_lightning.cluster_environments import TorchElasticEnvironment
+import torch.distributed as torch_distrib
+from pytorch_lightning.plugins.training_type import DDPPlugin
 from torch.utils.data import DataLoader
 
 from transformers import (
@@ -35,7 +35,6 @@ from transformers.integrations import is_ray_available
 if is_ray_available():
     import ray
     from distributed_ray_retriever import RagRayDistributedRetriever, RayRetriever
-
 
 from callbacks_rag import (  # noqa: E402 # isort:skipq
     get_checkpoint_callback,
@@ -74,27 +73,19 @@ class AttrDict(dict):
         self.__dict__ = self
 
 
-# In PTL >v1.0, `init_ddp_connection` method in the `LightningModule`
-# is no longer used, and is moved into DDPAccelerator instead.
-# We override DDPAccelerator to add our custom logic for initializing the
-# retriever.
-# https://github.com/PyTorchLightning/pytorch-lightning/blob/master/tests/backends/test_accelerator_connector.py
+class CustomDDP(DDPPlugin):
+    def init_ddp_connection(self, global_rank=None, world_size=None) -> None:
+        module = self.model
+        global_rank = global_rank if global_rank is not None else self.cluster_environment.global_rank()
+        world_size = world_size if world_size is not None else self.cluster_environment.world_size()
+        os.environ["MASTER_ADDR"] = self.cluster_environment.master_address()
+        os.environ["MASTER_PORT"] = str(self.cluster_environment.master_port())
+        if not torch.distributed.is_initialized():
+            logger.info(f"initializing ddp: GLOBAL_RANK: {global_rank}, MEMBER: {global_rank + 1}/{world_size}")
+            torch_distrib.init_process_group(self.torch_distributed_backend, rank=global_rank, world_size=world_size)
 
-
-class CustomAccel(DDPAccelerator):
-    def __init__(self, trainer=None, **kwargs):
-        # Trainer is set later.
-        super().__init__(trainer, **kwargs)
-
-    def init_ddp_connection(self, global_rank: int, world_size: int, is_slurm_managing_tasks: bool = True):
-        logger.info("Custom init_ddp_connection.")
-        module = self.trainer.model
-        if self.cluster_environment is None:
-            self.cluster_environment = TorchElasticEnvironment()
-        self.distributed_port = module.hparams.distributed_port
-        os.environ["MASTER_PORT"] = str(self.distributed_port)
-        super().init_ddp_connection(global_rank, world_size, is_slurm_managing_tasks)
         if module.is_rag_model:
+            self.distributed_port = module.hparams.distributed_port
             if module.distributed_retriever == "pytorch":
                 module.model.rag.retriever.init_retrieval(self.distributed_port)
             elif module.distributed_retriever == "ray" and global_rank == 0:
@@ -594,7 +585,7 @@ def main(args=None, model=None) -> GenerativeQAModule:
         checkpoint_callback=get_checkpoint_callback(args.output_dir, model.val_metric),
         early_stopping_callback=es_callback,
         logger=training_logger,
-        accelerator=CustomAccel() if args.gpus > 1 else None,
+        custom_ddp_plugin=CustomDDP() if args.gpus > 1 else None,
         profiler=pl.profiler.AdvancedProfiler() if args.profile else None,
     )
     pickle_save(model.hparams, model.output_dir / "hparams.pkl")
