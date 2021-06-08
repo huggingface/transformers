@@ -196,7 +196,7 @@ mkdir -p ${MODEL_DIR}
 , and can start training as follows:
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node ${NUM_GPUS} run_mlm.py \
+python3 -m torch.distributed.launch --nproc_per_node ${NUM_GPUS} run_mlm.py \
                         --output_dir="./runs" \
                         --model_type="roberta" \
                         --config_name="${MODEL_DIR}" \
