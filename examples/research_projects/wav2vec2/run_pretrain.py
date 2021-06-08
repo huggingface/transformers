@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import logging
 import sys
-import librosa
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
@@ -10,6 +9,7 @@ import torch
 import torch.nn as nn
 from packaging import version
 
+import librosa
 from transformers import (
     HfArgumentParser,
     Trainer,
@@ -171,14 +171,22 @@ class DataCollatorWav2Vec2Pretraining:
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="pt",
         )
-        features_shape = (batch["input_values"].shape[0], self._get_feat_extract_output_lengths(batch["input_values"].shape[1]))
+        features_shape = (
+            batch["input_values"].shape[0],
+            self._get_feat_extract_output_lengths(batch["input_values"].shape[1]),
+        )
 
-        batch["mask_time_indices"] = _compute_mask_indices(features_shape, self.config.mask_time_prob, self.config.mask_time_length, device=batch["input_values"].device, min_masks=2)
+        batch["mask_time_indices"] = _compute_mask_indices(
+            features_shape,
+            self.config.mask_time_prob,
+            self.config.mask_time_length,
+            device=batch["input_values"].device,
+            min_masks=2,
+        )
 
         return batch
 
     def _get_feat_extract_output_lengths(self, input_length: int) -> int:
-
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
@@ -190,7 +198,6 @@ class DataCollatorWav2Vec2Pretraining:
 
 
 class Wav2Vec2Trainer(Trainer):
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.num_update_step = 0
@@ -283,7 +290,9 @@ def main():
 
     def prepare_dataset(batch):
         # check that all files have the correct sampling rate
-        batch["input_values"], batch["sampling_rate"] = librosa.load(batch[data_args.speech_file_column], sr=feature_extractor.sampling_rate)
+        batch["input_values"], batch["sampling_rate"] = librosa.load(
+            batch[data_args.speech_file_column], sr=feature_extractor.sampling_rate
+        )
 
         return batch
 
@@ -298,7 +307,9 @@ def main():
         num_proc=data_args.preprocessing_num_workers,
     )
 
-    data_collator = DataCollatorWav2Vec2Pretraining(feature_extractor=feature_extractor, config=config, padding="longest")
+    data_collator = DataCollatorWav2Vec2Pretraining(
+        feature_extractor=feature_extractor, config=config, padding="longest"
+    )
 
     trainer = Wav2Vec2Trainer(
         model=model,

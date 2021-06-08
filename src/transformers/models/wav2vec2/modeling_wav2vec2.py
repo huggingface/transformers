@@ -695,9 +695,10 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
 
 class GumbelVectorQuantizer(nn.Module):
     """
-    Vector quantization using gumbel softmax. See `CATEGORICAL REPARAMETERIZATION
-WITH GUMBEL-SOFTMAX <https://arxiv.org/pdf/1611.01144.pdf>`__ for more information.
+        Vector quantization using gumbel softmax. See `CATEGORICAL REPARAMETERIZATION WITH GUMBEL-SOFTMAX
+        <https://arxiv.org/pdf/1611.01144.pdf>`__ for more information.
     """
+
     def __init__(self, config):
         super().__init__()
         self.num_groups = config.num_latent_groups
@@ -708,7 +709,9 @@ WITH GUMBEL-SOFTMAX <https://arxiv.org/pdf/1611.01144.pdf>`__ for more informati
         ), f"`config.vq_latent_dim {config.vq_latent_dim} must be divisible by `config.num_latent_groups` {self.num_groups} for concatenation"
 
         # storage for codebook variables (codewords)
-        self.vars = nn.Parameter(torch.FloatTensor(1, self.num_groups * self.num_vars, config.vq_latent_dim // self.num_groups))
+        self.vars = nn.Parameter(
+            torch.FloatTensor(1, self.num_groups * self.num_vars, config.vq_latent_dim // self.num_groups)
+        )
         self.weight_proj = nn.Linear(config.conv_dim[-1], self.num_groups * self.num_vars)
 
         # REMEMBER TO PUT THIS INTO INIT
@@ -719,15 +722,15 @@ WITH GUMBEL-SOFTMAX <https://arxiv.org/pdf/1611.01144.pdf>`__ for more informati
         # can be decayed for training
         self.temperature = 1
 
-# REMEMBER TO PUT THIS IN PRETRAINING SCRIPT
-#        assert len(temperature) == 3, f"{temperature}, {len(temperature)}"
-#        self.max_temp, self.min_temp, self.temp_decay = temperature
-#        self.curr_temp = self.max_temp
+    # REMEMBER TO PUT THIS IN PRETRAINING SCRIPT
+    #        assert len(temperature) == 3, f"{temperature}, {len(temperature)}"
+    #        self.max_temp, self.min_temp, self.temp_decay = temperature
+    #        self.curr_temp = self.max_temp
 
-#    def update_temperature(self, num_updates):
-#        self.curr_temp = max(self.max_temp * self.temp_decay ** num_updates, self.min_temp)
-#
-#        return self.curr_temp
+    #    def update_temperature(self, num_updates):
+    #        self.curr_temp = max(self.max_temp * self.temp_decay ** num_updates, self.min_temp)
+    #
+    #        return self.curr_temp
 
     def set_temperature(self, temperature: int):
         self.temperature = temperature
@@ -735,8 +738,8 @@ WITH GUMBEL-SOFTMAX <https://arxiv.org/pdf/1611.01144.pdf>`__ for more informati
     @staticmethod
     def _compute_perplexity(probs, mask):
         if mask is not None:
-            mask = mask.flatten()[:, None, None].expand(probs.shape)
-            probs = torch.where(mask, probs, torch.zeros_like(probs))
+            mask_extended = mask.flatten()[:, None, None].expand(probs.shape)
+            probs = torch.where(mask_extended, probs, torch.zeros_like(probs))
             marginal_probs = probs.sum(dim=0) / mask.sum()
         else:
             marginal_probs = probs.mean(dim=0)
@@ -753,16 +756,22 @@ WITH GUMBEL-SOFTMAX <https://arxiv.org/pdf/1611.01144.pdf>`__ for more informati
 
         if self.training:
             # sample code vector probs via gumbel in differentiateable way
-            codevector_probs = F.gumbel_softmax(hidden_states.float(), tau=self.temperature, hard=True).type_as(hidden_states)
+            codevector_probs = F.gumbel_softmax(hidden_states.float(), tau=self.temperature, hard=True).type_as(
+                hidden_states
+            )
 
             # compute perplexity
-            codevector_soft_dist = torch.softmax(hidden_states.view(batch_size * sequence_length, self.num_groups, -1).float(), dim=-1)
+            codevector_soft_dist = torch.softmax(
+                hidden_states.view(batch_size * sequence_length, self.num_groups, -1).float(), dim=-1
+            )
             perplexity = self._compute_perplexity(codevector_soft_dist, mask_time_indices)
         else:
             # take argmax in non-differentiable way
             # comptute hard codevector distribution (one hot)
             codevector_idx = hidden_states.argmax(dim=-1)
-            codevector_probs = hidden_states.new_zeros(*hidden_states.shape).scatter_(-1, codevector_idx.view(-1, 1), 1.0)
+            codevector_probs = hidden_states.new_zeros(*hidden_states.shape).scatter_(
+                -1, codevector_idx.view(-1, 1), 1.0
+            )
             codevector_probs = codevector_probs.view(batch_size * sequence_length, self.num_groups, -1)
 
             perplexity = self._compute_perplexity(codevector_probs, mask_time_indices)
@@ -770,7 +779,11 @@ WITH GUMBEL-SOFTMAX <https://arxiv.org/pdf/1611.01144.pdf>`__ for more informati
         codevector_probs = codevector_probs.view(batch_size * sequence_length, -1)
         # use probs to retrieve codevectors
         codevectors_per_group = codevector_probs.unsqueeze(-1) * self.vars
-        codevectors = codevectors_per_group.view(batch_size * sequence_length, self.num_groups, self.num_vars, -1).sum(-2).view(batch_size, sequence_length, -1)
+        codevectors = (
+            codevectors_per_group.view(batch_size * sequence_length, self.num_groups, self.num_vars, -1)
+            .sum(-2)
+            .view(batch_size, sequence_length, -1)
+        )
 
         return codevectors, perplexity
 
@@ -891,10 +904,12 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         self.init_weights()
 
-    def _mask_hidden_states(self, hidden_states: torch.FloatTensor, mask_time_indices: Optional[torch.FloatTensor] = None):
+    def _mask_hidden_states(
+        self, hidden_states: torch.FloatTensor, mask_time_indices: Optional[torch.FloatTensor] = None
+    ):
         """
-        Masks extracted features along time axis and/or along feature axis
-        according to `SpecAugment <https://arxiv.org/abs/1904.08779>`__ .
+        Masks extracted features along time axis and/or along feature axis according to `SpecAugment
+        <https://arxiv.org/abs/1904.08779>`__ .
         """
 
         # `config.apply_spec_augment` can set masking to False
@@ -1064,13 +1079,21 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         return negs, neg_idxs
 
     @staticmethod
-    def compute_contrastive_logits(target_features: torch.FloatTensor, predicted_features: torch.FloatTensor, negative_features, temperature: int = 1):
+    def compute_contrastive_logits(
+        target_features: torch.FloatTensor,
+        predicted_features: torch.FloatTensor,
+        negative_features,
+        temperature: int = 1,
+    ):
         """
-        Compute logits for contrastive loss based using cosine similarity as the distance measure between `[positive_feature, negative_features]` and `[predicted_features]`. Additionally, temperature can be applied.
+        Compute logits for contrastive loss based using cosine similarity as the distance measure between
+        `[positive_feature, negative_features]` and `[predicted_features]`. Additionally, temperature can be applied.
         """
         target_features = torch.cat([target_features, negative_features], dim=0)
 
-        logits = torch.cosine_similarity(predicted_features.float(), target_features.float(), dim=-1).type_as(target_features)
+        logits = torch.cosine_similarity(predicted_features.float(), target_features.float(), dim=-1).type_as(
+            target_features
+        )
 
         # apply temperature
         logits = logits / temperature
@@ -1122,7 +1145,12 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             negative_quantized_features, _ = self.sample_negatives(quantized_features)
 
             # 4. compute logits, corresponding to `logs = sim(c_t, [q_t, \sim{q}_t]) / \kappa` of equation (3) in https://arxiv.org/pdf/2006.11477.pdf
-            logits = self.compute_contrastive_logits(quantized_features[None, :], transformer_features, negative_quantized_features, self.config.contrastive_logit_temperature)
+            logits = self.compute_contrastive_logits(
+                quantized_features[None, :],
+                transformer_features,
+                negative_quantized_features,
+                self.config.contrastive_logit_temperature,
+            )
 
             # 5. if a negative vector is identical to the positive (i.e. when codebook utilization is low),
             # its cosine similarity will be masked
