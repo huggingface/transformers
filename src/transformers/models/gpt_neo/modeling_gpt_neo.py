@@ -164,7 +164,7 @@ class RotaryEmbedding(nn.Module):
         t = torch.arange(max_seq_len, device = device).type_as(self.inv_freq)
         freqs = torch.einsum('i , j -> i j', t, self.inv_freq)
         emb = torch.cat((freqs, freqs), dim=-1)
-        return rearrange(emb, 'n d -> () () n d')
+        return rearrange(emb, 'n d -> () n () d')
 
 #def rotate_half(x):
 #    x = rearrange(x, '... (j d) -> ... j d', j = 2)
@@ -177,7 +177,7 @@ class RotaryEmbedding(nn.Module):
 #    return (t * freqs.cos()) + (rotate_half(t) * freqs.sin())
 # end rotary
 
-def fixed_pos_embedding(x, seq_dim=0):
+def fixed_pos_embedding(x, seq_dim=1):
     dim = x.shape[-1]
     inv_freq = 1. / (10000 ** (torch.arange(0, dim, 2) / dim))
     sinusoid_inp = torch.einsum('i , j -> i j', torch.arange(x.shape[seq_dim]), inv_freq).to(x.device).float()
@@ -190,7 +190,7 @@ def rotate_every_two(x):
     return rearrange(x, '... d j -> ... (d j)')
 
 def apply_rotary_pos_emb(x, sincos):
-    sin, cos = map(lambda t: repeat(t, 'b n -> b (n j)', j=2)[-x.shape[1]:, None, :], sincos)
+    sin, cos = map(lambda t: repeat(t, "n d -> () n () (d j)", j=2), sincos)
     return (x * cos) + (rotate_every_two(x) * sin)
 
 class GPTNeoAttentionMixin:
