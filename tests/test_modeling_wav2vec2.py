@@ -828,7 +828,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             )
 
         # check diversity loss
-        num_codevectors = model.config.num_latent_vars * model.config.num_latent_groups
+        num_codevectors = model.config.num_codevectors_per_group * model.config.num_codevector_groups
         diversity_loss = (num_codevectors - outputs.codevector_perplexity) / num_codevectors
         self.assertTrue(abs(diversity_loss.item() - 0.8859) < 1e-3)
 

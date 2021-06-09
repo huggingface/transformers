@@ -90,11 +90,11 @@ class Wav2Vec2ForPreTrainingOutput(ModelOutput):
         loss (`optional`, returned when model is in train mode, ``torch.FloatTensor`` of shape :obj:`(1,)`):
             Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the `official
             paper <https://arxiv.org/pdf/2006.11477.pdf>`__ . (classification) loss.
-        projected_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vq_final_dim)`):
-            Hidden-states of the model projected to `config.vq_final_dim` that can be used to predict the masked
+        projected_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.proj_codevector_dim)`):
+            Hidden-states of the model projected to `config.proj_codevector_dim` that can be used to predict the masked
             projected quantized states.
-        projected_quantized_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vq_final_dim)`):
-            Quantized extracted feature vectors projected to `config.vq_final_dim` representing the positive target
+        projected_quantized_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.proj_codevector_dim)`):
+            Quantized extracted feature vectors projected to `config.proj_codevector_dim` representing the positive target
             vectors for contrastive loss.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
@@ -765,16 +765,16 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.num_groups = config.num_latent_groups
-        self.num_vars = config.num_latent_vars
+        self.num_groups = config.num_codevector_groups
+        self.num_vars = config.num_codevectors_per_group
 
         assert (
-            config.vq_latent_dim % self.num_groups == 0
-        ), f"`config.vq_latent_dim {config.vq_latent_dim} must be divisible by `config.num_latent_groups` {self.num_groups} for concatenation"
+            config.codevector_dim % self.num_groups == 0
+        ), f"`config.codevector_dim {config.codevector_dim} must be divisible by `config.num_codevector_groups` {self.num_groups} for concatenation"
 
         # storage for codebook variables (codewords)
         self.codevectors = nn.Parameter(
-            torch.FloatTensor(1, self.num_groups * self.num_vars, config.vq_latent_dim // self.num_groups)
+            torch.FloatTensor(1, self.num_groups * self.num_vars, config.codevector_dim // self.num_groups)
         )
         self.weight_proj = nn.Linear(config.conv_dim[-1], self.num_groups * self.num_vars)
 
@@ -1104,8 +1104,8 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         self.dropout_features = nn.Dropout(config.feat_quantizer_dropout)
 
         self.quantizer = Wav2Vec2GumbelVectorQuantizer(config)
-        self.project_q = nn.Linear(config.vq_latent_dim, config.vq_final_dim)
-        self.project_hid = nn.Linear(config.hidden_size, config.vq_final_dim)
+        self.project_q = nn.Linear(config.codevector_dim, config.proj_codevector_dim)
+        self.project_hid = nn.Linear(config.hidden_size, config.proj_codevector_dim)
 
         self.init_weights()
 
@@ -1201,7 +1201,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         r"""
         mask_time_indices (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
-            masked extracted features in `config.vq_final_dim` space.
+            masked extracted features in `config.proj_codevector_dim` space.
 
         Returns:
 
@@ -1279,7 +1279,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
                 quantized_features[None, :],
                 negative_quantized_features,
                 transformer_features,
-                self.config.contrastive_logit_temperature,
+                self.config.contrastive_logits_temperature,
             )
 
             # 5. if a negative vector is identical to the positive (i.e. when codebook utilization is low),
@@ -1298,7 +1298,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             )
 
             # 7. compute diversity loss: \mathbf{L}_d
-            num_codevectors = self.config.num_latent_vars * self.config.num_latent_groups
+            num_codevectors = self.config.num_codevectors_per_group * self.config.num_codevector_groups
             diversity_loss = (num_codevectors - codevector_perplexity) / num_codevectors
 
             # 8. \mathbf{L} = \mathbf{L}_m + \alpha * \mathbf{L}_d
