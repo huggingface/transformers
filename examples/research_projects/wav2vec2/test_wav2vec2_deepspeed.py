@@ -24,6 +24,7 @@ sys.path.insert(1, str(git_repo_path))
 
 import dataclasses  # noqa
 import io  # noqa
+import itertools  # noqa
 import json  # noqa
 import os  # noqa
 import unittest  # noqa
@@ -50,48 +51,62 @@ from transformers.trainer_utils import set_seed  # noqa
 
 set_seed(42)
 
-WAV2VEC2_TINY = "patrickvonplaten/wav2vec2_tiny_random_robust"
-
+models = dict(base="patrickvonplaten/wav2vec2_tiny_random", robust="patrickvonplaten/wav2vec2_tiny_random_robust")
 
 ZERO2 = "zero2"
 ZERO3 = "zero3"
 stages = [ZERO2, ZERO3]
 
 
+def custom_name_func(func, param_num, param):
+    # customize the test name generator function as we want both params to appear in the sub-test
+    # name, as by default it shows only the first param
+    param_based_name = parameterized.to_safe_name("_".join(str(x) for x in param.args))
+    return f"{func.__name__}_{param_based_name}"
+
+
+# Cartesian-product of zero stages with models to test
+params = list(itertools.product(stages, models.keys()))
+
+
 @slow
 @require_deepspeed
 @require_torch_gpu
 class TestDeepSpeedWav2Vec2(TestCasePlus):
-    @parameterized.expand(stages)
-    def test_fp32_non_distributed(self, stage):
+    @parameterized.expand(params, name_func=custom_name_func)
+    def test_fp32_non_distributed(self, stage, model):
         self.run_and_check(
             stage=stage,
+            model=model,
             distributed=False,
             fp16=False,
         )
 
     @require_torch_multi_gpu
-    @parameterized.expand(stages)
-    def test_fp32_distributed(self, stage):
+    @parameterized.expand(params, name_func=custom_name_func)
+    def test_fp32_distributed(self, stage, model):
         self.run_and_check(
             stage=stage,
+            model=model,
             distributed=True,
             fp16=False,
         )
 
-    @parameterized.expand(stages)
-    def test_fp16_non_distributed(self, stage):
+    @parameterized.expand(params, name_func=custom_name_func)
+    def test_fp16_non_distributed(self, stage, model):
         self.run_and_check(
             stage=stage,
+            model=model,
             distributed=False,
             fp16=True,
         )
 
     @require_torch_multi_gpu
-    @parameterized.expand(stages)
-    def test_fp16_distributed(self, stage):
+    @parameterized.expand(params, name_func=custom_name_func)
+    def test_fp16_distributed(self, stage, model):
         self.run_and_check(
             stage=stage,
+            model=model,
             distributed=True,
             fp16=True,
         )
@@ -104,13 +119,15 @@ class TestDeepSpeedWav2Vec2(TestCasePlus):
     # XXX: need to do better validation beyond just that the run was successful
     def run_and_check(
         self,
-        stage,
-        model_name: str = WAV2VEC2_TINY,
+        stage: str,
+        model: str,
         eval_steps: int = 10,
         distributed: bool = True,
         quality_checks: bool = True,
         fp16: bool = True,
     ):
+
+        model_name = models[model]
 
         output_dir = self.run_trainer(
             stage=stage,
