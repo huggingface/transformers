@@ -94,7 +94,8 @@ class TokenizerTesterMixin:
 
     tokenizer_class = None
     rust_tokenizer_class = None
-    test_rust_tokenizer = False
+    test_slow_tokenizer = True
+    test_rust_tokenizer = True
     space_between_special_tokens = False
     from_pretrained_kwargs = None
     from_pretrained_filter = None
@@ -165,11 +166,11 @@ class TokenizerTesterMixin:
         return output_txt, output_ids
 
     def get_tokenizers(self, fast=True, **kwargs) -> List[PreTrainedTokenizerBase]:
-        if fast and self.test_rust_tokenizer and self.tokenizer_class is not None:
+        if fast and self.test_rust_tokenizer and self.test_slow_tokenizer:
             return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
         elif fast and self.test_rust_tokenizer:
             return [self.get_rust_tokenizer(**kwargs)]
-        elif self.tokenizer_class is not None:
+        elif self.test_slow_tokenizer:
             return [self.get_tokenizer(**kwargs)]
         else:
             raise ValueError("This tokenizer class has no tokenizer to be tested.")
@@ -283,7 +284,7 @@ class TokenizerTesterMixin:
         self.assertIsNone(signature.parameters["tokenizer_file"].default)
 
     def test_tokenizer_slow_store_full_signature(self):
-        if self.tokenizer_class is None:
+        if not self.test_slow_tokenizer:
             return
 
         signature = inspect.signature(self.tokenizer_class.__init__)
@@ -308,7 +309,7 @@ class TokenizerTesterMixin:
         if not self.test_rust_tokenizer:
             return
 
-        if self.tokenizer_class is None:
+        if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
             return
 
@@ -484,7 +485,7 @@ class TokenizerTesterMixin:
 
     def test_added_tokens_do_lower_case(self):
         # TODO(thom) activate fast tokenizer tests once Rust tokenizers accepts white spaces in added tokens.
-        tokenizers = [self.get_tokenizer(do_lower_case=True)] if self.tokenizer_class is not None else []
+        tokenizers = [self.get_tokenizer(do_lower_case=True)] if self.test_slow_tokenizer else []
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if not hasattr(tokenizer, "do_lower_case") or not tokenizer.do_lower_case:
@@ -518,7 +519,7 @@ class TokenizerTesterMixin:
                 for special_token in tokenizer.all_special_tokens:
                     self.assertTrue(special_token in tokenized_sequence)
 
-        tokenizers = [self.get_tokenizer(do_lower_case=True)] if self.tokenizer_class is not None else []
+        tokenizers = [self.get_tokenizer(do_lower_case=True)] if self.test_slow_tokenizer else []
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if hasattr(tokenizer, "do_lower_case") and tokenizer.do_lower_case:
@@ -2013,7 +2014,7 @@ class TokenizerTesterMixin:
                 # Check is_fast is set correctly
                 self.assertTrue(tokenizer_r.is_fast)
 
-                if self.tokenizer_class is not None:
+                if self.test_slow_tokenizer:
                     tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                     self.assertFalse(tokenizer_p.is_fast)
 
@@ -2255,7 +2256,7 @@ class TokenizerTesterMixin:
                     self.assertIn(None, pair_batch_sequence_ids)
 
     def test_tokenization_python_rust_equals(self):
-        if self.tokenizer_class is None:
+        if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
             return
 
@@ -2296,7 +2297,7 @@ class TokenizerTesterMixin:
                     self.assertSequenceEqual(input_p[key], input_r[key][0])
 
     def test_num_special_tokens_to_add_equal(self):
-        if self.tokenizer_class is None:
+        if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
             return
 
@@ -2314,7 +2315,7 @@ class TokenizerTesterMixin:
                 )
 
     def test_max_length_equal(self):
-        if self.tokenizer_class is None:
+        if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
             return
 
@@ -2328,7 +2329,7 @@ class TokenizerTesterMixin:
                 self.assertEqual(tokenizer_r.max_len_sentences_pair, tokenizer_p.max_len_sentences_pair)
 
     def test_special_tokens_map_equal(self):
-        if self.tokenizer_class is None:
+        if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
             return
 
@@ -2466,7 +2467,7 @@ class TokenizerTesterMixin:
                     self.assertEqual(tokens[key].shape[-1], 6)
 
     def test_compare_pretokenized_inputs(self):
-        if self.tokenizer_class is None:
+        if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
             return
 
@@ -2548,7 +2549,7 @@ class TokenizerTesterMixin:
                     self.assertEqual(output_p[key], output_r[key])
 
     def test_create_token_type_ids(self):
-        if self.tokenizer_class is None:
+        if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
             return
 
@@ -2570,7 +2571,7 @@ class TokenizerTesterMixin:
                 self.assertEqual(output_p, output_r)
 
     def test_build_inputs_with_special_tokens(self):
-        if self.tokenizer_class is None:
+        if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
             return
 
@@ -2607,7 +2608,7 @@ class TokenizerTesterMixin:
                 self.assertEqual(output_p, output_r)
 
     def test_padding(self, max_length=50):
-        if self.tokenizer_class is None:
+        if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
             return
 
@@ -2829,7 +2830,7 @@ class TokenizerTesterMixin:
                 self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
 
     def test_padding_different_model_input_name(self):
-        if self.tokenizer_class is None:
+        if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
             return
 
@@ -2867,7 +2868,7 @@ class TokenizerTesterMixin:
                 )
 
     def test_save_pretrained(self):
-        if self.tokenizer_class is None:
+        if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
             return
 
@@ -2937,7 +2938,7 @@ class TokenizerTesterMixin:
                 shutil.rmtree(tmpdirname2)
 
     def test_embeded_special_tokens(self):
-        if self.tokenizer_class is None:
+        if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
             return
 
@@ -3005,7 +3006,7 @@ class TokenizerTesterMixin:
                             self.assertEqual(len(i_no), len(i_with) - simple_num_special_tokens_to_add)
 
     def test_compare_prepare_for_model(self):
-        if self.tokenizer_class is None:
+        if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
             return
 
@@ -3038,7 +3039,7 @@ class TokenizerTesterMixin:
 
                 self.assertTrue(special_token_id in r_output)
 
-                if self.tokenizer_class is not None:
+                if self.test_slow_tokenizer:
                     tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
                         pretrained_name, additional_special_tokens=added_tokens, **kwargs, from_slow=True
                     )

@@ -24,6 +24,7 @@ from .test_tokenization_common import TokenizerTesterMixin
 @require_tokenizers
 class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
     rust_tokenizer_class = PreTrainedTokenizerFast
+    test_slow_tokenizer = False
     test_rust_tokenizer = True
     from_pretrained_vocab_key = "tokenizer_file"
 
