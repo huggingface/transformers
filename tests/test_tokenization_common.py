@@ -181,12 +181,6 @@ class TokenizerTesterMixin:
     def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
         return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
-    def get_main_tokenizer(self, **kwargs) -> Union[PreTrainedTokenizer, PreTrainedTokenizerFast]:
-        if self.tokenizer_class is not None:
-            return self.get_tokenizer(**kwargs)
-        else:
-            return self.get_rust_tokenizer(**kwargs)
-
     # def get_input_output_texts(self) -> Tuple[str, str]:
     #     """Feel free to overwrite"""
     #     # TODO: @property
@@ -1411,11 +1405,14 @@ class TokenizerTesterMixin:
         # This tests that tokenizers don't impact others. Unfortunately the case where it fails is when
         # we're loading an S3 configuration from a pre-trained identifier, and we have no way of testing those today.
 
-        tokenizer = self.get_main_tokenizer(random_argument=True)
-        assert tokenizer.init_kwargs["random_argument"] is True
-        new_tokenizer = self.get_main_tokenizer(random_argument=False)
-        assert tokenizer.init_kwargs["random_argument"] is True
-        assert new_tokenizer.init_kwargs["random_argument"] is False
+        tokenizers = self.get_tokenizers(random_argument=True)
+        new_tokenizers = self.get_tokenizers(random_argument=False)
+
+        for tokenizer, new_tokenizer in zip(tokenizers, new_tokenizers):
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                assert tokenizer.init_kwargs["random_argument"] is True
+                assert tokenizer.init_kwargs["random_argument"] is True
+                assert new_tokenizer.init_kwargs["random_argument"] is False
 
     def test_get_vocab(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
@@ -1923,85 +1920,92 @@ class TokenizerTesterMixin:
 
         MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
 
-        tokenizer = self.get_main_tokenizer()
-        if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-            return
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
+                    return
 
-        config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
-        config = config_class()
+                config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
+                config = config_class()
 
-        if config.is_encoder_decoder or config.pad_token_id is None:
-            return
+                if config.is_encoder_decoder or config.pad_token_id is None:
+                    return
 
-        # Build sequence
-        first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
-        sequence = " ".join(first_ten_tokens)
-        encoded_sequence = tokenizer.encode_plus(sequence, return_tensors="np")
-        batch_encoded_sequence = tokenizer.batch_encode_plus([sequence, sequence], return_tensors="np")
+                # Build sequence
+                first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
+                sequence = " ".join(first_ten_tokens)
+                encoded_sequence = tokenizer.encode_plus(sequence, return_tensors="np")
+                batch_encoded_sequence = tokenizer.batch_encode_plus([sequence, sequence], return_tensors="np")
 
-        # TODO: add forward through JAX/Flax when PR is merged
-        # This is currently here to make flake8 happy !
-        if encoded_sequence is None:
-            raise ValueError("Cannot convert list to numpy tensor on  encode_plus()")
+                # TODO: add forward through JAX/Flax when PR is merged
+                # This is currently here to make flake8 happy !
+                if encoded_sequence is None:
+                    raise ValueError("Cannot convert list to numpy tensor on  encode_plus()")
 
-        if batch_encoded_sequence is None:
-            raise ValueError("Cannot convert list to numpy tensor on  batch_encode_plus()")
+                if batch_encoded_sequence is None:
+                    raise ValueError("Cannot convert list to numpy tensor on  batch_encode_plus()")
 
-        if self.test_rust_tokenizer:
-            fast_tokenizer = self.get_rust_tokenizer()
-            encoded_sequence_fast = fast_tokenizer.encode_plus(sequence, return_tensors="np")
-            batch_encoded_sequence_fast = fast_tokenizer.batch_encode_plus([sequence, sequence], return_tensors="np")
+                if self.test_rust_tokenizer:
+                    fast_tokenizer = self.get_rust_tokenizer()
+                    encoded_sequence_fast = fast_tokenizer.encode_plus(sequence, return_tensors="np")
+                    batch_encoded_sequence_fast = fast_tokenizer.batch_encode_plus(
+                        [sequence, sequence], return_tensors="np"
+                    )
 
-            # TODO: add forward through JAX/Flax when PR is merged
-            # This is currently here to make flake8 happy !
-            if encoded_sequence_fast is None:
-                raise ValueError("Cannot convert list to numpy tensor on  encode_plus() (fast)")
+                    # TODO: add forward through JAX/Flax when PR is merged
+                    # This is currently here to make flake8 happy !
+                    if encoded_sequence_fast is None:
+                        raise ValueError("Cannot convert list to numpy tensor on  encode_plus() (fast)")
 
-            if batch_encoded_sequence_fast is None:
-                raise ValueError("Cannot convert list to numpy tensor on  batch_encode_plus() (fast)")
+                    if batch_encoded_sequence_fast is None:
+                        raise ValueError("Cannot convert list to numpy tensor on  batch_encode_plus() (fast)")
 
     @require_torch
     def test_prepare_seq2seq_batch(self):
         if not self.test_seq2seq:
             return
 
-        tokenizer = self.get_main_tokenizer()
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                # Longer text that will definitely require truncation.
+                src_text = [
+                    " UN Chief Says There Is No Military Solution in Syria",
+                    " Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for Syria is that 'there is no military solution' to the nearly five-year conflict and more weapons will only worsen the violence and misery for millions of people.",
+                ]
+                tgt_text = [
+                    "Şeful ONU declară că nu există o soluţie militară în Siria",
+                    "Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei "
+                    'pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu '
+                    "vor face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni.",
+                ]
+                try:
+                    batch = tokenizer.prepare_seq2seq_batch(
+                        src_texts=src_text,
+                        tgt_texts=tgt_text,
+                        max_length=3,
+                        max_target_length=10,
+                        return_tensors="pt",
+                        src_lang="en_XX",  # this should be ignored (for all but mbart) but not cause an error
+                    )
+                except NotImplementedError:
+                    return
+                self.assertEqual(batch.input_ids.shape[1], 3)
+                self.assertEqual(batch.labels.shape[1], 10)
+                # max_target_length will default to max_length if not specified
+                batch = tokenizer.prepare_seq2seq_batch(
+                    src_text, tgt_texts=tgt_text, max_length=3, return_tensors="pt"
+                )
+                self.assertEqual(batch.input_ids.shape[1], 3)
+                self.assertEqual(batch.labels.shape[1], 3)
 
-        # Longer text that will definitely require truncation.
-        src_text = [
-            " UN Chief Says There Is No Military Solution in Syria",
-            " Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for Syria is that 'there is no military solution' to the nearly five-year conflict and more weapons will only worsen the violence and misery for millions of people.",
-        ]
-        tgt_text = [
-            "Şeful ONU declară că nu există o soluţie militară în Siria",
-            "Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei "
-            'pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu '
-            "vor face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni.",
-        ]
-        try:
-            batch = tokenizer.prepare_seq2seq_batch(
-                src_texts=src_text,
-                tgt_texts=tgt_text,
-                max_length=3,
-                max_target_length=10,
-                return_tensors="pt",
-                src_lang="en_XX",  # this should be ignored (for all but mbart) but not cause an error
-            )
-        except NotImplementedError:
-            return
-        self.assertEqual(batch.input_ids.shape[1], 3)
-        self.assertEqual(batch.labels.shape[1], 10)
-        # max_target_length will default to max_length if not specified
-        batch = tokenizer.prepare_seq2seq_batch(src_text, tgt_texts=tgt_text, max_length=3, return_tensors="pt")
-        self.assertEqual(batch.input_ids.shape[1], 3)
-        self.assertEqual(batch.labels.shape[1], 3)
-
-        batch_encoder_only = tokenizer.prepare_seq2seq_batch(
-            src_texts=src_text, max_length=3, max_target_length=10, return_tensors="pt"
-        )
-        self.assertEqual(batch_encoder_only.input_ids.shape[1], 3)
-        self.assertEqual(batch_encoder_only.attention_mask.shape[1], 3)
-        self.assertNotIn("decoder_input_ids", batch_encoder_only)
+                batch_encoder_only = tokenizer.prepare_seq2seq_batch(
+                    src_texts=src_text, max_length=3, max_target_length=10, return_tensors="pt"
+                )
+                self.assertEqual(batch_encoder_only.input_ids.shape[1], 3)
+                self.assertEqual(batch_encoder_only.attention_mask.shape[1], 3)
+                self.assertNotIn("decoder_input_ids", batch_encoder_only)
 
     def test_is_fast(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
