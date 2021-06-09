@@ -1251,6 +1251,9 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if mask_time_indices is not None:
+            mask_time_indices = mask_time_indices.to(torch.bool)
+
         outputs = self.wav2vec2(
             input_values,
             attention_mask=attention_mask,

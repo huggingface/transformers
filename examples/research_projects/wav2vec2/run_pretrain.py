@@ -224,7 +224,7 @@ class Wav2Vec2PreTrainer(Trainer):
         else:
             loss = self.compute_loss(model, inputs)
 
-        if self.args.n_gpu > 1:
+        if self.args.n_gpu > 1 or self.deepspeed:
             if model.module.config.ctc_loss_reduction == "mean":
                 loss = loss.mean()
             elif model.module.config.ctc_loss_reduction == "sum":
@@ -247,9 +247,14 @@ class Wav2Vec2PreTrainer(Trainer):
 
         self.num_update_step += 1
         # make sure gumbel softmax temperature is decayed
-        model.set_gumbel_temperature(
-            max(self.max_gumbel_temp * self.gumbel_temp_decay ** self.num_update_step, self.min_gumbel_temp)
-        )
+        if self.args.n_gpu > 1 or self.deepspeed:
+            model.module.set_gumbel_temperature(
+                max(self.max_gumbel_temp * self.gumbel_temp_decay ** self.num_update_step, self.min_gumbel_temp)
+            )
+        else:
+            model.set_gumbel_temperature(
+                max(self.max_gumbel_temp * self.gumbel_temp_decay ** self.num_update_step, self.min_gumbel_temp)
+            )
 
         return loss.detach()
 
@@ -331,13 +336,18 @@ def main():
     )
 
     # pretraining is only supported for "newer" stable layer norm architecture
+    # apply_spec_augment has to be True, mask_feature_prob has to be 0.0
     config = Wav2Vec2Config.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         gradient_checkpointing=model_args.gradient_checkpointing,
-        do_stable_layer_norm=True,
-        feat_extract_norm="layer",
     )
+
+    if not config.do_stable_layer_norm or config.feat_extract_norm != "layer":
+        raise ValueError(
+            "PreTraining is only supported for ``config.do_stable_layer_norm=True`` and ``config.feat_extract_norm='layer'"
+        )
+
     model = Wav2Vec2ForPreTraining(config)
 
     data_collator = DataCollatorWav2Vec2Pretraining(model=model, feature_extractor=feature_extractor)
