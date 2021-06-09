@@ -47,6 +47,7 @@ from .file_utils import (
     is_sentencepiece_available,
     is_speech_available,
     is_tf_available,
+    is_timm_available,
     is_tokenizers_available,
     is_torch_available,
     is_vision_available,
@@ -101,10 +102,12 @@ _import_structure = {
         "is_flax_available",
         "is_psutil_available",
         "is_py3nvml_available",
+        "is_scipy_available",
         "is_sentencepiece_available",
         "is_sklearn_available",
         "is_speech_available",
         "is_tf_available",
+        "is_timm_available",
         "is_tokenizers_available",
         "is_torch_available",
         "is_torch_tpu_available",
@@ -165,6 +168,7 @@ _import_structure = {
         "BlenderbotSmallConfig",
         "BlenderbotSmallTokenizer",
     ],
+    "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -179,6 +183,7 @@ _import_structure = {
     "models.deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaTokenizer"],
     "models.deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
     "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
+    "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
     "models.distilbert": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertConfig", "DistilBertTokenizer"],
     "models.dpr": [
         "DPR_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -232,6 +237,7 @@ _import_structure = {
         "TransfoXLCorpus",
         "TransfoXLTokenizer",
     ],
+    "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
     "models.wav2vec2": [
         "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -403,12 +409,30 @@ if is_vision_available():
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
     _import_structure["models.clip"].append("CLIPProcessor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
+    _import_structure["models.detr"].append("DetrFeatureExtractor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
 else:
     from .utils import dummy_vision_objects
 
     _import_structure["utils.dummy_vision_objects"] = [
         name for name in dir(dummy_vision_objects) if not name.startswith("_")
+    ]
+
+# Timm-backed objects
+if is_timm_available() and is_vision_available():
+    _import_structure["models.detr"].extend(
+        [
+            "DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DetrForObjectDetection",
+            "DetrForSegmentation",
+            "DetrModel",
+        ]
+    )
+else:
+    from .utils import dummy_timm_objects
+
+    _import_structure["utils.dummy_timm_objects"] = [
+        name for name in dir(dummy_timm_objects) if not name.startswith("_")
     ]
 
 # PyTorch-backed objects
@@ -487,6 +511,7 @@ if is_torch_available():
             "MODEL_FOR_MASKED_LM_MAPPING",
             "MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
             "MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
+            "MODEL_FOR_OBJECT_DETECTION_MAPPING",
             "MODEL_FOR_PRETRAINING_MAPPING",
             "MODEL_FOR_QUESTION_ANSWERING_MAPPING",
             "MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
@@ -746,6 +771,7 @@ if is_torch_available():
         [
             "GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST",
             "GPTNeoForCausalLM",
+            "GPTNeoForSequenceClassification",
             "GPTNeoModel",
             "GPTNeoPreTrainedModel",
             "load_tf_weights_in_gpt_neo",
@@ -994,6 +1020,19 @@ if is_torch_available():
             "load_tf_weights_in_transfo_xl",
         ]
     )
+    _import_structure["models.visual_bert"].extend(
+        [
+            "VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VisualBertForMultipleChoice",
+            "VisualBertForPreTraining",
+            "VisualBertForQuestionAnswering",
+            "VisualBertForRegionToPhraseAlignment",
+            "VisualBertForVisualReasoning",
+            "VisualBertLayer",
+            "VisualBertModel",
+            "VisualBertPreTrainedModel",
+        ]
+    )
     _import_structure["models.vit"].extend(
         [
             "VIT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1007,6 +1046,7 @@ if is_torch_available():
             "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "Wav2Vec2ForCTC",
             "Wav2Vec2ForMaskedLM",
+            "Wav2Vec2ForPreTraining",
             "Wav2Vec2Model",
             "Wav2Vec2PreTrainedModel",
         ]
@@ -1437,6 +1477,14 @@ else:
 
 # FLAX-backed objects
 if is_flax_available():
+    _import_structure["generation_flax_logits_process"] = [
+        "FlaxLogitsProcessor",
+        "FlaxLogitsProcessorList",
+        "FlaxLogitsWarper",
+        "FlaxTemperatureLogitsWarper",
+        "FlaxTopKLogitsWarper",
+        "FlaxTopPLogitsWarper",
+    ]
     _import_structure["modeling_flax_utils"] = ["FlaxPreTrainedModel"]
     _import_structure["models.auto"].extend(
         [
@@ -1471,6 +1519,14 @@ if is_flax_available():
             "FlaxBertForTokenClassification",
             "FlaxBertModel",
             "FlaxBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.clip"].extend(
+        [
+            "FlaxCLIPModel",
+            "FlaxCLIPPreTrainedModel",
+            "FlaxCLIPTextModel",
+            "FlaxCLIPVisionModel",
         ]
     )
     _import_structure["models.electra"].extend(
@@ -1555,10 +1611,12 @@ if TYPE_CHECKING:
         is_flax_available,
         is_psutil_available,
         is_py3nvml_available,
+        is_scipy_available,
         is_sentencepiece_available,
         is_sklearn_available,
         is_speech_available,
         is_tf_available,
+        is_timm_available,
         is_tokenizers_available,
         is_torch_available,
         is_torch_tpu_available,
@@ -1619,6 +1677,7 @@ if TYPE_CHECKING:
         BlenderbotSmallConfig,
         BlenderbotSmallTokenizer,
     )
+    from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.clip import (
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -1633,6 +1692,7 @@ if TYPE_CHECKING:
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
     from .models.deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config
     from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
+    from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
     from .models.dpr import (
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -1683,6 +1743,7 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
+    from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -1829,13 +1890,23 @@ if TYPE_CHECKING:
         from .image_utils import ImageFeatureExtractionMixin
         from .models.clip import CLIPFeatureExtractor, CLIPProcessor
         from .models.deit import DeiTFeatureExtractor
+        from .models.detr import DetrFeatureExtractor
         from .models.vit import ViTFeatureExtractor
     else:
         from .utils.dummy_vision_objects import *
 
     # Modeling
-    if is_torch_available():
+    if is_timm_available() and is_vision_available():
+        from .models.detr import (
+            DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DetrForObjectDetection,
+            DetrForSegmentation,
+            DetrModel,
+        )
+    else:
+        from .utils.dummy_timm_objects import *
 
+    if is_torch_available():
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -1905,6 +1976,7 @@ if TYPE_CHECKING:
             MODEL_FOR_MASKED_LM_MAPPING,
             MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
+            MODEL_FOR_OBJECT_DETECTION_MAPPING,
             MODEL_FOR_PRETRAINING_MAPPING,
             MODEL_FOR_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
@@ -2121,6 +2193,7 @@ if TYPE_CHECKING:
         from .models.gpt_neo import (
             GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTNeoForCausalLM,
+            GPTNeoForSequenceClassification,
             GPTNeoModel,
             GPTNeoPreTrainedModel,
             load_tf_weights_in_gpt_neo,
@@ -2318,6 +2391,17 @@ if TYPE_CHECKING:
             TransfoXLPreTrainedModel,
             load_tf_weights_in_transfo_xl,
         )
+        from .models.visual_bert import (  # load_tf_weights_in_visual_bert,
+            VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VisualBertForMultipleChoice,
+            VisualBertForPreTraining,
+            VisualBertForQuestionAnswering,
+            VisualBertForRegionToPhraseAlignment,
+            VisualBertForVisualReasoning,
+            VisualBertLayer,
+            VisualBertModel,
+            VisualBertPreTrainedModel,
+        )
         from .models.vit import (
             VIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViTForImageClassification,
@@ -2328,6 +2412,7 @@ if TYPE_CHECKING:
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Wav2Vec2ForCTC,
             Wav2Vec2ForMaskedLM,
+            Wav2Vec2ForPreTraining,
             Wav2Vec2Model,
             Wav2Vec2PreTrainedModel,
         )
@@ -2693,6 +2778,14 @@ if TYPE_CHECKING:
         from .utils.dummy_tf_objects import *
 
     if is_flax_available():
+        from .generation_flax_logits_process import (
+            FlaxLogitsProcessor,
+            FlaxLogitsProcessorList,
+            FlaxLogitsWarper,
+            FlaxTemperatureLogitsWarper,
+            FlaxTopKLogitsWarper,
+            FlaxTopPLogitsWarper,
+        )
         from .modeling_flax_utils import FlaxPreTrainedModel
         from .models.auto import (
             FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
@@ -2725,6 +2818,7 @@ if TYPE_CHECKING:
             FlaxBertModel,
             FlaxBertPreTrainedModel,
         )
+        from .models.clip import FlaxCLIPModel, FlaxCLIPPreTrainedModel, FlaxCLIPTextModel, FlaxCLIPVisionModel
         from .models.electra import (
             FlaxElectraForMaskedLM,
             FlaxElectraForMultipleChoice,

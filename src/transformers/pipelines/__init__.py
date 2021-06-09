@@ -37,7 +37,7 @@ from .base import (
     PipelineDataFormat,
     PipelineException,
     get_default_model,
-    infer_framework_from_model,
+    infer_framework_load_model,
 )
 from .conversational import Conversation, ConversationalPipeline
 from .feature_extraction import FeatureExtractionPipeline
@@ -110,14 +110,14 @@ TASK_ALIASES = {
 SUPPORTED_TASKS = {
     "feature-extraction": {
         "impl": FeatureExtractionPipeline,
-        "tf": TFAutoModel if is_tf_available() else None,
-        "pt": AutoModel if is_torch_available() else None,
+        "tf": (TFAutoModel,) if is_tf_available() else (),
+        "pt": (AutoModel,) if is_torch_available() else (),
         "default": {"model": {"pt": "distilbert-base-cased", "tf": "distilbert-base-cased"}},
     },
     "text-classification": {
         "impl": TextClassificationPipeline,
-        "tf": TFAutoModelForSequenceClassification if is_tf_available() else None,
-        "pt": AutoModelForSequenceClassification if is_torch_available() else None,
+        "tf": (TFAutoModelForSequenceClassification,) if is_tf_available() else (),
+        "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
         "default": {
             "model": {
                 "pt": "distilbert-base-uncased-finetuned-sst-2-english",
@@ -127,8 +127,8 @@ SUPPORTED_TASKS = {
     },
     "token-classification": {
         "impl": TokenClassificationPipeline,
-        "tf": TFAutoModelForTokenClassification if is_tf_available() else None,
-        "pt": AutoModelForTokenClassification if is_torch_available() else None,
+        "tf": (TFAutoModelForTokenClassification,) if is_tf_available() else (),
+        "pt": (AutoModelForTokenClassification,) if is_torch_available() else (),
         "default": {
             "model": {
                 "pt": "dbmdz/bert-large-cased-finetuned-conll03-english",
@@ -138,16 +138,16 @@ SUPPORTED_TASKS = {
     },
     "question-answering": {
         "impl": QuestionAnsweringPipeline,
-        "tf": TFAutoModelForQuestionAnswering if is_tf_available() else None,
-        "pt": AutoModelForQuestionAnswering if is_torch_available() else None,
+        "tf": (TFAutoModelForQuestionAnswering,) if is_tf_available() else (),
+        "pt": (AutoModelForQuestionAnswering,) if is_torch_available() else (),
         "default": {
             "model": {"pt": "distilbert-base-cased-distilled-squad", "tf": "distilbert-base-cased-distilled-squad"},
         },
     },
     "table-question-answering": {
         "impl": TableQuestionAnsweringPipeline,
-        "pt": AutoModelForTableQuestionAnswering if is_torch_available() else None,
-        "tf": None,
+        "pt": (AutoModelForTableQuestionAnswering,) if is_torch_available() else (),
+        "tf": (),
         "default": {
             "model": {
                 "pt": "google/tapas-base-finetuned-wtq",
@@ -158,21 +158,21 @@ SUPPORTED_TASKS = {
     },
     "fill-mask": {
         "impl": FillMaskPipeline,
-        "tf": TFAutoModelForMaskedLM if is_tf_available() else None,
-        "pt": AutoModelForMaskedLM if is_torch_available() else None,
+        "tf": (TFAutoModelForMaskedLM,) if is_tf_available() else (),
+        "pt": (AutoModelForMaskedLM,) if is_torch_available() else (),
         "default": {"model": {"pt": "distilroberta-base", "tf": "distilroberta-base"}},
     },
     "summarization": {
         "impl": SummarizationPipeline,
-        "tf": TFAutoModelForSeq2SeqLM if is_tf_available() else None,
-        "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
+        "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
+        "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
         "default": {"model": {"pt": "sshleifer/distilbart-cnn-12-6", "tf": "t5-small"}},
     },
     # This task is a special case as it's parametrized by SRC, TGT languages.
     "translation": {
         "impl": TranslationPipeline,
-        "tf": TFAutoModelForSeq2SeqLM if is_tf_available() else None,
-        "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
+        "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
+        "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
         "default": {
             ("en", "fr"): {"model": {"pt": "t5-base", "tf": "t5-base"}},
             ("en", "de"): {"model": {"pt": "t5-base", "tf": "t5-base"}},
@@ -181,20 +181,20 @@ SUPPORTED_TASKS = {
     },
     "text2text-generation": {
         "impl": Text2TextGenerationPipeline,
-        "tf": TFAutoModelForSeq2SeqLM if is_tf_available() else None,
-        "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
+        "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
+        "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
         "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
     },
     "text-generation": {
         "impl": TextGenerationPipeline,
-        "tf": TFAutoModelForCausalLM if is_tf_available() else None,
-        "pt": AutoModelForCausalLM if is_torch_available() else None,
+        "tf": (TFAutoModelForCausalLM,) if is_tf_available() else (),
+        "pt": (AutoModelForCausalLM,) if is_torch_available() else (),
         "default": {"model": {"pt": "gpt2", "tf": "gpt2"}},
     },
     "zero-shot-classification": {
         "impl": ZeroShotClassificationPipeline,
-        "tf": TFAutoModelForSequenceClassification if is_tf_available() else None,
-        "pt": AutoModelForSequenceClassification if is_torch_available() else None,
+        "tf": (TFAutoModelForSequenceClassification,) if is_tf_available() else (),
+        "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
         "default": {
             "model": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
             "config": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
@@ -203,14 +203,14 @@ SUPPORTED_TASKS = {
     },
     "conversational": {
         "impl": ConversationalPipeline,
-        "tf": TFAutoModelForCausalLM if is_tf_available() else None,
-        "pt": AutoModelForCausalLM if is_torch_available() else None,
+        "tf": (TFAutoModelForSeq2SeqLM, TFAutoModelForCausalLM) if is_tf_available() else (),
+        "pt": (AutoModelForSeq2SeqLM, AutoModelForCausalLM) if is_torch_available() else (),
         "default": {"model": {"pt": "microsoft/DialoGPT-medium", "tf": "microsoft/DialoGPT-medium"}},
     },
     "image-classification": {
         "impl": ImageClassificationPipeline,
-        "tf": None,
-        "pt": AutoModelForImageClassification if is_torch_available() else None,
+        "tf": (),
+        "pt": (AutoModelForImageClassification,) if is_torch_available() else (),
         "default": {"model": {"pt": "google/vit-base-patch16-224"}},
     },
 }
@@ -379,53 +379,35 @@ def pipeline(
         >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
         >>> pipeline('ner', model=model, tokenizer=tokenizer)
     """
+
     # Retrieve the task
     targeted_task, task_options = check_task(task)
+    task_class = targeted_task["impl"]
 
     # Use default model/config/tokenizer for the task if no model is provided
     if model is None:
         # At that point framework might still be undetermined
         model = get_default_model(targeted_task, framework, task_options)
 
+    # Config is the primordial information item.
+    # Instantiate config if needed
+    if isinstance(config, str):
+        config = AutoConfig.from_pretrained(config, revision=revision, _from_pipeline=task, **model_kwargs)
+    elif config is None and isinstance(model, str):
+        config = AutoConfig.from_pretrained(model, revision=revision, _from_pipeline=task, **model_kwargs)
+
     model_name = model if isinstance(model, str) else None
-
-    # Infer the framework form the model
-    if framework is None:
-        framework, model = infer_framework_from_model(model, targeted_task, revision=revision, task=task)
-
-    task_class, model_class = targeted_task["impl"], targeted_task[framework]
 
     # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
     model_kwargs["use_auth_token"] = model_kwargs.get("use_auth_token", use_auth_token)
 
-    # Instantiate config if needed
-    if isinstance(config, str):
-        config = AutoConfig.from_pretrained(config, revision=revision, _from_pipeline=task, **model_kwargs)
-
-    # Instantiate model if needed
-    if isinstance(model, str):
-        # Handle transparent TF/PT model conversion
-        if framework == "pt" and model.endswith(".h5"):
-            model_kwargs["from_tf"] = True
-            logger.warning(
-                "Model might be a TensorFlow model (ending with `.h5`) but TensorFlow is not available. "
-                "Trying to load the model with PyTorch."
-            )
-        elif framework == "tf" and model.endswith(".bin"):
-            model_kwargs["from_pt"] = True
-            logger.warning(
-                "Model might be a PyTorch model (ending with `.bin`) but PyTorch is not available. "
-                "Trying to load the model with Tensorflow."
-            )
-
-        if model_class is None:
-            raise ValueError(
-                f"Pipeline using {framework} framework, but this framework is not supported by this pipeline."
-            )
-
-        model = model_class.from_pretrained(
-            model, config=config, revision=revision, _from_pipeline=task, **model_kwargs
-        )
+    # Infer the framework from the model
+    # Forced if framework already defined, inferred if it's None
+    # Will load the correct model if possible
+    model_classes = {"tf": targeted_task["tf"], "pt": targeted_task["pt"]}
+    framework, model = infer_framework_load_model(
+        model, model_classes=model_classes, config=config, framework=framework, revision=revision, task=task
+    )
 
     model_config = model.config
 

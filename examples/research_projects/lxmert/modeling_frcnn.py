@@ -1426,7 +1426,7 @@ class AnchorGenerator(nn.Module):
                 h = aspect_ratio * w
                 x0, y0, x1, y1 = -w / 2.0, -h / 2.0, w / 2.0, h / 2.0
                 anchors.append([x0, y0, x1, y1])
-        return nn.Parameter(torch.Tensor(anchors))
+        return nn.Parameter(torch.tensor(anchors))
 
     def forward(self, features):
         """
