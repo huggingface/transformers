@@ -1218,9 +1218,9 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
 
             >>> def map_to_array(batch):
-            >>>     speech, _ = sf.read(batch["file"])
-            >>>     batch["speech"] = speech
-            >>>     return batch
+            ...     speech, _ = sf.read(batch["file"])
+            ...     batch["speech"] = speech
+            ...     return batch
 
 
             >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
@@ -1234,12 +1234,12 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             >>> mask_time_indices = _compute_mask_indices((batch_size, sequence_length), mask_prob=0.2, mask_length=2, device=model.device)
 
             >>> with torch.no_grad():
-            >>>     outputs = model(input_values, mask_time_indices=mask_time_indices)
+            ...     outputs = model(input_values, mask_time_indices=mask_time_indices)
 
             >>> # compute cosine similarity between predicted (=projected_states) and target (=projected_quantized_states)
             >>> cosine_sim = torch.cosine_similarity(
-            >>>     outputs.projected_states, outputs.projected_quantized_states, dim=-1
-            >>> )
+            ...     outputs.projected_states, outputs.projected_quantized_states, dim=-1
+            ... )
 
             >>> # show that cosine similarity is much higher than random
             >>> assert cosine_sim[mask_time_indices].mean() > 0.5
@@ -1294,11 +1294,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             # 6. compute contrastive loss \mathbf{L}_m = cross_entropy(logs) = -log(exp(sim(c_t, q_t)/\kappa) / \sum_{\sim{q}} exp(sim(c_t, \sim{q})/\kappa))
             preds = logits.transpose(0, 2).reshape(-1, logits.size(0))
             target = ((1 - mask_time_indices.long()) * -100).transpose(0, 1).flatten()
-            contrastive_loss = F.cross_entropy(
-                preds.float(),
-                target,
-                reduction="sum",
-            )
+            contrastive_loss = F.cross_entropy(preds.float(), target, reduction="sum")
 
             # 7. compute diversity loss: \mathbf{L}_d
             num_codevectors = self.config.num_codevectors_per_group * self.config.num_codevector_groups
