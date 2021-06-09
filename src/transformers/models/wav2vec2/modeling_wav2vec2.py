@@ -94,8 +94,8 @@ class Wav2Vec2ForPreTrainingOutput(ModelOutput):
             Hidden-states of the model projected to `config.proj_codevector_dim` that can be used to predict the masked
             projected quantized states.
         projected_quantized_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.proj_codevector_dim)`):
-            Quantized extracted feature vectors projected to `config.proj_codevector_dim` representing the positive target
-            vectors for contrastive loss.
+            Quantized extracted feature vectors projected to `config.proj_codevector_dim` representing the positive
+            target vectors for contrastive loss.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
