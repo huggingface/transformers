@@ -692,12 +692,17 @@ be ignored.
 
 - ``sub_group_size``: ``1e9``
 
-``sub_group_size`` controls the granularity in which parameters are updated during optimizer steps. Parameters are grouped into buckets of ``sub_group_size`` and each buckets is updated one at a time. When used with NVMe offload in ZeRO-Infinity, ``sub_group_size`` therefore controls the granularity in which model states are moved in and out of CPU memory from NVMe during the optimizer step.  This prevents running out of CPU memory for extremely large models.
+``sub_group_size`` controls the granularity in which parameters are updated during optimizer steps. Parameters are
+grouped into buckets of ``sub_group_size`` and each buckets is updated one at a time. When used with NVMe offload in
+ZeRO-Infinity, ``sub_group_size`` therefore controls the granularity in which model states are moved in and out of CPU
+memory from NVMe during the optimizer step. This prevents running out of CPU memory for extremely large models.
 
-You can leave ``sub_group_size`` to its default value of `1e9` when not using NVMe offload. You may want to change its default value in the following cases:
+You can leave ``sub_group_size`` to its default value of `1e9` when not using NVMe offload. You may want to change its
+default value in the following cases:
 
 1. Running into OOM during optimizer step: Reduce ``sub_group_size`` to reduce memory utilization of temporary buffers
-2. Optimizer Step is taking a long time: Increase ``sub_group_size`` to improve bandwidth utilization as a result of the increased data buffers.
+2. Optimizer Step is taking a long time: Increase ``sub_group_size`` to improve bandwidth utilization as a result of
+   the increased data buffers.
 
 
 .. _deepspeed-nvme:
