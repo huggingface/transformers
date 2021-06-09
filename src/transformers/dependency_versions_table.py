@@ -59,6 +59,7 @@ deps = {
     "tensorflow-cpu": "tensorflow-cpu>=2.3",
     "tensorflow": "tensorflow>=2.3",
     "timeout-decorator": "timeout-decorator",
+    "timm": "timm",
     "tokenizers": "tokenizers>=0.10.1,<0.11",
     "torch": "torch>=1.0",
     "torchaudio": "torchaudio",
