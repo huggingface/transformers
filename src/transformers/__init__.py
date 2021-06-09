@@ -1541,6 +1541,14 @@ if is_flax_available():
             "FlaxBigBirdPreTrainedModel",
         ]
     )
+    _import_structure["models.clip"].extend(
+        [
+            "FlaxCLIPModel",
+            "FlaxCLIPPreTrainedModel",
+            "FlaxCLIPTextModel",
+            "FlaxCLIPVisionModel",
+        ]
+    )
     _import_structure["models.electra"].extend(
         [
             "FlaxElectraForMaskedLM",
