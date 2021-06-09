@@ -23,7 +23,7 @@ from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_
 
 
 if is_flax_available():
-    from transformers.models.big_bird.modeling_flax_bigbird import (
+    from transformers.models.big_bird.modeling_flax_big_bird import (
         FlaxBigBirdForMaskedLM,
         FlaxBigBirdForMultipleChoice,
         FlaxBigBirdForPreTraining,

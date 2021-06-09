@@ -1,5 +1,4 @@
 # coding=utf-8
-# coding=utf-8
 # Copyright 2021 The Google Flax Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1307,17 +1306,17 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: BigBirdConfig,
-        input_shape: Tuple = (1, 1),
+        input_shape: Optional[tuple] = None,
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         **kwargs
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
-        if config.attention_type == "block_sparse":
-            seqlen = 12 * config.block_size
-            input_shape = (1, seqlen)
-            if isinstance(module, FlaxBigBirdForMultipleChoiceModule):
-                input_shape = (1, 1, seqlen)
+        if config.attention_type == "block_sparse" and input_shape is None:
+            input_shape = (1, 12 * config.block_size)
+        elif input_shape is None:
+            input_shape = (1, 1)
+
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
@@ -1619,7 +1618,8 @@ class FlaxBigBirdClassificationHead(nn.Module):
         self.out_proj = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
     def __call__(self, features, deterministic=True):
-        x = self.dropout(features, deterministic=deterministic)
+        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
+        x = self.dropout(x, deterministic=deterministic)
         x = self.dense(x)
         x = ACT2FN[self.config.hidden_act](x)
         x = self.dropout(x, deterministic=deterministic)
@@ -1658,8 +1658,8 @@ class FlaxBigBirdForSequenceClassificationModule(nn.Module):
             return_dict=return_dict,
         )
 
-        pooled_output = outputs[1]
-        logits = self.classifier(pooled_output, deterministic=deterministic)
+        sequence_output = outputs[0]
+        logits = self.classifier(sequence_output, deterministic=deterministic)
 
         if not return_dict:
             return (logits,) + outputs[2:]
@@ -1754,9 +1754,22 @@ class FlaxBigBirdForMultipleChoiceModule(nn.Module):
     """,
     BIG_BIRD_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForMultipleChoice with Bert->BigBird
 class FlaxBigBirdForMultipleChoice(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdForMultipleChoiceModule
+
+    def __init__(
+        self,
+        config: BigBirdConfig,
+        input_shape: Optional[tuple] = None,
+        seed: int = 0,
+        dtype: jnp.dtype = jnp.float32,
+        **kwargs
+    ):
+        if config.attention_type == "block_sparse" and input_shape is None:
+            input_shape = (1, 1, 12 * config.block_size)
+        elif input_shape is None:
+            input_shape = (1, 1)
+        super().__init__(config, input_shape=input_shape, seed=seed, dtype=dtype)
 
 
 overwrite_call_docstring(
