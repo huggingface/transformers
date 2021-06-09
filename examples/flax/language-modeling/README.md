@@ -126,11 +126,22 @@ For a step-by-step walkthrough of how to do masked language modeling in Flax, pl
 look at [this TODO: (Patrick)]() google colab.
 
 
-## TODO(Patrick): Add comparison with PyTorch GPU/TPU
+## Runtime evaluation
 
-### Script to compare pre-training with PyTorch/XLA on TPUv3-8
+We also ran masked language modeling once using PyTorch/XLA on on a single V100 GPU, 8 V100 GPUs, and 8 Cloud v3 TPUs and report the
+overall training time below. For comparison we ran Pytorch's [run_glue.py](https://github.com/huggingface/transformers/blob/master/examples/pytorch/text-classification/run_glue.py) on a single GPU (last column).
 
-For comparison you can run the same pre-training with PyTorch/XLA on TPU.
+
+| Task  | [TPU v3-8](https://tensorboard.dev/experiment/GdYmdak2TWeVz0DDRYOrrg/#scalars&_smoothingWeight=0)  | [TPU v3-8 (Pytorch/XLA)]()| [1 GPU](https://tensorboard.dev/experiment/mkPS4Zh8TnGe1HB6Yzwj4Q)  | 1 GPU (Pytorch) |
+|-------|-----------|------------|------------|-----------------|
+| MLM   |  1m 42s   |  1m 26s    | 3m 9s      | 4m 6s           |
+|-------|
+| **COST*** | $8.56  | $29.10 | $13.06 | $16.41      |
+
+### Script to run MLM with PyTorch/XLA on TPUv3-8
+
+For comparison you can run the same pre-training with PyTorch/XLA on TPU. To set up PyTorch/XLA on Cloud TPU VMs, please 
+refer to [this](https://cloud.google.com/tpu/docs/pytorch-xla-ug-tpu-vm) guide.
 Having created the tokenzier and configuration in `norwegian-roberta-base`, we just create the following symbolic links:
 
 ```bash
@@ -141,6 +152,9 @@ ln -s ~/transformers/examples/pytorch/xla_spawn.py ./
 ,set some environment variables:
 
 ```bash
+export XRT_TPU_CONFIG="localservice;0;localhost:51011"
+unset LD_PRELOAD
+
 export NUM_TPUS=8
 export TOKENIZERS_PARALLELISM=0
 export MODEL_DIR="./norwegian-roberta-base"
@@ -169,9 +183,10 @@ python3 xla_spawn.py --num_cores ${NUM_TPUS} run_mlm.py --output_dir="./runs" \
 										--adam_beta2="0.98" \
 										--do_train \
 										--do_eval \
-										--logging_steps="200" \
-										--evaluation_strategy="steps" \
-										--report_to="tensorboard"
+										--logging_steps="500" \
+										--evaluation_strategy="epoch" \
+										--report_to="tensorboard" \
+										--save_strategy="no"
 ```
 
 ### Script to compare pre-training with PyTorch on 8 GPU V100's
