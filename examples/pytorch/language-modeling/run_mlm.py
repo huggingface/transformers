@@ -266,6 +266,9 @@ def main():
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
+    datasets["train"] = datasets["train"].select(range(5000))
+    datasets["validation"] = datasets["validation"].select(range(1000))
+
     # Load pretrained model and tokenizer
     #
     # Distributed training:
