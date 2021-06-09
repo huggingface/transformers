@@ -180,7 +180,7 @@ class RotaryEmbedding(nn.Module):
 def fixed_pos_embedding(x, seq_dim=0):
     dim = x.shape[-1]
     inv_freq = 1. / (10000 ** (torch.arange(0, dim, 2) / dim))
-    sinusoid_inp = torch.einsum('i , j -> i j', torch.arange(x.shape[seq_dim]), inv_freq).to(x.device)
+    sinusoid_inp = torch.einsum('i , j -> i j', torch.arange(x.shape[seq_dim]), inv_freq).to(x.device).float()
     return torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)
 
 def rotate_every_two(x):
@@ -316,8 +316,8 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
 
-        query = self._split_heads(query, self.num_heads, self.head_dim, self.rotary)
-        key = self._split_heads(key, self.num_heads, self.head_dim, self.rotary)
+        query = self._split_heads(query, self.num_heads, self.head_dim, self.rotary).float()
+        key = self._split_heads(key, self.num_heads, self.head_dim, self.rotary).float()
         value = self._split_heads(value, self.num_heads, self.head_dim, False)
 
         if self.rotary:
@@ -343,8 +343,8 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
         if layer_past is not None:
             past_key = layer_past[0]
             past_value = layer_past[1]
-            key = torch.cat((past_key, key), dim=-2)
-            value = torch.cat((past_value, value), dim=-2)
+            key = torch.cat((past_key, key), dim=-2).half()
+            value = torch.cat((past_value, value), dim=-2).half()
 
         if use_cache is True:
             present = (key, value)
