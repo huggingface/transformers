@@ -28,24 +28,18 @@
     },
 
     "zero_optimization": {
-        "stage": 3,
+        "stage": 2,
         "offload_optimizer": {
             "device": "cpu",
             "pin_memory": true
         },
-        "offload_param": {
-            "device": "cpu",
-            "pin_memory": true
-        },
+        "find_unused_parameters": true,
+        "allgather_partitions": true,
+        "allgather_bucket_size": 2e8,
         "overlap_comm": true,
-        "contiguous_gradients": true,
-        "sub_group_size": 1e9,
-        "reduce_bucket_size": "auto",
-        "stage3_prefetch_bucket_size": "auto",
-        "stage3_param_persistence_threshold": "auto",
-        "stage3_max_live_parameters": 1e9,
-        "stage3_max_reuse_distance": 1e9,
-        "stage3_gather_fp16_weights_on_model_save": true
+        "reduce_scatter": true,
+        "reduce_bucket_size": 2e8,
+        "contiguous_gradients": true
     },
 
     "gradient_accumulation_steps": "auto",

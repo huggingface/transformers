@@ -23,6 +23,8 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
+from transformers.deepspeed import is_deepspeed_zero3_enabled
+
 from ...activations import ACT2FN
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, MaskedLMOutput
@@ -193,7 +195,17 @@ class Wav2Vec2PositionalConvEmbedding(nn.Module):
             padding=config.num_conv_pos_embeddings // 2,
             groups=config.num_conv_pos_embedding_groups,
         )
-        self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
+
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
+                self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
+            deepspeed.zero.register_external_parameter(self, self.conv.weight_v)
+            deepspeed.zero.register_external_parameter(self, self.conv.weight_g)
+        else:
+            self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
+
         self.padding = Wav2Vec2SamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
 
@@ -615,15 +627,19 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
         hidden_states = hidden_states + position_embeddings
         hidden_states = self.dropout(hidden_states)
 
+        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+
         for layer in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = np.random.uniform(0, 1)
-            if self.training and (dropout_probability < self.config.layerdrop):  # skip the layer
-                layer_outputs = (None, None)
-            else:
+
+            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
+            if not skip_the_layer or deepspeed_zero3_is_enabled:
+                # under deepspeed zero3 all gpus must run in sync
+                # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
                 if getattr(self.config, "gradient_checkpointing", False) and self.training:
                     # create gradient checkpointing function
                     def create_custom_forward(module):
@@ -642,6 +658,9 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
                         hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
                     )
                 hidden_states = layer_outputs[0]
+
+            if skip_the_layer:
+                layer_outputs = (None, None)
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -680,7 +699,18 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
-            torch.nn.init.kaiming_normal_(module.weight.data)
+            if is_deepspeed_zero3_enabled():
+                import deepspeed
+
+                if hasattr(module, "weight_v") and hasattr(module, "weight_g"):
+                    with deepspeed.zero.GatheredParameters([module.weight_v, module.weight_g], modifier_rank=0):
+                        torch.nn.init.kaiming_normal_(module.weight.data)
+                else:
+                    with deepspeed.zero.GatheredParameters(module.weight, modifier_rank=0):
+                        torch.nn.init.kaiming_normal_(module.weight.data)
+            else:
+                torch.nn.init.kaiming_normal_(module.weight.data)
+
         if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
 
@@ -1061,7 +1091,8 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
             target_lengths = labels_mask.sum(-1)
             flattened_targets = labels.masked_select(labels_mask)
 
-            log_probs = F.log_softmax(logits, dim=-1).transpose(0, 1)
+            # ctc_loss doesn't support fp16
+            log_probs = F.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
 
             with torch.backends.cudnn.flags(enabled=False):
                 loss = F.ctc_loss(
