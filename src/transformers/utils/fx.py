@@ -238,6 +238,10 @@ class HFTracer(Tracer):
 
         clone(**inputs)
 
+        # Useful because sometime the config is changed at inference time, for instance for
+        # classification tasks where config.problem_type can be set.
+        model.config = clone.config
+
         _reset_tensor_methods(original_methods)
 
         self.recorded_methods = {
@@ -267,9 +271,10 @@ class HFTracer(Tracer):
         Helper method which tries to insert a module that was not declared as submodule.
         """
         idx = 0
-        path = f"{mod.__class__.__name__.lower()}_{idx}"
+        mod_name = mod.__class__.__name__.lower()
+        path = f"{mod_name}_{idx}"
         while hasattr(self.root, path):
-            path = f"{path}_{idx}"
+            path = f"{mod_name}_{idx}"
             idx += 1
 
         self.root.add_module(path, mod)
