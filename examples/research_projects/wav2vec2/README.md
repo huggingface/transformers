@@ -184,3 +184,35 @@ run_asr.py \
 --preprocessing_num_workers=1 --group_by_length --freeze_feature_extractor --verbose_logging \
 --deepspeed ds_config_wav2vec2_zero3.json
 ```
+
+### Pretraining Wav2Vec2
+
+The `run_pretrain.py` script allows one to pretrain a Wav2Vec2 model from scratch using Wav2Vec2's contrastive loss objective (see official [paper](https://arxiv.org/abs/2006.11477) for more information). 
+It is recommended to pre-train Wav2Vec2 with Trainer + Deepspeed (please refer to [this guide](https://huggingface.co/transformers/master/main_classes/deepspeed.html#deepspeed-trainer-integration) for more information).
+
+Here is an example of how you can use DeepSpeed ZeRO-2 to pretrain a small Wav2Vec2 model:
+
+```
+PYTHONPATH=../../../src deepspeed --num_gpus 2 run_pretrain.py \
+--output_dir="./wav2vec2-base-libri-100h" \
+--num_train_epochs="3" \
+--per_device_train_batch_size="32" \
+--per_device_eval_batch_size="32" \
+--gradient_accumulation_steps="2" \
+--save_total_limit="3" \
+--save_steps="500" \
+--logging_steps="10" \
+--learning_rate="5e-4" \
+--weight_decay="0.01" \
+--warmup_steps="3000" \
+--model_name_or_path="patrickvonplaten/wav2vec2-base-libri-100h" \
+--dataset_name="librispeech_asr" \
+--dataset_config_name="clean" \
+--train_split_name="train.100" \
+--preprocessing_num_workers="4" \
+--max_duration_in_seconds="10.0" \
+--group_by_length \
+--verbose_logging \
+--fp16 \
+--deepspeed ds_config_wav2vec2_zero2.json \
+```
