@@ -66,7 +66,6 @@ def convert_roberta_checkpoint_to_pytorch(
     )
     if classification_head:
         config.num_labels = roberta.model.classification_heads["mnli"].out_proj.weight.shape[0]
-    print("Our BERT config:", config)
 
     model = RobertaForSequenceClassification(config) if classification_head else RobertaForMaskedLM(config)
     model.eval()
@@ -84,8 +83,11 @@ def convert_roberta_checkpoint_to_pytorch(
         model.roberta.embeddings.LayerNorm.weight = roberta_sent_encoder.layernorm_embedding.weight
         model.roberta.embeddings.LayerNorm.bias = roberta_sent_encoder.layernorm_embedding.bias
     else:
-        model.roberta.embeddings.LayerNorm.weight = roberta_sent_encoder.layer_norm.weight
-        model.roberta.embeddings.LayerNorm.bias = roberta_sent_encoder.layer_norm.bias
+        config.normalize_embeddings = False
+        model.roberta.encoder.LayerNorm.weight = roberta_sent_encoder.layer_norm.weight
+        model.roberta.encoder.LayerNorm.bias = roberta_sent_encoder.layer_norm.bias
+
+    print("Our BERT config:", config)
 
     for i in range(config.num_hidden_layers):
         # Encoder: start of layer
