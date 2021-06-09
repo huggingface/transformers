@@ -2969,6 +2969,11 @@ class Wav2Vec2ForMaskedLM:
         requires_backends(self, ["torch"])
 
 
+class Wav2Vec2ForPreTraining:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class Wav2Vec2Model:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])

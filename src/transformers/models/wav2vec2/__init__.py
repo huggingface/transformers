@@ -32,6 +32,7 @@ if is_torch_available():
         "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Wav2Vec2ForCTC",
         "Wav2Vec2ForMaskedLM",
+        "Wav2Vec2ForPreTraining",
         "Wav2Vec2Model",
         "Wav2Vec2PreTrainedModel",
     ]
@@ -48,6 +49,7 @@ if TYPE_CHECKING:
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Wav2Vec2ForCTC,
             Wav2Vec2ForMaskedLM,
+            Wav2Vec2ForPreTraining,
             Wav2Vec2Model,
             Wav2Vec2PreTrainedModel,
         )
