@@ -47,11 +47,26 @@ class ImageClassificationPipelineTests(unittest.TestCase):
                 "http://images.cocodataset.org/val2017/000000039769.jpg",
             ]
         },
-        {"images": "tests/fixtures/coco.jpg"},
-        {"images": ["tests/fixtures/coco.jpg", "tests/fixtures/coco.jpg"]},
-        {"images": Image.open("tests/fixtures/coco.jpg")},
-        {"images": [Image.open("tests/fixtures/coco.jpg"), Image.open("tests/fixtures/coco.jpg")]},
-        {"images": [Image.open("tests/fixtures/coco.jpg"), "tests/fixtures/coco.jpg"]},
+        {"images": "./tests/fixtures/tests_samples/COCO/000000039769.png"},
+        {
+            "images": [
+                "./tests/fixtures/tests_samples/COCO/000000039769.png",
+                "./tests/fixtures/tests_samples/COCO/000000039769.png",
+            ]
+        },
+        {"images": Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")},
+        {
+            "images": [
+                Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
+                Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
+            ]
+        },
+        {
+            "images": [
+                Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
+                "./tests/fixtures/tests_samples/COCO/000000039769.png",
+            ]
+        },
     ]
 
     def test_small_model_from_factory(self):
