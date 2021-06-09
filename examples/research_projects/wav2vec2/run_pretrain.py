@@ -127,7 +127,7 @@ class DataTrainingArguments:
 
 
 @dataclass
-class DataCollatorWav2Vec2Pretraining:
+class DataCollatorForWav2Vec2Pretraining:
     """
     Data collator that will dynamically pad the inputs received and prepare masked indices
     for self-supervised pretraining.
@@ -350,7 +350,7 @@ def main():
 
     model = Wav2Vec2ForPreTraining(config)
 
-    data_collator = DataCollatorWav2Vec2Pretraining(model=model, feature_extractor=feature_extractor)
+    data_collator = DataCollatorForWav2Vec2Pretraining(model=model, feature_extractor=feature_extractor)
 
     trainer = Wav2Vec2PreTrainer(
         model=model,

@@ -318,18 +318,14 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
+                uniform_init_parms = [
+                    "conv.weight",
+                    "masked_spec_embed",
+                    "codevectors",
+                    "quantizer.weight_proj.weight",
+                ]
                 if param.requires_grad:
-                    if any(
-                        [
-                            x in name
-                            for x in [
-                                "conv.weight",
-                                "masked_spec_embed",
-                                "codevectors",
-                                "quantizer.weight_proj.weight",
-                            ]
-                        ]
-                    ):
+                    if any([x in name for x in uniform_init_parms]):
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
@@ -458,18 +454,14 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
+                uniform_init_parms = [
+                    "conv.weight",
+                    "masked_spec_embed",
+                    "codevectors",
+                    "quantizer.weight_proj.weight",
+                ]
                 if param.requires_grad:
-                    if any(
-                        [
-                            x in name
-                            for x in [
-                                "conv.weight",
-                                "masked_spec_embed",
-                                "codevectors",
-                                "quantizer.weight_proj.weight",
-                            ]
-                        ]
-                    ):
+                    if any([x in name for x in uniform_init_parms]):
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",

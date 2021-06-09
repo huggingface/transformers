@@ -1277,7 +1277,8 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             # 3. sample K negatives (distractors) quantized states for contrastive loss
             negative_quantized_features = self._sample_negatives(quantized_features, self.config.num_negatives)
 
-            # 4. compute logits, corresponding to `logs = sim(c_t, [q_t, \sim{q}_t]) / \kappa` of equation (3) in https://arxiv.org/pdf/2006.11477.pdf
+            # 4. compute logits, corresponding to `logs = sim(c_t, [q_t, \sim{q}_t]) / \kappa`
+            # of equation (3) in https://arxiv.org/pdf/2006.11477.pdf
             logits = self.compute_contrastive_logits(
                 quantized_features[None, :],
                 negative_quantized_features,
@@ -1291,7 +1292,8 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             if neg_is_pos.any():
                 logits[1:][neg_is_pos] = float("-inf")
 
-            # 6. compute contrastive loss \mathbf{L}_m = cross_entropy(logs) = -log(exp(sim(c_t, q_t)/\kappa) / \sum_{\sim{q}} exp(sim(c_t, \sim{q})/\kappa))
+            # 6. compute contrastive loss \mathbf{L}_m = cross_entropy(logs) =
+            # -log(exp(sim(c_t, q_t)/\kappa) / \sum_{\sim{q}} exp(sim(c_t, \sim{q})/\kappa))
             preds = logits.transpose(0, 2).reshape(-1, logits.size(0))
             target = ((1 - mask_time_indices.long()) * -100).transpose(0, 1).flatten()
             contrastive_loss = F.cross_entropy(preds.float(), target, reduction="sum")
@@ -1370,7 +1372,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
             >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
             >>> logits = model(input_values).logits
 
-            >>> predicted_ids = torch.argmax(logits, input_dim=-1)
+            >>> predicted_ids = torch.argmax(logits, dim=-1)
             >>> transcription = processor.decode(predicted_ids[0])
         """
 
@@ -1455,7 +1457,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
             >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
             >>> logits = model(input_values).logits
-            >>> predicted_ids = torch.argmax(logits, input_dim=-1)
+            >>> predicted_ids = torch.argmax(logits, dim=-1)
 
             >>> transcription = processor.decode(predicted_ids[0])
 
