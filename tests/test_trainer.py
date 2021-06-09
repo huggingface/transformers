@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     PASS,
     USER,
     TestCasePlus,
+    get_gpu_count,
     get_tests_dir,
     is_staging_test,
     require_datasets,
@@ -1113,15 +1114,17 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # this is a sensitive test so let's keep debugging printouts in place for quick diagnosis.
         # it's using pretty large safety margins, but small enough to detect broken functionality.
         debug = 0
+        n_gpus = get_gpu_count()
 
         bs = 8
+        eval_len = 16 * n_gpus
         # make the params somewhat big so that there will be enough RAM consumed to be able to
         # measure things. We should get about 64KB for a+b in fp32
         a = torch.ones(1000, bs) + 0.001
         b = torch.ones(1000, bs) - 0.001
 
         # 1. with mem metrics enabled
-        trainer = get_regression_trainer(a=a, b=b, eval_len=16, skip_memory_metrics=False)
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, skip_memory_metrics=False)
         metrics = trainer.evaluate()
         del trainer
         gc.collect()
@@ -1142,7 +1145,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertLess(fp32_eval, 5_000)
 
         # 2. with mem metrics disabled
-        trainer = get_regression_trainer(a=a, b=b, eval_len=16, fp16_full_eval=True, skip_memory_metrics=False)
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, fp16_full_eval=True, skip_memory_metrics=False)
         metrics = trainer.evaluate()
         fp16_init = metrics["init_mem_gpu_alloc_delta"]
         fp16_eval = metrics["eval_mem_gpu_alloc_delta"]
