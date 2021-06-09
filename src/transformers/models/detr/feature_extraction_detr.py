@@ -430,20 +430,22 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             annotations (:obj:`Dict`, :obj:`List[Dict]`, `optional`):
                 The corresponding annotations in COCO format.
 
-                In case :obj:`format = "coco_detection"`, the annotations for each image should have the following
-                format: {'image_id': int, 'annotations': [annotation]}, with the annotations being a list of COCO
-                object annotations.
+                In case :class:`~transformers.DetrFeatureExtractor` was initialized with :obj:`format =
+                "coco_detection"`, the annotations for each image should have the following format: {'image_id': int,
+                'annotations': [annotation]}, with the annotations being a list of COCO object annotations.
 
-                In case :obj:`format = "coco_panoptic"`, the annotations for each image should have the following
-                format: {'image_id': int, 'file_name': str, 'segments_info': [segment_info]} with segments_info being a
-                list of COCO panoptic annotations.
+                In case :class:`~transformers.DetrFeatureExtractor` was initialized with :obj:`format =
+                "coco_panoptic"`, the annotations for each image should have the following format: {'image_id': int,
+                'file_name': str, 'segments_info': [segment_info]} with segments_info being a list of COCO panoptic
+                annotations.
 
             return_segmentation_masks (:obj:`Dict`, :obj:`List[Dict]`, `optional`, defaults to :obj:`False`):
                 Whether to also return instance segmentation masks in case :obj:`format = "coco_detection"`.
 
             masks_path (:obj:`pathlib.Path`, `optional`):
                 Path to the directory containing the PNG files that store the class-agnostic image segmentations. Only
-                relevant in case :obj:`format = "coco_panoptic"`.
+                relevant in case :class:`~transformers.DetrFeatureExtractor` was initialized with :obj:`format =
+                "coco_panoptic"`.
 
             pad_and_return_pixel_mask (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to pad images up to the largest image in a batch and create a pixel mask.
