@@ -205,8 +205,10 @@ class BertEmbeddings(nn.Module):
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
-        if hasattr(self, "token_type_ids"):
-            token_type_ids = self.token_type_ids[:, :seq_length]
+        elif token_type_ids is not None and len(torch.nonzero(token_type_ids)) < 1:
+
+            if hasattr(self, "token_type_ids"):
+                token_type_ids = self.token_type_ids[:, :seq_length]
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
