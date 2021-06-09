@@ -203,9 +203,13 @@ class BertEmbeddings(nn.Module):
             position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
 
         if token_type_ids is None:
-            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+            token_type_ids = self.token_type_ids[:, :seq_length]
 
-        elif token_type_ids is not None and len(torch.nonzero(token_type_ids)) < 1:
+        """
+        Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
+        when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids
+        """
+        if token_type_ids is not None and len(torch.nonzero(token_type_ids)) < 1:
 
             if hasattr(self, "token_type_ids"):
                 token_type_ids = self.token_type_ids[:, :seq_length]
