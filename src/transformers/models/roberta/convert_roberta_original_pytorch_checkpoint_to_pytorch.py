@@ -67,6 +67,16 @@ def convert_roberta_checkpoint_to_pytorch(
     if classification_head:
         config.num_labels = roberta.model.classification_heads["mnli"].out_proj.weight.shape[0]
 
+    # Older fairseq models have normalized embeddings, see https://github.com/pytorch/fairseq/issues/3600
+    normalize_embeddings = (
+        hasattr(roberta_sent_encoder, "layernorm_embedding") and roberta_sent_encoder.layernorm_embedding
+    )
+
+    if not normalize_embeddings:
+        config.normalize_embeddings = False
+
+    print("Our RoBERTa config:", config)
+
     model = RobertaForSequenceClassification(config) if classification_head else RobertaForMaskedLM(config)
     model.eval()
 
@@ -78,16 +88,12 @@ def convert_roberta_checkpoint_to_pytorch(
         model.roberta.embeddings.token_type_embeddings.weight
     )  # just zero them out b/c RoBERTa doesn't use them.
 
-    if hasattr(roberta_sent_encoder, "layernorm_embedding") and roberta_sent_encoder.layernorm_embedding:
-        # Older XLM-R models have "layernorm_embedding"
+    if normalize_embeddings:
         model.roberta.embeddings.LayerNorm.weight = roberta_sent_encoder.layernorm_embedding.weight
         model.roberta.embeddings.LayerNorm.bias = roberta_sent_encoder.layernorm_embedding.bias
     else:
-        config.normalize_embeddings = False
         model.roberta.encoder.LayerNorm.weight = roberta_sent_encoder.layer_norm.weight
         model.roberta.encoder.LayerNorm.bias = roberta_sent_encoder.layer_norm.bias
-
-    print("Our BERT config:", config)
 
     for i in range(config.num_hidden_layers):
         # Encoder: start of layer
