@@ -462,7 +462,7 @@ class GPTNeoBlock(nn.Module):
         
         if self.jax:
             feed_forward_hidden_states = self.mlp(hidden_states)
-            hidden_states = attn_output + feed_forward_hidden_states
+            hidden_states = attn_output + feed_forward_hidden_states + residual
         else:
             # residual connection
             hidden_states = attn_output + residual
