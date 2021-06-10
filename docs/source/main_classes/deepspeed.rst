@@ -92,16 +92,18 @@ To make a local build for DeepSpeed:
     --global-option="build_ext" --global-option="-j8" --no-cache -v \
     --disable-pip-version-check 2>&1 | tee build.log
 
-If you intend to use NVMe offload you will need to also include ``DS_BUILD_AIO=1`` in the instructions above (and also install `libaio-dev` system-wide).
+If you intend to use NVMe offload you will need to also include ``DS_BUILD_AIO=1`` in the instructions above (and also
+install `libaio-dev` system-wide).
 
-Edit ``TORCH_CUDA_ARCH_LIST`` to insert the code for the architectures of the GPU cards you intend to use.
-Assuming all your cards are the same you can get the arch via:
+Edit ``TORCH_CUDA_ARCH_LIST`` to insert the code for the architectures of the GPU cards you intend to use. Assuming all
+your cards are the same you can get the arch via:
 
 .. code-block:: bash
 
     CUDA_VISIBLE_DEVICES=0 python -c "import torch; print(torch.cuda.get_device_capability())"
 
-So if you get ``8, 6``, then use ``TORCH_CUDA_ARCH_LIST="8.6"``. If you have multiple different cards, you can list all of them like so ``TORCH_CUDA_ARCH_LIST="6.1;8.6"``
+So if you get ``8, 6``, then use ``TORCH_CUDA_ARCH_LIST="8.6"``. If you have multiple different cards, you can list all
+of them like so ``TORCH_CUDA_ARCH_LIST="6.1;8.6"``
 
 If you need to use the same setup on multiple machines, make a binary wheel:
 
@@ -1583,7 +1585,9 @@ In your report please always include:
 
 1. the full Deepspeed config file in the report
 
-2. either the command line arguments if you were using the :class:`~transformers.Trainer` or :class:`~transformers.TrainingArguments` arguments if you were scripting the Trainer setup yourself. Please do not dump the :class:`~transformers.TrainingArguments` as it has dozens of entries that are irrelevant.
+2. either the command line arguments if you were using the :class:`~transformers.Trainer` or
+   :class:`~transformers.TrainingArguments` arguments if you were scripting the Trainer setup yourself. Please do not
+   dump the :class:`~transformers.TrainingArguments` as it has dozens of entries that are irrelevant.
 
 3. Output of:
 
@@ -1593,22 +1597,30 @@ In your report please always include:
     python -c 'import transformers; print(f"transformers: {transformers.__version__}")'
     python -c 'import deepspeed; print(f"deepspeed: {deepspeed.__version__}")'
 
-4. If possible include a link to a Google Colab notebook that we can reproduce the problem with. You can use this `notebook
+4. If possible include a link to a Google Colab notebook that we can reproduce the problem with. You can use this
+   `notebook
 <https://github.com/stas00/porting/blob/master/transformers/deepspeed/DeepSpeed_on_colab_CLI.ipynb>`__ as a base.
 
 5. Unless it's impossible please always use a standard dataset that we can use and not something custom.
 
-6. If possible try to use one of the existing `examples <https://github.com/huggingface/transformers/tree/master/examples/pytorch>`__ to reproduce the problem with.
+6. If possible try to use one of the existing `examples
+   <https://github.com/huggingface/transformers/tree/master/examples/pytorch>`__ to reproduce the problem with.
 
 Things to consider:
 
 * Deepspeed is often not the cause of the problem.
 
-   Some of the filed issues proved to be Deepspeed-unrelated. That is once Deepspeed was removed from the setup, the problem was still there.
+   Some of the filed issues proved to be Deepspeed-unrelated. That is once Deepspeed was removed from the setup, the
+   problem was still there.
 
-   Therefore, if it's not absolutely obvious it's a DeepSpeed-related problem, as in you can see that there is an exception and you can see that DeepSpeed modules are involved, first re-test your setup without DeepSpeed in it. And only if the problem persists then do mentioned Deepspeed and supply all the required details.
+   Therefore, if it's not absolutely obvious it's a DeepSpeed-related problem, as in you can see that there is an
+   exception and you can see that DeepSpeed modules are involved, first re-test your setup without DeepSpeed in it. And
+   only if the problem persists then do mentioned Deepspeed and supply all the required details.
 
-* If it's clear to you that the issue is in the DeepSpeed core and not the integration part, please file the Issue directly with `Deepspeed <https://github.com/microsoft/DeepSpeed/>`__. If you aren't sure, please do not worry, either Issue tracker will do, we will figure it out once you posted it and redirect you to another Issue tracker if need be.
+* If it's clear to you that the issue is in the DeepSpeed core and not the integration part, please file the Issue
+  directly with `Deepspeed <https://github.com/microsoft/DeepSpeed/>`__. If you aren't sure, please do not worry,
+  either Issue tracker will do, we will figure it out once you posted it and redirect you to another Issue tracker if
+  need be.
 
 
 
