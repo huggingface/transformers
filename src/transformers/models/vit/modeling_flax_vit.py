@@ -288,7 +288,6 @@ class FlaxViTLayer(nn.Module):
         # in ViT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(attention_output)
 
-
         hidden_states = self.intermediate(layer_output)
         hidden_states = self.output(hidden_states, attention_output, deterministic=deterministic)
 
