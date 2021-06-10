@@ -30,11 +30,11 @@ can work with this! You can even do regression, such as predicting the score on 
 given the text of their review.
 
 The preferred input format is either a CSV or newline-delimited JSON file that contains a `sentence1` and 
-`label` field, and optionally a `sentence2` field, if your task involves comparing two texts (for example, if your classifier
-is deciding whether two sentences are paraphrases of each other, or were written by the same author). If
-you do not have a `sentence1` field, the script will assume the non-label fields are the input text, which
-may not always be what you want, especially if you have more than two fields! For example, here is a snippet
-of a valid input JSON file, though note that your texts can be much longer than these, and are not constrained
+`label` field. If your task involves comparing two texts (for example, if your classifier
+is deciding whether two sentences are paraphrases of each other, or were written by the same author) then you should also include a `sentence2` field in each example. If you do not have a `sentence1` field then the script will assume the non-label fields are the input text, which
+may not always be what you want, especially if you have more than two fields! 
+
+Here is a snippet of a valid input JSON file, though note that your texts can be much longer than these, and are not constrained
 (despite the field name) to being single grammatical sentences:
 ```
 {"sentence1": "COVID-19 vaccine updates: How is the rollout proceeding?", "label": "news"}
