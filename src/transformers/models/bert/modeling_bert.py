@@ -203,7 +203,10 @@ class BertEmbeddings(nn.Module):
         seq_length = input_shape[1]
 
         if position_ids is None:
-            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
+            if hasattr(self, "position_ids"):
+                position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
+            else:
+                position_ids = torch.arange(seq_length).expand((1, -1))
 
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
