@@ -44,6 +44,10 @@ class RobertaConfig(BertConfig):
     The :class:`~transformers.RobertaConfig` class directly inherits :class:`~transformers.BertConfig`. It reuses the
     same defaults. Please check the parent class for more information.
 
+    Args:
+        normalize_embeddings (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not normalize embeddings.
+
     Examples::
 
         >>> from transformers import RobertaConfig, RobertaModel
@@ -65,6 +69,7 @@ class RobertaConfig(BertConfig):
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            normalize_embeddings=normalize_embeddings,
             **kwargs,
         )
+
+        self.normalize_embeddings = normalize_embeddings
