@@ -354,7 +354,7 @@ def main():
             label_to_id = {label: i for i, label in enumerate(label_list)}
     if label_to_id is not None:
         config.label2id = label_to_id
-    config.id2label = {id: label for label, id in config.label2id.items()}
+        config.id2label = {id: label for label, id in config.label2id.items()}
 
     if data_args.max_seq_length > tokenizer.model_max_length:
         logger.warning(
