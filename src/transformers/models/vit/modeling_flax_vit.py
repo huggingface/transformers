@@ -23,7 +23,12 @@ from flax.linen.attention import dot_product_attention_weights
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxBaseModelOutputWithPooling, FlaxSequenceClassifierOutput
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel
+from ...modeling_flax_utils import (
+    ACT2FN,
+    FlaxPreTrainedModel,
+    append_replace_return_docstrings,
+    overwrite_call_docstring,
+)
 from .configuration_vit import ViTConfig
 
 
@@ -68,7 +73,7 @@ VIT_INPUTS_DOCSTRING = r"""
 """
 
 
-class PatchEmbeddings(nn.Module):
+class FlaxPatchEmbeddings(nn.Module):
 
     config: ViTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -101,10 +106,10 @@ class FlaxViTEmbeddings(nn.Module):
 
     def setup(self):
         self.cls_token = self.param("cls_token", nn.initializers.zeros, (1, 1, self.config.hidden_size))
-        self.patch_embeddings = PatchEmbeddings(self.config, dtype=self.dtype)
+        self.patch_embeddings = FlaxPatchEmbeddings(self.config, dtype=self.dtype)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = self.param(
-            "pos_embeddings", nn.initializers.zeros, (1, num_patches + 1, self.config.hidden_size)
+            "position_embeddings", nn.initializers.zeros, (1, num_patches + 1, self.config.hidden_size)
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
@@ -204,11 +209,11 @@ class FlaxViTAttention(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.self = FlaxViTSelfAttention(self.config, dtype=self.dtype)
+        self.attention = FlaxViTSelfAttention(self.config, dtype=self.dtype)
         self.output = FlaxViTSelfOutput(self.config, dtype=self.dtype)
 
     def __call__(self, hidden_states, deterministic=True, output_attentions: bool = False):
-        attn_outputs = self.self(hidden_states, deterministic=deterministic, output_attentions=output_attentions)
+        attn_outputs = self.attention(hidden_states, deterministic=deterministic, output_attentions=output_attentions)
         attn_output = attn_outputs[0]
         hidden_states = self.output(attn_output, hidden_states, deterministic=deterministic)
 
@@ -494,9 +499,28 @@ class FlaxViTModel(FlaxViTPreTrainedModel):
     module_class = FlaxViTModule
 
 
-# append_call_sample_docstring(
-#     FlaxViTModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
-# )
+FLAX_VISION_MODEL_DOCSTRING = """
+    Returns:
+
+    Examples:
+
+        >>> from transformers import ViTFeatureExtractor, FlaxViTModel
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
+        >>> model = FlaxViTModel.from_pretrained('google/vit-base-patch16-224-in21k')
+
+        >>> inputs = feature_extractor(images=image, return_tensors="jax")
+        >>> outputs = model(**inputs)
+        >>> last_hidden_states = outputs.last_hidden_state
+"""
+
+overwrite_call_docstring(FlaxViTModel, FLAX_VISION_MODEL_DOCSTRING)
+append_replace_return_docstrings(FlaxViTModel, output_type=FlaxBaseModelOutputWithPooling, config_class=ViTConfig)
 
 
 class FlaxViTForImageClassificationModule(nn.Module):
@@ -552,3 +576,33 @@ class FlaxViTForImageClassificationModule(nn.Module):
 )
 class FlaxViTForImageClassification(FlaxViTPreTrainedModel):
     module_class = FlaxViTForImageClassificationModule
+
+
+FLAX_VISION_CLASSIF_DOCSTRING = """
+    Returns:
+
+    Example::
+
+        >>> from transformers import FlaxViTFeatureExtractor, ViTForImageClassification
+        >>> from PIL import Image
+        >>> import jax
+        >>> import requests
+
+        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
+        >>> model = FlaxViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
+
+        >>> inputs = feature_extractor(images=image, return_tensors="jax")
+        >>> outputs = model(**inputs)
+        >>> logits = outputs.logits
+        >>> # model predicts one of the 1000 ImageNet classes
+        >>> predicted_class_idx = jax.numpy.argmax(logits, axis=-1)
+        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+"""
+
+overwrite_call_docstring(FlaxViTForImageClassification, FLAX_VISION_CLASSIF_DOCSTRING)
+append_replace_return_docstrings(
+    FlaxViTForImageClassification, output_type=FlaxSequenceClassifierOutput, config_class=ViTConfig
+)
