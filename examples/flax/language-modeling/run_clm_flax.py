@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning the library models for causal language modeling (GPT, GPT-2, CTRL, ...) on a text file or a dataset.
+Pre-training/Fine-tuning the library models for causal language modeling (GPT, GPT-2, CTRL, ...) on a text file or a dataset.
 
 Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
 https://huggingface.co/models?filter=causal-lm
@@ -41,7 +41,7 @@ import transformers
 from flax import jax_utils, traverse_util
 from flax.jax_utils import unreplicate
 from flax.training import train_state
-from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key, stack_forest
+from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
 from transformers import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
@@ -190,9 +190,7 @@ class TrainState(train_state.TrainState):
         return jax_utils.replicate(self).replace(dropout_rng=shard_prng_key(self.dropout_rng))
 
 
-def data_loader(
-    rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuffle: bool = False, distributed: bool = False
-):
+def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuffle: bool = False):
     """
     Returns batches of size `batch_size` from truncated `dataset`, sharded over all local devices.
     Shuffle batches if `shuffle` is `True`.
@@ -211,17 +209,15 @@ def data_loader(
         batch = dataset[idx]
         batch = {k: jnp.array(v) for k, v in batch.items()}
 
-        if distributed:
-            batch = shard(batch)
+        batch = shard(batch)
 
         yield batch
 
 
-def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step, distributed):
+def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step):
     summary_writer.scalar("train_time", train_time, step)
 
-    if distributed:
-        train_metrics = get_metrics(train_metrics)
+    train_metrics = get_metrics(train_metrics)
     for key, vals in train_metrics.items():
         tag = f"train_{key}"
         for i, val in enumerate(vals):
@@ -400,7 +396,7 @@ def main():
                 f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
                 "Picking 1024 instead. You can change that default value by passing --block_size xxx."
             )
-        block_size = 1024
+            block_size = 1024
     else:
         if data_args.block_size > tokenizer.model_max_length:
             logger.warning(
@@ -458,7 +454,6 @@ def main():
         summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir).joinpath("logs").as_posix())
 
     # Initialize our training
-    distributed = jax.local_device_count() > 1
     rng = jax.random.PRNGKey(training_args.seed)
     rng, dropout_rng = jax.random.split(rng)
 
@@ -507,7 +502,7 @@ def main():
         return loss.mean()
 
     # Define gradient update step fn
-    def _train_step(state, batch):
+    def train_step(state, batch):
         dropout_rng, new_dropout_rng = jax.random.split(state.dropout_rng)
 
         def compute_loss(params):
@@ -518,39 +513,32 @@ def main():
 
         grad_fn = jax.value_and_grad(compute_loss)
         loss, grad = grad_fn(state.params)
-        if distributed:
-            grad = jax.lax.pmean(grad, "batch")
+        grad = jax.lax.pmean(grad, "batch")
 
         new_state = state.apply_gradients(grads=grad, dropout_rng=new_dropout_rng)
 
         metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}
-        if distributed:
-            metrics = jax.lax.pmean(metrics, axis_name="batch")
+        metrics = jax.lax.pmean(metrics, axis_name="batch")
 
         return new_state, metrics
 
     # Define eval fn
-    def _eval_step(params, batch):
+    def eval_step(params, batch):
         labels = batch.pop("labels")
         logits = model(**batch, params=params, train=False)[0]
         loss = loss_fn(logits, labels)
 
         # summarize metrics
         metrics = {"loss": loss}
-        if distributed:
-            metrics = jax.lax.pmean(metrics, axis_name="batch")
+        metrics = jax.lax.pmean(metrics, axis_name="batch")
         return metrics
 
     # Create parallel version of the train and eval step
-    if distributed:
-        train_step = jax.pmap(_train_step, "batch", donate_argnums=(0,))
-        eval_step = jax.pmap(_eval_step, "batch")
+    p_train_step = jax.pmap(train_step, "batch", donate_argnums=(0,))
+    p_eval_step = jax.pmap(eval_step, "batch")
 
-        # Replicate the train state on each device
-        state = state.replicate()
-    else:
-        train_step = jax.jit(_train_step, donate_argnums=(0,))
-        eval_step = jax.jit(_eval_step)
+    # Replicate the train state on each device
+    state = state.replicate()
 
     logger.info("***** Running training *****")
     logger.info(f"  Num examples = {len(train_dataset)}")
@@ -570,18 +558,17 @@ def main():
         train_metrics = []
 
         # Generate an epoch by shuffling sampling indices from the train dataset
-        train_loader = data_loader(input_rng, train_dataset, train_batch_size, shuffle=True, distributed=distributed)
+        train_loader = data_loader(input_rng, train_dataset, train_batch_size, shuffle=True)
         steps_per_epoch = len(train_dataset) // train_batch_size
         # train
         for _ in tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False):
             batch = next(train_loader)
-            state, train_metric = train_step(state, batch)
+            state, train_metric = p_train_step(state, batch)
             train_metrics.append(train_metric)
 
         train_time += time.time() - train_start
 
-        if distributed:
-            train_metric = unreplicate(train_metric)
+        train_metric = unreplicate(train_metric)
 
         epochs.write(
             f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']})"
@@ -589,19 +576,16 @@ def main():
 
         # ======================== Evaluating ==============================
         eval_metrics = []
-        eval_loader = data_loader(input_rng, eval_dataset, eval_batch_size, distributed=distributed)
+        eval_loader = data_loader(input_rng, eval_dataset, eval_batch_size)
         eval_steps = len(eval_dataset) // eval_batch_size
         for _ in tqdm(range(eval_steps), desc="Evaluating...", position=2, leave=False):
             # Model forward
             batch = next(eval_loader)
-            metrics = eval_step(state.params, batch)
+            metrics = p_eval_step(state.params, batch)
             eval_metrics.append(metrics)
 
         # normalize eval metrics
-        if distributed:
-            eval_metrics = get_metrics(eval_metrics)
-        else:
-            eval_metrics = stack_forest(jax.device_get(eval_metrics))
+        eval_metrics = get_metrics(eval_metrics)
 
         eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
 
@@ -618,14 +602,11 @@ def main():
         # Save metrics
         if has_tensorboard and jax.process_index() == 0:
             cur_step = epoch * (len(train_dataset) // train_batch_size)
-            write_metric(summary_writer, train_metrics, eval_metrics, train_time, cur_step, distributed)
+            write_metric(summary_writer, train_metrics, eval_metrics, train_time, cur_step)
 
     # save last checkpoint
     if jax.process_index() == 0:
-        if distributed:
-            params = jax.device_get(unreplicate(state.params))
-        else:
-            params = state.params
+        params = jax.device_get(unreplicate(state.params))
         model.save_pretrained(training_args.output_dir, params=params)
 
 
