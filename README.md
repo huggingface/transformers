@@ -150,6 +150,8 @@ class Checkpoint(MutableMapping):
 model = GPTNeoForCausalLM.from_pretrained(pretrained_model_name_or_path=None, config=config, state_dict=Checkpoint())
 ```
 
+There is also an [alternative](https://gist.github.com/finetuneanon/7dd417a31338a63f219a49702e0550db) version of the conversion script that can run on colab within the regualr 12GB of RAM.
+
 GPT-J 6B is quite sensitive to repetition penalty. While gpt-neo can easily handle penalty values of 2 and above, this model starts generating strange text at about 1.3 repetition penalty.
 
 ---
