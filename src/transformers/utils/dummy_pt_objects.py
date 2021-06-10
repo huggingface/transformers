@@ -274,6 +274,10 @@ class AlbertForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class AlbertForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -499,6 +503,10 @@ class BartForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class BartForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -570,6 +578,10 @@ class BertForPreTraining:
 class BertForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class BertForSequenceClassification:
@@ -679,6 +691,10 @@ class BigBirdForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class BigBirdForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -749,6 +765,10 @@ class BigBirdPegasusForConditionalGeneration:
 class BigBirdPegasusForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class BigBirdPegasusForSequenceClassification:
@@ -863,6 +883,10 @@ class CamembertForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class CamembertForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -954,6 +978,10 @@ class ConvBertForMultipleChoice:
 class ConvBertForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class ConvBertForSequenceClassification:
@@ -1056,6 +1084,10 @@ class DebertaForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class DebertaForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -1108,6 +1140,10 @@ class DebertaV2ForMaskedLM:
 class DebertaV2ForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class DebertaV2ForSequenceClassification:
@@ -1201,6 +1237,10 @@ class DistilBertForMultipleChoice:
 class DistilBertForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class DistilBertForSequenceClassification:
@@ -1308,6 +1348,10 @@ class ElectraForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class ElectraForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -1374,10 +1418,18 @@ class FlaubertForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class FlaubertForQuestionAnsweringSimple:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class FlaubertForSequenceClassification:
@@ -1481,6 +1533,10 @@ class FunnelForPreTraining:
 class FunnelForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class FunnelForSequenceClassification:
@@ -1634,6 +1690,10 @@ class IBertForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class IBertForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -1726,6 +1786,10 @@ class LEDForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class LEDForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -1769,6 +1833,10 @@ class LongformerForMultipleChoice:
 class LongformerForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class LongformerForSequenceClassification:
@@ -1852,6 +1920,10 @@ class LxmertForPreTraining:
 class LxmertForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class LxmertModel:
@@ -1952,6 +2024,10 @@ class MBartForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class MBartForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -2014,6 +2090,10 @@ class MegatronBertForPreTraining:
 class MegatronBertForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class MegatronBertForSequenceClassification:
@@ -2097,6 +2177,10 @@ class MobileBertForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class MobileBertForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -2167,6 +2251,10 @@ class MPNetForMultipleChoice:
 class MPNetForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class MPNetForSequenceClassification:
@@ -2405,6 +2493,10 @@ class ReformerForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class ReformerForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -2493,6 +2585,10 @@ class RobertaForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class RobertaForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -2554,6 +2650,10 @@ class RoFormerForMultipleChoice:
 class RoFormerForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class RoFormerForSequenceClassification:
@@ -2646,6 +2746,10 @@ class SqueezeBertForMultipleChoice:
 class SqueezeBertForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class SqueezeBertForSequenceClassification:
@@ -2748,6 +2852,10 @@ class TapasForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class TapasForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -2835,6 +2943,10 @@ class VisualBertForPreTraining:
 class VisualBertForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class VisualBertForRegionToPhraseAlignment:
@@ -2952,10 +3064,18 @@ class XLMForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class XLMForQuestionAnsweringSimple:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class XLMForSequenceClassification:
@@ -3077,6 +3197,10 @@ class XLMRobertaForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class XLMRobertaForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -3121,10 +3245,18 @@ class XLNetForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class XLNetForQuestionAnsweringSimple:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class XLNetForSequenceClassification:

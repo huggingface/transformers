@@ -9,6 +9,10 @@ class DetrForObjectDetection:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["timm", "vision"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["timm", "vision"])
+
 
 class DetrForSegmentation:
     def __init__(self, *args, **kwargs):

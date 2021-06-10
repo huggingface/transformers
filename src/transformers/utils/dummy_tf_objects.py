@@ -122,6 +122,10 @@ class TFAlbertForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
 
 class TFAlbertForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -354,6 +358,10 @@ class TFBertForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
 
 class TFBertForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -466,6 +474,10 @@ class TFCamembertForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
 
 class TFCamembertForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -518,6 +530,10 @@ class TFConvBertForMultipleChoice:
 class TFConvBertForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
 
 
 class TFConvBertForSequenceClassification:
@@ -624,6 +640,10 @@ class TFDistilBertForMultipleChoice:
 class TFDistilBertForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
 
 
 class TFDistilBertForSequenceClassification:
@@ -736,6 +756,10 @@ class TFElectraForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
 
 class TFElectraForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -788,6 +812,10 @@ class TFFlaubertForMultipleChoice:
 class TFFlaubertForQuestionAnsweringSimple:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
 
 
 class TFFlaubertForSequenceClassification:
@@ -864,6 +892,10 @@ class TFFunnelForPreTraining:
 class TFFunnelForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
 
 
 class TFFunnelForSequenceClassification:
@@ -997,6 +1029,10 @@ class TFLongformerForMultipleChoice:
 class TFLongformerForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
 
 
 class TFLongformerForSequenceClassification:
@@ -1138,6 +1174,10 @@ class TFMobileBertForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
 
 class TFMobileBertForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -1204,6 +1244,10 @@ class TFMPNetForMultipleChoice:
 class TFMPNetForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
 
 
 class TFMPNetForSequenceClassification:
@@ -1389,6 +1433,10 @@ class TFRobertaForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
 
 class TFRobertaForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -1464,6 +1512,10 @@ class TFRoFormerForMultipleChoice:
 class TFRoFormerForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
 
 
 class TFRoFormerForSequenceClassification:
@@ -1611,6 +1663,10 @@ class TFXLMForQuestionAnsweringSimple:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
 
 class TFXLMForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -1687,6 +1743,10 @@ class TFXLMRobertaForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
 
 class TFXLMRobertaForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -1730,6 +1790,10 @@ class TFXLNetForMultipleChoice:
 class TFXLNetForQuestionAnsweringSimple:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
 
 
 class TFXLNetForSequenceClassification:
