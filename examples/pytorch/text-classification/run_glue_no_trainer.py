@@ -38,9 +38,12 @@ from transformers import (
     get_scheduler,
     set_seed,
 )
+from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)
+
+require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
 task_to_keys = {
     "cola": ("sentence", None),
