@@ -235,6 +235,6 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("google/vit-base-patch16-224", from_pt=True)
+            model = model_class_name.from_pretrained("google/vit-base-patch16-224")
             outputs = model(np.ones((1, 3, 224, 224)))
             self.assertIsNotNone(outputs)

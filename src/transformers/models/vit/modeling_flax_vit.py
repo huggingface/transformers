@@ -288,7 +288,6 @@ class FlaxViTLayer(nn.Module):
         # in ViT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(attention_output)
 
-        # TODO feedforward chunking not working for now
 
         hidden_states = self.intermediate(layer_output)
         hidden_states = self.output(hidden_states, attention_output, deterministic=deterministic)
@@ -403,7 +402,7 @@ class FlaxViTPreTrainedModel(FlaxPreTrainedModel):
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         # init input tensors
-        pixel_values = jnp.zeros(input_shape, dtype=jnp.float32)
+        pixel_values = jnp.zeros(input_shape, dtype=self.dtype)
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
