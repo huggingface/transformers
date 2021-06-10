@@ -502,7 +502,7 @@ class FlaxViTModel(FlaxViTPreTrainedModel):
 FLAX_VISION_MODEL_DOCSTRING = """
     Returns:
 
-    Examples:
+    Examples::
 
         >>> from transformers import ViTFeatureExtractor, FlaxViTModel
         >>> from PIL import Image
