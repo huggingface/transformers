@@ -77,3 +77,36 @@ python run_text_classification.py \
 --output_dir output/ \
 --test_file data_to_predict.json
 ```
+
+## run_glue.py
+
+This script handles training on the GLUE dataset for various text classification and regression tasks. The GLUE datasets will be loaded automatically, so you only need to specify the task you want (with the `--task_name` argument). You can also supply your own files for prediction with the `--predict_file` argument, for example if you want to train a model on GLUE for e.g. paraphrase detection and then predict whether your own data contains paraphrases or not. Please ensure the names of your input fields match the names of the features in the relevant GLUE dataset - you can see a list of the column names in the `task_to_keys` dict in the `run_glue.py` file.
+
+### Usage notes
+
+The `--do_train`, `--do_eval` and `--do_predict` arguments control whether training, evaluations or predictions are performed. After training, the model will be saved to `--output_dir`. Once your model is trained, you can call the script without the `--do_train` or `--do_eval` arguments to quickly get predictions from your saved model.
+
+### Multi-GPU and TPU usage
+
+By default, the script uses a `MirroredStrategy` and will use multiple GPUs effectively if they are available. TPUs
+can also be used by passing the name of the TPU resource with the `--tpu` argument.
+
+### Memory usage and data loading
+
+One thing to note is that all data is loaded into memory in this script. Most text classification datasets are small
+enough that this is not an issue, but if you have a very large dataset you will need to modify the script to handle
+data streaming. This is particularly challenging for TPUs, given the stricter requirements and the sheer volume of data
+required to keep them fed. A full explanation of all the possible pitfalls is a bit beyond this example script and 
+README, but for more information you can see the 'Input Datasets' section of 
+[this document](https://www.tensorflow.org/guide/tpu).
+
+### Example command
+```
+python run_glue.py \
+--model_name_or_path distilbert-base-cased \
+--task_name mnli \
+--do_train \
+--do_eval \
+--do_predict \
+--predict_file data_to_predict.json
+```
