@@ -177,10 +177,12 @@ class RotaryEmbedding(nn.Module):
 #    return (t * freqs.cos()) + (rotate_half(t) * freqs.sin())
 # end rotary
 
-def fixed_pos_embedding(x, seq_dim=1):
+def fixed_pos_embedding(x, seq_dim=1, seq_len=None):
     dim = x.shape[-1]
+    if seq_len is None:
+        seq_len = x.shape[seq_dim]
     inv_freq = 1. / (10000 ** (torch.arange(0, dim, 2) / dim))
-    sinusoid_inp = torch.einsum('i , j -> i j', torch.arange(x.shape[seq_dim]), inv_freq).to(x.device).float()
+    sinusoid_inp = torch.einsum('i , j -> i j', torch.arange(seq_len), inv_freq).to(x.device).float()
     return torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)
 
 def rotate_every_two(x):
@@ -189,8 +191,8 @@ def rotate_every_two(x):
     x = torch.stack((-x2, x1), axis=-1)
     return rearrange(x, '... d j -> ... (d j)')
 
-def apply_rotary_pos_emb(x, sincos):
-    sin, cos = map(lambda t: repeat(t, "n d -> () n () (d j)", j=2), sincos)
+def apply_rotary_pos_emb(x, sincos, offset=0):
+    sin, cos = map(lambda t: repeat(t[offset:x.shape[1]+offset,:], "n d -> () n () (d j)", j=2), sincos)
     return (x * cos) + (rotate_every_two(x) * sin)
 
 class GPTNeoAttentionMixin:
@@ -321,30 +323,35 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
         value = self._split_heads(value, self.num_heads, self.head_dim, False)
 
         if self.rotary:
-          if self.rotary_dim is not None:
-              k_rot = key[:, :, :, :self.rotary_dim]
-              k_pass = key[:, :, :, self.rotary_dim:]
+            seq_len = key.shape[1]
+            offset = 0
+            if layer_past is not None:
+                offset = layer_past[0].shape[-2]
+                seq_len += offset
+            if self.rotary_dim is not None:
+                k_rot = key[:, :, :, :self.rotary_dim]
+                k_pass = key[:, :, :, self.rotary_dim:]
 
-              q_rot = query[:, :, :, :self.rotary_dim]
-              q_pass = query[:, :, :, self.rotary_dim:]
+                q_rot = query[:, :, :, :self.rotary_dim]
+                q_pass = query[:, :, :, self.rotary_dim:]
 
-              sincos = fixed_pos_embedding(k_rot, 1)
-              k_rot = apply_rotary_pos_emb(k_rot, sincos)
-              q_rot = apply_rotary_pos_emb(q_rot, sincos)
+                sincos = fixed_pos_embedding(k_rot, 1, seq_len=seq_len)
+                k_rot = apply_rotary_pos_emb(k_rot, sincos, offset=offset)
+                q_rot = apply_rotary_pos_emb(q_rot, sincos, offset=offset)
 
-              key = torch.cat([k_rot, k_pass], dim=-1)
-              query = torch.cat([q_rot, q_pass], dim=-1)
-          elif rotary_emb is not None:
-              key = apply_rotary_pos_emb(key, rotary_emb)
-              query = apply_rotary_pos_emb(query, rotary_emb)
-          key = key.permute(0, 2, 1, 3)
-          query = query.permute(0, 2, 1, 3)
+                key = torch.cat([k_rot, k_pass], dim=-1)
+                query = torch.cat([q_rot, q_pass], dim=-1)
+            elif rotary_emb is not None:
+                key = apply_rotary_pos_emb(key, rotary_emb)
+                query = apply_rotary_pos_emb(query, rotary_emb)
+            key = key.permute(0, 2, 1, 3)
+            query = query.permute(0, 2, 1, 3)
 
         if layer_past is not None:
             past_key = layer_past[0]
             past_value = layer_past[1]
-            key = torch.cat((past_key, key), dim=-2).half()
-            value = torch.cat((past_value, value), dim=-2).half()
+            key = torch.cat((past_key, key), dim=-2)
+            value = torch.cat((past_value, value), dim=-2)
 
         if use_cache is True:
             present = (key, value)
