@@ -117,6 +117,9 @@ class GPTNeoConfig(PretrainedConfig):
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
+        rotary=False,
+        rotary_dim=None,
+        gptj=False,
         **kwargs
     ):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -141,6 +144,9 @@ class GPTNeoConfig(PretrainedConfig):
         self.summary_proj_to_labels = summary_proj_to_labels
         self.gradient_checkpointing = gradient_checkpointing
         self.use_cache = use_cache
+        self.rotary = rotary
+        self.rotary_dim = rotary_dim
+        self.jax = jax
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
