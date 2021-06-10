@@ -405,3 +405,17 @@ class FlaxRobertaPreTrainedModel:
     @classmethod
     def from_pretrained(self, *args, **kwargs):
         requires_backends(self, ["flax"])
+
+
+class FlaxViTForImageClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxViTModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["flax"])

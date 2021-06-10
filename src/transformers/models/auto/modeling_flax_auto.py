@@ -47,8 +47,9 @@ from ..roberta.modeling_flax_roberta import (
     FlaxRobertaForTokenClassification,
     FlaxRobertaModel,
 )
+from ..vit.modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel
 from .auto_factory import auto_class_factory
-from .configuration_auto import BertConfig, CLIPConfig, ElectraConfig, GPT2Config, RobertaConfig
+from .configuration_auto import BertConfig, CLIPConfig, ElectraConfig, GPT2Config, RobertaConfig, ViTConfig
 
 
 logger = logging.get_logger(__name__)
@@ -62,6 +63,7 @@ FLAX_MODEL_MAPPING = OrderedDict(
         (GPT2Config, FlaxGPT2Model),
         (ElectraConfig, FlaxElectraModel),
         (CLIPConfig, FlaxCLIPModel),
+        (ViTConfig, FlaxViTModel),
     ]
 )
 
@@ -80,6 +82,13 @@ FLAX_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (RobertaConfig, FlaxRobertaForMaskedLM),
         (BertConfig, FlaxBertForMaskedLM),
         (ElectraConfig, FlaxElectraForMaskedLM),
+    ]
+)
+
+FLAX_MODEL_FOR_IMAGECLASSIFICATION_MAPPING = OrderedDict(
+    [
+        # Model for Image-classsification
+        (ViTConfig, FlaxViTForImageClassification),
     ]
 )
 
@@ -133,6 +142,12 @@ FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = OrderedDict(
 )
 
 FlaxAutoModel = auto_class_factory("FlaxAutoModel", FLAX_MODEL_MAPPING)
+
+FlaxAutoModelForImageClassification = auto_class_factory(
+    "FlaxAutoModelForImageClassification",
+    FLAX_MODEL_FOR_IMAGECLASSIFICATION_MAPPING,
+    head_doc="image classification modeling",
+)
 
 FlaxAutoModelForCausalLM = auto_class_factory(
     "FlaxAutoModelForCausalLM", FLAX_MODEL_FOR_CAUSAL_LM_MAPPING, head_doc="causal language modeling"
