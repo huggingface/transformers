@@ -189,7 +189,6 @@ class FlaxBigBirdEmbeddings(nn.Module):
         return hidden_states
 
 
-
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertSelfAttention with Bert->BigBird
 class FlaxBigBirdSelfAttention(nn.Module):
     config: BigBirdConfig
