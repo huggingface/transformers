@@ -1598,8 +1598,8 @@ In your report please always include:
     python -c 'import deepspeed; print(f"deepspeed: {deepspeed.__version__}")'
 
 4. If possible include a link to a Google Colab notebook that we can reproduce the problem with. You can use this
-   `notebook
-<https://github.com/stas00/porting/blob/master/transformers/deepspeed/DeepSpeed_on_colab_CLI.ipynb>`__ as a base.
+   `notebook <https://github.com/stas00/porting/blob/master/transformers/deepspeed/DeepSpeed_on_colab_CLI.ipynb>`__ as
+   a starting point.
 
 5. Unless it's impossible please always use a standard dataset that we can use and not something custom.
 
