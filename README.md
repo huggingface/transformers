@@ -150,6 +150,10 @@ class Checkpoint(MutableMapping):
 model = GPTNeoForCausalLM.from_pretrained(pretrained_model_name_or_path=None, config=config, state_dict=Checkpoint())
 ```
 
+GPT-J 6B is quite sensitive to repetition penalty. While gpt-neo can easily handle penalty values of 2 and above, this model starts generating strange text at about 1.3 repetition penalty.
+
+---
+
 <!---
 Copyright 2020 The HuggingFace Team. All rights reserved.
 
