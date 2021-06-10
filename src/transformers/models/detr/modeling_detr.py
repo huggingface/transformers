@@ -885,7 +885,6 @@ class DetrEncoder(DetrPreTrainedModel):
 
     Args:
         config: DetrConfig
-        embed_tokens (torch.nn.Embedding): output embedding
     """
 
     def __init__(self, config: DetrConfig):
@@ -894,14 +893,11 @@ class DetrEncoder(DetrPreTrainedModel):
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
 
-        embed_dim = config.d_model
-        self.padding_idx = config.pad_token_id
-        self.max_source_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
-
         self.layers = nn.ModuleList([DetrEncoderLayer(config) for _ in range(config.encoder_layers)])
 
-        # in the original DETR, no layernorm is used for the Encoder, as "normalize_before" is set to False by default there
+        # in the original DETR, no layernorm is used at the end of the encoder, as "normalize_before" is set to False by default
+        # however we include it as some models like UP-DETR use it
+        self.layernorm = nn.LayerNorm(config.d_model) if config.normalize_before else None
 
         self.init_weights()
 
@@ -973,9 +969,18 @@ class DetrEncoder(DetrPreTrainedModel):
 
                 hidden_states = layer_outputs[0]
 
+                print(f"Hidden states after layer {i}")
+                print(hidden_states[0,:3,:3])
+
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
+        if self.layernorm is not None:
+            hidden_states = self.layernorm(hidden_states)
+
+        print("Hidden states after final layernorm of encoder:")
+        print(hidden_states[0, :3, :3])
+        
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
@@ -999,16 +1004,13 @@ class DetrDecoder(DetrPreTrainedModel):
 
     Args:
         config: DetrConfig
-        embed_tokens (torch.nn.Embedding): output embedding
     """
 
-    def __init__(self, config: DetrConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: DetrConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
-        self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
         self.layers = nn.ModuleList([DetrDecoderLayer(config) for _ in range(config.decoder_layers)])
         # in DETR, the decoder uses layernorm after the last decoder layer output

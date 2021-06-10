@@ -143,7 +143,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             :obj:`do_resize` is set to :obj:`True`.
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to normalize the input with mean and standard deviation.
-        image_mean (:obj:`int`, `optional`, defaults to :obj:`[0.485, 0.456, 0.406]s`):
+        image_mean (:obj:`int`, `optional`, defaults to :obj:`[0.485, 0.456, 0.406]`):
             The sequence of means for each channel, to be used when normalizing images. Defaults to the ImageNet mean.
         image_std (:obj:`int`, `optional`, defaults to :obj:`[0.229, 0.224, 0.225]`):
             The sequence of standard deviations for each channel, to be used when normalizing images. Defaults to the
