@@ -108,6 +108,7 @@ Use the [conversion script](https://gist.github.com/finetuneanon/b814e702b1e2e15
 
 ```python
 import torch
+from transformers import GPTNeoForCausalLM, AutoConfig
 
 # GPT-J 6B config
 config = AutoConfig.from_pretrained("EleutherAI/gpt-neo-2.7B")
