@@ -18,7 +18,6 @@
 
 import logging
 import os
-import random
 import sys
 from dataclasses import dataclass, field
 from typing import Optional
@@ -31,7 +30,6 @@ import transformers
 from transformers import (
     AutoConfig,
     AutoTokenizer,
-    EvalPrediction,
     HfArgumentParser,
     PretrainedConfig,
     TFAutoModelForSequenceClassification,
@@ -117,6 +115,7 @@ task_to_keys = {
 }
 
 logger = logging.getLogger(__name__)
+
 
 # region Command-line arguments
 @dataclass
@@ -474,7 +473,7 @@ def main():
                 validation_data = tf_data["validation"]
             else:
                 validation_data = None
-            history = model.fit(
+            model.fit(
                 tf_data["train"],
                 validation_data=validation_data,
                 epochs=int(training_args.num_train_epochs),
