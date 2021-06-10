@@ -521,8 +521,7 @@ def main():
         if distributed:
             grad = jax.lax.pmean(grad, "batch")
 
-        new_state = state.apply_gradients(grads=grad)
-        new_state.replace(dropout_rng=new_dropout_rng)
+        new_state = state.apply_gradients(grads=grad, dropout_rng=new_dropout_rng)
 
         metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}
         if distributed:
