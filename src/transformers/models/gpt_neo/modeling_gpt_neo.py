@@ -318,8 +318,8 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
 
-        query = self._split_heads(query, self.num_heads, self.head_dim, self.rotary).float()
-        key = self._split_heads(key, self.num_heads, self.head_dim, self.rotary).float()
+        query = self._split_heads(query, self.num_heads, self.head_dim, self.rotary)
+        key = self._split_heads(key, self.num_heads, self.head_dim, self.rotary)
         value = self._split_heads(value, self.num_heads, self.head_dim, False)
 
         if self.rotary:
@@ -336,8 +336,8 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
                 q_pass = query[:, :, :, self.rotary_dim:]
 
                 sincos = fixed_pos_embedding(k_rot, 1, seq_len=seq_len)
-                k_rot = apply_rotary_pos_emb(k_rot, sincos, offset=offset)
-                q_rot = apply_rotary_pos_emb(q_rot, sincos, offset=offset)
+                k_rot = apply_rotary_pos_emb(k_rot, sincos, offset=offset).half()
+                q_rot = apply_rotary_pos_emb(q_rot, sincos, offset=offset).half()
 
                 key = torch.cat([k_rot, k_pass], dim=-1)
                 query = torch.cat([q_rot, q_pass], dim=-1)
@@ -350,8 +350,8 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
         if layer_past is not None:
             past_key = layer_past[0]
             past_value = layer_past[1]
-            key = torch.cat((past_key, key), dim=-2)
-            value = torch.cat((past_value, value), dim=-2)
+            key = torch.cat((past_key, key), dim=-2).half()
+            value = torch.cat((past_value, value), dim=-2).half()
 
         if use_cache is True:
             present = (key, value)
@@ -819,7 +819,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
     GPT_NEO_START_DOCSTRING,
 )
 class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.scale_attn", r"lm_head\.weight", r"h\.\d+\.attn\.attention\.bias"]
+    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.attention\.scale_attn", r"lm_head\.weight", r"h\.\d+\.attn\.attention\.bias"]
     _keys_to_ignore_on_save = [r"lm_head.weight"]
 
     def __init__(self, config):
