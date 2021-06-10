@@ -1095,16 +1095,17 @@ class GenerationTesterMixin:
 
             signature = inspect.signature(model.forward)
             # We want to test only models where encoder/decoder head masking is implemented
-            if set(head_masking.keys()) < set([*signature.parameters.keys()]):
+            if not set(head_masking.keys()) < set([*signature.parameters.keys()]):
                 continue
 
             for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
                 out = model.generate(
                     input_ids,
+                    attention_mask=attention_mask,
                     num_beams=1,
-                    max_length=max_length,
                     output_attentions=True,
                     return_dict_in_generate=True,
+                    remove_invalid_values=True,
                     **{name: mask},
                 )
                 # We check the state of decoder_attentions and cross_attentions just from the last step

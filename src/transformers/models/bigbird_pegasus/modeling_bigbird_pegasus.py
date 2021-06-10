@@ -1174,6 +1174,8 @@ class BigBirdPegasusEncoderAttention(nn.Module):
         from_blocked_mask=None,
         to_blocked_mask=None,
     ):
+        # Expand dims to enable multiplication in the self-attention module
+        head_mask = head_mask.reshape(1, -1, 1, 1) if head_mask is not None else None
 
         if self.config.attention_type == "original_full":
             self_outputs = self.self(
@@ -1372,6 +1374,7 @@ class BigBirdPegasusEncoderLayer(nn.Module):
         self_attention_outputs = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
+            head_mask=layer_head_mask,
             output_attentions=output_attentions,
             band_mask=band_mask,
             from_mask=from_mask,
