@@ -334,6 +334,9 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = None
 MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = None
 
 
+MODEL_FOR_OBJECT_DETECTION_MAPPING = None
+
+
 MODEL_FOR_PRETRAINING_MAPPING = None
 
 
@@ -2963,6 +2966,11 @@ class Wav2Vec2ForMaskedLM:
 
     @classmethod
     def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Wav2Vec2ForPreTraining:
+    def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
