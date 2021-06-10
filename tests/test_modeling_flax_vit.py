@@ -49,7 +49,6 @@ class FlaxViTModelTester(unittest.TestCase):
         attention_probs_dropout_prob=0.1,
         type_sequence_label_size=10,
         initializer_range=0.02,
-        num_labels=3,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -120,11 +119,14 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    # We need to override this test because in ViT, the seq_len equals the number of patches + 1
+    # we compute that here
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
         num_patches = (config.image_size // config.patch_size) ** 2
+        seq_length = num_patches + 1
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -144,7 +146,7 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, num_patches + 1, num_patches + 1],
+                [self.model_tester.num_attention_heads, seq_length, seq_length],
             )
             out_len = len(outputs)
 
@@ -160,9 +162,10 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, num_patches + 1, num_patches + 1],
+                [self.model_tester.num_attention_heads, seq_length, seq_length],
             )
 
+    # We neeed to override this test because ViT's forward signature is different than text models.
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -175,6 +178,7 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    # We neeed to override this test because ViT expects pixel_values instead of input_ids
     def test_jit_compilation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -198,10 +202,13 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 for jitted_output, output in zip(jitted_outputs, outputs):
                     self.assertEqual(jitted_output.shape, output.shape)
 
+    # We need to override this test because in ViT, the seq_len equals the number of patches + 1
+    # we compute that here
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
             num_patches = (config.image_size // config.patch_size) ** 2
+            seq_length = num_patches + 1  # we add 1 for the [CLS] token
 
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             hidden_states = outputs.hidden_states
@@ -210,7 +217,7 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [num_patches + 1, self.model_tester.hidden_size],
+                [seq_length, self.model_tester.hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
