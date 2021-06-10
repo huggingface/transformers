@@ -559,7 +559,6 @@ def main():
     logger.info(f"  Total train batch size (w. parallel & distributed) = {train_batch_size}")
     logger.info(f"  Total optimization steps = {total_train_steps}")
 
-    train_metrics = []
     train_time = 0
     epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
     for epoch in epochs:
@@ -568,6 +567,7 @@ def main():
 
         # Create sampling rng
         rng, input_rng = jax.random.split(rng)
+        train_metrics = []
 
         # Generate an epoch by shuffling sampling indices from the train dataset
         train_loader = data_loader(input_rng, train_dataset, train_batch_size, shuffle=True, distributed=distributed)
