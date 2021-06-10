@@ -544,7 +544,8 @@ class CLIPModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         # forward pass
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
 
         # verify the logits
         self.assertEqual(
@@ -556,6 +557,6 @@ class CLIPModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
-        expected_logits = torch.tensor([[24.5056, 18.8076]], device=torch_device)
+        expected_logits = torch.tensor([[24.5701, 19.3049]], device=torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
