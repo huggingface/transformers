@@ -76,6 +76,12 @@ def parse_args():
         "--validation_file", type=str, default=None, help="A csv or a json file containing the validation data."
     )
     parser.add_argument(
+        "--text_column_name", type=str, default=None, help="The column name of text to input in the file (a csv or JSON file)."
+    )
+    parser.add_argument(
+        "--label_column_name", type=str, default=None, help="The column name of label to input in the file (a csv or JSON file)."
+    )
+    parser.add_argument(
         "--max_length",
         type=int,
         default=128,
@@ -259,8 +265,20 @@ def main():
     else:
         column_names = raw_datasets["validation"].column_names
         features = raw_datasets["validation"].features
-    text_column_name = "tokens" if "tokens" in column_names else column_names[0]
-    label_column_name = f"{args.task_name}_tags" if f"{args.task_name}_tags" in column_names else column_names[1]
+
+    if data_args.text_column_name is not None:
+        text_column_name = data_args.text_column_name
+    elif "tokens" in column_names:
+        text_column_name = "tokens"
+    else:
+        text_column_name = column_names[0]
+
+    if data_args.label_column_name is not None:
+        label_column_name = data_args.label_column_name
+    elif f"{data_args.task_name}_tags" in column_names:
+        label_column_name = f"{data_args.task_name}_tags"
+    else:
+        label_column_name = column_names[1]
 
     # In the event the labels are not a `Sequence[ClassLabel]`, we will need to go through the dataset to get the
     # unique labels.
