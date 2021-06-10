@@ -284,12 +284,8 @@ def main():
     if not is_regression:
         label_list = datasets["train"].features["label"].names
         num_labels = len(label_list)
-        id2label = {i: label for i, label in enumerate(label_list)}
-        label2id = {label: i for i, label in id2label.items()}
     else:
         num_labels = 1
-        id2label = None
-        label2id = None
 
     if data_args.predict_file is not None:
         logger.info("Preparing user-supplied file for predictions...")
@@ -315,26 +311,14 @@ def main():
     #
     # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
-    if is_regression:
-        config = AutoConfig.from_pretrained(
-            model_args.config_name if model_args.config_name else model_args.model_name_or_path,
-            num_labels=num_labels,
-            finetuning_task=data_args.task_name,
-            cache_dir=model_args.cache_dir,
-            revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
-        )
-    else:
-        config = AutoConfig.from_pretrained(
-            model_args.config_name if model_args.config_name else model_args.model_name_or_path,
-            num_labels=num_labels,
-            finetuning_task=data_args.task_name,
-            cache_dir=model_args.cache_dir,
-            revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
-            label2id=label2id,
-            id2label=id2label
-        )
+    config = AutoConfig.from_pretrained(
+        model_args.config_name if model_args.config_name else model_args.model_name_or_path,
+        num_labels=num_labels,
+        finetuning_task=data_args.task_name,
+        cache_dir=model_args.cache_dir,
+        revision=model_args.model_revision,
+        use_auth_token=True if model_args.use_auth_token else None,
+    )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
@@ -368,6 +352,10 @@ def main():
                 f"model labels: {list(sorted(label_name_to_id.keys()))}, dataset labels: {list(sorted(label_list))}."
                 "\nIgnoring the model labels as a result.",
             )
+            label_to_id = {label: i for i, label in enumerate(label_list)}
+    if label_to_id is not None:
+        config.label2id = label_to_id
+    config.id2label = {id: label for label, id in config.label2id.items()}
 
     if data_args.max_seq_length > tokenizer.model_max_length:
         logger.warning(
@@ -561,7 +549,7 @@ def main():
                         if is_regression:
                             writer.write(f"{index}\t{item:3.3f}\n")
                         else:
-                            item = label_list[item]
+                            item = model.config.id2label[item]
                             writer.write(f"{index}\t{item}\n")
         # endregion
 
