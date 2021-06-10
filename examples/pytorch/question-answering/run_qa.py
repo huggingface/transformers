@@ -24,10 +24,11 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
+import numpy
 from datasets import load_dataset, load_metric
 
 import transformers
-from trainer_qa import QuestionAnsweringTrainer
+from sparseml_utils import SparseMLQATrainer, export_model
 from transformers import (
     AutoConfig,
     AutoModelForQuestionAnswering,
@@ -56,9 +57,17 @@ class ModelArguments:
     """
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
     """
-
     model_name_or_path: str = field(
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+    )
+    distill_teacher: Optional[str] = field(
+        default=None, metadata={"help": "Teacher model which needs to be a trained QA model"}
+    )
+    distill_temperature: Optional[float] = field(
+        default=2.0, metadata={"help": "Temperature applied to teacher softmax for distillation."}
+    )
+    distill_hardness: Optional[float] = field(
+        default=1.0, metadata={"help": "Proportion of loss coming from teacher model."}
     )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
@@ -89,6 +98,14 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
+    recipe: Optional[str] = field(
+        default=None,
+        metadata={"help": "Path to a SparseML sparsification recipe, see https://github.com/neuralmagic/sparseml "
+                  "for more information"},
+    )
+    onnx_export_path: Optional[str] = field(
+        default=None, metadata={"help": "The filename and path which will be where onnx model is outputed"}
+    )
     dataset_name: Optional[str] = field(
         default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
     )
@@ -299,6 +316,18 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
+
+    teacher_model = None
+    if model_args.distill_teacher is not None:
+        teacher_model = AutoModelForQuestionAnswering.from_pretrained(
+            model_args.distill_teacher,
+            from_tf=bool(".ckpt" in model_args.distill_teacher),
+            config=config,
+            cache_dir=model_args.cache_dir,
+        )
+        teacher_model_parameters = filter(lambda p: p.requires_grad, teacher_model.parameters())
+        params = sum([numpy.prod(p.size()) for p in teacher_model_parameters])
+        logger.info("Teacher Model has %s parameters", params)
 
     # Tokenizer check: this script requires a fast tokenizer.
     if not isinstance(tokenizer, PreTrainedTokenizerFast):
@@ -543,7 +572,11 @@ def main():
         return metric.compute(predictions=p.predictions, references=p.label_ids)
 
     # Initialize our Trainer
-    trainer = QuestionAnsweringTrainer(
+    trainer = SparseMLQATrainer(
+        data_args.recipe,
+        teacher=teacher_model,
+        distill_hardness=model_args.distill_hardness,
+        distill_temperature=model_args.distill_temperature,
         model=model,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
@@ -611,6 +644,11 @@ def main():
                 kwargs["dataset"] = data_args.dataset_name
 
         trainer.push_to_hub(**kwargs)
+
+    if data_args.onnx_export_path:
+        logger.info("*** Export to ONNX ***")
+        eval_dataloader = trainer.get_eval_dataloader(eval_dataset)
+        export_model(model, eval_dataloader, data_args.onnx_export_path)
 
 
 def _mp_fn(index):
