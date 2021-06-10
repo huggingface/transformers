@@ -28,7 +28,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 # Unicode defines 1,114,112 total “codepoints”
-UNICODE_VOCAB_SIZE = 1114112 
+UNICODE_VOCAB_SIZE = 1114112
 
 # Below: Constants defining canonical codepoints for special, pseudo-characters.
 # Copied from https://github.com/google-research/language/blob/master/language/canine/special_codepoints.py
@@ -120,12 +120,12 @@ class CanineTokenizer(PreTrainedTokenizer):
             codepoint: name for name, codepoint in self._special_codepoints.items()
         }
 
-        self._unicode_vocab_size = UNICODE_VOCAB_SIZE 
+        self._unicode_vocab_size = UNICODE_VOCAB_SIZE
         self._num_special_tokens = len(self._special_codepoints)
 
     @property
     def vocab_size(self) -> int:
-        return self._unicode_vocab_size 
+        return self._unicode_vocab_size
 
     def _tokenize(self, text: str) -> List[str]:
         """Tokenize a string (i.e. perform character splitting)."""

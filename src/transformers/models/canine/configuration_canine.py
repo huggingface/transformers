@@ -41,29 +41,26 @@ class CanineConfig(PretrainedConfig):
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimension of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
+            Number of hidden layers in the deep Transformer encoder.
         num_attention_heads (:obj:`int`, `optional`, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
+            Number of attention heads for each attention layer in the Transformer encoders.
         intermediate_size (:obj:`int`, `optional`, defaults to 3072):
-            Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+            Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoders.
         hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
             :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probabilitiy for all fully connected layers in the embeddings, encoders, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 16384):
-            The maximum sequence length that this model might ever be used with.&
+            The maximum sequence length that this model might ever be used with.
         type_vocab_size (:obj:`int`, `optional`, defaults to 16):
             The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.CanineModel`.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if ``config.is_decoder=True``.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
         downsampling_rate (:obj:`int`, `optional`, defaults to 4):
