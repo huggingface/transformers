@@ -8,6 +8,7 @@ This branch has the following patches:
 * local self attention uses padding so it doesn't OOM on long sequences
 * tail free sampling
 * fix random samples showing up in fp16 mode
+* [support](#gpt-j-6b) for GPT-J 6B
 
 Protip: Make sure to call model.generate with `use_cache=True`.
 
@@ -98,6 +99,54 @@ class Checkpoint(collections.MutableMapping):
 model_name = "EleutherAI/gpt-neo-2.7B"
 from transformers import GPTNeoForCausalLM, AutoConfig
 config = AutoConfig.from_pretrained(model_name)
+model = GPTNeoForCausalLM.from_pretrained(pretrained_model_name_or_path=None, config=config, state_dict=Checkpoint())
+```
+
+## GPT-J 6B
+
+Use the [conversion script](https://gist.github.com/finetuneanon/b814e702b1e2e150d2e263f6a75f4650) to convert the slim checkpoint. This script generates a split up checkpoint instead of a monolithic one. You can easily change this by directly calling torch.save on the checkpoint variable at the end instead of calling save. You can load the model like this:
+
+```python
+import torch
+
+# GPT-J 6B config
+config = AutoConfig.from_pretrained("EleutherAI/gpt-neo-2.7B")
+config.attention_layers = ["global"] * 28
+config.attention_types = [["global"], 28]
+config.num_layers = 28
+config.num_heads = 16
+config.hidden_size = 256 * config.num_heads
+config.vocab_size = 50400
+config.rotary = True
+config.rotary_dim = 64
+config.jax = True
+
+try:
+    from collections.abc import MutableMapping
+except ImportError:
+    from collections import MutableMapping
+
+class Checkpoint(MutableMapping):
+    def __init__(self):
+        self.checkpoint = torch.load("j6b_ckpt/m.pt", map_location="cpu")
+    def __len__(self):
+        return len(self.checkpoint)
+    def __getitem__(self, key):
+        return torch.load(self.checkpoint[key], map_location="cpu")
+    def __setitem__(self, key, value):
+        return
+    def __delitem__(self, key, value):
+        return
+    def keys(self):
+        return self.checkpoint.keys()
+    def __iter__(self):
+        for key in self.checkpoint:
+            yield (key, self.__getitem__(key))
+    def __copy__(self):
+        return Checkpoint()
+    def copy(self):
+        return Checkpoint()
+
 model = GPTNeoForCausalLM.from_pretrained(pretrained_model_name_or_path=None, config=config, state_dict=Checkpoint())
 ```
 
