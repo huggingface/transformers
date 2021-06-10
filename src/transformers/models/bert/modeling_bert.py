@@ -179,19 +179,19 @@ class BertEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        
+
         if version.parse(torch.__version__) > version.parse("1.6.0"):
-            
+
             self.register_buffer(
                 "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
             )
-            
+
             self.register_buffer(
                 "token_type_ids",
                 torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device),
                 persistent=False,
             )
-        
+
     def forward(
         self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
     ):
@@ -208,6 +208,10 @@ class BertEmbeddings(nn.Module):
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
                 token_type_ids = self.token_type_ids[:, :seq_length]
+
+        # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
+        # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
+        # issue #5664
 
         elif token_type_ids is not None and len(torch.nonzero(token_type_ids)) < 1:
             if hasattr(self, "token_type_ids"):
