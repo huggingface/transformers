@@ -143,7 +143,7 @@ mkdir -p ${MODEL_DIR}
 ln -s ~/transformers/examples/flax/language-modeling/run_clm_flax.py run_clm_flax.py
 ```
 
-Netx, we'll follow the similar steps to train the tokenizer as given in [Train tokenizer](https://github.com/huggingface/transformers/tree/master/examples/flax/language-modeling#train-tokenizer)
+Netx, we'll follow the similar steps to train the tokenizer as given in [Train tokenizer](#train-tokenizer)
 
 ### Create configuration
 
