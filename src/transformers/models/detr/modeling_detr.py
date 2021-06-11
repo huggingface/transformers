@@ -212,8 +212,8 @@ class DetrSegmentationOutput(ModelOutput):
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
             possible padding). You can use :meth:`~transformers.DetrFeatureExtractor.post_process` to retrieve the
             unnormalized bounding boxes.
-        pred_masks (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, width, height)`):
-            Segmentation masks for all queries. See also
+        pred_masks (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, height/4, width/4)`):
+            Segmentation masks logits for all queries. See also
             :meth:`~transformers.DetrFeatureExtractor.post_process_segmentation` or
             :meth:`~transformers.DetrFeatureExtractor.post_process_panoptic` to evaluate instance and panoptic
             segmentation masks respectively.
@@ -1508,10 +1508,10 @@ class DetrForSegmentation(DetrPreTrainedModel):
     ):
         r"""
         labels (:obj:`List[Dict]` of len :obj:`(batch_size,)`, `optional`):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 3 keys: 'class_labels', 'boxes' and 'masks' (the class labels, bounding boxes and segmentation
-            masks of an image in the batch respectively). The class labels themselves should be a
-            :obj:`torch.LongTensor` of len :obj:`(number of bounding boxes in the image,)`, the boxes a
+            Labels for computing the bipartite matching loss, DICE/F-1 loss and Focal loss. List of dicts, each
+            dictionary containing at least the following 3 keys: 'class_labels', 'boxes' and 'masks' (the class labels,
+            bounding boxes and segmentation masks of an image in the batch respectively). The class labels themselves
+            should be a :obj:`torch.LongTensor` of len :obj:`(number of bounding boxes in the image,)`, the boxes a
             :obj:`torch.FloatTensor` of shape :obj:`(number of bounding boxes in the image, 4)` and the masks a
             :obj:`torch.FloatTensor` of shape :obj:`(number of bounding boxes in the image, height, width)`.
 
