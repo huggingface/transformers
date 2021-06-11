@@ -19,12 +19,12 @@ import math
 import os
 from dataclasses import dataclass
 from typing import Optional, Tuple
-from packaging import version
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
+from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
