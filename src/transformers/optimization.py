@@ -629,7 +629,7 @@ class AdafactorSchedule(LambdaLR):
 
 def get_adafactor_schedule(optimizer, initial_lr=0.0):
     """
-    Get a proxy scheduler for :class:`~transformers.optimization.Adafactor`
+    Get a proxy schedule for :class:`~transformers.optimization.Adafactor`
 
     Args:
         optimizer (:class:`~torch.optim.Optimizer`):
