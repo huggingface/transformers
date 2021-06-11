@@ -14,7 +14,6 @@
 
 import sys
 import time
-import wandb
 import warnings
 from tqdm import tqdm
 import logging
@@ -54,6 +53,7 @@ if __name__ == "__main__":
 
     # W&B
     if config.wandb:
+	import wandb
         wandb.init(project="torch-bert")
         wandb.config.update(vars(config))
 
