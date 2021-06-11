@@ -20,6 +20,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
+from packaging import version
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
@@ -46,7 +47,6 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
-from packaging import version
 from .configuration_roberta import RobertaConfig
 
 
