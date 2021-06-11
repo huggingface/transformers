@@ -29,7 +29,6 @@ from huggingface_hub import HfApi
 from requests.exceptions import HTTPError
 from transformers import AutoTokenizer, IntervalStrategy, PretrainedConfig, TrainingArguments, is_torch_available
 from transformers.file_utils import WEIGHTS_NAME
-from transformers.optimization import Adafactor, AdafactorSchedule
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
     PASS,
@@ -590,8 +589,12 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertFalse(torch.allclose(trainer.model.b, b))
         self.assertEqual(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 1.0)
 
+    @require_torch
     def test_adafactor_lr_none(self):
         # test the special case where lr=None, since Trainer can't not have lr_scheduler
+
+        from transformers.optimization import Adafactor, AdafactorSchedule
+
         train_dataset = RegressionDataset()
         args = TrainingArguments("./regression")
         model = RegressionModel()
