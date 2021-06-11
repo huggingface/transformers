@@ -304,6 +304,15 @@ def infer_metric_tags_from_eval_results(eval_results):
     return result
 
 
+def is_hf_dataset(dataset):
+    if not is_datasets_available():
+        return False
+
+    from datasets import Dataset
+
+    return isinstance(dataset, Dataset)
+
+
 @dataclass
 class TrainingSummary:
     model_name: str
@@ -463,6 +472,20 @@ class TrainingSummary:
         dataset=None,
         dataset_args=None,
     ):
+        # Infer default from dataset
+        one_dataset = trainer.train_dataset if trainer.train_dataset is not None else trainer.eval_dataset
+        if dataset_tags is None and is_hf_dataset(one_dataset):
+            default_tag = one_dataset.builder_name
+            # Those are not real datasets from the Hub so we exclude them.
+            if default_tag not in ["csv", "json", "text"]:
+                dataset_tags = [default_tag]
+
+        if dataset_args is None and is_hf_dataset(one_dataset):
+            dataset_args = [one_dataset.config_name]
+
+        if dataset is None and dataset_tags is not None:
+            dataset = dataset_tags
+
         # TODO (Sylvain) Add a default for `pipeline-tag` inferred from the model.
         if model_name is None:
             model_name = Path(trainer.args.output_dir).name
