@@ -79,7 +79,7 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
     def test_torch_fill_mask_with_targets(self):
         valid_inputs = ["My name is <mask>"]
         # ' Sam' will yield a warning but work
-        valid_targets = [["ĠTeven", "ĠPatrick", "ĠClara"], ["ĠSam"], [" Sam"]]
+        valid_targets = [[" Teven", "ĠPatrick", "ĠClara"], ["ĠSam"], [" Sam"]]
         invalid_targets = [[], [""], ""]
         for model_name in self.small_models:
             unmasker = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt")
@@ -94,7 +94,7 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
     def test_torch_fill_mask_with_targets_and_topk(self):
         model_name = self.small_models[0]
         unmasker = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt")
-        targets = ["ĠTeven", "ĠPatrick", "ĠClara"]
+        targets = [" Teven", "ĠPatrick", "ĠClara"]
         top_k = 2
         outputs = unmasker("My name is <mask>", targets=targets, top_k=top_k)
 
@@ -105,7 +105,7 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
         model_name = self.small_models[0]
         unmasker = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt")
         # String duplicates + id duplicates
-        targets = ["ĠTeven", "ĠPatrick", "ĠClara", "ĠClara", " Clara"]
+        targets = [" Teven", "ĠPatrick", "ĠClara", "ĠClara", " Clara"]
         top_k = 10
         outputs = unmasker("My name is <mask>", targets=targets, top_k=top_k)
 
@@ -117,7 +117,7 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
     def test_tf_fill_mask_with_targets(self):
         valid_inputs = ["My name is <mask>"]
         # ' Sam' will yield a warning but work
-        valid_targets = [["ĠTeven", "ĠPatrick", "ĠClara"], ["ĠSam"], [" Sam"]]
+        valid_targets = [[" Teven", "ĠPatrick", "ĠClara"], ["ĠSam"], [" Sam"]]
         invalid_targets = [[], [""], ""]
         for model_name in self.small_models:
             unmasker = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="tf")
