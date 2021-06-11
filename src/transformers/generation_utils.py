@@ -1564,7 +1564,7 @@ class GenerationMixin:
                     )
 
             # sample
-            probs = F.softmax(next_token_scores, dim=-1)
+            probs = F.softmax(next_token_scores.float(), dim=-1)
             next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
 
             # finished sentences should have their next token be a padding token
@@ -2128,7 +2128,7 @@ class GenerationMixin:
             vocab_size = next_token_scores.shape[-1]
             next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
 
-            probs = F.softmax(next_token_scores, dim=-1)
+            probs = F.softmax(next_token_scores.float(), dim=-1)
 
             next_tokens = torch.multinomial(probs, num_samples=2 * num_beams)
             next_token_scores = torch.gather(next_token_scores, -1, next_tokens)
