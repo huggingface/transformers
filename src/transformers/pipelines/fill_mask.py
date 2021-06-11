@@ -123,26 +123,29 @@ class FillMaskPipeline(Pipeline):
         batch_size = outputs.shape[0] if self.framework == "tf" else outputs.size(0)
 
         if targets is not None:
-            if len(targets) == 0:
-                raise ValueError("At least one target must be provided when passed.")
             if isinstance(targets, str):
                 targets = [targets]
 
             vocab = self.tokenizer.vocab
             target_ids = []
             for target in targets:
-                if not target:
-                    continue
                 id_ = vocab.get(target, None)
                 if id_ is None:
-                    id_ = self.tokenizer(
+                    input_ids = self.tokenizer(
                         target,
                         add_special_tokens=False,
                         return_attention_mask=False,
                         return_token_type_ids=False,
                         max_length=1,
                         truncation=True,
-                    )["input_ids"][0]
+                    )["input_ids"]
+                    if len(input_ids) == 0:
+                        logger.warning(
+                            f"The specified target token `{target}` does not exist in the model vocabulary. "
+                            f"We cannot replace it with anything meaningful, irngoring it"
+                        )
+                        continue
+                    id_ = input_ids[0]
                     # XXX: If users encounter this pass
                     # it becomes pretty slow, so let's make sure
                     # The warning enables them to fix the input to
@@ -152,7 +155,10 @@ class FillMaskPipeline(Pipeline):
                         f"Replacing with `{self.tokenizer.convert_ids_to_tokens(id_)}`."
                     )
                 target_ids.append(id_)
-            target_ids = np.array(list(set(target_ids)))
+            target_ids = list(set(target_ids))
+            if len(target_ids) == 0:
+                raise ValueError("At least one target must be provided when passed.")
+            target_ids = np.array(target_ids)
             # Cap top_k if there are targets
             if top_k > target_ids.shape[0]:
                 top_k = target_ids.shape[0]
