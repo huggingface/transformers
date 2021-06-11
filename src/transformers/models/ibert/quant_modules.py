@@ -19,8 +19,7 @@ import decimal
 
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from torch import nn
 from torch.autograd import Function
 
 from ...utils import logging
@@ -31,8 +30,7 @@ logger = logging.get_logger(__name__)
 
 class QuantEmbedding(nn.Module):
     """
-    Quantized version of :obj:`torch.nn.Embedding`. Adds quantization-specific arguments on top of
-    :obj:`torch.nn.Embedding`.
+    Quantized version of :obj:`nn.Embedding`. Adds quantization-specific arguments on top of :obj:`nn.Embedding`.
 
     Args:
         weight_bit (:obj:`int`, `optional`, defaults to :obj:`8`):
@@ -79,7 +77,7 @@ class QuantEmbedding(nn.Module):
     def forward(self, x, positions=None, incremental_state=None):
         if not self.quant_mode:
             return (
-                F.embedding(
+                nn.functional.embedding(
                     x,
                     self.weight,
                     self.padding_idx,
@@ -101,7 +99,7 @@ class QuantEmbedding(nn.Module):
             self.weight, self.weight_bit, self.percentile_mode, self.weight_scaling_factor
         )
 
-        emb_int = F.embedding(
+        emb_int = nn.functional.embedding(
             x,
             self.weight_integer,
             self.padding_idx,
@@ -222,7 +220,7 @@ class QuantAct(nn.Module):
 
 class QuantLinear(nn.Module):
     """
-    Quantized version of :obj:`torch.nn.Linear`. Adds quantization-specific arguments on top of :obj:`torch.nn.Linear`.
+    Quantized version of :obj:`nn.Linear`. Adds quantization-specific arguments on top of :obj:`nn.Linear`.
 
     Args:
         weight_bit (:obj:`int`, `optional`, defaults to :obj:`8`):
@@ -264,7 +262,7 @@ class QuantLinear(nn.Module):
 
     def forward(self, x, prev_act_scaling_factor=None):
         if not self.quant_mode:
-            return F.linear(x, weight=self.weight, bias=self.bias), None
+            return nn.functional.linear(x, weight=self.weight, bias=self.bias), None
 
         # assert that prev_act_scaling_factor is a scalar tensor
         assert prev_act_scaling_factor is not None and prev_act_scaling_factor.shape == (1,), (
@@ -295,14 +293,14 @@ class QuantLinear(nn.Module):
         x_int = x / prev_act_scaling_factor
 
         return (
-            F.linear(x_int, weight=self.weight_integer, bias=self.bias_integer) * bias_scaling_factor,
+            nn.functional.linear(x_int, weight=self.weight_integer, bias=self.bias_integer) * bias_scaling_factor,
             bias_scaling_factor,
         )
 
 
 class IntGELU(nn.Module):
     """
-    Quantized version of :obj:`torch.nn.GELU`. Adds quantization-specific arguments on top of :obj:`torch.nn.GELU`.
+    Quantized version of :obj:`nn.GELU`. Adds quantization-specific arguments on top of :obj:`nn.GELU`.
 
     Args:
         quant_mode (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -359,8 +357,7 @@ class IntGELU(nn.Module):
 
 class IntSoftmax(nn.Module):
     """
-    Quantized version of :obj:`torch.nn.Softmax`. Adds quantization-specific arguments on top of
-    :obj:`torch.nn.Softmax`.
+    Quantized version of :obj:`nn.Softmax`. Adds quantization-specific arguments on top of :obj:`nn.Softmax`.
 
     Args:
         output_bit (:obj:`int`):
@@ -431,8 +428,7 @@ class IntSoftmax(nn.Module):
 
 class IntLayerNorm(nn.Module):
     """
-    Quantized version of :obj:`torch.nn.LayerNorm`. Adds quantization-specific arguments on top of
-    :obj:`torch.nn.LayerNorm`.
+    Quantized version of :obj:`nn.LayerNorm`. Adds quantization-specific arguments on top of :obj:`nn.LayerNorm`.
 
     Args:
         output_bit (:obj:`int`, `optional`, defaults to :obj:`8`):

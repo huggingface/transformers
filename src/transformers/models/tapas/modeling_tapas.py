@@ -22,8 +22,8 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
-import torch.nn as nn
 import torch.utils.checkpoint
+from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
@@ -720,9 +720,9 @@ TAPAS_START_DOCSTRING = r"""
     methods the library implements for all its models (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.
+    This model is also a PyTorch `nn.Module <https://pytorch.org/docs/stable/nn.html#nn.Module>`__ subclass. Use it as
+    a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config (:class:`~transformers.TapasConfig`): Model configuration class with all the parameters of the model.
@@ -2031,7 +2031,7 @@ def _calculate_aggregate_mask(answer, pooled_output, cell_selection_preference, 
         cell_selection_preference (:obj:`float`):
             Preference for cell selection in ambiguous cases.
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Labels per token. aggregation_classifier (:obj:`torch.nn.Linear`): Aggregation head
+            Labels per token. aggregation_classifier (:obj:`nn.Linear`): Aggregation head
 
     Returns:
         aggregate_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,)`): A mask set to 1 for examples that
@@ -2096,10 +2096,8 @@ def _calculate_aggregation_loss_known(
         # Use aggregation supervision as the target.
         target_aggregation = aggregation_labels
 
-    one_hot_labels = torch.nn.functional.one_hot(target_aggregation, num_classes=num_aggregation_labels).type(
-        torch.float32
-    )
-    log_probs = torch.nn.functional.log_softmax(logits_aggregation, dim=-1)
+    one_hot_labels = nn.functional.one_hot(target_aggregation, num_classes=num_aggregation_labels).type(torch.float32)
+    log_probs = nn.functional.log_softmax(logits_aggregation, dim=-1)
 
     # torch.FloatTensor[batch_size]
     per_example_aggregation_intermediate = -torch.sum(one_hot_labels * log_probs, dim=-1)
@@ -2243,7 +2241,7 @@ def _calculate_expected_result(
         aggregation_op_only_probs = gumbel_dist.sample()
     else:
         # <float32>[batch_size, num_aggregation_labels - 1]
-        aggregation_op_only_probs = torch.nn.functional.softmax(
+        aggregation_op_only_probs = nn.functional.softmax(
             logits_aggregation[:, 1:] / config.aggregation_temperature, dim=-1
         )
 

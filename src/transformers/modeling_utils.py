@@ -25,7 +25,6 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import torch
 from torch import Tensor, device, dtype, nn
 from torch.nn import CrossEntropyLoss
-from torch.nn import functional as F
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
@@ -143,7 +142,7 @@ def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtil
 
 class ModuleUtilsMixin:
     """
-    A few utilities for :obj:`torch.nn.Modules`, to be used as a mixin.
+    A few utilities for :obj:`nn.Modules`, to be used as a mixin.
     """
 
     @staticmethod
@@ -355,9 +354,7 @@ class ModuleUtilsMixin:
         """
 
         def parameter_filter(x):
-            return (x.requires_grad or not only_trainable) and not (
-                isinstance(x, torch.nn.Embedding) and exclude_embeddings
-            )
+            return (x.requires_grad or not only_trainable) and not (isinstance(x, nn.Embedding) and exclude_embeddings)
 
         params = filter(parameter_filter, self.parameters()) if only_trainable else self.parameters()
         return sum(p.numel() for p in params)
@@ -471,7 +468,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @property
     def base_model(self) -> nn.Module:
         """
-        :obj:`torch.nn.Module`: The main body of the model.
+        :obj:`nn.Module`: The main body of the model.
         """
         return getattr(self, self.base_model_prefix, self)
 
@@ -549,7 +546,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         ):
             assert isinstance(decoder_pointer, nn.Module) and isinstance(
                 encoder_pointer, nn.Module
-            ), f"{decoder_pointer} and {encoder_pointer} have to be of type torch.nn.Module"
+            ), f"{decoder_pointer} and {encoder_pointer} have to be of type nn.Module"
             if hasattr(decoder_pointer, "weight"):
                 assert hasattr(encoder_pointer, "weight")
                 encoder_pointer.weight = decoder_pointer.weight
@@ -613,7 +610,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             output_embeddings.weight = input_embeddings.weight
 
         if getattr(output_embeddings, "bias", None) is not None:
-            output_embeddings.bias.data = torch.nn.functional.pad(
+            output_embeddings.bias.data = nn.functional.pad(
                 output_embeddings.bias.data,
                 (
                     0,
@@ -625,7 +622,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
             output_embeddings.out_features = input_embeddings.num_embeddings
 
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> torch.nn.Embedding:
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
         """
         Resizes input token embeddings matrix of the model if :obj:`new_num_tokens != config.vocab_size`.
 
@@ -635,11 +632,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             new_num_tokens (:obj:`int`, `optional`):
                 The number of new tokens in the embedding matrix. Increasing the size will add newly initialized
                 vectors at the end. Reducing the size will remove vectors from the end. If not provided or :obj:`None`,
-                just returns a pointer to the input tokens :obj:`torch.nn.Embedding` module of the model without doing
+                just returns a pointer to the input tokens :obj:`nn.Embedding` module of the model without doing
                 anything.
 
         Return:
-            :obj:`torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
+            :obj:`nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
         """
         model_embeds = self._resize_token_embeddings(new_num_tokens)
         if new_num_tokens is None:
@@ -668,24 +665,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return self.get_input_embeddings()
 
     def _get_resized_embeddings(
-        self, old_embeddings: torch.nn.Embedding, new_num_tokens: Optional[int] = None
-    ) -> torch.nn.Embedding:
+        self, old_embeddings: nn.Embedding, new_num_tokens: Optional[int] = None
+    ) -> nn.Embedding:
         """
         Build a resized Embedding Module from a provided token Embedding Module. Increasing the size will add newly
         initialized vectors at the end. Reducing the size will remove vectors from the end
 
         Args:
-            old_embeddings (:obj:`torch.nn.Embedding`):
+            old_embeddings (:obj:`nn.Embedding`):
                 Old embeddings to be resized.
             new_num_tokens (:obj:`int`, `optional`):
                 New number of tokens in the embedding matrix.
 
                 Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
                 vectors from the end. If not provided or :obj:`None`, just returns a pointer to the input tokens
-                :obj:`torch.nn.Embedding`` module of the model without doing anything.
+                :obj:`nn.Embedding`` module of the model without doing anything.
 
         Return:
-            :obj:`torch.nn.Embedding`: Pointer to the resized Embedding Module or the old Embedding Module if
+            :obj:`nn.Embedding`: Pointer to the resized Embedding Module or the old Embedding Module if
             :obj:`new_num_tokens` is :obj:`None`
         """
         if new_num_tokens is None:
@@ -732,28 +729,28 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return new_embeddings
 
     def _get_resized_lm_head(
-        self, old_lm_head: torch.nn.Linear, new_num_tokens: Optional[int] = None, transposed: Optional[bool] = False
-    ) -> torch.nn.Linear:
+        self, old_lm_head: nn.Linear, new_num_tokens: Optional[int] = None, transposed: Optional[bool] = False
+    ) -> nn.Linear:
         """
         Build a resized Linear Module from a provided old Linear Module. Increasing the size will add newly initialized
         vectors at the end. Reducing the size will remove vectors from the end
 
         Args:
-            old_lm_head (:obj:`torch.nn.Linear`):
+            old_lm_head (:obj:`nn.Linear`):
                 Old lm head liner layer to be resized.
             new_num_tokens (:obj:`int`, `optional`):
                 New number of tokens in the linear matrix.
 
                 Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
                 vectors from the end. If not provided or :obj:`None`, just returns a pointer to the input tokens
-                :obj:`torch.nn.Linear`` module of the model without doing anything.
+                :obj:`nn.Linear`` module of the model without doing anything.
             transposed (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether ``old_lm_head`` is transposed or not. If True ``old_lm_head.size()`` is ``lm_head_dim,
                 vocab_size`` else ``vocab_size, lm_head_dim``.
 
         Return:
-            :obj:`torch.nn.Linear`: Pointer to the resized Linear Module or the old Linear Module if
-            :obj:`new_num_tokens` is :obj:`None`
+            :obj:`nn.Linear`: Pointer to the resized Linear Module or the old Linear Module if :obj:`new_num_tokens` is
+            :obj:`None`
         """
         if new_num_tokens is None:
             return old_lm_head
@@ -1358,7 +1355,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     def retrieve_modules_from_names(self, names, add_prefix=False, remove_prefix=False):
         module_keys = set([".".join(key.split(".")[:-1]) for key in names])
 
-        # torch.nn.ParameterList is a special case where two parameter keywords
+        # nn.ParameterList is a special case where two parameter keywords
         # are appended to the module name, *e.g.* bert.special_embeddings.0
         module_keys = module_keys.union(set([".".join(key.split(".")[:-2]) for key in names if key[-1].isdigit()]))
 
@@ -1681,7 +1678,7 @@ class SQuADHead(nn.Module):
         else:
             # during inference, compute the end logits based on beam search
             bsz, slen, hsz = hidden_states.size()
-            start_log_probs = F.softmax(start_logits, dim=-1)  # shape (bsz, slen)
+            start_log_probs = nn.functional.softmax(start_logits, dim=-1)  # shape (bsz, slen)
 
             start_top_log_probs, start_top_index = torch.topk(
                 start_log_probs, self.start_n_top, dim=-1
@@ -1695,7 +1692,7 @@ class SQuADHead(nn.Module):
             )  # shape (bsz, slen, start_n_top, hsz)
             p_mask = p_mask.unsqueeze(-1) if p_mask is not None else None
             end_logits = self.end_logits(hidden_states_expanded, start_states=start_states, p_mask=p_mask)
-            end_log_probs = F.softmax(end_logits, dim=1)  # shape (bsz, slen, start_n_top)
+            end_log_probs = nn.functional.softmax(end_logits, dim=1)  # shape (bsz, slen, start_n_top)
 
             end_top_log_probs, end_top_index = torch.topk(
                 end_log_probs, self.end_n_top, dim=1
@@ -1820,12 +1817,12 @@ class SequenceSummary(nn.Module):
         return output
 
 
-def unwrap_model(model: torch.nn.Module) -> torch.nn.Module:
+def unwrap_model(model: nn.Module) -> nn.Module:
     """
     Recursively unwraps a model from potential containers (as used in distributed training).
 
     Args:
-        model (:obj:`torch.nn.Module`): The model to unwrap.
+        model (:obj:`nn.Module`): The model to unwrap.
     """
     # since there could be multiple levels of wrapping, unwrap recursively
     if hasattr(model, "module"):
@@ -1834,19 +1831,19 @@ def unwrap_model(model: torch.nn.Module) -> torch.nn.Module:
         return model
 
 
-def prune_linear_layer(layer: torch.nn.Linear, index: torch.LongTensor, dim: int = 0) -> torch.nn.Linear:
+def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) -> nn.Linear:
     """
     Prune a linear layer to keep only entries in index.
 
     Used to remove heads.
 
     Args:
-        layer (:obj:`torch.nn.Linear`): The layer to prune.
+        layer (:obj:`nn.Linear`): The layer to prune.
         index (:obj:`torch.LongTensor`): The indices to keep in the layer.
         dim (:obj:`int`, `optional`, defaults to 0): The dimension on which to keep the indices.
 
     Returns:
-        :obj:`torch.nn.Linear`: The pruned layer as a new layer with :obj:`requires_grad=True`.
+        :obj:`nn.Linear`: The pruned layer as a new layer with :obj:`requires_grad=True`.
     """
     index = index.to(layer.weight.device)
     W = layer.weight.index_select(dim, index).clone().detach()
@@ -1902,20 +1899,20 @@ def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, dim: int = 1) -> 
 
 
 def prune_layer(
-    layer: Union[torch.nn.Linear, Conv1D], index: torch.LongTensor, dim: Optional[int] = None
-) -> Union[torch.nn.Linear, Conv1D]:
+    layer: Union[nn.Linear, Conv1D], index: torch.LongTensor, dim: Optional[int] = None
+) -> Union[nn.Linear, Conv1D]:
     """
     Prune a Conv1D or linear layer to keep only entries in index.
 
     Used to remove heads.
 
     Args:
-        layer (:obj:`Union[torch.nn.Linear, Conv1D]`): The layer to prune.
+        layer (:obj:`Union[nn.Linear, Conv1D]`): The layer to prune.
         index (:obj:`torch.LongTensor`): The indices to keep in the layer.
         dim (:obj:`int`, `optional`): The dimension on which to keep the indices.
 
     Returns:
-        :obj:`torch.nn.Linear` or :class:`~transformers.modeling_utils.Conv1D`: The pruned layer as a new layer with
+        :obj:`nn.Linear` or :class:`~transformers.modeling_utils.Conv1D`: The pruned layer as a new layer with
         :obj:`requires_grad=True`.
     """
     if isinstance(layer, nn.Linear):

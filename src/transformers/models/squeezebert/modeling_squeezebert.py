@@ -92,7 +92,7 @@ class SqueezeBertEmbeddings(nn.Module):
         return embeddings
 
 
-class MatMulWrapper(torch.nn.Module):
+class MatMulWrapper(nn.Module):
     """
     Wrapper for torch.matmul(). This makes flop-counting easier to implement. Note that if you directly call
     torch.matmul() in your code, the flop counter will typically ignore the flops of the matmul.
@@ -457,9 +457,9 @@ SQUEEZEBERT_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.
+    This model is also a PyTorch `nn.Module <https://pytorch.org/docs/stable/nn.html#nn.Module>`__ subclass. Use it as
+    a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     For best results finetuning SqueezeBERT on text classification tasks, it is recommended to use the
     `squeezebert/squeezebert-mnli-headless` checkpoint as a starting point.

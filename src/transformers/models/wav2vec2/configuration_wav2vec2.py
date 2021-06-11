@@ -127,12 +127,12 @@ class Wav2Vec2Config(PretrainedConfig):
         diversity_loss_weight (:obj:`int`, `optional`, defaults to 0.1):
             The weight of the codebook diversity loss component.
         ctc_loss_reduction (:obj:`str`, `optional`, defaults to :obj:`"sum"`):
-            Specifies the reduction to apply to the output of ``torch.nn.CTCLoss``. Only relevant when training an
-            instance of :class:`~transformers.Wav2Vec2ForCTC`.
+            Specifies the reduction to apply to the output of ``nn.CTCLoss``. Only relevant when training an instance
+            of :class:`~transformers.Wav2Vec2ForCTC`.
         ctc_zero_infinity (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to zero infinite losses and the associated gradients of ``torch.nn.CTCLoss``. Infinite losses
-            mainly occur when the inputs are too short to be aligned to the targets. Only relevant when training an
-            instance of :class:`~transformers.Wav2Vec2ForCTC`.
+            Whether to zero infinite losses and the associated gradients of ``nn.CTCLoss``. Infinite losses mainly
+            occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
+            of :class:`~transformers.Wav2Vec2ForCTC`.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
 

@@ -21,8 +21,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...file_utils import (
@@ -344,7 +343,7 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
                     attn_score = attn_score.float().masked_fill(attn_mask[:, :, :, None], -1e30).type_as(attn_score)
 
         # [qlen x klen x bsz x n_head]
-        attn_prob = F.softmax(attn_score, dim=1)
+        attn_prob = nn.functional.softmax(attn_score, dim=1)
         attn_prob = self.dropatt(attn_prob)
 
         # Mask heads if we want to
@@ -434,7 +433,7 @@ class AdaptiveEmbedding(nn.Module):
         if self.div_val == 1:
             embed = self.emb_layers[0](inp)
             if self.d_proj != self.d_embed:
-                embed = F.linear(embed, self.emb_projs[0])
+                embed = nn.functional.linear(embed, self.emb_projs[0])
         else:
             param = next(self.parameters())
             inp_flat = inp.view(-1)
@@ -450,7 +449,7 @@ class AdaptiveEmbedding(nn.Module):
 
                 inp_i = inp_flat.index_select(0, indices_i) - l_idx
                 emb_i = self.emb_layers[i](inp_i)
-                emb_i = F.linear(emb_i, self.emb_projs[i])
+                emb_i = nn.functional.linear(emb_i, self.emb_projs[i])
 
                 emb_flat.index_copy_(0, indices_i, emb_i)
 
@@ -531,13 +530,13 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
             new_num_tokens: (`optional`) int:
                 New number of tokens in the embedding matrix. Increasing the size will add newly initialized vectors at
                 the end. Reducing the size will remove vectors from the end. If not provided or None: does nothing and
-                just returns a pointer to the input tokens ``torch.nn.Embeddings`` Module of the model.
+                just returns a pointer to the input tokens ``nn.Embeddings`` Module of the model.
             layer: (`optional`) int:
                 Layer of the `AdaptiveEmbedding` where the resizing should be done. Per default the last layer will be
                 resized. Be aware that when resizing other than the last layer, you have to ensure that the new
                 token(s) in the tokenizer are at the corresponding position.
 
-        Return: ``torch.nn.Embeddings`` Pointer to the input tokens Embeddings Module of the model
+        Return: ``nn.Embeddings`` Pointer to the input tokens Embeddings Module of the model
         """
         base_model = getattr(self, self.base_model_prefix, self)  # get the base model if needed
 
@@ -717,9 +716,9 @@ TRANSFO_XL_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.
+    This model is also a PyTorch `nn.Module <https://pytorch.org/docs/stable/nn.html#nn.Module>`__ subclass. Use it as
+    a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config (:class:`~transformers.TransfoXLConfig`): Model configuration class with all the parameters of the model.

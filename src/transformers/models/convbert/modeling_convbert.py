@@ -383,7 +383,7 @@ class ConvBertSelfAttention(nn.Module):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = torch.nn.functional.softmax(attention_scores, dim=-1)
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -676,9 +676,8 @@ class ConvBertPredictionHeadTransform(nn.Module):
 
 
 CONVBERT_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
+    This model is a PyTorch `nn.Module <https://pytorch.org/docs/stable/nn.html#nn.Module>`_ sub-class. Use it as a
+    regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and behavior.
 
     Parameters:
         config (:class:`~transformers.ConvBertConfig`): Model configuration class with all the parameters of the model.

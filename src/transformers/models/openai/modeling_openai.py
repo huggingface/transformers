@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
-import torch.nn as nn
+from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import gelu_new, silu
@@ -340,9 +340,9 @@ OPENAI_GPT_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.
+    This model is also a PyTorch `nn.Module <https://pytorch.org/docs/stable/nn.html#nn.Module>`__ subclass. Use it as
+    a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config (:class:`~transformers.OpenAIGPTConfig`): Model configuration class with all the parameters of the model.

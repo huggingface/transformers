@@ -91,8 +91,8 @@ def keras_serializable(cls):
 
     Args:
         cls (a :obj:`tf.keras.layers.Layers subclass`):
-            Typically a :obj:`TF.MainLayer` class in this project, in general must accept a :obj:`config` argument to
-            its initializer.
+            Typically a :obj:`Tnn.functional.MainLayer` class in this project, in general must accept a :obj:`config`
+            argument to its initializer.
 
     Returns:
         The same class object, with modifications for Keras deserialization.

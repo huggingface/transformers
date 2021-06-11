@@ -21,7 +21,6 @@ import os
 import warnings
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
 from torch.utils.checkpoint import checkpoint
@@ -178,8 +177,8 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
 
 ####################################################
 # PyTorch Models are constructed by sub-classing
-# - torch.nn.Module for the layers and
-# - PreTrainedModel for the models (it-self a sub-class of torch.nn.Module)
+# - nn.Module for the layers and
+# - PreTrainedModel for the models (it-self a sub-class of nn.Module)
 ####################################################
 PARALLELIZE_DOCSTRING = r"""
     This is an experimental feature and is a subject to change at a moment's notice.
@@ -257,7 +256,7 @@ class T5DenseReluDense(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = self.wi(hidden_states)
-        hidden_states = F.relu(hidden_states)
+        hidden_states = nn.functional.relu(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.wo(hidden_states)
         return hidden_states
@@ -502,10 +501,10 @@ class T5Attention(nn.Module):
                 position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
         scores += position_bias
-        attn_weights = F.softmax(scores.float(), dim=-1).type_as(
+        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
             scores
         )  # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = F.dropout(
+        attn_weights = nn.functional.dropout(
             attn_weights, p=self.dropout, training=self.training
         )  # (batch_size, n_heads, seq_length, key_length)
 
@@ -1075,9 +1074,9 @@ T5_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.
+    This model is also a PyTorch `nn.Module <https://pytorch.org/docs/stable/nn.html#nn.Module>`__ subclass. Use it as
+    a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config (:class:`~transformers.T5Config`): Model configuration class with all the parameters of the model.

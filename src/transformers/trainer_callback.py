@@ -167,7 +167,7 @@ class TrainerCallback:
             The current state of the :class:`~transformers.Trainer`.
         control (:class:`~transformers.TrainerControl`):
             The object that is returned to the :class:`~transformers.Trainer` and can be used to make some decisions.
-        model (:class:`~transformers.PreTrainedModel` or :obj:`torch.nn.Module`):
+        model (:class:`~transformers.PreTrainedModel` or :obj:`nn.Module`):
             The model being trained.
         tokenizer (:class:`~transformers.PreTrainedTokenizer`):
             The tokenizer used for encoding the data.

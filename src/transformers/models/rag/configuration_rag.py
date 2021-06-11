@@ -61,7 +61,7 @@ RAG_CONFIG_DOC = r"""
             smoothing in the loss calculation. If set to 0, no label smoothing is performed.
         do_marginalize (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If :obj:`True`, the logits are marginalized over all documents by making use of
-            ``torch.nn.functional.log_softmax``.
+            ``nn.functional.log_softmax``.
         reduce_loss (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to reduce the NLL loss using the ``torch.Tensor.sum`` operation.
         do_deduplication (:obj:`bool`, `optional`, defaults to :obj:`True`):

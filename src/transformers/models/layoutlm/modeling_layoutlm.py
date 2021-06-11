@@ -52,7 +52,7 @@ LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-LayoutLMLayerNorm = torch.nn.LayerNorm
+LayoutLMLayerNorm = nn.LayerNorm
 
 
 class LayoutLMEmbeddings(nn.Module):
@@ -631,9 +631,8 @@ LAYOUTLM_START_DOCSTRING = r"""
     The LayoutLM model was proposed in `LayoutLM: Pre-training of Text and Layout for Document Image Understanding
     <https://arxiv.org/abs/1912.13318>`__ by Yiheng Xu, Minghao Li, Lei Cui, Shaohan Huang, Furu Wei and Ming Zhou.
 
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
+    This model is a PyTorch `nn.Module <https://pytorch.org/docs/stable/nn.html#nn.Module>`_ sub-class. Use it as a
+    regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and behavior.
 
     Parameters:
         config (:class:`~transformers.LayoutLMConfig`): Model configuration class with all the parameters of the model.
