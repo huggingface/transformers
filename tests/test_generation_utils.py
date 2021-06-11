@@ -1078,7 +1078,7 @@ class GenerationTesterMixin:
         attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-            model = model_class(config)
+            model = model_class(config).to(torch_device)
             # We want to test only encoder-decoder models
             if not config.is_encoder_decoder:
                 continue
