@@ -431,7 +431,7 @@ class FlaxBartEncoderLayerCollection(nn.Module):
     def setup(self):
         self.layers = [
             FlaxBartEncoderLayer(self.config, name=str(i), dtype=self.dtype)
-            for i in range(self.config.num_hidden_layers)
+            for i in range(self.config.encoder_layers)
         ]
         self.layerdrop = self.config.encoder_layerdrop
 
@@ -589,7 +589,7 @@ class FlaxBartDecoderLayerCollection(nn.Module):
     def setup(self):
         self.layers = [
             FlaxBartDecoderLayer(self.config, name=str(i), dtype=self.dtype)
-            for i in range(self.config.num_hidden_layers)
+            for i in range(self.config.decoder_layers)
         ]
         self.layerdrop = self.config.encoder_layerdrop
 
