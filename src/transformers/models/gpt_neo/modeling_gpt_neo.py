@@ -1,5 +1,6 @@
 # coding=utf-8
 # Copyright 2021 The Eleuther AI and HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 NovelAI/finetune
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -136,6 +137,7 @@ def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
     model.set_output_embeddings(lin)
     return model
 
+# based on https://github.com/kingoflolz/mesh-transformer-jax
 def fixed_pos_embedding(x, seq_dim=1, seq_len=None):
     dim = x.shape[-1]
     if seq_len is None:
