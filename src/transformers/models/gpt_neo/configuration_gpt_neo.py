@@ -119,7 +119,7 @@ class GPTNeoConfig(PretrainedConfig):
         eos_token_id=50256,
         rotary=False,
         rotary_dim=None,
-        gptj=False,
+        jax=False,
         **kwargs
     ):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
