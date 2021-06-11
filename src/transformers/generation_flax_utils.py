@@ -334,7 +334,7 @@ class FlaxGenerationMixin:
             next_token = next_token[:, None]
 
             next_sequences = lax.dynamic_update_slice(state.sequences, next_token, (0, state.cur_len))
-            next_model_kwargs = self.update_inputs_for_generation(model_outputs, model_kwargs)
+            next_model_kwargs = self.update_inputs_for_generation(model_outputs, state.model_kwargs)
 
             return GreedyState(
                 cur_len=state.cur_len + 1,
