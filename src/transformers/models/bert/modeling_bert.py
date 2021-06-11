@@ -209,7 +209,7 @@ class BertEmbeddings(nn.Module):
                 self.token_type_ids = self.token_type_ids.expand(input_shape[0], seq_length)
                 token_type_ids = self.token_type_ids
             else:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
