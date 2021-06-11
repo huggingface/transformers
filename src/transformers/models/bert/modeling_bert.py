@@ -197,7 +197,8 @@ class BertEmbeddings(nn.Module):
 
         seq_length = input_shape[1]
 
-        position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
+        if position_ids is None:
+            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
 
         # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
         # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
