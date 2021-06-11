@@ -79,8 +79,6 @@ class DetrConfig(PretrainedConfig):
         decoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
             The LayerDrop probability for the decoder. See the `LayerDrop paper <see
             https://arxiv.org/abs/1909.11556>`__ for more details.
-        normalize_before (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to apply layer normalization at the end of the encoder.
         auxiliary_loss (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
         position_embedding_type (:obj:`str`, `optional`, defaults to :obj:`"sine"`):
@@ -147,7 +145,6 @@ class DetrConfig(PretrainedConfig):
         init_xavier_std=1.0,
         classifier_dropout=0.0,
         scale_embedding=False,
-        normalize_before=False,
         auxiliary_loss=False,
         position_embedding_type="sine",
         backbone="resnet50",
@@ -184,7 +181,6 @@ class DetrConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.normalize_before = normalize_before
         self.auxiliary_loss = auxiliary_loss
         self.position_embedding_type = position_embedding_type
         self.backbone = backbone

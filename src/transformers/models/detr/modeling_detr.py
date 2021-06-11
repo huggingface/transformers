@@ -99,9 +99,7 @@ class DetrModelOutput(Seq2SeqModelOutput):
 
     Args:
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the decoder of the model. If
-            :obj:`past_key_values` is used only the last hidden-state of the sequences of shape :obj:`(batch_size, 1,
-            hidden_size)` is output.
+            Sequence of hidden-states at the output of the last layer of the decoder of the model.
         decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the decoder at the output of
@@ -149,7 +147,7 @@ class DetrObjectDetectionOutput(ModelOutput):
         pred_boxes (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use :class:`~transformers.DetrForObjectDetection.post_process` to retrieve the
+            possible padding). You can use :meth:`~transformers.DetrFeatureExtractor.post_process` to retrieve the
             unnormalized bounding boxes.
         auxiliary_outputs (:obj:`list[Dict]`, `optional`):
             Optional, only returned when auxilary losses are activated (i.e. :obj:`config.auxiliary_loss` is set to
@@ -157,9 +155,6 @@ class DetrObjectDetectionOutput(ModelOutput):
             and :obj:`pred_boxes`) for each decoder layer.
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
-
-            If :obj:`past_key_values` is used only the last hidden-state of the sequences of shape :obj:`(batch_size,
-            1, hidden_size)` is output.
         decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the decoder at the output of
@@ -215,7 +210,7 @@ class DetrSegmentationOutput(ModelOutput):
         pred_boxes (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use :meth:`~transformers.DetrForObjectDetection.post_process` to retrieve the
+            possible padding). You can use :meth:`~transformers.DetrFeatureExtractor.post_process` to retrieve the
             unnormalized bounding boxes.
         pred_masks (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, width, height)`):
             Segmentation masks for all queries. See also
@@ -228,9 +223,6 @@ class DetrSegmentationOutput(ModelOutput):
             and :obj:`pred_boxes`) for each decoder layer.
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
-
-            If :obj:`past_key_values` is used only the last hidden-state of the sequences of shape :obj:`(batch_size,
-            1, hidden_size)` is output.
         decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the decoder at the output of
@@ -896,8 +888,6 @@ class DetrEncoder(DetrPreTrainedModel):
         self.layers = nn.ModuleList([DetrEncoderLayer(config) for _ in range(config.encoder_layers)])
 
         # in the original DETR, no layernorm is used at the end of the encoder, as "normalize_before" is set to False by default
-        # however we include it as some models like UP-DETR use it
-        self.layernorm = nn.LayerNorm(config.d_model) if config.normalize_before else None
 
         self.init_weights()
 
@@ -969,18 +959,9 @@ class DetrEncoder(DetrPreTrainedModel):
 
                 hidden_states = layer_outputs[0]
 
-                print(f"Hidden states after layer {i}")
-                print(hidden_states[0,:3,:3])
-
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
-        if self.layernorm is not None:
-            hidden_states = self.layernorm(hidden_states)
-
-        print("Hidden states after final layernorm of encoder:")
-        print(hidden_states[0, :3, :3])
-        
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
@@ -1374,11 +1355,11 @@ class DetrForObjectDetection(DetrPreTrainedModel):
     ):
         r"""
         labels (:obj:`List[Dict]` of len :obj:`(batch_size,)`, `optional`):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing 2 keys:
-            'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch respectively). The
-            class labels themselves should be a :obj:`torch.LongTensor` of len :obj:`(number of bounding boxes in the
-            image,)` and the boxes a :obj:`torch.FloatTensor` of shape :obj:`(number of bounding boxes in the image,
-            4)`.
+            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
+            respectively). The class labels themselves should be a :obj:`torch.LongTensor` of len :obj:`(number of
+            bounding boxes in the image,)` and the boxes a :obj:`torch.FloatTensor` of shape :obj:`(number of bounding
+            boxes in the image, 4)`.
 
         Returns:
 
@@ -1527,12 +1508,12 @@ class DetrForSegmentation(DetrPreTrainedModel):
     ):
         r"""
         labels (:obj:`List[Dict]` of len :obj:`(batch_size,)`, `optional`):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing 3 keys:
-            'class_labels', 'boxes' and 'masks' (the class labels, bounding boxes and segmentation masks of an image in
-            the batch respectively). The class labels themselves should be a :obj:`torch.LongTensor` of len
-            :obj:`(number of bounding boxes in the image,)`, the boxes a :obj:`torch.FloatTensor` of shape
-            :obj:`(number of bounding boxes in the image, 4)` and the masks a :obj:`torch.FloatTensor` of shape
-            :obj:`(number of bounding boxes in the image, 4)`.
+            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+            following 3 keys: 'class_labels', 'boxes' and 'masks' (the class labels, bounding boxes and segmentation
+            masks of an image in the batch respectively). The class labels themselves should be a
+            :obj:`torch.LongTensor` of len :obj:`(number of bounding boxes in the image,)`, the boxes a
+            :obj:`torch.FloatTensor` of shape :obj:`(number of bounding boxes in the image, 4)` and the masks a
+            :obj:`torch.FloatTensor` of shape :obj:`(number of bounding boxes in the image, height, width)`.
 
         Returns:
 
