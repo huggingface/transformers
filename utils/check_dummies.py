@@ -39,8 +39,8 @@ class {0}:
         requires_backends(self, {1})
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, {1})
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, {1})
 """
 
 DUMMY_CLASS = """
@@ -103,11 +103,14 @@ def read_init():
 def create_dummy_object(name, backend_name):
     """Create the code for the dummy object corresponding to `name`."""
     _pretrained = [
-        "Config" "ForCausalLM",
+        "Config",
+        "ForCausalLM",
         "ForConditionalGeneration",
         "ForMaskedLM",
         "ForMultipleChoice",
+        "ForObjectDetection",
         "ForQuestionAnswering",
+        "ForSegmentation",
         "ForSequenceClassification",
         "ForTokenClassification",
         "Model",
