@@ -1078,7 +1078,7 @@ class GenerationTesterMixin:
         attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-            model = model_class(config)
+            model = model_class(config).to(torch_device)
             # We want to test only encoder-decoder models
             if not config.is_encoder_decoder:
                 continue
@@ -1095,16 +1095,17 @@ class GenerationTesterMixin:
 
             signature = inspect.signature(model.forward)
             # We want to test only models where encoder/decoder head masking is implemented
-            if set(head_masking.keys()) < set([*signature.parameters.keys()]):
+            if not set(head_masking.keys()) < set([*signature.parameters.keys()]):
                 continue
 
             for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
                 out = model.generate(
                     input_ids,
+                    attention_mask=attention_mask,
                     num_beams=1,
-                    max_length=max_length,
                     output_attentions=True,
                     return_dict_in_generate=True,
+                    remove_invalid_values=True,
                     **{name: mask},
                 )
                 # We check the state of decoder_attentions and cross_attentions just from the last step
@@ -1615,3 +1616,26 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # BeamSearchScorer max_length should not influence "real" max_length
         self.assertEqual(generated_ids.tolist(), generated_ids_no_max_len.tolist())
+
+    def test_max_new_tokens(self):
+        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
+        bart_tokenizer = BartTokenizer.from_pretrained("sshleifer/bart-tiny-random")
+        bart_model = BartForConditionalGeneration.from_pretrained("sshleifer/bart-tiny-random").to(torch_device)
+        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        self.assertEqual(list(input_ids.shape), [1, 15])
+
+        # Encoder decoder call
+        max_new_tokens = 3
+        outputs = bart_model.generate(input_ids, max_new_tokens=max_new_tokens)
+        # 1 BOS + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 4])
+
+        # Decoder only call
+        outputs = bart_model.generate(decoder_input_ids=input_ids, max_new_tokens=max_new_tokens)
+        # 15 + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 18])
+
+        # max_new_tokens and max_length serve the same purpose and should not be used together.
+        with self.assertWarns(UserWarning):
+            outputs = bart_model.generate(decoder_input_ids=input_ids, max_new_tokens=10, max_length=20)

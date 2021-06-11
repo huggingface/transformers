@@ -40,7 +40,7 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 
 
@@ -105,6 +105,12 @@ class DataTrainingArguments:
     test_file: Optional[str] = field(
         default=None,
         metadata={"help": "An optional input test data file to predict on (a csv or JSON file)."},
+    )
+    text_column_name: Optional[str] = field(
+        default=None, metadata={"help": "The column name of text to input in the file (a csv or JSON file)."}
+    )
+    label_column_name: Optional[str] = field(
+        default=None, metadata={"help": "The column name of label to input in the file (a csv or JSON file)."}
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
@@ -201,7 +207,7 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
-    logger.setLevel(logging.INFO if is_main_process(training_args.local_rank) else logging.WARN)
+    logger.setLevel(logging.INFO if training_args.should_log else logging.WARN)
 
     # Log on each process the small summary:
     logger.warning(
@@ -209,7 +215,7 @@ def main():
         + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
     # Set the verbosity to info of the Transformers logger (on main process only):
-    if is_main_process(training_args.local_rank):
+    if training_args.should_log:
         transformers.utils.logging.set_verbosity_info()
         transformers.utils.logging.enable_default_handler()
         transformers.utils.logging.enable_explicit_format()
@@ -249,10 +255,20 @@ def main():
     else:
         column_names = datasets["validation"].column_names
         features = datasets["validation"].features
-    text_column_name = "tokens" if "tokens" in column_names else column_names[0]
-    label_column_name = (
-        f"{data_args.task_name}_tags" if f"{data_args.task_name}_tags" in column_names else column_names[1]
-    )
+
+    if data_args.text_column_name is not None:
+        text_column_name = data_args.text_column_name
+    elif "tokens" in column_names:
+        text_column_name = "tokens"
+    else:
+        text_column_name = column_names[0]
+
+    if data_args.label_column_name is not None:
+        label_column_name = data_args.label_column_name
+    elif f"{data_args.task_name}_tags" in column_names:
+        label_column_name = f"{data_args.task_name}_tags"
+    else:
+        label_column_name = column_names[1]
 
     # In the event the labels are not a `Sequence[ClassLabel]`, we will need to go through the dataset to get the
     # unique labels.
@@ -281,6 +297,8 @@ def main():
     config = AutoConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         num_labels=num_labels,
+        label2id=label_to_id,
+        id2label={i: l for l, i in label_to_id.items()},
         finetuning_task=data_args.task_name,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,

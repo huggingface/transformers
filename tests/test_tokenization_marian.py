@@ -21,7 +21,7 @@ from shutil import copyfile
 
 from transformers import BatchEncoding, MarianTokenizer
 from transformers.file_utils import is_sentencepiece_available, is_tf_available, is_torch_available
-from transformers.testing_utils import require_sentencepiece
+from transformers.testing_utils import require_sentencepiece, slow
 
 
 if is_sentencepiece_available():
@@ -74,6 +74,25 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "This is a test",
         )
 
+    def test_convert_token_and_id(self):
+        """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
+        token = "</s>"
+        token_id = 0
+
+        self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
+        self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
+
+    def test_get_vocab(self):
+        vocab_keys = list(self.get_tokenizer().get_vocab().keys())
+
+        self.assertEqual(vocab_keys[0], "</s>")
+        self.assertEqual(vocab_keys[1], "<unk>")
+        self.assertEqual(vocab_keys[-1], "<pad>")
+        self.assertEqual(len(vocab_keys), 9)
+
+    def test_vocab_size(self):
+        self.assertEqual(self.get_tokenizer().vocab_size, 9)
+
     def test_tokenizer_equivalence_en_de(self):
         en_de_tokenizer = MarianTokenizer.from_pretrained(f"{ORG_NAME}opus-mt-en-de")
         batch = en_de_tokenizer(["I am a small frog"], return_tensors=None)
@@ -101,3 +120,16 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         batch_smaller = tok(["I am a tiny frog", "I am a small frog"], padding=True, return_tensors=FRAMEWORK)
         self.assertIsInstance(batch_smaller, BatchEncoding)
         self.assertEqual(batch_smaller.input_ids.shape, (2, 10))
+
+    @slow
+    def test_tokenizer_integration(self):
+        # fmt: off
+        expected_encoding = {'input_ids': [[43495, 462, 20, 42164, 1369, 52, 464, 132, 1703, 492, 13, 7491, 38999, 6, 8, 464, 132, 1703, 492, 13, 4669, 37867, 13, 7525, 27, 1593, 988, 13, 33972, 7029, 6, 20, 8251, 383, 2, 270, 5866, 3788, 2, 2353, 8251, 12338, 2, 13958, 387, 2, 3629, 6953, 188, 2900, 2, 13958, 8011, 11501, 23, 8460, 4073, 34009, 20, 435, 11439, 27, 8, 8460, 4073, 6004, 20, 9988, 375, 27, 33, 266, 1945, 1076, 1350, 37867, 3288, 5, 577, 1076, 4374, 8, 5082, 5, 26453, 257, 556, 403, 2, 242, 132, 383, 316, 492, 8, 10767, 6, 316, 304, 4239, 3, 0], [148, 15722, 19, 1839, 12, 1350, 13, 22327, 5082, 5418, 47567, 35938, 59, 318, 19552, 108, 2183, 54, 14976, 4835, 32, 547, 1114, 8, 315, 2417, 5, 92, 19088, 3, 0, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100], [36, 6395, 12570, 39147, 11597, 6, 266, 4, 45405, 7296, 3, 0, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100, 58100]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # noqa: E501
+        # fmt: on
+
+        self.tokenizer_integration_test_util(
+            expected_encoding=expected_encoding,
+            model_name="Helsinki-NLP/opus-mt-en-de",
+            revision="1a8c2263da11e68e50938f97e10cd57820bd504c",
+            decode_kwargs={"use_source_tokenizer": True},
+        )

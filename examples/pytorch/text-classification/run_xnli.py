@@ -40,12 +40,14 @@ from transformers import (
     default_data_collator,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
+from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.7.0.dev0")
+require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +188,7 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
-    logger.setLevel(logging.INFO if is_main_process(training_args.local_rank) else logging.WARN)
+    logger.setLevel(logging.INFO if training_args.should_log else logging.WARN)
 
     # Log on each process the small summary:
     logger.warning(
@@ -195,7 +197,7 @@ def main():
     )
 
     # Set the verbosity to info of the Transformers logger (on main process only):
-    if is_main_process(training_args.local_rank):
+    if training_args.should_log:
         transformers.utils.logging.set_verbosity_info()
         transformers.utils.logging.enable_default_handler()
         transformers.utils.logging.enable_explicit_format()
@@ -280,6 +282,7 @@ def main():
             preprocess_function,
             batched=True,
             load_from_cache_file=not data_args.overwrite_cache,
+            desc="Running tokenizer on train dataset",
         )
         # Log a few random samples from the training set:
         for index in random.sample(range(len(train_dataset)), 3):
@@ -292,6 +295,7 @@ def main():
             preprocess_function,
             batched=True,
             load_from_cache_file=not data_args.overwrite_cache,
+            desc="Running tokenizer on validation dataset",
         )
 
     if training_args.do_predict:
@@ -301,6 +305,7 @@ def main():
             preprocess_function,
             batched=True,
             load_from_cache_file=not data_args.overwrite_cache,
+            desc="Running tokenizer on prediction dataset",
         )
 
     # Get the metric function

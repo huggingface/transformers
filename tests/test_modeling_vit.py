@@ -322,7 +322,7 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    image = Image.open("./tests/fixtures/tests_samples/COCO/cats.png")
+    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
     return image
 
 
