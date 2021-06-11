@@ -486,6 +486,14 @@ class TrainingSummary:
         if dataset is None and dataset_tags is not None:
             dataset = dataset_tags
 
+        # Infer default finetuned_from
+        if (
+            finetuned_from is None
+            and hasattr(trainer.model.config, "_name_or_path")
+            and not os.path.isdir(trainer.model.config._name_or_path)
+        ):
+            finetuned_from = trainer.model.config._name_or_path
+
         # TODO (Sylvain) Add a default for `pipeline-tag` inferred from the model.
         if model_name is None:
             model_name = Path(trainer.args.output_dir).name
