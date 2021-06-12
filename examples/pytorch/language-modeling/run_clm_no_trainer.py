@@ -155,6 +155,13 @@ def parse_args():
         choices=MODEL_TYPES,
     )
     parser.add_argument(
+        "--config_overrides",
+        type=str,
+        default=None,
+        help="Override some existing default config settings when a model is trained from scratch. Example: "
+        "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index",
+    )
+    parser.add_argument(
         "--block_size",
         type=int,
         default=None,
@@ -182,6 +189,9 @@ def parse_args():
         if args.validation_file is not None:
             extension = args.validation_file.split(".")[-1]
             assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, json or txt file."
+
+    if args.config_overrides is not None and (args.config_name is not None or args.model_name_or_path is not None):
+        raise ValueError("--config_overrides can't be used in combination with --config_name or --model_name_or_path")
 
     if args.output_dir is not None:
         os.makedirs(args.output_dir, exist_ok=True)
@@ -263,6 +273,9 @@ def main():
     else:
         config = CONFIG_MAPPING[args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
+        if args.config_overrides is not None:
+            logger.info(f"Overriding config: {args.config_overrides}")
+            config.update_from_string(args.config_overrides)
 
     if args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name, use_fast=not args.use_slow_tokenizer)
