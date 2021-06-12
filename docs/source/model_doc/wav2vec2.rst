@@ -79,3 +79,10 @@ Wav2Vec2ForCTC
 
 .. autoclass:: transformers.Wav2Vec2ForCTC
     :members: forward
+
+
+Wav2Vec2ForPreTraining
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Wav2Vec2ForPreTraining
+    :members: forward

@@ -1,4 +1,4 @@
-.. 
+..
     Copyright 2020 The HuggingFace Team. All rights reserved.
 
     Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -505,8 +505,8 @@ This outputs a (hopefully) coherent next token following the original sequence, 
     >>> print(resulting_string)
     Hugging Face is based in DUMBO, New York City, and has
 
-In the next section, we show how :func:`~transformers.PreTrainedModel.generate` can be used to generate multiple tokens
-up to a specified length instead of one token at a time.
+In the next section, we show how :func:`~transformers.generation_utils.GenerationMixin.generate` can be used to
+generate multiple tokens up to a specified length instead of one token at a time.
 
 Text Generation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -629,7 +629,7 @@ It leverages a fine-tuned model on CoNLL-2003, fine-tuned by `@stefan-it <https:
 
     >>> ner_pipe = pipeline("ner")
 
-    >>> sequence = """Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO, 
+    >>> sequence = """Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO,
     ... therefore very close to the Manhattan Bridge which is visible from the window."""
 
 
