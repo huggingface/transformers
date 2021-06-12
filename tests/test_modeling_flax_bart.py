@@ -20,6 +20,7 @@ import timeout_decorator  # noqa
 from transformers import BartConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
+from .test_generation_flax_utils import FlaxGenerationTesterMixin
 from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
@@ -316,7 +317,7 @@ class BartHeadTests(unittest.TestCase):
 
 
 @require_flax
-class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase):
+class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTesterMixin):
     is_encoder_decoder = True
     all_model_classes = (
         (
@@ -328,6 +329,7 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase):
         if is_flax_available()
         else ()
     )
+    all_generative_model_classes = (FlaxBartForConditionalGeneration,) if is_flax_available() else ()
     test_head_masking = True
 
     def setUp(self):
