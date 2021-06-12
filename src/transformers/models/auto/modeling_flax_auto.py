@@ -55,7 +55,7 @@ from ..roberta.modeling_flax_roberta import (
 )
 from ..vit.modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel
 from .auto_factory import auto_class_factory
-from .configuration_auto import BertConfig, CLIPConfig, ElectraConfig, GPT2Config, RobertaConfig, ViTConfig
+from .configuration_auto import BartConfig, BertConfig, CLIPConfig, ElectraConfig, GPT2Config, RobertaConfig, ViTConfig
 
 
 logger = logging.get_logger(__name__)
