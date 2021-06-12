@@ -17,7 +17,6 @@
 import math
 import random
 from functools import partial
-from operator import mod
 from typing import Callable, Optional, Tuple
 
 import flax.linen as nn
@@ -482,7 +481,7 @@ class FlaxBartEncoderLayerCollection(nn.Module):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
             if deterministic and (dropout_probability < self.layerdrop):  # skip the layer
-                hidden_states, attn = (None, None)
+                outputs = (None, None)
 
             outputs = encoder_layer(
                 hidden_states,

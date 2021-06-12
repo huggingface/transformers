@@ -154,8 +154,8 @@ class FlaxBartForConditionalGeneration:
         requires_backends(self, ["flax"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
 
 
 class FlaxBartForQuestionAnswering:
@@ -163,8 +163,8 @@ class FlaxBartForQuestionAnswering:
         requires_backends(self, ["flax"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
 
 
 class FlaxBartForSequenceClassification:
@@ -172,8 +172,8 @@ class FlaxBartForSequenceClassification:
         requires_backends(self, ["flax"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
 
 
 class FlaxBartModel:
@@ -181,8 +181,8 @@ class FlaxBartModel:
         requires_backends(self, ["flax"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
 
 
 class FlaxBertForMaskedLM:
