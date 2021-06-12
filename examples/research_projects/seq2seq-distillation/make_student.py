@@ -118,7 +118,7 @@ def create_student_by_copying_alternating_layers(
             d = teacher_d
         init_kwargs.update({"encoder_layers": e, "decoder_layers": d})
     except AttributeError:  # T5
-        if hasattr(teacher.config, 'num_encoder_layers'):
+        if hasattr(teacher.config, "num_encoder_layers"):
             teacher_e, teacher_d = teacher.config.num_encoder_layers, teacher.config.num_decoder_layers
         else:
             teacher_e, teacher_d = teacher.config.num_layers, teacher.config.num_decoder_layers
@@ -126,7 +126,7 @@ def create_student_by_copying_alternating_layers(
             e = teacher_e
         if d is None:
             d = teacher_d
-        if hasattr(teacher.config, 'num_encoder_layers'):
+        if hasattr(teacher.config, "num_encoder_layers"):
             init_kwargs.update({"num_encoder_layers": e, "num_decoder_layers": d})
         else:
             init_kwargs.update({"num_layers": e, "num_decoder_layers": d})
@@ -156,7 +156,9 @@ def create_student_by_copying_alternating_layers(
         d_layers_to_copy: List[int] = pick_layers_to_copy(d, teacher_d)
 
     try:
-        if hasattr(teacher, 'prophetnet'): # For ProphetNet, student.model.encoder.layers is called student.prophetnet.encoder.layers
+        if hasattr(
+            teacher, "prophetnet"
+        ):  # For ProphetNet, student.model.encoder.layers is called student.prophetnet.encoder.layers
             copy_layers(teacher.prophetnet.encoder.layers, student.prophetnet.encoder.layers, e_layers_to_copy)
             copy_layers(teacher.prophetnet.decoder.layers, student.prophetnet.decoder.layers, d_layers_to_copy)
         else:
