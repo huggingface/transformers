@@ -58,8 +58,8 @@ PROPHETNET_START_DOCSTRING = r"""
     from original Fairseq checkpoints. For more information on the checkpoint conversion, please take a look at the
     file ``convert_prophetnet_original_pytorch_checkpoint_to_pytorch.py``.
 
-    This model is a PyTorch `nn.Module <https://pytorch.org/docs/stable/nn.html#nn.Module>`_ sub-class. Use it as a
-    regular PyTorch Module and refer to the PyTorch documentation for all matters related to general usage and
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matters related to general usage and
     behavior.
 
     Parameters:
@@ -1242,7 +1242,7 @@ class ProphetNetDecoderLayer(nn.Module):
 )
 class ProphetNetEncoder(ProphetNetPreTrainedModel):
     r"""
-    word_embeddings  (:obj:`nn.Embeddings` of shape :obj:`(config.vocab_size, config.hidden_size)`, `optional`):
+    word_embeddings  (:obj:`torch.nn.Embeddings` of shape :obj:`(config.vocab_size, config.hidden_size)`, `optional`):
         The word embedding parameters. This can be used to initialize :class:`~transformers.ProphetNetEncoder` with
         pre-defined word embeddings instead of randomly initialized word embeddings.
     """
@@ -1379,7 +1379,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
 )
 class ProphetNetDecoder(ProphetNetPreTrainedModel):
     r"""
-    word_embeddings  (:obj:`nn.Embeddings` of shape :obj:`(config.vocab_size, config.hidden_size)`, `optional`):
+    word_embeddings  (:obj:`torch.nn.Embeddings` of shape :obj:`(config.vocab_size, config.hidden_size)`, `optional`):
         The word embedding parameters. This can be used to initialize :class:`~transformers.ProphetNetEncoder` with
         pre-defined word embeddings instead of randomly initialized word embeddings.
     """

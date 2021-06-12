@@ -30,7 +30,8 @@ logger = logging.get_logger(__name__)
 
 class QuantEmbedding(nn.Module):
     """
-    Quantized version of :obj:`nn.Embedding`. Adds quantization-specific arguments on top of :obj:`nn.Embedding`.
+    Quantized version of :obj:`torch.nn.Embedding`. Adds quantization-specific arguments on top of
+    :obj:`torch.nn.Embedding`.
 
     Args:
         weight_bit (:obj:`int`, `optional`, defaults to :obj:`8`):
@@ -220,7 +221,7 @@ class QuantAct(nn.Module):
 
 class QuantLinear(nn.Module):
     """
-    Quantized version of :obj:`nn.Linear`. Adds quantization-specific arguments on top of :obj:`nn.Linear`.
+    Quantized version of :obj:`torch.nn.Linear`. Adds quantization-specific arguments on top of :obj:`torch.nn.Linear`.
 
     Args:
         weight_bit (:obj:`int`, `optional`, defaults to :obj:`8`):
@@ -300,7 +301,7 @@ class QuantLinear(nn.Module):
 
 class IntGELU(nn.Module):
     """
-    Quantized version of :obj:`nn.GELU`. Adds quantization-specific arguments on top of :obj:`nn.GELU`.
+    Quantized version of :obj:`torch.nn.GELU`. Adds quantization-specific arguments on top of :obj:`torch.nn.GELU`.
 
     Args:
         quant_mode (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -357,7 +358,8 @@ class IntGELU(nn.Module):
 
 class IntSoftmax(nn.Module):
     """
-    Quantized version of :obj:`nn.Softmax`. Adds quantization-specific arguments on top of :obj:`nn.Softmax`.
+    Quantized version of :obj:`torch.nn.Softmax`. Adds quantization-specific arguments on top of
+    :obj:`torch.nn.Softmax`.
 
     Args:
         output_bit (:obj:`int`):
@@ -428,7 +430,8 @@ class IntSoftmax(nn.Module):
 
 class IntLayerNorm(nn.Module):
     """
-    Quantized version of :obj:`nn.LayerNorm`. Adds quantization-specific arguments on top of :obj:`nn.LayerNorm`.
+    Quantized version of :obj:`torch.nn.LayerNorm`. Adds quantization-specific arguments on top of
+    :obj:`torch.nn.LayerNorm`.
 
     Args:
         output_bit (:obj:`int`, `optional`, defaults to :obj:`8`):

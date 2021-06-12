@@ -530,13 +530,13 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
             new_num_tokens: (`optional`) int:
                 New number of tokens in the embedding matrix. Increasing the size will add newly initialized vectors at
                 the end. Reducing the size will remove vectors from the end. If not provided or None: does nothing and
-                just returns a pointer to the input tokens ``nn.Embeddings`` Module of the model.
+                just returns a pointer to the input tokens ``torch.nn.Embeddings`` Module of the model.
             layer: (`optional`) int:
                 Layer of the `AdaptiveEmbedding` where the resizing should be done. Per default the last layer will be
                 resized. Be aware that when resizing other than the last layer, you have to ensure that the new
                 token(s) in the tokenizer are at the corresponding position.
 
-        Return: ``nn.Embeddings`` Pointer to the input tokens Embeddings Module of the model
+        Return: ``torch.nn.Embeddings`` Pointer to the input tokens Embeddings Module of the model
         """
         base_model = getattr(self, self.base_model_prefix, self)  # get the base model if needed
 
@@ -716,9 +716,9 @@ TRANSFO_XL_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `nn.Module <https://pytorch.org/docs/stable/nn.html#nn.Module>`__ subclass. Use it as
-    a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+    general usage and behavior.
 
     Parameters:
         config (:class:`~transformers.TransfoXLConfig`): Model configuration class with all the parameters of the model.

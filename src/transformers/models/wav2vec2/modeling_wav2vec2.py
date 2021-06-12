@@ -883,7 +883,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
-            # from https://pytorch.org/docs/stable/generated/nn.Conv1d.html
+            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
             return (input_length - kernel_size) // stride + 1
 
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
@@ -899,8 +899,9 @@ WAV_2_VEC_2_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving etc.).
 
-    This model is a PyTorch `nn.Module <https://pytorch.org/docs/stable/nn.html#nn.Module>`_ sub-class. Use it as a
-    regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and behavior.
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config (:class:`~transformers.Wav2Vec2Config`): Model configuration class with all the parameters of the model.

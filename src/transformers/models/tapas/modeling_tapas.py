@@ -720,9 +720,9 @@ TAPAS_START_DOCSTRING = r"""
     methods the library implements for all its models (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `nn.Module <https://pytorch.org/docs/stable/nn.html#nn.Module>`__ subclass. Use it as
-    a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+    general usage and behavior.
 
     Parameters:
         config (:class:`~transformers.TapasConfig`): Model configuration class with all the parameters of the model.
@@ -2031,7 +2031,7 @@ def _calculate_aggregate_mask(answer, pooled_output, cell_selection_preference, 
         cell_selection_preference (:obj:`float`):
             Preference for cell selection in ambiguous cases.
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Labels per token. aggregation_classifier (:obj:`nn.Linear`): Aggregation head
+            Labels per token. aggregation_classifier (:obj:`torch.nn.Linear`): Aggregation head
 
     Returns:
         aggregate_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,)`): A mask set to 1 for examples that

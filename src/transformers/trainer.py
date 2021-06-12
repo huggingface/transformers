@@ -190,14 +190,14 @@ class Trainer:
     Trainer is a simple but feature-complete training and eval loop for PyTorch, optimized for 🤗 Transformers.
 
     Args:
-        model (:class:`~transformers.PreTrainedModel` or :obj:`nn.Module`, `optional`):
+        model (:class:`~transformers.PreTrainedModel` or :obj:`torch.nn.Module`, `optional`):
             The model to train, evaluate or use for predictions. If not provided, a ``model_init`` must be passed.
 
             .. note::
 
                 :class:`~transformers.Trainer` is optimized to work with the :class:`~transformers.PreTrainedModel`
-                provided by the library. You can still use your own models defined as :obj:`nn.Module` as long as they
-                work the same way as the 🤗 Transformers models.
+                provided by the library. You can still use your own models defined as :obj:`torch.nn.Module` as long as
+                they work the same way as the 🤗 Transformers models.
         args (:class:`~transformers.TrainingArguments`, `optional`):
             The arguments to tweak for training. Will default to a basic instance of
             :class:`~transformers.TrainingArguments` with the ``output_dir`` set to a directory named `tmp_trainer` in
@@ -248,8 +248,8 @@ class Trainer:
           :class:`~transformers.PreTrainedModel` subclass.
         - **model_wrapped** -- Always points to the most external model in case one or more other modules wrap the
           original model. This is the model that should be used for the forward pass. For example, under ``DeepSpeed``,
-          the inner model is wrapped in ``DeepSpeed`` and then again in ``nn.DistributedDataParallel``. If the inner
-          model hasn't been wrapped, then ``self.model_wrapped`` is the same as ``self.model``.
+          the inner model is wrapped in ``DeepSpeed`` and then again in ``torch.nn.DistributedDataParallel``. If the
+          inner model hasn't been wrapped, then ``self.model_wrapped`` is the same as ``self.model``.
         - **is_model_parallel** -- Whether or not a model has been switched to a model parallel mode (different from
           data parallelism, this means some of the model layers are split on different GPUs).
         - **place_model_on_device** -- Whether or not to automatically place the model on the device - it will be set

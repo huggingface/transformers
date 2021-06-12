@@ -810,9 +810,9 @@ class TrainingArguments:
         The current mode used for parallelism if multiple GPUs/TPU cores are available. One of:
 
         - :obj:`ParallelMode.NOT_PARALLEL`: no parallelism (CPU or one GPU).
-        - :obj:`ParallelMode.NOT_DISTRIBUTED`: several GPUs in one single process (uses :obj:`nn.DataParallel`).
+        - :obj:`ParallelMode.NOT_DISTRIBUTED`: several GPUs in one single process (uses :obj:`torch.nn.DataParallel`).
         - :obj:`ParallelMode.DISTRIBUTED`: several GPUs, each having its own process (uses
-          :obj:`nn.DistributedDataParallel`).
+          :obj:`torch.nn.DistributedDataParallel`).
         - :obj:`ParallelMode.TPU`: several TPU cores.
         """
         if is_torch_tpu_available():

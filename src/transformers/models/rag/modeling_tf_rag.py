@@ -912,7 +912,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         r"""
         do_marginalize (:obj:`bool`, `optional`):
             If :obj:`True`, the logits are marginalized over all documents by making use of
-            ``nn.functional.log_softmax``.
+            ``torch.nn.functional.log_softmax``.
         labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the cross entropy classification loss according to Rag-Token model formulation See
             https://arxiv.org/pdf/2005.11401.pdf Section 2.1 for details about Rag-Token formulation. Indices should be
