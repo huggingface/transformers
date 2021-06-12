@@ -14,13 +14,90 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
+from typing import Optional, Tuple, Union
+
 import numpy as np
 import tensorflow as tf
 
 from .utils import logging
+from .file_utils import ModelOutput
 
 
 logger = logging.get_logger(__name__)
+
+
+@dataclass
+class TFGreedySearchDecoderOnlyOutput(ModelOutput):
+    """
+    Base class for outputs of decoder-only generation models using greedy search.
+
+
+    Args:
+        sequences (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
+            The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
+            shorter if all batches finished early due to the :obj:`eos_token_id`.
+        scores (:obj:`tuple(tf.Tensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
+            Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
+            at each generation step. :obj:`(max_length-input_ids.shape[-1],)`-shaped tuple of :obj:`tf.Tensor`
+            with each tensor of shape :obj:`(batch_size, config.vocab_size)`).
+        attentions (:obj:`tuple(tuple(tf.Tensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`tf.Tensor` of shape :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
+        hidden_states (:obj:`tuple(tuple(tf.Tensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`tf.Tensor` of shape :obj:`(batch_size, generated_length, hidden_size)`.
+    """
+
+    sequences: tf.Tensor = None
+    scores: Optional[Tuple[tf.Tesnor]] = None
+    attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
+
+
+@dataclass
+class TFGreedySearchEncoderDecoderOutput(ModelOutput):
+    """
+    Base class for outputs of encoder-decoder generation models using greedy search. Hidden states and attention
+    weights of the decoder (respectively the encoder) can be accessed via the encoder_attentions and the
+    encoder_hidden_states attributes (respectively the decoder_attentions and the decoder_hidden_states attributes)
+
+
+    Args:
+        sequences (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
+            The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
+            shorter if all batches finished early due to the :obj:`eos_token_id`.
+        scores (:obj:`tuple(tf.Tensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
+            Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
+            at each generation step. :obj:`(max_length-1,)`-shaped tuple of :obj:`tf.Tensor` with each tensor
+            of shape :obj:`(batch_size, config.vocab_size)`).
+        encoder_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` (one for each layer of the decoder) of shape :obj:`(batch_size,
+            num_heads, sequence_length, sequence_length)`.
+        encoder_hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+        decoder_attentions (:obj:`tuple(tuple(tf.Tensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`tf.Tensor` of shape :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
+        cross_attentions (:obj:`tuple(tuple(tf.Tensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`tf.Tensor` of shape :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
+        decoder_hidden_states (:obj:`tuple(tuple(tf.Tensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`tf.Tensor` of shape :obj:`(batch_size, generated_length, hidden_size)`.
+    """
+
+    sequences: tf.Tensor = None
+    scores: Optional[Tuple[tf.Tensor]] = None
+    encoder_attentions: Optional[Tuple[tf.Tensor]] = None
+    encoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
+    decoder_attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    cross_attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    decoder_hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
+
+
+TFGreedySearchOutput = Union[TFGreedySearchEncoderDecoderOutput, TFGreedySearchDecoderOnlyOutput]
 
 
 class TFGenerationMixin:
@@ -67,8 +144,13 @@ class TFGenerationMixin:
         attention_mask=None,
         decoder_start_token_id=None,
         use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        output_scores=None,
+        return_dict_in_generate=None,
         forced_bos_token_id=None,
         forced_eos_token_id=None,
+        **model_kwargs,
     ):
         r"""
         Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
@@ -139,6 +221,16 @@ class TFGenerationMixin:
             use_cache: (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not the model should use the past last key/values attentions (if applicable to the model) to
                 speed up decoding.
+            output_attentions (:obj:`bool`, `optional`, defaults to `False`):
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more details.
+            output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
+                for more details.
+            output_scores (:obj:`bool`, `optional`, defaults to `False`):
+                Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
+            return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
+                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
             forced_bos_token_id (:obj:`int`, `optional`):
                 The id of the token to force as the first generated token after the :obj:`decoder_start_token_id`.
                 Useful for multilingual models like :doc:`mBART <../model_doc/mbart>` where the first generated token
@@ -228,6 +320,19 @@ class TFGenerationMixin:
         forced_eos_token_id = (
             forced_eos_token_id if forced_eos_token_id is not None else self.config.forced_eos_token_id
         )
+
+        output_scores = output_scores if output_scores is not None else self.config.output_scores
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict_in_generate = (
+            return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
+        )
+
+        model_kwargs["output_scores"] = output_scores
+        model_kwargs["output_attentions"] = output_attentions
+        model_kwargs["output_hidden_states"] = output_hidden_states
 
         if input_ids is not None:
             batch_size = shape_list(input_ids)[0]  # overridden by the input batch_size
@@ -394,6 +499,8 @@ class TFGenerationMixin:
                 use_cache=use_cache,
                 forced_bos_token_id=forced_bos_token_id,
                 forced_eos_token_id=forced_eos_token_id,
+                return_dict_in_generate=return_dict_in_generate,
+                **model_kwargs,
             )
         else:
             output = self._generate_no_beam_search(
@@ -415,6 +522,8 @@ class TFGenerationMixin:
                 encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
+                return_dict_in_generate=return_dict_in_generate,
+                **model_kwargs,
             )
 
         return output
@@ -439,6 +548,7 @@ class TFGenerationMixin:
         encoder_outputs,
         attention_mask,
         use_cache,
+        return_dict_in_generate,
         **kwargs
     ):
         """
@@ -452,12 +562,48 @@ class TFGenerationMixin:
 
         past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
 
+        # init attention / hidden states / scores tuples
+        scores = () if (return_dict_in_generate and kwargs["output_scores"]) else None
+        decoder_attentions = () if (return_dict_in_generate and kwargs["output_attentions"]) else None
+        cross_attentions = () if (return_dict_in_generate and kwargs["output_attentions"]) else None
+        decoder_hidden_states = () if (return_dict_in_generate and kwargs["output_hidden_states"]) else None
+
+        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
+        if return_dict_in_generate and self.config.is_encoder_decoder:
+            encoder_attentions = kwargs["encoder_outputs"].get("attentions") if kwargs["output_attentions"] else None
+            encoder_hidden_states = (
+                kwargs["encoder_outputs"].get("hidden_states") if kwargs["output_hidden_states"] else None
+            )
+
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
                 input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **kwargs
             )
-            outputs = self(**model_inputs)
-            next_token_logits = outputs[0][:, -1, :]
+            outputs = self(
+                **model_inputs,
+                return_dict=True,
+                output_attentions=kwargs["output_attentions"],
+                output_hidden_states=kwargs["output_hidden_states"]
+            )  # (batch_size * num_beams, cur_len, vocab_size)
+            next_token_logits = outputs.logits[:, -1, :]  # (batch_size * num_beams, vocab_size)
+
+            # Store scores, attentions and hidden_states when required
+            if return_dict_in_generate:
+                if kwargs["output_scores"]:
+                    scores += (next_token_logits,)
+                if kwargs["output_attentions"]:
+                    decoder_attentions += (
+                        (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
+                    )
+                    if self.config.is_encoder_decoder:
+                        cross_attentions += (outputs.cross_attentions,)
+
+                if kwargs["output_hidden_states"]:
+                    decoder_hidden_states += (
+                        (outputs.decoder_hidden_states,)
+                        if self.config.is_encoder_decoder
+                        else (outputs.hidden_states,)
+                    )
 
             # if model has past, then set the past variable to speed up decoding
             if self._use_cache(outputs, use_cache):
@@ -580,7 +726,26 @@ class TFGenerationMixin:
         else:
             decoded = input_ids
 
-        return decoded
+        if return_dict_in_generate:
+            if self.config.is_encoder_decoder:
+                return TFGreedySearchEncoderDecoderOutput(
+                    sequences=decoded,
+                    scores=scores,
+                    encoder_attentions=encoder_attentions,
+                    encoder_hidden_states=encoder_hidden_states,
+                    decoder_attentions=decoder_attentions,
+                    cross_attentions=cross_attentions,
+                    decoder_hidden_states=decoder_hidden_states,
+                )
+            else:
+                return TFGreedySearchDecoderOnlyOutput(
+                    sequences=decoded,
+                    scores=scores,
+                    attentions=decoder_attentions,
+                    hidden_states=decoder_hidden_states,
+                )
+        else:
+            return decoded
 
     def _generate_beam_search(
         self,
@@ -608,6 +773,7 @@ class TFGenerationMixin:
         use_cache,
         forced_bos_token_id,
         forced_eos_token_id,
+        return_dict_in_generate,
         **kwargs,
     ):
         """Generate sequences for each example with beam search."""
