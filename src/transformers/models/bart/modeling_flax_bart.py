@@ -16,6 +16,7 @@
 
 import math
 import random
+from functools import partial
 from re import I
 from typing import Callable, Optional, Tuple
 
@@ -193,30 +194,16 @@ class FlaxBartAttention(nn.Module):
             self.head_dim * self.num_heads == self.embed_dim
         ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
 
-        self.k_proj = nn.Dense(
+        dense = partial(
+            nn.Dense,
             self.embed_dim,
             use_bias=self.bias,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
         )
-        self.v_proj = nn.Dense(
-            self.embed_dim,
-            use_bias=self.bias,
-            dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-        )
-        self.q_proj = nn.Dense(
-            self.embed_dim,
-            use_bias=self.bias,
-            dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-        )
-        self.out_proj = nn.Dense(
-            self.embed_dim,
-            use_bias=self.bias,
-            dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-        )
+
+        self.q_proj, self.k_proj, self.v_proj = dense(), dense(), dense()
+        self.out_proj = dense()
 
         self.dropout_layer = nn.Dropout(rate=self.dropout)
 
@@ -269,7 +256,6 @@ class FlaxBartAttention(nn.Module):
         key_value_states: Optional[jnp.ndarray] = None,
         attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
-        output_attentions: bool = False,
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
         """Input shape: Batch x Time x Channel"""
@@ -277,7 +263,7 @@ class FlaxBartAttention(nn.Module):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        batch_size, tgt_len, embed_dim = hidden_states.shape
+        batch_size = hidden_states.shape[0]
 
         # get query proj
         query_states = self.q_proj(hidden_states)
@@ -386,11 +372,7 @@ class FlaxBartEncoderLayer(nn.Module):
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
         residual = hidden_states
-        hidden_states, attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-        )
+        hidden_states, attn_weights = self.self_attn(hidden_states=hidden_states, attention_mask=attention_mask)
 
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
@@ -434,7 +416,7 @@ class FlaxBartEncoderLayerCollection(nn.Module):
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
 
-        for idx, encoder_layer in enumerate(self.layers):
+        for encoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -445,7 +427,7 @@ class FlaxBartEncoderLayerCollection(nn.Module):
             hidden_states, attn = encoder_layer(
                 hidden_states,
                 attention_mask,
-                True,  # we want to always output attentions at this step (at least so far for debugging purposes :) )
+                output_attentions,  # we want to always output attentions at this step (at least so far for debugging purposes :) )
                 deterministic,
             )
 
@@ -510,10 +492,7 @@ class FlaxBartDecoderLayer(nn.Module):
 
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            init_cache=init_cache,
-            output_attentions=output_attentions,
+            hidden_states=hidden_states, attention_mask=attention_mask, init_cache=init_cache
         )
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
@@ -528,7 +507,6 @@ class FlaxBartDecoderLayer(nn.Module):
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                output_attentions=output_attentions,
             )
             hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
             hidden_states = residual + hidden_states
@@ -578,7 +556,7 @@ class FlaxBartDecoderLayerCollection(nn.Module):
         all_self_attns = () if output_attentions else None
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
 
-        for idx, decoder_layer in enumerate(self.layers):
+        for decoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
                 # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -643,6 +621,249 @@ class FlaxBartClassificationHead(nn.Module):
         return hidden_states
 
 
+class FlaxBartEncoder(nn.Module):
+    config: BartConfig
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    embed_tokens: Optional[nn.Embed] = None
+
+    def setup(self):
+        self.dropout_layer = nn.Dropout(rate=self.config.dropout)
+        self.layerdrop = self.config.encoder_layerdrop
+
+        embed_dim = self.config.d_model
+        self.padding_idx = self.config.pad_token_id
+        self.max_source_positions = self.config.max_position_embeddings
+        self.embed_scale = math.sqrt(embed_dim) if self.config.scale_embedding else 1.0
+
+        if self.embed_tokens is None:
+            self.embed_tokens = nn.Embed(
+                self.config.vocab_size,
+                embed_dim,
+                embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+                dtype=self.dtype,
+            )
+
+        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # and adjust num_embeddings appropriately. Other models don't have this hack
+        self.offset = 2
+        self.embed_positions = nn.Embed(
+            self.config.max_position_embeddings + self.offset,
+            embed_dim,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            dtype=self.dtype,
+        )
+        self.layers = FlaxBartEncoderLayerCollection(self.config, self.dtype)
+        self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        position_ids,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: bool = True,
+        deterministic: bool = True,
+    ):
+        input_shape = input_ids.shape
+        input_ids = input_ids.reshape(-1, input_shape[-1])
+
+        inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+
+        embed_pos = self.embed_positions(position_ids + self.offset)
+
+        hidden_states = inputs_embeds + embed_pos
+        hidden_states = self.layernorm_embedding(hidden_states)
+        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
+
+        outputs = self.layers(
+            hidden_states,
+            attention_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        if not return_dict:
+            return outputs
+
+        return FlaxBaseModelOutput(
+            last_hidden_state=outputs.last_hidden_state,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+class FlaxBartDecoder(nn.Module):
+    config: BartConfig
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    embed_tokens: Optional[nn.Embed] = None
+
+    def setup(self):
+        self.dropout_layer = nn.Dropout(rate=self.config.dropout)
+        self.layerdrop = self.config.decoder_layerdrop
+
+        embed_dim = self.config.d_model
+        self.padding_idx = self.config.pad_token_id
+        self.max_target_positions = self.config.max_position_embeddings
+        self.embed_scale = math.sqrt(self.config.d_model) if self.config.scale_embedding else 1.0
+
+        if self.embed_tokens is None:
+            self.embed_tokens = nn.Embed(
+                self.config.vocab_size,
+                embed_dim,
+                embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+                dtype=self.dtype,
+            )
+
+        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # and adjust num_embeddings appropriately. Other models don't have this hack
+        self.offset = 2
+        self.embed_positions = nn.Embed(
+            self.config.max_position_embeddings + self.offset,
+            embed_dim,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            dtype=self.dtype,
+        )
+
+        self.layers = FlaxBartDecoderLayerCollection(self.config, self.dtype)
+        self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
+
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        position_ids,
+        encoder_hidden_states: Optional[jnp.ndarray] = None,
+        encoder_attention_mask: Optional[jnp.ndarray] = None,
+        output_attentions: Optional[bool] = None,
+        init_cache: bool = False,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: bool = True,
+        deterministic: bool = True,
+    ):
+        input_shape = input_ids.shape
+        input_ids = input_ids.reshape(-1, input_shape[-1])
+
+        inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+
+        # embed positions
+        positions = self.embed_positions(position_ids + self.offset)
+
+        hidden_states = inputs_embeds + positions
+        hidden_states = self.layernorm_embedding(hidden_states)
+
+        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
+
+        outputs = self.layers(
+            hidden_states,
+            attention_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
+            deterministic=deterministic,
+            init_cache=init_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        if not return_dict:
+            return outputs
+
+        return FlaxBaseModelOutputWithPastAndCrossAttentions(
+            last_hidden_state=outputs.last_hidden_state,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
+        )
+
+
+class FlaxBartModule(nn.Module):
+    config: BartConfig
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        self.shared = nn.Embed(
+            self.config.vocab_size,
+            self.config.d_model,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            dtype=self.dtype,
+        )
+
+        self.encoder = FlaxBartEncoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
+        self.decoder = FlaxBartDecoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
+
+    def get_encoder(self):
+        return self.encoder
+
+    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
+    def __call__(
+        self,
+        input_ids: Optional[jnp.ndarray] = None,
+        attention_mask: Optional[jnp.ndarray] = None,
+        decoder_input_ids: Optional[jnp.ndarray] = None,
+        decoder_attention_mask: Optional[jnp.ndarray] = None,
+        position_ids: Optional[jnp.ndarray] = None,
+        decoder_position_ids: Optional[jnp.ndarray] = None,
+        encoder_outputs: Optional[FlaxBaseModelOutput] = None,
+        init_cache: bool = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: bool = True,
+        deterministic: bool = True,
+    ):
+        if encoder_outputs is None:
+            encoder_outputs = self.encoder(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                deterministic=deterministic,
+            )
+
+        elif return_dict and not isinstance(encoder_outputs, FlaxBaseModelOutput):
+            encoder_outputs = FlaxBaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+            )
+
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            position_ids=decoder_position_ids,
+            encoder_hidden_states=encoder_outputs[0],
+            encoder_attention_mask=attention_mask,
+            init_cache=init_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
+        )
+
+        if not return_dict:
+            return decoder_outputs + encoder_outputs
+
+        return FlaxSeq2SeqModelOutput(
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+        )
+
+
 class FlaxBartPretrainedModel(FlaxPreTrainedModel):
     config_class = BartConfig
     base_model_prefix: str = "bart"
@@ -662,9 +883,8 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
-        input_ids = jax.ops.index_update(
-            input_ids, (..., -1), self.config.eos_token_id
-        )  # make sure initialization pass will work
+        # make sure initialization pass will work for FlaxBartForSequenceClassificationModule
+        input_ids = jax.ops.index_update(input_ids, (..., -1), self.config.eos_token_id)
         attention_mask = jnp.ones_like(input_ids)
         decoder_input_ids = input_ids
         decoder_attention_mask = jnp.ones_like(input_ids)
@@ -866,254 +1086,6 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
         return outputs
 
 
-class FlaxBartEncoder(nn.Module):
-    config: BartConfig
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    embed_tokens: Optional[nn.Embed] = None
-
-    def setup(self):
-        self.dropout_layer = nn.Dropout(rate=self.config.dropout)
-        self.layerdrop = self.config.encoder_layerdrop
-
-        embed_dim = self.config.d_model
-        self.padding_idx = self.config.pad_token_id
-        self.max_source_positions = self.config.max_position_embeddings
-        self.embed_scale = math.sqrt(embed_dim) if self.config.scale_embedding else 1.0
-
-        if self.embed_tokens is None:
-            self.embed_tokens = nn.Embed(
-                self.config.vocab_size,
-                embed_dim,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-                dtype=self.dtype,
-            )
-
-        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
-        self.offset = 2
-        self.embed_positions = nn.Embed(
-            self.config.max_position_embeddings + self.offset,
-            embed_dim,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-            dtype=self.dtype,
-        )
-        self.layers = FlaxBartEncoderLayerCollection(self.config, self.dtype)
-        self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
-
-    def __call__(
-        self,
-        input_ids,
-        attention_mask,
-        position_ids,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: bool = True,
-        deterministic: bool = True,
-    ):
-        input_shape = input_ids.shape
-        input_ids = input_ids.reshape(-1, input_shape[-1])
-
-        inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-
-        embed_pos = self.embed_positions(position_ids + self.offset)
-
-        hidden_states = inputs_embeds + embed_pos
-        hidden_states = self.layernorm_embedding(hidden_states)
-        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
-
-        outputs = self.layers(
-            hidden_states,
-            attention_mask,
-            deterministic=deterministic,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        if not return_dict:
-            return outputs
-
-        return FlaxBaseModelOutput(
-            last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-class FlaxBartDecoder(nn.Module):
-    config: BartConfig
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    embed_tokens: Optional[nn.Embed] = None
-
-    def setup(self):
-        self.dropout_layer = nn.Dropout(rate=self.config.dropout)
-        self.layerdrop = self.config.decoder_layerdrop
-
-        embed_dim = self.config.d_model
-        self.padding_idx = self.config.pad_token_id
-        self.max_target_positions = self.config.max_position_embeddings
-        self.embed_scale = math.sqrt(self.config.d_model) if self.config.scale_embedding else 1.0
-
-        if self.embed_tokens is None:
-            self.embed_tokens = nn.Embed(
-                self.config.vocab_size,
-                embed_dim,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-                dtype=self.dtype,
-            )
-
-        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
-        self.offset = 2
-        self.embed_positions = nn.Embed(
-            self.config.max_position_embeddings + self.offset,
-            embed_dim,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-            dtype=self.dtype,
-        )
-
-        self.layers = FlaxBartDecoderLayerCollection(self.config, self.dtype)
-        self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
-    def __call__(
-        self,
-        input_ids,
-        attention_mask,
-        position_ids,
-        encoder_hidden_states: Optional[jnp.ndarray] = None,
-        encoder_attention_mask: Optional[jnp.ndarray] = None,
-        output_attentions: Optional[bool] = None,
-        init_cache: bool = False,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: bool = True,
-        deterministic: bool = True,
-    ):
-        input_shape = input_ids.shape
-        input_ids = input_ids.reshape(-1, input_shape[-1])
-
-        inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-
-        # embed positions
-        positions = self.embed_positions(position_ids + self.offset)
-
-        hidden_states = inputs_embeds + positions
-        hidden_states = self.layernorm_embedding(hidden_states)
-
-        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
-
-        outputs = self.layers(
-            hidden_states,
-            attention_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            deterministic=deterministic,
-            init_cache=init_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        if not return_dict:
-            return outputs
-
-        return FlaxBaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            cross_attentions=outputs.cross_attentions,
-        )
-
-
-class FlaxBartModule(nn.Module):
-    config: BartConfig
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-
-    def setup(
-        self,
-    ):
-        _, vocab_size = self.config.pad_token_id, self.config.vocab_size
-        embed_dim = self.config.d_model
-
-        self.shared = nn.Embed(
-            vocab_size,
-            embed_dim,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-            dtype=self.dtype,
-        )
-
-        self.encoder = FlaxBartEncoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
-        self.decoder = FlaxBartDecoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
-
-    def get_encoder(self):
-        return self.encoder
-
-    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
-    def __call__(
-        self,
-        input_ids: Optional[jnp.ndarray] = None,
-        attention_mask: Optional[jnp.ndarray] = None,
-        decoder_input_ids: Optional[jnp.ndarray] = None,
-        decoder_attention_mask: Optional[jnp.ndarray] = None,
-        position_ids: Optional[jnp.ndarray] = None,
-        decoder_position_ids: Optional[jnp.ndarray] = None,
-        encoder_outputs: Optional[FlaxBaseModelOutput] = None,
-        init_cache: bool = False,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: bool = True,
-        deterministic: bool = True,
-    ):
-        if encoder_outputs is None:
-            encoder_outputs = self.encoder(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-                deterministic=deterministic,
-            )
-
-        elif return_dict and not isinstance(encoder_outputs, FlaxBaseModelOutput):
-            encoder_outputs = FlaxBaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-            )
-
-        decoder_outputs = self.decoder(
-            input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
-            position_ids=decoder_position_ids,
-            encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=attention_mask,
-            init_cache=init_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            deterministic=deterministic,
-        )
-
-        if not return_dict:
-            return decoder_outputs + encoder_outputs
-
-        return FlaxSeq2SeqModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
-        )
-
-
 @add_start_docstrings(
     "The bare Bart Model transformer outputting raw hidden-states without any specific head on top.",
     BART_START_DOCSTRING,
@@ -1254,11 +1226,14 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     def __call__(
         self,
-        input_ids: jnp.ndarray,
+        input_ids: Optional[jnp.ndarray] = None,
         attention_mask: Optional[jnp.ndarray] = None,
         decoder_input_ids: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
-        encoder_outputs: Optional[jnp.ndarray] = None,
+        position_ids: Optional[jnp.ndarray] = None,
+        decoder_position_ids: Optional[jnp.ndarray] = None,
+        encoder_outputs: Optional[FlaxBaseModelOutput] = None,
+        init_cache: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: bool = True,
@@ -1269,7 +1244,10 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            position_ids=position_ids,
+            decoder_position_ids=decoder_position_ids,
             encoder_outputs=encoder_outputs,
+            init_cache=init_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1334,11 +1312,14 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     def __call__(
         self,
-        input_ids: jnp.ndarray,
+        input_ids: Optional[jnp.ndarray] = None,
         attention_mask: Optional[jnp.ndarray] = None,
         decoder_input_ids: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
-        encoder_outputs: Optional[jnp.ndarray] = None,
+        position_ids: Optional[jnp.ndarray] = None,
+        decoder_position_ids: Optional[jnp.ndarray] = None,
+        encoder_outputs: Optional[FlaxBaseModelOutput] = None,
+        init_cache: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: bool = True,
@@ -1349,7 +1330,10 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            position_ids=position_ids,
+            decoder_position_ids=decoder_position_ids,
             encoder_outputs=encoder_outputs,
+            init_cache=init_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1364,10 +1348,7 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
         end_logits = end_logits.squeeze(-1)
 
         if not return_dict:
-            output = (
-                start_logits,
-                end_logits,
-            ) + outputs[1:]
+            output = (start_logits, end_logits) + outputs[1:]
             return output
 
         return FlaxSeq2SeqQuestionAnsweringModelOutput(
