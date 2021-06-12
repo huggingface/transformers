@@ -1239,7 +1239,7 @@ class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
             hidden_states = outputs[0]
 
             if self.config.tie_word_embeddings:
-                shared_embedding = self.model.variables["params"]["shared"]["embedding"]
+                shared_embedding = module.model.variables["params"]["shared"]["embedding"]
                 lm_logits = module.lm_head.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
             else:
                 lm_logits = module.lm_head(hidden_states)
@@ -1247,7 +1247,7 @@ class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
             lm_logits += module.final_logits_bias
             return lm_logits, outputs
 
-        lm_logits, decoder_outputs = self.module.apply(
+        outputs, past = self.module.apply(
             inputs,
             decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4"),
             decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
@@ -1262,6 +1262,7 @@ class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
             mutable=mutable,
             method=_decoder_forward,
         )
+        lm_logits, decoder_outputs = outputs
 
         if return_dict and not isinstance(encoder_outputs, FlaxBaseModelOutput):
             encoder_outputs = FlaxBaseModelOutput(
@@ -1285,12 +1286,10 @@ class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
 
         # add updated cache to model output
         if past_key_values is not None and return_dict:
-            outputs, past_key_values = outputs
-            outputs["past_key_values"] = unfreeze(past_key_values["cache"])
+            outputs["past_key_values"] = unfreeze(past["cache"])
             return outputs
         elif past_key_values is not None and not return_dict:
-            outputs, past_key_values = outputs
-            outputs = outputs[:1] + (unfreeze(past_key_values["cache"]),) + outputs[1:]
+            outputs = outputs[:1] + (unfreeze(past["cache"]),) + outputs[1:]
 
         return outputs
 
