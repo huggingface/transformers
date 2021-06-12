@@ -25,6 +25,7 @@ from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 if is_flax_available():
     import jax
+    import jax.numpy as jnp
     from transformers.models.bart.modeling_flax_bart import (
         FlaxBartForConditionalGeneration,
         FlaxBartForQuestionAnswering,
@@ -78,7 +79,7 @@ class FlaxBartModelTester(unittest.TestCase):
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
+        max_position_embeddings=32,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
@@ -132,6 +133,92 @@ class FlaxBartModelTester(unittest.TestCase):
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()
         return config, inputs_dict
+
+    def check_use_cache_forward(self, model_class_name, config, inputs_dict):
+        max_decoder_length = 20
+        model = model_class_name(config)
+
+        encoder_outputs = model.encode(inputs_dict["input_ids"])
+
+        decoder_input_ids, decoder_attention_mask = (
+            inputs_dict["decoder_input_ids"],
+            inputs_dict["decoder_attention_mask"],
+        )
+
+        past_key_values = model.init_cache(decoder_input_ids.shape[0], max_decoder_length, encoder_outputs)
+        decoder_attention_mask = jnp.ones((decoder_input_ids.shape[0], max_decoder_length), dtype="i4")
+
+        decoder_position_ids = jnp.broadcast_to(
+            jnp.arange(decoder_input_ids.shape[-1] - 1)[None, :],
+            (decoder_input_ids.shape[0], decoder_input_ids.shape[-1] - 1),
+        )
+        outputs_cache = model.decode(
+            decoder_input_ids[:, :-1],
+            encoder_outputs,
+            decoder_attention_mask=decoder_attention_mask,
+            past_key_values=past_key_values,
+            decoder_position_ids=decoder_position_ids,
+        )
+
+        decoder_position_ids = jnp.array(decoder_input_ids.shape[0] * [[decoder_input_ids.shape[-1] - 1]], dtype="i4")
+        outputs_cache_next = model.decode(
+            decoder_input_ids[:, -1:],
+            encoder_outputs,
+            decoder_attention_mask=decoder_attention_mask,
+            past_key_values=outputs_cache.past_key_values,
+            decoder_position_ids=decoder_position_ids,
+        )
+
+        outputs = model.decode(decoder_input_ids, encoder_outputs)
+
+        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
+
+    def check_use_cache_forward_with_attn_mask(self, model_class_name, config, inputs_dict):
+        max_decoder_length = 20
+        model = model_class_name(config)
+
+        encoder_outputs = model.encode(inputs_dict["input_ids"])
+
+        decoder_input_ids, decoder_attention_mask = (
+            inputs_dict["decoder_input_ids"],
+            inputs_dict["decoder_attention_mask"],
+        )
+
+        decoder_attention_mask_cache = jnp.concatenate(
+            [
+                decoder_attention_mask,
+                jnp.zeros((decoder_attention_mask.shape[0], max_decoder_length - decoder_attention_mask.shape[1])),
+            ],
+            axis=-1,
+        )
+
+        past_key_values = model.init_cache(decoder_input_ids.shape[0], max_decoder_length, encoder_outputs)
+        decoder_position_ids = jnp.broadcast_to(
+            jnp.arange(decoder_input_ids.shape[-1] - 1)[None, :],
+            (decoder_input_ids.shape[0], decoder_input_ids.shape[-1] - 1),
+        )
+
+        outputs_cache = model.decode(
+            decoder_input_ids[:, :-1],
+            encoder_outputs,
+            decoder_attention_mask=decoder_attention_mask_cache,
+            past_key_values=past_key_values,
+            decoder_position_ids=decoder_position_ids,
+        )
+        decoder_position_ids = jnp.array(decoder_input_ids.shape[0] * [[decoder_input_ids.shape[-1] - 1]], dtype="i4")
+        outputs_cache_next = model.decode(
+            decoder_input_ids[:, -1:],
+            encoder_outputs,
+            past_key_values=outputs_cache.past_key_values,
+            decoder_attention_mask=decoder_attention_mask_cache,
+            decoder_position_ids=decoder_position_ids,
+        )
+
+        outputs = model.decode(decoder_input_ids, encoder_outputs, decoder_attention_mask=decoder_attention_mask)
+
+        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
 
 @require_flax
@@ -244,6 +331,14 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = FlaxBartModelTester(self)
+
+    def test_use_cache_forward(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_use_cache_forward(FlaxBartForConditionalGeneration, config, inputs_dict)
+
+    def test_use_cache_forward_with_attn_mask(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_use_cache_forward_with_attn_mask(FlaxBartForConditionalGeneration, config, inputs_dict)
 
     def test_encode(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
