@@ -311,8 +311,8 @@ class FlaxGenerationMixin:
                 model_kwargs=next_model_kwargs,
             )
 
+        # The very first prompt often has sequence length > 1, so run outside of `lax.while_loop` to comply with TPU
         if input_ids.shape[1] > 1:
-            # The very first prompt often has sequence length > 1, so run outside of `lax.while_loop` to comply with TPU
             state = greedy_search_body_fn(state)
 
         if not trace:
@@ -352,10 +352,10 @@ class FlaxGenerationMixin:
         # per batch-item state bit indicating if sentence has finished.
         is_sent_finished = jnp.zeros((batch_size,), dtype=jnp.bool_)
 
-        model = self
+        model = self.decode if self.config.is_encoder_decoder else self
 
         # initialize model specific kwargs
-        model_kwargs = model.prepare_inputs_for_generation(input_ids, max_length, **model_kwargs)
+        model_kwargs = self.prepare_inputs_for_generation(input_ids, max_length, **model_kwargs)
 
         # initialize state
         state = SampleState(
@@ -391,7 +391,7 @@ class FlaxGenerationMixin:
             next_token = next_token[:, None]
 
             next_sequences = lax.dynamic_update_slice(state.sequences, next_token, (0, state.cur_len))
-            next_model_kwargs = model.update_inputs_for_generation(model_outputs, model_kwargs)
+            next_model_kwargs = self.update_inputs_for_generation(model_outputs, state.model_kwargs)
 
             return SampleState(
                 cur_len=state.cur_len + 1,
@@ -403,7 +403,8 @@ class FlaxGenerationMixin:
             )
 
         # The very first prompt often has sequence length > 1, so run outside of `lax.while_loop` to comply with TPU
-        state = sample_search_body_fn(state)
+        if input_ids.shape[1] > 1:
+            state = sample_search_body_fn(state)
 
         if not trace:
             state = self._run_loop_in_debug(sample_search_cond_fn, sample_search_body_fn, state)
