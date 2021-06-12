@@ -1644,7 +1644,7 @@ def tf_required(func):
         if is_tf_available():
             return func(*args, **kwargs)
         else:
-            raise ImportError(f"Method `{func.__name__}` requires Tnn.functional.")
+            raise ImportError(f"Method `{func.__name__}` requires TF.")
 
     return wrapper
 
