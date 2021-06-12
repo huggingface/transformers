@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Fairseq Authors, The HuggingFace Inc. team and Daniel Stancl. All rights reserved.
+# Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1258,6 +1258,8 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
         attention_mask: Optional[jnp.ndarray] = None,
         decoder_input_ids: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
+        position_ids: Optional[jnp.ndarray] = None,
+        decoder_position_ids: Optional[jnp.ndarray] = None,
         encoder_outputs: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1269,6 +1271,8 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            position_ids=position_ids,
+            decoder_position_ids=decoder_position_ids,
             encoder_outputs=encoder_outputs,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1338,6 +1342,8 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
         attention_mask: Optional[jnp.ndarray] = None,
         decoder_input_ids: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
+        position_ids: Optional[jnp.ndarray] = None,
+        decoder_position_ids: Optional[jnp.ndarray] = None,
         encoder_outputs: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1349,6 +1355,8 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            position_ids=position_ids,
+            decoder_position_ids=decoder_position_ids,
             encoder_outputs=encoder_outputs,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
