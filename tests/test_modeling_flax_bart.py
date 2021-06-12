@@ -58,9 +58,6 @@ def prepare_bart_inputs_dict(
         "decoder_input_ids": decoder_input_ids,
         "attention_mask": attention_mask,
         "decoder_attention_mask": attention_mask,
-        "head_mask": head_mask,
-        "decoder_head_mask": decoder_head_mask,
-        "cross_attn_head_mask": cross_attn_head_mask,
     }
 
 
@@ -231,7 +228,7 @@ class BartHeadTests(unittest.TestCase):
 
 @require_flax
 class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase):
-
+    is_encoder_decoder = True
     all_model_classes = (
         (
             FlaxBartModel,

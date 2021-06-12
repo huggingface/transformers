@@ -423,15 +423,15 @@ class FlaxBartEncoderLayerCollection(nn.Module):
             if deterministic and (dropout_probability < self.layerdrop):  # skip the layer
                 hidden_states, attn = (None, None)
 
-            hidden_states, attn = encoder_layer(
+            outputs = encoder_layer(
                 hidden_states,
                 attention_mask,
-                output_attentions,  # we want to always output attentions at this step (at least so far for debugging purposes :) )
+                output_attentions,
                 deterministic,
             )
-
+            hidden_states = outputs[0]
             if output_attentions:
-                all_attentions = all_attentions + (attn,)
+                all_attentions = all_attentions + (outputs[1],)
 
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
