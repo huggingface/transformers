@@ -801,12 +801,6 @@ class FlaxBartDecoder(nn.Module):
         self.layers = FlaxBartDecoderLayerCollection(self.config, self.dtype)
         self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     def __call__(
         self,
         input_ids,
