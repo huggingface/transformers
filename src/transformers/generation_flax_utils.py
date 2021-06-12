@@ -192,9 +192,7 @@ class FlaxGenerationMixin:
         prng_key = prng_key if prng_key is not None else jax.random.PRNGKey(0)
 
         if decoder_start_token_id is None and self.config.is_encoder_decoder:
-            raise ValueError(
-                "`decoder_start_token_id` has to be defined for encoder-decoder generation."
-            )
+            raise ValueError("`decoder_start_token_id` has to be defined for encoder-decoder generation.")
 
         if self.config.is_encoder_decoder:
             # add encoder_outputs to model_kwargs
