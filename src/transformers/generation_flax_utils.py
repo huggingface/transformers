@@ -67,6 +67,21 @@ class FlaxSampleOutput(ModelOutput):
 
 
 @flax.struct.dataclass
+class FlaxBeamSearchOutput(ModelOutput):
+    """
+    Flax Base class for outputs of decoder-only generation models using greedy search.
+
+
+    Args:
+        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+            The generated sequences. If all batches finished early due to the :obj:`eos_token_id`, :obj:`sequences` is
+            padded to :obj:`max_length`.
+    """
+
+    sequences: jax_xla.DeviceArray = None
+
+
+@flax.struct.dataclass
 class GreedyState:
     cur_len: jax_xla.DeviceArray
     sequences: jax_xla.DeviceArray
@@ -77,6 +92,16 @@ class GreedyState:
 
 @flax.struct.dataclass
 class SampleState:
+    cur_len: jax_xla.DeviceArray
+    sequences: jax_xla.DeviceArray
+    current_token: jax_xla.DeviceArray
+    is_sent_finished: jax_xla.DeviceArray
+    prng_key: jax_xla.DeviceArray
+    model_kwargs: Dict[str, jax_xla.DeviceArray]
+
+
+@flax.struct.dataclass
+class BeamSearchState:
     cur_len: jax_xla.DeviceArray
     sequences: jax_xla.DeviceArray
     current_token: jax_xla.DeviceArray
@@ -112,6 +137,7 @@ class FlaxGenerationMixin:
         top_k: Optional[int] = None,
         top_p: Optional[float] = None,
         temperature: Optional[float] = None,
+        num_beams: Optional[int] = None,
         trace: bool = True,
         **model_kwargs,
     ):
@@ -147,6 +173,8 @@ class FlaxGenerationMixin:
                 The id of the `beginning-of-sequence` token.
             eos_token_id (:obj:`int`, `optional`):
                 The id of the `end-of-sequence` token.
+            num_beams (:obj:`int`, `optional`, defaults to 1):
+                Number of beams for beam search. 1 means no beam search.
             trace (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether to trace generation. Setting ``trace=False`` should only be used for debugging and will lead to
                 a considerably slower runtime.
@@ -175,8 +203,13 @@ class FlaxGenerationMixin:
         prng_key = prng_key if prng_key is not None else jax.random.PRNGKey(0)
 
         do_sample = do_sample if do_sample is not None else self.config.do_sample
+        num_beams = num_beams if num_beams is not None else self.config.num_beams
 
-        if do_sample:
+        if not do_sample and num_beams == 1:
+            return self._greedy_search(
+                input_ids, max_length, pad_token_id, eos_token_id, trace=trace, model_kwargs=model_kwargs
+            )
+        elif do_sample and num_beams == 1:
             logits_warper = self._get_logits_warper(top_k=top_k, top_p=top_p, temperature=temperature)
             return self._sample(
                 input_ids,
@@ -188,8 +221,8 @@ class FlaxGenerationMixin:
                 model_kwargs=model_kwargs,
                 trace=trace,
             )
-        else:
-            return self._greedy_search(
+        elif not do_sample and num_beams > 1:
+            return self._beam_search(
                 input_ids, max_length, pad_token_id, eos_token_id, trace=trace, model_kwargs=model_kwargs
             )
 
@@ -386,3 +419,81 @@ class FlaxGenerationMixin:
             state = lax.while_loop(sample_search_cond_fn, sample_search_body_fn, state)
 
         return FlaxSampleOutput(sequences=state.sequences)
+
+    def _beam_search(
+        self,
+        input_ids: None,
+        max_length: Optional[int] = None,
+        pad_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
+        trace: bool = True,
+        model_kwargs: Optional[Dict[str, jax_xla.DeviceArray]] = None,
+    ):
+        # init values
+        max_length = max_length if max_length is not None else self.config.max_length
+        pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
+        eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+
+        batch_size, cur_len = input_ids.shape
+
+        eos_token_id = jnp.array(eos_token_id)
+        pad_token_id = jnp.array(pad_token_id)
+        cur_len = jnp.array(cur_len)
+
+        # per batch-item holding current token in loop.
+        sequences = jnp.full((batch_size, max_length), pad_token_id, dtype=jnp.int32)
+        sequences = lax.dynamic_update_slice(sequences, input_ids, (0, 0))
+
+        # per batch-item state bit indicating if sentence has finished.
+        is_sent_finished = jnp.zeros((batch_size,), dtype=jnp.bool_)
+
+        model = self
+
+        # initialize model specific kwargs
+        model_kwargs = model.prepare_inputs_for_generation(input_ids, max_length, **model_kwargs)
+
+        # initialize state
+        state = GreedyState(
+            cur_len=cur_len,
+            sequences=sequences,
+            current_token=input_ids,
+            is_sent_finished=is_sent_finished,
+            model_kwargs=model_kwargs,
+        )
+
+        def greedy_search_cond_fn(state):
+            """state termination condition fn."""
+            has_reached_max_length = state.cur_len == max_length
+            all_sequence_finished = jnp.all(state.is_sent_finished)
+            finish_generation = jnp.logical_or(has_reached_max_length, all_sequence_finished)
+            return ~finish_generation
+
+        def greedy_search_body_fn(state):
+            """state update fn."""
+            model_outputs = model(state.current_token, **state.model_kwargs)
+            next_token = jnp.argmax(model_outputs.logits[:, -1], axis=-1)
+
+            next_is_sent_finished = state.is_sent_finished | (next_token == eos_token_id)
+            next_token = next_token * ~next_is_sent_finished + pad_token_id * next_is_sent_finished
+            next_token = next_token[:, None]
+
+            next_sequences = lax.dynamic_update_slice(state.sequences, next_token, (0, state.cur_len))
+            next_model_kwargs = model.update_inputs_for_generation(model_outputs, model_kwargs)
+
+            return GreedyState(
+                cur_len=state.cur_len + 1,
+                sequences=next_sequences,
+                current_token=next_token,
+                is_sent_finished=next_is_sent_finished,
+                model_kwargs=next_model_kwargs,
+            )
+
+        # The very first prompt often has sequence length > 1, so run outside of `lax.while_loop` to comply with TPU
+        state = greedy_search_body_fn(state)
+
+        if not trace:
+            state = self._run_loop_in_debug(greedy_search_cond_fn, greedy_search_body_fn, state)
+        else:
+            state = lax.while_loop(greedy_search_cond_fn, greedy_search_body_fn, state)
+
+        return FlaxGreedySearchOutput(sequences=state.sequences)

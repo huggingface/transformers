@@ -15,6 +15,7 @@
 
 import inspect
 from abc import ABC
+from typing import List, Iterable
 
 import jax
 import jax.lax as lax
@@ -81,16 +82,18 @@ class FlaxLogitsProcessorList(list):
     """
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: jax_xla.DeviceArray, scores: jax_xla.DeviceArray, **kwargs) -> jax_xla.DeviceArray:
+    def __call__(
+        self, input_ids: jax_xla.DeviceArray, scores: jax_xla.DeviceArray, cur_len: int, **kwargs
+    ) -> jax_xla.DeviceArray:
         for processor in self:
             function_args = inspect.signature(processor.__call__).parameters
-            if len(function_args) > 2:
+            if len(function_args) > 3:
                 assert all(
                     arg in kwargs for arg in list(function_args.keys())[2:]
                 ), f"Make sure that all the required parameters: {list(function_args.keys())} for {processor.__class__} are passed to the logits processor."
-                scores = processor(input_ids, scores, **kwargs)
+                scores = processor(input_ids, scores, cur_len, **kwargs)
             else:
-                scores = processor(input_ids, scores)
+                scores = processor(input_ids, scores, cur_len)
         return scores
 
 
@@ -109,7 +112,9 @@ class FlaxTemperatureLogitsWarper(FlaxLogitsWarper):
 
         self.temperature = temperature
 
-    def __call__(self, input_ids: jax_xla.DeviceArray, scores: jax_xla.DeviceArray) -> jax_xla.DeviceArray:
+    def __call__(
+        self, input_ids: jax_xla.DeviceArray, scores: jax_xla.DeviceArray, cur_len: int
+    ) -> jax_xla.DeviceArray:
         scores = scores / self.temperature
         return scores
 
@@ -137,7 +142,9 @@ class FlaxTopPLogitsWarper(FlaxLogitsWarper):
         self.filter_value = filter_value
         self.min_tokens_to_keep = min_tokens_to_keep
 
-    def __call__(self, input_ids: jax_xla.DeviceArray, scores: jax_xla.DeviceArray) -> jax_xla.DeviceArray:
+    def __call__(
+        self, input_ids: jax_xla.DeviceArray, scores: jax_xla.DeviceArray, cur_len: int
+    ) -> jax_xla.DeviceArray:
         topk_scores, topk_indices = lax.top_k(scores, scores.shape[-1])
 
         mask_scores = jnp.full_like(scores, self.filter_value)
@@ -177,7 +184,9 @@ class FlaxTopKLogitsWarper(FlaxLogitsWarper):
         self.filter_value = filter_value
         self.min_tokens_to_keep = min_tokens_to_keep
 
-    def __call__(self, input_ids: jax_xla.DeviceArray, scores: jax_xla.DeviceArray) -> jax_xla.DeviceArray:
+    def __call__(
+        self, input_ids: jax_xla.DeviceArray, scores: jax_xla.DeviceArray, cur_len: int
+    ) -> jax_xla.DeviceArray:
         batch_size, vocab_size = scores.shape
         next_scores_flat = jnp.full(batch_size * vocab_size, self.filter_value)
 
@@ -190,3 +199,143 @@ class FlaxTopKLogitsWarper(FlaxLogitsWarper):
         next_scores_flat = jax.ops.index_update(next_scores_flat, topk_indices_flat, topk_scores_flat)
         next_scores = next_scores_flat.reshape(batch_size, vocab_size)
         return next_scores
+
+
+class FlaxForcedBOSTokenLogitsProcessor(FlaxLogitsProcessor):
+    r"""
+    :class:`~transformers.FlaxLogitsProcessor` that enforces the specified token as the first generated token.
+
+    Args:
+        bos_token_id (:obj:`int`):
+            The id of the token to force as the first generated token.
+    """
+
+    def __init__(self, bos_token_id: int):
+        self.bos_token_id = bos_token_id
+
+    def __call__(
+        self, input_ids: jax_xla.DeviceArray, scores: jax_xla.DeviceArray, cur_len: int
+    ) -> jax_xla.DeviceArray:
+        if cur_len == 1:
+            new_scores = jnp.full(scores.shape, -float("inf"))
+            scores = jax.ops.index_update(new_scores, jax.ops.index[:, self.bos_token_id], 0)
+        return scores
+
+
+class FlaxForcedEOSTokenLogitsProcessor(FlaxLogitsProcessor):
+    r"""
+    :class:`~transformers.FlaxLogitsProcessor` that enforces the specified token as the last generated token when
+    :obj:`max_length` is reached.
+
+    Args:
+        max_length (:obj:`int`):
+            The maximum length of the sequence to be generated.
+        eos_token_id (:obj:`int`):
+            The id of the token to force as the last generated token when :obj:`max_length` is reached.
+    """
+
+    def __init__(self, max_length: int, eos_token_id: int):
+        self.max_length = max_length
+        self.eos_token_id = eos_token_id
+
+    def __call__(
+        self, input_ids: jax_xla.DeviceArray, scores: jax_xla.DeviceArray, cur_len: int
+    ) -> jax_xla.DeviceArray:
+        if cur_len == self.max_length - 1:
+            new_scores = jnp.full(scores.shape, -float("inf"))
+            scores = jax.ops.index_update(new_scores, jax.ops.index[:, self.eos_token_id], 0)
+        return scores
+
+
+class FlaxMinLengthLogitsProcessor(FlaxLogitsProcessor):
+    r"""
+    :class:`transformers.FlaxLogitsProcessor` enforcing a min-length by setting EOS probability to 0.
+
+    Args:
+        min_length (:obj:`int`):
+            The minimum length below which the score of :obj:`eos_token_id` is set to :obj:`-float("Inf")`.
+        eos_token_id (:obj:`int`):
+            The id of the `end-of-sequence` token.
+    """
+
+    def __init__(self, min_length: int, eos_token_id: int):
+        if not isinstance(min_length, int) or min_length < 0:
+            raise ValueError(f"`min_length` has to be a positive integer, but is {min_length}")
+
+        if not isinstance(eos_token_id, int) or eos_token_id < 0:
+            raise ValueError(f"`eos_token_id` has to be a positive integer, but is {eos_token_id}")
+
+        self.min_length = min_length
+        self.eos_token_id = eos_token_id
+
+    def __call__(
+        self, input_ids: jax_xla.DeviceArray, scores: jax_xla.DeviceArray, cur_len: int
+    ) -> jax_xla.DeviceArray:
+        if cur_len < self.min_length:
+            scores = jax.ops.index_update(scores, jax.ops.index[:, self.eos_token_id], -float("inf"))
+        return scores
+
+
+class FlaxNoRepeatNGramLogitsProcessor(FlaxLogitsProcessor):
+    r"""
+    :class:`transformers.LogitsProcessor` that enforces no repetition of n-grams. See `Fairseq
+    <https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345>`__.
+
+    Args:
+        ngram_size (:obj:`int`):
+            All ngrams of size :obj:`ngram_size` can only occur once.
+    """
+
+    def __init__(self, ngram_size: int):
+        if not isinstance(ngram_size, int) or ngram_size <= 0:
+            raise ValueError(f"`ngram_size` has to be a strictly positive integer, but is {ngram_size}")
+        self.ngram_size = ngram_size
+
+    def __call__(
+        self, input_ids: jax_xla.DeviceArray, scores: jax_xla.DeviceArray, cur_len: int
+    ) -> jax_xla.DeviceArray:
+        num_batch_hypotheses = scores.shape[0]
+
+        banned_batch_tokens = _calc_banned_ngram_tokens(
+            self.ngram_size, input_ids[:, :cur_len], num_batch_hypotheses, cur_len
+        )
+
+        for i, banned_tokens in enumerate(banned_batch_tokens):
+            scores = jax.ops.index_update(scores, jax.ops.index[i, banned_tokens], -float("inf"))
+
+        return scores
+
+
+def _calc_banned_ngram_tokens(
+    ngram_size: int, prev_input_ids: jax_xla.DeviceArray, num_hypos: int, cur_len: int
+) -> List[Iterable[int]]:
+    """Copied from fairseq for no_repeat_ngram in beam_search"""
+    if cur_len + 1 < ngram_size:
+        # return no banned tokens if we haven't generated no_repeat_ngram_size tokens yet
+        return [[] for _ in range(num_hypos)]
+
+    generated_ngrams = _get_ngrams(ngram_size, prev_input_ids, num_hypos)
+
+    banned_tokens = [
+        _get_generated_ngrams(generated_ngrams[hypo_idx], prev_input_ids[hypo_idx], ngram_size, cur_len)
+        for hypo_idx in range(num_hypos)
+    ]
+    return banned_tokens
+
+
+def _get_ngrams(ngram_size: int, prev_input_ids: jax_xla.DeviceArray, num_hypos: int):
+    generated_ngrams = [{} for _ in range(num_hypos)]
+    for idx in range(num_hypos):
+        gen_tokens = prev_input_ids[idx].tolist()
+        generated_ngram = generated_ngrams[idx]
+        for ngram in zip(*[gen_tokens[i:] for i in range(ngram_size)]):
+            prev_ngram_tuple = tuple(ngram[:-1])
+            generated_ngram[prev_ngram_tuple] = generated_ngram.get(prev_ngram_tuple, []) + [ngram[-1]]
+    return generated_ngrams
+
+
+def _get_generated_ngrams(banned_ngrams, prev_input_ids, ngram_size, cur_len):
+    # Before decoding the next token, prevent decoding of ngrams that have already appeared
+    start_idx = cur_len + 1 - ngram_size
+    ngram_idx = tuple(prev_input_ids[start_idx:cur_len].tolist())
+    return banned_ngrams.get(ngram_idx, [])
