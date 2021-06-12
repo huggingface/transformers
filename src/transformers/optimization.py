@@ -638,7 +638,7 @@ def get_adafactor_schedule(optimizer, initial_lr=0.0):
             Initial lr
 
     Return:
-      :class:`~transformers.optimization.Adafactor` proxy schedule object.
+        :class:`~transformers.optimization.Adafactor` proxy schedule object.
 
 
     """
