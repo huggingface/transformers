@@ -126,6 +126,7 @@ class FlaxBartModelTester(unittest.TestCase):
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
             initializer_range=self.initializer_range,
+            use_cache=False,
         )
         inputs_dict = prepare_bart_inputs_dict(config, input_ids, decoder_input_ids)
         return config, inputs_dict
