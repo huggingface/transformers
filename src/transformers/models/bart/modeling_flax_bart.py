@@ -17,7 +17,6 @@
 import math
 import random
 from functools import partial
-from re import I
 from typing import Callable, Optional, Tuple
 
 import flax.linen as nn
@@ -1186,7 +1185,7 @@ class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
 
         past_key_values = self.init_cache(batch_size, max_length, encoder_outputs)
         # Note that usually one would have to put 0's in the attention_mask for x > input_ids.shape[-1] and x < cache_length.
-        # But since GPT2 uses a causal mask, those positions are masked anyways.
+        # But since the decoder uses a causal mask, those positions are masked anyways.
         # Thus we can create a single static attention_mask here, which is more efficient for compilation
         extended_attention_mask = jnp.ones((batch_size, max_length), dtype="i4")
         if decoder_attention_mask is not None:
