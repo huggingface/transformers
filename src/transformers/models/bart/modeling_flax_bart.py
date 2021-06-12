@@ -173,7 +173,7 @@ def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_
     shifted_input_ids = jnp.roll(input_ids, 1, axis=-1)
     shifted_input_ids = jax.ops.index_update(shifted_input_ids, (..., 0), decoder_start_token_id)
     # replace possible -100 values in labels by `pad_token_id`
-    shifted_input_ids = jax.ops.index_update(shifted_input_ids, shifted_input_ids == -100, pad_token_id)
+    shifted_input_ids = jnp.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
 
     return shifted_input_ids
 
@@ -1380,7 +1380,7 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
 
         eos_mask = jnp.where(input_ids == self.config.eos_token_id, 1, 0)
 
-        # The first condition is necessary to overcome jax._src.errors.ConcretizationTypeError during initialization
+        # The first condition is necessary to overcome jax._src.errors.ConcretizationTypeError during JIT compilation
         if type(eos_mask) != jax.interpreters.partial_eval.DynamicJaxprTracer:
             if len(jnp.unique(eos_mask.sum(1))) > 1:
                 raise ValueError("All examples must have the same number of <eos> tokens.")
