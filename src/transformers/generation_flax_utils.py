@@ -291,6 +291,7 @@ class FlaxGenerationMixin:
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
 
         batch_size, cur_len = input_ids.shape
+        input_key = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
 
         eos_token_id = jnp.array(eos_token_id)
         pad_token_id = jnp.array(pad_token_id)
@@ -303,8 +304,7 @@ class FlaxGenerationMixin:
         # per batch-item state bit indicating if sentence has finished.
         is_sent_finished = jnp.zeros((batch_size,), dtype=jnp.bool_)
 
-        model = self.decoder if self.config.is_encoder_decoder else self
-
+        model = self
         # initialize model specific kwargs
         model_kwargs = self.prepare_inputs_for_generation(input_ids, max_length, **model_kwargs)
 
@@ -326,7 +326,8 @@ class FlaxGenerationMixin:
 
         def greedy_search_body_fn(state):
             """state update fn."""
-            model_outputs = model(state.current_token, **state.model_kwargs)
+            state.model_kwargs[input_key] = state.current_token
+            model_outputs = model(**state.model_kwargs)
             next_token = jnp.argmax(model_outputs.logits[:, -1], axis=-1)
 
             next_is_sent_finished = state.is_sent_finished | (next_token == eos_token_id)
@@ -334,8 +335,8 @@ class FlaxGenerationMixin:
             next_token = next_token[:, None]
 
             next_sequences = lax.dynamic_update_slice(state.sequences, next_token, (0, state.cur_len))
-            next_model_kwargs = self.update_inputs_for_generation(model_outputs, state.model_kwargs)
-
+            next_model_kwargs = model.update_inputs_for_generation(model_outputs, state.model_kwargs)
+            state.model_kwargs.pop(input_key)
             return GreedyState(
                 cur_len=state.cur_len + 1,
                 sequences=next_sequences,
