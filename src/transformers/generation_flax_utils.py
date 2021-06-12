@@ -110,39 +110,6 @@ class FlaxGenerationMixin:
         model_kwargs["encoder_outputs"] = self.encode(input_ids, return_dict=True, **encoder_kwargs)
         return model_kwargs
 
-    def _prepare_decoder_input_ids_for_generation(
-        self, input_ids, decoder_start_token_id: int = None, bos_token_id: int = None
-    ):
-        decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
-        decoder_input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
-        return decoder_input_ids
-
-    def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
-        decoder_start_token_id = (
-            decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
-        )
-        bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
-
-        if decoder_start_token_id is not None:
-            return decoder_start_token_id
-        elif (
-            hasattr(self.config, "decoder")
-            and hasattr(self.config.decoder, "decoder_start_token_id")
-            and self.config.decoder.decoder_start_token_id is not None
-        ):
-            return self.config.decoder.decoder_start_token_id
-        elif bos_token_id is not None:
-            return bos_token_id
-        elif (
-            hasattr(self.config, "decoder")
-            and hasattr(self.config.decoder, "bos_token_id")
-            and self.config.decoder.bos_token_id is not None
-        ):
-            return self.config.decoder.bos_token_id
-        raise ValueError(
-            "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
-        )
-
     def generate(
         self,
         input_ids: jax_xla.DeviceArray,
@@ -219,17 +186,21 @@ class FlaxGenerationMixin:
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        decoder_start_token_id = (
+            decoder_start_token_id if decoder_start_token_id else self.config.decoder_start_token_id
+        )
         prng_key = prng_key if prng_key is not None else jax.random.PRNGKey(0)
 
-        # Storing encoder_input_ids for logits_processor that could use them
-        encoder_input_ids = input_ids if self.config.is_encoder_decoder else None
+        if decoder_start_token_id is None and self.config.is_encoder_decoder:
+            raise ValueError(
+                "`decoder_start_token_id` has to be defined for encoder-decoder generation."
+            )
 
         if self.config.is_encoder_decoder:
             # add encoder_outputs to model_kwargs
             model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
-            input_ids = self._prepare_decoder_input_ids_for_generation(
-                input_ids, decoder_start_token_id=decoder_start_token_id, bos_token_id=bos_token_id
-            )
+            # prepare decoder_input_ids for generation
+            input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
         do_sample = do_sample if do_sample is not None else self.config.do_sample
 
@@ -342,8 +313,7 @@ class FlaxGenerationMixin:
                 model_kwargs=next_model_kwargs,
             )
 
-        # for now, not accepting decoder_input_ids for seq2seq models, so we should only run the for causal models
-        if not self.config.is_encoder_decoder:
+        if input_ids.shape[1] > 1:
             # The very first prompt often has sequence length > 1, so run outside of `lax.while_loop` to comply with TPU
             state = greedy_search_body_fn(state)
 
