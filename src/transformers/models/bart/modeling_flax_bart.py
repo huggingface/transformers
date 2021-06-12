@@ -385,17 +385,6 @@ class FlaxBartEncoderLayer(nn.Module):
         output_attentions: bool = True,
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
-        """
-        Args:
-            hidden_states (:obj:`jnp.ndarray`): input to the layer of shape `(seq_len, batch, embed_dim)`
-            attention_mask (:obj:`jnp.ndarray`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (:obj:`jnp.ndarray`): mask for attention heads in a given layer of size
-                `(encoder_attention_heads,)`.
-            output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
-                returned tensors for more detail.
-        """
         residual = hidden_states
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
@@ -515,26 +504,8 @@ class FlaxBartDecoderLayer(nn.Module):
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
         output_attentions: bool = True,
-        use_cache: bool = True,
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
-        """
-        Args:
-            hidden_states (:obj:`jnp.ndarray`): input to the layer of shape `(seq_len, batch, embed_dim)`
-            attention_mask (:obj:`jnp.ndarray`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            encoder_hidden_states (:obj:`jnp.ndarray`): cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
-            encoder_attention_mask (:obj:`jnp.ndarray`): encoder attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (:obj:`jnp.ndarray`): mask for attention heads in a given layer of size
-                `(encoder_attention_heads,)`.
-            cross_attn_layer_head_mask (:obj:`jnp.ndarray`): mask for cross-attention heads in a given layer of
-                size `(decoder_attention_heads,)`.
-            past_key_value (:obj:`Tuple(jnp.ndarray)`): cached past key and value projection states
-            output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
-                returned tensors for more detail.
-        """
         residual = hidden_states
 
         # Self Attention
@@ -600,7 +571,6 @@ class FlaxBartDecoderLayerCollection(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        use_cache: bool = True,
         return_dict: bool = True,
     ):
         # decoder layers
@@ -623,7 +593,6 @@ class FlaxBartDecoderLayerCollection(nn.Module):
                 encoder_attention_mask=encoder_attention_mask,
                 init_cache=init_cache,
                 output_attentions=output_attentions,
-                use_cache=use_cache,
                 deterministic=deterministic,
             )
             hidden_states = layer_outputs[0]
@@ -804,7 +773,6 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
         position_ids: Optional[jnp.ndarray] = None,
         decoder_position_ids: Optional[jnp.ndarray] = None,
         encoder_outputs: Optional[FlaxBaseModelOutput] = None,
-        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -882,7 +850,6 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
             decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
             decoder_position_ids=jnp.array(decoder_position_ids, dtype="i4"),
             encoder_outputs=encoder_outputs,
-            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -904,15 +871,6 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
 
 
 class FlaxBartEncoder(nn.Module):
-    """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    :class:`FlaxBartEncoderLayer`.
-
-    Args:
-        config: BartConfig
-        embed_tokens (flax.linen.Embedding): output embedding
-    """
-
     config: BartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
     embed_tokens: Optional[nn.Embed] = None
@@ -956,49 +914,6 @@ class FlaxBartEncoder(nn.Module):
         return_dict: bool = True,
         deterministic: bool = True,
     ):
-        r"""
-        Args:
-            input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using :class:`~transformers.BartTokenizer`. See
-                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
-                for details.
-
-                `What are input IDs? <../glossary.html#input-ids>`__
-            attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            head_mask (:obj:`jnp.ndarray` of shape :obj:`(encoder_layers, encoder_attention_heads)`, `optional`):
-                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
-            inputs_embeds (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
-                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
-                into associated vectors than the model's internal embedding lookup matrix.
-            output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
-                returned tensors for more detail.
-            output_hidden_states (:obj:`bool`, `optional`):
-                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
-                for more detail.
-            return_dict (:obj:`bool`, `optional`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         input_shape = input_ids.shape
         input_ids = input_ids.reshape(-1, input_shape[-1])
 
@@ -1030,14 +945,6 @@ class FlaxBartEncoder(nn.Module):
 
 
 class FlaxBartDecoder(nn.Module):
-    """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`FlaxBartDecoderLayer`
-
-    Args:
-        config: BartConfig
-        embed_tokens (flax.linen.Embedding): output embedding
-    """
-
     config: BartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
     embed_tokens: Optional[nn.Embed] = None
@@ -1086,82 +993,11 @@ class FlaxBartDecoder(nn.Module):
         encoder_hidden_states: Optional[jnp.ndarray] = None,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = None,
-        use_cache: Optional[bool] = None,
         init_cache: bool = False,
         output_hidden_states: Optional[bool] = None,
         return_dict: bool = True,
         deterministic: bool = True,
     ):
-        r"""
-        Args:
-            input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using :class:`~transformers.BartTokenizer`. See
-                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
-                for details.
-
-                `What are input IDs? <../glossary.html#input-ids>`__
-            attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            encoder_hidden_states (:obj:`jnp.ndarray` of shape :obj:`(batch_size, encoder_sequence_length, hidden_size)`, `optional`):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
-            encoder_attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, encoder_sequence_length)`, `optional`):
-                Mask to avoid performing cross-attention on padding tokens indices of encoder input_ids. Mask values
-                selected in ``[0, 1]``:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            head_mask (:obj:`jnp.ndarray` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
-                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
-            cross_attn_head_mask (:obj:`jnp.ndarray` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
-                Mask to nullify selected heads of the cross-attention modules in the decoder to avoid performing
-                cross-attention on hidden heads. Mask values selected in ``[0, 1]``:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
-            past_key_values (:obj:`Tuple[Tuple[jnp.ndarray]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-                Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
-                decoding.
-
-                If :obj:`past_key_values` are used, the user can optionally input only the last
-                :obj:`decoder_input_ids` (those that don't have their past key value states given to this model) of
-                shape :obj:`(batch_size, 1)` instead of all :obj:`decoder_input_ids`` of shape :obj:`(batch_size,
-                sequence_length)`.
-            inputs_embeds (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
-                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
-                into associated vectors than the model's internal embedding lookup matrix.
-            output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
-                returned tensors for more detail.
-            output_hidden_states (:obj:`bool`, `optional`):
-                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
-                for more detail.
-            return_dict (:obj:`bool`, `optional`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         input_shape = input_ids.shape
         input_ids = input_ids.reshape(-1, input_shape[-1])
 
@@ -1184,7 +1020,6 @@ class FlaxBartDecoder(nn.Module):
             init_cache=init_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            use_cache=use_cache,
             return_dict=return_dict,
         )
 
@@ -1232,21 +1067,12 @@ class FlaxBartModule(nn.Module):
         position_ids: Optional[jnp.ndarray] = None,
         decoder_position_ids: Optional[jnp.ndarray] = None,
         encoder_outputs: Optional[FlaxBaseModelOutput] = None,
-        use_cache: Optional[bool] = None,
         init_cache: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: bool = True,
         deterministic: bool = True,
     ):
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -1271,7 +1097,6 @@ class FlaxBartModule(nn.Module):
             position_ids=decoder_position_ids,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
-            use_cache=use_cache,
             init_cache=init_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1372,7 +1197,6 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
         position_ids: Optional[jnp.ndarray] = None,
         decoder_position_ids: Optional[jnp.ndarray] = None,
         encoder_outputs: Optional[FlaxBaseModelOutput] = None,
-        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: bool = True,
@@ -1386,7 +1210,6 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
             position_ids=position_ids,
             decoder_position_ids=decoder_position_ids,
             encoder_outputs=encoder_outputs,
-            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1566,7 +1389,6 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
         decoder_input_ids: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
         encoder_outputs: Optional[jnp.ndarray] = None,
-        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: bool = True,
@@ -1578,7 +1400,6 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             encoder_outputs=encoder_outputs,
-            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1648,7 +1469,6 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
         decoder_input_ids: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
         encoder_outputs: Optional[jnp.ndarray] = None,
-        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: bool = True,
@@ -1660,7 +1480,6 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             encoder_outputs=encoder_outputs,
-            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
