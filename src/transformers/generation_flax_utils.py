@@ -107,7 +107,7 @@ class FlaxGenerationMixin:
             for argument, value in model_kwargs.items()
             if not (argument.startswith("decoder_") or argument.startswith("cross_attn"))
         }
-        model_kwargs["encoder_outputs"] = self.encoder(input_ids, return_dict=True, **encoder_kwargs)
+        model_kwargs["encoder_outputs"] = self.encode(input_ids, return_dict=True, **encoder_kwargs)
         return model_kwargs
 
     def _prepare_decoder_input_ids_for_generation(
