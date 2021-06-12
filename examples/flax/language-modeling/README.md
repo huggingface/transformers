@@ -127,9 +127,9 @@ look at [this TODO: (Patrick)]() google colab.
 
 ## Causal language modeling
 
-In the following, we demonstrate how to train a auto-regressive causal transformer model 
-as introduced in [GPT2](https://openai.com/blog/better-language-models/).
-More specifically, we demonstrate how JAX/Flax can be leveraged 
+In the following, we demonstrate how to train an auto-regressive causal transformer model 
+in JAX/Flax.
+More specifically, we pretrain a randomely initialized [**`gpt2`**](https://huggingface.co/gpt2) model in Norwegian on a single TPUv3-8.
 to pre-train 124M [**`gpt2`**](https://huggingface.co/gpt2)
 in Norwegian on a single TPUv3-8 pod.
 
@@ -143,7 +143,7 @@ mkdir -p ${MODEL_DIR}
 ln -s ~/transformers/examples/flax/language-modeling/run_clm_flax.py run_clm_flax.py
 ```
 
-Netx, we'll follow the similar steps to train the tokenizer as given in [Train tokenizer](#train-tokenizer)
+Next, we'll follow the same steps as above in [Train tokenizer](#train-tokenizer) to train the tokenizer.
 
 ### Create configuration
 
