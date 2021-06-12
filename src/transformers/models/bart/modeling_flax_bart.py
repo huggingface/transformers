@@ -360,8 +360,14 @@ class FlaxBartEncoderLayer(nn.Module):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
         self.activation_fn = ACT2FN[self.config.activation_function]
         self.acticvation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
-        self.fc1 = nn.Dense(self.config.encoder_ffn_dim)
-        self.fc2 = nn.Dense(self.embed_dim)
+        self.fc1 = nn.Dense(
+            self.config.encoder_ffn_dim,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+        )
+        self.fc2 = nn.Dense(
+            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
+        )
         self.final_layer_norm = nn.LayerNorm(dtype=self.dtype)
 
     def __call__(
@@ -474,8 +480,14 @@ class FlaxBartDecoderLayer(nn.Module):
             is_decoder=True,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
-        self.fc1 = nn.Dense(self.config.encoder_ffn_dim)
-        self.fc2 = nn.Dense(self.embed_dim)
+        self.fc1 = nn.Dense(
+            self.config.encoder_ffn_dim,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+        )
+        self.fc2 = nn.Dense(
+            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
+        )
         self.final_layer_norm = nn.LayerNorm(dtype=self.dtype)
 
     def __call__(
@@ -608,9 +620,15 @@ class FlaxBartClassificationHead(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.dense = nn.Dense(self.inner_dim, dtype=self.dtype)
+        self.dense = nn.Dense(
+            self.inner_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
+        )
         self.dropout = nn.Dropout(rate=self.pooler_dropout)
-        self.out_proj = nn.Dense(self.num_classes, dtype=self.dtype)
+        self.out_proj = nn.Dense(
+            self.num_classes,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+        )
 
     def __call__(self, hidden_states: jnp.ndarray, deterministic: bool):
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
@@ -1102,7 +1120,12 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
 
     def setup(self):
         self.model = FlaxBartModule(config=self.config, dtype=self.dtype)
-        self.lm_head = nn.Dense(self.model.shared.num_embeddings, use_bias=False, dtype=self.dtype)
+        self.lm_head = nn.Dense(
+            self.model.shared.num_embeddings,
+            use_bias=False,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+        )
         self.final_logits_bias = self.param("final_logits_bias", self.bias_init, (1, self.model.shared.num_embeddings))
 
     def get_encoder(self):
@@ -1435,7 +1458,9 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
 
     def setup(self):
         self.model = FlaxBartModule(config=self.config, dtype=self.dtype)
-        self.qa_outputs = nn.Dense(self.num_labels, dtype=self.dtype)
+        self.qa_outputs = nn.Dense(
+            self.num_labels, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
+        )
 
     def get_encoder(self):
         return self.model.encoder
