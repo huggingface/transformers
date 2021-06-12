@@ -24,6 +24,7 @@ from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
 if is_flax_available():
+    import jax
     from transformers.models.bart.modeling_flax_bart import (
         FlaxBartForConditionalGeneration,
         FlaxBartForQuestionAnswering,
@@ -243,6 +244,61 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = FlaxBartModelTester(self)
+
+    def test_encode(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                model = model_class(config)
+
+                @jax.jit
+                def encode_jitted(input_ids, attention_mask=None, **kwargs):
+                    return model.encode(input_ids=input_ids, attention_mask=attention_mask)
+
+                with self.subTest("JIT Enabled"):
+                    jitted_outputs = encode_jitted(**prepared_inputs_dict).to_tuple()
+
+                with self.subTest("JIT Disabled"):
+                    with jax.disable_jit():
+                        outputs = encode_jitted(**prepared_inputs_dict).to_tuple()
+
+                self.assertEqual(len(outputs), len(jitted_outputs))
+                for jitted_output, output in zip(jitted_outputs, outputs):
+
+                    self.assertEqual(jitted_output.shape, output.shape)
+
+    def test_decode(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = FlaxBartForConditionalGeneration(config)
+
+        encoder_outputs = model.encode(inputs_dict["input_ids"], inputs_dict["attention_mask"])
+        prepared_inputs_dict = {
+            "decoder_input_ids": inputs_dict["decoder_input_ids"],
+            "decoder_attention_mask": inputs_dict["decoder_attention_mask"],
+            "encoder_outputs": encoder_outputs,
+        }
+
+        @jax.jit
+        def decode_jitted(decoder_input_ids, decoder_attention_mask, encoder_outputs):
+            return model.decode(
+                decoder_input_ids=decoder_input_ids,
+                decoder_attention_mask=decoder_attention_mask,
+                encoder_outputs=encoder_outputs,
+            )
+
+        with self.subTest("JIT Enabled"):
+            jitted_outputs = decode_jitted(**prepared_inputs_dict).to_tuple()
+
+        with self.subTest("JIT Disabled"):
+            with jax.disable_jit():
+                outputs = decode_jitted(**prepared_inputs_dict).to_tuple()
+
+        self.assertEqual(len(outputs), len(jitted_outputs))
+        for jitted_output, output in zip(jitted_outputs, outputs):
+
+            self.assertEqual(jitted_output.shape, output.shape)
 
     @slow
     def test_model_from_pretrained(self):

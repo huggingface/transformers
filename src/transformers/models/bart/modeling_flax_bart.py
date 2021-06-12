@@ -1247,7 +1247,7 @@ class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
             lm_logits += module.final_logits_bias
             return lm_logits, outputs
 
-        outputs, past = self.module.apply(
+        outputs = self.module.apply(
             inputs,
             decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4"),
             decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
@@ -1262,7 +1262,11 @@ class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
             mutable=mutable,
             method=_decoder_forward,
         )
-        lm_logits, decoder_outputs = outputs
+
+        if past_key_values is None:
+            lm_logits, decoder_outputs = outputs
+        else:
+            (lm_logits, decoder_outputs), past = outputs
 
         if return_dict and not isinstance(encoder_outputs, FlaxBaseModelOutput):
             encoder_outputs = FlaxBaseModelOutput(
@@ -1343,6 +1347,9 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
             num_classes=self.num_labels if self.num_labels is not None else self.config.num_labels,
             pooler_dropout=self.config.classifier_dropout,
         )
+
+    def get_encoder(self):
+        return self.model.encoder
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     def __call__(
@@ -1429,6 +1436,9 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
     def setup(self):
         self.model = FlaxBartModule(config=self.config, dtype=self.dtype)
         self.qa_outputs = nn.Dense(self.num_labels, dtype=self.dtype)
+
+    def get_encoder(self):
+        return self.model.encoder
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     def __call__(
