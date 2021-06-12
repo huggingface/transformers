@@ -15,7 +15,7 @@
 
 import inspect
 from abc import ABC
-from typing import List, Iterable
+from typing import Iterable, List
 
 import jax
 import jax.lax as lax

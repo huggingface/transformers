@@ -28,14 +28,14 @@ if is_flax_available():
     import jax
     import jax.numpy as jnp
     from transformers.generation_flax_logits_process import (
+        FlaxForcedBOSTokenLogitsProcessor,
+        FlaxForcedEOSTokenLogitsProcessor,
         FlaxLogitsProcessorList,
+        FlaxMinLengthLogitsProcessor,
+        FlaxNoRepeatNGramLogitsProcessor,
         FlaxTemperatureLogitsWarper,
         FlaxTopKLogitsWarper,
         FlaxTopPLogitsWarper,
-        FlaxMinLengthLogitsProcessor,
-        FlaxForcedBOSTokenLogitsProcessor,
-        FlaxForcedEOSTokenLogitsProcessor,
-        FlaxNoRepeatNGramLogitsProcessor,
     )
 
 
