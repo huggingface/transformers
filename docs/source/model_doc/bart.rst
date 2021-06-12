@@ -61,7 +61,7 @@ Implementation Notes
 - Model predictions are intended to be identical to the original implementation when
   :obj:`force_bos_token_to_be_generated=True`. This only works, however, if the string you pass to
   :func:`fairseq.encode` starts with a space.
-- :meth:`~transformers.BartForConditionalGeneration.generate` should be used for conditional generation tasks like
+- :meth:`~transformers.generation_utils.GenerationMixin.generate` should be used for conditional generation tasks like
   summarization, see the example in that docstrings.
 - Models that load the `facebook/bart-large-cnn` weights will not have a :obj:`mask_token_id`, or be able to perform
   mask-filling tasks.
