@@ -337,11 +337,13 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationT
 
     def test_use_cache_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.check_use_cache_forward(FlaxBartForConditionalGeneration, config, inputs_dict)
+        for model_class in self.all_model_classes:
+            self.model_tester.check_use_cache_forward(model_class, config, inputs_dict)
 
     def test_use_cache_forward_with_attn_mask(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.check_use_cache_forward_with_attn_mask(FlaxBartForConditionalGeneration, config, inputs_dict)
+        for model_class in self.all_model_classes:
+            self.model_tester.check_use_cache_forward_with_attn_mask(model_class, config, inputs_dict)
 
     def test_encode(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -364,39 +366,40 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationT
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
-
                     self.assertEqual(jitted_output.shape, output.shape)
 
     def test_decode(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = FlaxBartForConditionalGeneration(config)
 
-        encoder_outputs = model.encode(inputs_dict["input_ids"], inputs_dict["attention_mask"])
-        prepared_inputs_dict = {
-            "decoder_input_ids": inputs_dict["decoder_input_ids"],
-            "decoder_attention_mask": inputs_dict["decoder_attention_mask"],
-            "encoder_outputs": encoder_outputs,
-        }
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                model = model_class(config)
+                encoder_outputs = model.encode(inputs_dict["input_ids"], inputs_dict["attention_mask"])
 
-        @jax.jit
-        def decode_jitted(decoder_input_ids, decoder_attention_mask, encoder_outputs):
-            return model.decode(
-                decoder_input_ids=decoder_input_ids,
-                decoder_attention_mask=decoder_attention_mask,
-                encoder_outputs=encoder_outputs,
-            )
+                prepared_inputs_dict = {
+                    "decoder_input_ids": inputs_dict["decoder_input_ids"],
+                    "decoder_attention_mask": inputs_dict["decoder_attention_mask"],
+                    "encoder_outputs": encoder_outputs,
+                }
 
-        with self.subTest("JIT Enabled"):
-            jitted_outputs = decode_jitted(**prepared_inputs_dict).to_tuple()
+                @jax.jit
+                def decode_jitted(decoder_input_ids, decoder_attention_mask, encoder_outputs):
+                    return model.decode(
+                        decoder_input_ids=decoder_input_ids,
+                        decoder_attention_mask=decoder_attention_mask,
+                        encoder_outputs=encoder_outputs,
+                    )
 
-        with self.subTest("JIT Disabled"):
-            with jax.disable_jit():
-                outputs = decode_jitted(**prepared_inputs_dict).to_tuple()
+                with self.subTest("JIT Enabled"):
+                    jitted_outputs = decode_jitted(**prepared_inputs_dict).to_tuple()
 
-        self.assertEqual(len(outputs), len(jitted_outputs))
-        for jitted_output, output in zip(jitted_outputs, outputs):
+                with self.subTest("JIT Disabled"):
+                    with jax.disable_jit():
+                        outputs = decode_jitted(**prepared_inputs_dict).to_tuple()
 
-            self.assertEqual(jitted_output.shape, output.shape)
+                self.assertEqual(len(outputs), len(jitted_outputs))
+                for jitted_output, output in zip(jitted_outputs, outputs):
+                    self.assertEqual(jitted_output.shape, output.shape)
 
     @slow
     def test_model_from_pretrained(self):
