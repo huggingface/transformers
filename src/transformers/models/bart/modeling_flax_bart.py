@@ -32,6 +32,7 @@ from ...file_utils import add_start_docstrings, replace_return_docstrings
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
+    FlaxCausalLMOutputWithCrossAttentions,
     FlaxSeq2SeqLMOutput,
     FlaxSeq2SeqModelOutput,
     FlaxSeq2SeqQuestionAnsweringModelOutput,
@@ -1447,25 +1448,15 @@ class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
         else:
             (lm_logits, decoder_outputs), past = outputs
 
-        if return_dict and not isinstance(encoder_outputs, FlaxBaseModelOutput):
-            encoder_outputs = FlaxBaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-            )
-
-        if not return_dict:
-            outputs = (lm_logits,) + decoder_outputs + encoder_outputs
-        else:
-            outputs = FlaxSeq2SeqLMOutput(
+        if return_dict:
+            outputs = FlaxCausalLMOutputWithCrossAttentions(
                 logits=lm_logits,
-                decoder_hidden_states=decoder_outputs.hidden_states,
-                decoder_attentions=decoder_outputs.attentions,
+                hidden_states=decoder_outputs.hidden_states,
+                attentions=decoder_outputs.attentions, 
                 cross_attentions=decoder_outputs.cross_attentions,
-                encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-                encoder_hidden_states=encoder_outputs.hidden_states,
-                encoder_attentions=encoder_outputs.attentions,
             )
+        else:
+            outputs = (lm_logits,) + decoder_outputs[1:]
 
         # add updated cache to model output
         if past_key_values is not None and return_dict:
