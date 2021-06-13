@@ -1306,8 +1306,7 @@ class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
             else:
                 a = config["a"]
                 b = config["b"]
-            model_config = RegressionModelConfig(a=a, b=b,
-                                                 double_output=False)
+            model_config = RegressionModelConfig(a=a, b=b, double_output=False)
 
             return RegressionPreTrainedModel(model_config)
 
@@ -1328,8 +1327,8 @@ class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
                 model_init=model_init,
             )
             trainer.hyperparameter_search(
-                direction="minimize", hp_space=hp_space, hp_name=hp_name,
-                backend="ray", n_trials=4)
+                direction="minimize", hp_space=hp_space, hp_name=hp_name, backend="ray", n_trials=4
+            )
 
     def test_hyperparameter_search(self):
         self.ray_hyperparameter_search()
@@ -1337,6 +1336,7 @@ class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
     def test_hyperparameter_search_ray_client(self):
         import ray
         from ray.util.client.ray_client_helpers import ray_start_client_server
+
         with ray_start_client_server() as client:
             assert ray.util.client.ray.is_connected()
             self.ray_hyperparameter_search()

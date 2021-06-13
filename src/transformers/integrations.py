@@ -165,11 +165,13 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
     if not trainer._memory_tracker.skip_memory_metrics:
         from .trainer_utils import TrainerMemoryTracker
-        logger.warning("Memory tracking for your Trainer is currently "
-                       "enabled. Automatically disabling the memory tracker "
-                       "since the memory tracker is not serializable.")
-        trainer._memory_tracker = TrainerMemoryTracker(
-            skip_memory_metrics=True)
+
+        logger.warning(
+            "Memory tracking for your Trainer is currently "
+            "enabled. Automatically disabling the memory tracker "
+            "since the memory tracker is not serializable."
+        )
+        trainer._memory_tracker = TrainerMemoryTracker(skip_memory_metrics=True)
 
     # The model and TensorBoard writer do not pickle so we have to remove them (if they exists)
     # while doing the ray hp search.
@@ -202,7 +204,8 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         trainer.use_tune_checkpoints = True
         if kwargs["keep_checkpoints_num"] > 1:
             logger.warning(
-                f"Currently keeping {kwargs['keep_checkpoint_num']} checkpoints for each trial. "
+                f"Currently keeping {kwargs['keep_checkpoints_num']} "
+                f"checkpoints for each trial. "
                 "Checkpoints are usually huge, "
                 "consider setting `keep_checkpoints_num=1`."
             )
