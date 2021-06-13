@@ -62,7 +62,7 @@ def input_values_processing(func, config, input_values, **kwargs):
     """
     Process the input of each TensorFlow model including the booleans. In case of a list of symbolic inputs, each input
     has to be named accordingly to the parameters name, i.e. `input_values = tf.keras.Input(shape=(128,),
-    dtype='int32', name="input_values")` otherwise the order of the tensors will not be guaranteed during the training.
+    dtype='float32', name="input_values")` otherwise the order of the tensors will not be guaranteed during the training.
 
     Args:
         func (:obj:`callable`):
