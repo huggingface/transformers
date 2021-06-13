@@ -520,7 +520,7 @@ class TFWav2Vec2WeightNormConv1D(tf.keras.layers.Conv1D):
             **kwargs,
         )
         self.explicit_padding = explicit_padding
-        self.filter_axis = 0
+        self.filter_axis = 2
         self.initialized = False
         self.kernel_norm_axes = tf.constant([0, 1])
 
@@ -537,7 +537,7 @@ class TFWav2Vec2WeightNormConv1D(tf.keras.layers.Conv1D):
     def build(self, input_shape):
         if not self.built:
             super().build(input_shape)
-            self.kernel = tf.Variable(self.kernel, name="weight_v", trainable=True)
+            self.kernel = tf.Variable(tf.transpose(self.kernel), name="weight_v", trainable=True)
             self.weight_v = self.kernel
 
             self.weight_g = self.add_weight(
@@ -555,6 +555,7 @@ class TFWav2Vec2WeightNormConv1D(tf.keras.layers.Conv1D):
             self.initialized = True
 
         self._normalize_kernel()
+
         padded_inputs = tf.pad(inputs, ((0, 0), (self.explicit_padding, self.explicit_padding), (0, 0)))
         output = super().call(padded_inputs)
 
@@ -1540,7 +1541,6 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
 
             >>> loss = model(input_values, labels=labels).loss
         """
-
         inputs = input_values_processing(
             func=self.call,
             config=self.config,
