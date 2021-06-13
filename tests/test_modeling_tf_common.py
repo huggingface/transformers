@@ -1066,7 +1066,7 @@ class TFModelTesterMixin:
 
     def test_lm_head_model_random_no_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict["input_ids"]
+        input_ids = inputs_dict.get("input_ids", None)
 
         # iterate over all generative models
         for model_class in self.all_generative_model_classes:
@@ -1102,7 +1102,7 @@ class TFModelTesterMixin:
 
     def test_lm_head_model_random_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict["input_ids"]
+        input_ids = inputs_dict.get("input_ids", None)
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config)

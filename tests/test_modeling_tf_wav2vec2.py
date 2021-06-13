@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+import copy
+import inspect
 import math
 import unittest
 
@@ -221,6 +223,37 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    # overwrite because input_values != input_ids
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.call)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["input_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    # overwrite because input_values != input_ids
+    def test_keyword_and_dict_args(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            outputs_dict = model(inputs)
+
+            inputs_keywords = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+            input_values = inputs_keywords.pop("input_values", None)
+            outputs_keywords = model(input_values, **inputs_keywords)
+            output_dict = outputs_dict[0].numpy()
+            output_keywords = outputs_keywords[0].numpy()
+
+            self.assertLess(np.sum(np.abs(output_dict - output_keywords)), 1e-6)
+
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -296,6 +329,37 @@ class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
             scope="robust",
         )
         self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=37)
+
+    # overwrite because input_values != input_ids
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.call)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["input_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    # overwrite because input_values != input_ids
+    def test_keyword_and_dict_args(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            outputs_dict = model(inputs)
+
+            inputs_keywords = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+            input_values = inputs_keywords.pop("input_values", None)
+            outputs_keywords = model(input_values, **inputs_keywords)
+            output_dict = outputs_dict[0].numpy()
+            output_keywords = outputs_keywords[0].numpy()
+
+            self.assertLess(np.sum(np.abs(output_dict - output_keywords)), 1e-6)
 
     def test_config(self):
         self.config_tester.run_common_tests()
