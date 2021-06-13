@@ -20,29 +20,21 @@ import io
 import json
 import weakref
 from copy import deepcopy
+from functools import partialmethod
 
 from .dependency_versions_check import dep_version_check
+from .file_utils import is_torch_available
 from .utils import logging
 
+
+if is_torch_available():
+    import torch
 
 logger = logging.get_logger(__name__)
 
 
 def is_deepspeed_available():
     return importlib.util.find_spec("deepspeed") is not None
-
-
-def _is_true(config, key):
-    if config is None:
-        return False
-    return bool(config.get(key))
-
-
-def _set_if_auto(config, key, val):
-    if config is None:
-        return
-    if config.get(key) == "auto":
-        config[key] = val
 
 
 class HfDeepSpeedConfig:
@@ -82,71 +74,138 @@ class HfDeepSpeedConfig:
         # zero stage - this is done as early as possible, before model is created, to allow
         # ``is_deepspeed_zero3_enabled`` query and getting to the early deepspeed config object
         # during ``zero.Init()`` which needs whether fp16 is enabled, dtype, etc.
-        config_zero = config.get("zero_optimization", {})
-        self.stage = config_zero.get("stage", 0)
+        self._stage = self.get_value("zero_optimization.stage", -1)
 
         # offload
-        self.offload = False
-        config_zero = config.get("zero_optimization", {})
-        if self.is_zero2():
-            self.offload = _is_true(config_zero, "cpu_offload")
-        elif self.is_zero3():
-            offload_devices = ["cpu", "nvme"]
-            if config_zero.get("offload_optimizer", {}).get("device") in offload_devices:
-                self.offload = True
-            if config_zero.get("offload_param", {}).get("device") in offload_devices:
-                self.offload = True
+        self._offload = False
+        if self.is_zero2() or self.is_zero3():
+            offload_devices_valid = set(["cpu", "nvme"])
+            offload_devices = set(
+                [
+                    self.get_value("zero_optimization.offload_optimizer.device"),
+                    self.get_value("zero_optimization.offload_param.device"),
+                ]
+            )
+            if len(offload_devices & offload_devices_valid) > 0:
+                self._offload = True
+
+    def find_config_node(self, ds_key_long):
+        config = self.config
+
+        # find the config node of interest if it exists
+        nodes = ds_key_long.split(".")
+        ds_key = nodes.pop()
+        for node in nodes:
+            config = config.get(node)
+            if config is None:
+                return None, ds_key
+
+        return config, ds_key
+
+    def get_value(self, ds_key_long, default=None):
+        """
+        Returns the set value or ``default`` if no value is set
+        """
+        config, ds_key = self.find_config_node(ds_key_long)
+        if config is None:
+            return default
+        return config.get(ds_key, default)
+
+    def is_true(self, ds_key_long):
+        """
+        Returns :obj:`True`/:obj:`False` only if the value is set, always :obj:`False` otherwise. So use this method to
+        ask the very specific question of whether the value is set to :obj:`True` (and it's not set to :obj:`False` or
+        isn't set).
+
+        """
+        value = self.get_value(ds_key_long)
+        return False if value is None else bool(value)
+
+    def is_false(self, ds_key_long):
+        """
+        Returns :obj:`True`/:obj:`False` only if the value is set, always :obj:`False` otherwise. So use this method to
+        ask the very specific question of whether the value is set to :obj:`False` (and it's not set to :obj:`True` or
+        isn't set).
+        """
+        value = self.get_value(ds_key_long)
+        return False if value is None else not bool(value)
 
     def is_zero2(self):
-        return self.stage == 2
+        return self._stage == 2
 
     def is_zero3(self):
-        return self.stage == 3
+        return self._stage == 3
 
     def is_offload(self):
-        return self.offload
+        return self._offload
 
 
 class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
     """
     The ``HfTrainerDeepSpeedConfig`` object is meant to be created during ``TrainingArguments`` object creation and has
     the same lifespan as the latter.
-
     """
 
     def __init__(self, config_file_or_dict):
         super().__init__(config_file_or_dict)
+        self._dtype = torch.float16
+        self.mismatches = []
+
+    def dtype(self):
+        return self._dtype
+
+    def fill_match(self, ds_key_long, hf_val, hf_key=None, must_match=True):
+        """
+        A utility method that massages the config file and can optionally verify that the values match.
+
+        1. Replace "auto" values with ``TrainingArguments`` value.
+
+        2. If it wasn't "auto" and ``must_match`` is true, then check that DS config matches Trainer
+        config values and if mismatched add the entry to ``self.mismatched`` - will assert during
+        ``trainer_config_finalize`` for one or more mismatches.
+
+        """
+        config, ds_key = self.find_config_node(ds_key_long)
+        if config is None:
+            return
+
+        if config.get(ds_key) == "auto":
+            config[ds_key] = hf_val
+            return
+
+        if not must_match:
+            return
+
+        ds_val = config.get(ds_key)
+        if ds_val is not None and ds_val != hf_val:
+            self.mismatches.append(f"- ds {ds_key_long}={ds_val} vs hf {hf_key}={hf_val}")
+
+    fill_only = partialmethod(fill_match, must_match=False)
 
     def trainer_config_process(self, args):
         """
         Adjust the config with ``TrainingArguments`` values. This stage is run during ``TrainingArguments`` object
         creation.
         """
-        config = self.config
-
         # DeepSpeed does:
         # train_batch_size = world_size * train_micro_batch_size_per_gpu * gradient_accumulation_steps
         train_batch_size = args.world_size * args.per_device_train_batch_size * args.gradient_accumulation_steps
-        _set_if_auto(config, "train_micro_batch_size_per_gpu", args.per_device_train_batch_size)
-        _set_if_auto(config, "gradient_accumulation_steps", args.gradient_accumulation_steps)
-        _set_if_auto(config, "train_batch_size", train_batch_size)
-        _set_if_auto(config, "gradient_clipping", args.max_grad_norm)
+        self.fill_match(
+            "train_micro_batch_size_per_gpu", args.per_device_train_batch_size, "per_device_train_batch_size"
+        )
+        self.fill_match("gradient_accumulation_steps", args.gradient_accumulation_steps, "gradient_accumulation_steps")
+        self.fill_match("train_batch_size", train_batch_size, "train_batch_size (calculated)")
+        self.fill_match("gradient_clipping", args.max_grad_norm, "max_grad_norm")
 
-        config_optim = config.get("optimizer", {})
-        if config_optim != {}:
-            config_optim_params = config_optim.get("params")
-            _set_if_auto(config_optim_params, "lr", args.learning_rate)
-            _set_if_auto(config_optim_params, "betas", [args.adam_beta1, args.adam_beta2])
-            _set_if_auto(config_optim_params, "eps", args.adam_epsilon)
-            _set_if_auto(config_optim_params, "weight_decay", args.weight_decay)
+        self.fill_match("optimizer.params.lr", args.learning_rate, "learning_rate")
+        self.fill_match("optimizer.params.betas", [args.adam_beta1, args.adam_beta2], "adam_beta1+adam_beta2")
+        self.fill_match("optimizer.params.eps", args.adam_epsilon, "adam_epsilon")
+        self.fill_match("optimizer.params.weight_decay", args.weight_decay, "weight_decay")
 
-        config_sched = config.get("scheduler", {})
-        if config_sched != {}:
-            config_sched_params = config_sched.get("params")
-            _set_if_auto(config_sched_params, "warmup_min_lr", 0)
-            _set_if_auto(config_sched_params, "warmup_max_lr", args.learning_rate)
-            _set_if_auto(config_sched_params, "warmup_num_steps", args.warmup_steps)
-            # total_num_steps - will get set in trainer_config_finalize
+        self.fill_only("scheduler.params.warmup_min_lr", 0)  # not a trainer arg
+        self.fill_match("scheduler.params.warmup_max_lr", args.learning_rate, "learning_rate")
+        self.fill_match("scheduler.params.warmup_num_steps", args.warmup_steps, "warmup_steps")
+        # total_num_steps - will get set in trainer_config_finalize
 
         # fp16
         if args.fp16:
@@ -156,14 +215,19 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
         # amp: similar to the pytorch native amp - it has a bunch of optional params but we won't set
         # any here unless the user did the work
-        config_fp16 = config.get("fp16")
-        _set_if_auto(config_fp16, "enabled", fp16_backend == "amp")
+        self.fill_match("fp16.enabled", fp16_backend == "amp", "fp16+fp16_backend(amp)")
 
         # apex: delegates amp work to apex (which needs to be available), but it cannot be used with any
         # ZeRO features
-        config_amp = config.get("amp")
-        _set_if_auto(config_amp, "enabled", fp16_backend == "apex")
-        _set_if_auto(config_amp, "opt_level", args.fp16_opt_level)
+        self.fill_match("amp.enabled", fp16_backend == "apex", "fp16+fp16_backend(apex)")
+        self.fill_match("amp.opt_level", args.fp16_opt_level, "fp16_opt_level")
+
+        # only if we have an explicit fp16.enabled = False then it's fp32, if it's True or this
+        # whole config section is missing then the fallback is fp16
+        if self.is_false("fp16.enabled"):
+            self._dtype = torch.float32
+        # later there will be other dtypes besides just fp16 and fp32
+        # also not quite sure what dtype should be under apex, defaulting to fp16 for now
 
     def trainer_config_finalize(self, args, model, num_training_steps):
         """
@@ -171,21 +235,23 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
         Now we we can complete the configuration process.
         """
-        config = self.config
-
         # zero
-        config_zero = config.get("zero_optimization", {})
         if self.is_zero3():
             # automatically assign the optimal config values based on model config
             hidden_size = model.config.hidden_size
-            _set_if_auto(config_zero, "reduce_bucket_size", hidden_size * hidden_size)
-            _set_if_auto(config_zero, "stage3_prefetch_bucket_size", 0.9 * hidden_size * hidden_size)
-            _set_if_auto(config_zero, "stage3_param_persistence_threshold", 10 * hidden_size)
+            self.fill_only("zero_optimization.reduce_bucket_size", hidden_size * hidden_size)
+            self.fill_only("zero_optimization.stage3_prefetch_bucket_size", 0.9 * hidden_size * hidden_size)
+            self.fill_only("zero_optimization.stage3_param_persistence_threshold", 10 * hidden_size)
 
         # scheduler
-        config_sched = config.get("scheduler", {})
-        config_sched_params = config_sched.get("params", {})
-        _set_if_auto(config_sched_params, "total_num_steps", num_training_steps)
+        self.fill_match("scheduler.params.total_num_steps", num_training_steps, "num_training_steps (calculated)")
+
+        if len(self.mismatches) > 0:
+            mismatches = "\n".join(self.mismatches)
+            raise ValueError(
+                f"Please correct the following DeepSpeed config values that mismatch TrainingArguments values:\n{mismatches}\n"
+                "The easiest method is to set these DeepSpeed config values to 'auto'."
+            )
 
 
 # keep the config object global to be able to access it anywhere during TrainingArguments life-cycle

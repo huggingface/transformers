@@ -28,6 +28,7 @@ from typing import Iterator, Union
 
 from transformers import logging as transformers_logging
 
+from .deepspeed import is_deepspeed_available
 from .file_utils import (
     is_datasets_available,
     is_faiss_available,
@@ -38,6 +39,7 @@ from .file_utils import (
     is_sentencepiece_available,
     is_soundfile_availble,
     is_tf_available,
+    is_timm_available,
     is_tokenizers_available,
     is_torch_available,
     is_torch_tpu_available,
@@ -224,6 +226,19 @@ def require_git_lfs(test_case):
 def require_onnx(test_case):
     if not is_onnx_available():
         return unittest.skip("test requires ONNX")(test_case)
+    else:
+        return test_case
+
+
+def require_timm(test_case):
+    """
+    Decorator marking a test that requires Timm.
+
+    These tests are skipped when Timm isn't installed.
+
+    """
+    if not is_timm_available():
+        return unittest.skip("test requires Timm")(test_case)
     else:
         return test_case
 
@@ -450,6 +465,16 @@ def require_soundfile(test_case):
     """
     if not is_soundfile_availble():
         return unittest.skip("test requires soundfile")(test_case)
+    else:
+        return test_case
+
+
+def require_deepspeed(test_case):
+    """
+    Decorator marking a test that requires deepspeed
+    """
+    if not is_deepspeed_available():
+        return unittest.skip("test requires deepspeed")(test_case)
     else:
         return test_case
 

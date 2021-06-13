@@ -71,6 +71,8 @@ class Wav2Vec2Config(PretrainedConfig):
         feat_extract_activation (:obj:`str, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the 1D convolutional layers of the feature
             extractor. If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
+        feat_quantizer_dropout (obj:`float`, `optional`, defaults to 0.0):
+            The dropout probabilitiy for quantized feature extractor states.
         conv_dim (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(512, 512, 512, 512, 512, 512, 512)`):
             A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
             feature extractor. The length of `conv_dim` defines the number of 1D convolutional layers.
@@ -108,6 +110,22 @@ class Wav2Vec2Config(PretrainedConfig):
             masked along the time axis. This is only relevant if ``apply_spec_augment is True``.
         mask_feature_length (:obj:`int`, `optional`, defaults to 10):
             Length of vector span along the feature axis.
+        num_codevectors_per_group (:obj:`int`, `optional`, defaults to 320):
+            Number of entries in each quantization codebook (group).
+        num_codevector_groups (:obj:`int`, `optional`, defaults to 2):
+            Number of codevector groups for product codevector quantization.
+        contrastive_logits_temperature (:obj:`float`, `optional`, defaults to 0.1):
+            The temperature `kappa` in the contrastive loss.
+        feat_quantizer_dropout (:obj:`float`, `optional`, defaults to 0.0):
+            The dropout probabilitiy for the output of the feature extractor that's used by the quantizer.
+        num_negatives (:obj:`int`, `optional`, defaults to 100):
+            Number of negative samples for the contrastive loss.
+        codevector_dim (:obj:`int`, `optional`, defaults to 256):
+            Dimensionality of the quantized feature vectors.
+        proj_codevector_dim (:obj:`int`, `optional`, defaults to 256):
+            Dimensionality of the final projection of both the quantized and the transformer features.
+        diversity_loss_weight (:obj:`int`, `optional`, defaults to 0.1):
+            The weight of the codebook diversity loss component.
         ctc_loss_reduction (:obj:`str`, `optional`, defaults to :obj:`"sum"`):
             Specifies the reduction to apply to the output of ``torch.nn.CTCLoss``. Only relevant when training an
             instance of :class:`~transformers.Wav2Vec2ForCTC`.
@@ -145,6 +163,7 @@ class Wav2Vec2Config(PretrainedConfig):
         activation_dropout=0.1,
         attention_dropout=0.1,
         feat_proj_dropout=0.1,
+        feat_quantizer_dropout=0.0,
         final_dropout=0.1,
         layerdrop=0.1,
         initializer_range=0.02,
@@ -163,6 +182,13 @@ class Wav2Vec2Config(PretrainedConfig):
         mask_time_length=10,
         mask_feature_prob=0.0,
         mask_feature_length=10,
+        num_codevectors_per_group=320,
+        num_codevector_groups=2,
+        contrastive_logits_temperature=0.1,
+        num_negatives=100,
+        codevector_dim=256,
+        proj_codevector_dim=256,
+        diversity_loss_weight=0.1,
         ctc_loss_reduction="sum",
         ctc_zero_infinity=False,
         gradient_checkpointing=False,
@@ -216,6 +242,16 @@ class Wav2Vec2Config(PretrainedConfig):
         self.mask_time_length = mask_time_length
         self.mask_feature_prob = mask_feature_prob
         self.mask_feature_length = mask_feature_length
+
+        # parameters for pretraining with codevector quantized representations
+        self.num_codevectors_per_group = num_codevectors_per_group
+        self.num_codevector_groups = num_codevector_groups
+        self.contrastive_logits_temperature = contrastive_logits_temperature
+        self.feat_quantizer_dropout = feat_quantizer_dropout
+        self.num_negatives = num_negatives
+        self.codevector_dim = codevector_dim
+        self.proj_codevector_dim = proj_codevector_dim
+        self.diversity_loss_weight = diversity_loss_weight
 
         # ctc loss
         self.ctc_loss_reduction = ctc_loss_reduction

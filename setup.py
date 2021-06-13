@@ -90,7 +90,7 @@ _deps = [
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
-    "deepspeed>=0.3.16",
+    "deepspeed>=0.4.0",
     "docutils==0.16.0",
     "fairscale>0.3",
     "faiss-cpu",
@@ -104,7 +104,7 @@ _deps = [
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
     "jax>=0.2.8",
-    "jaxlib>=0.1.59",
+    "jaxlib>=0.1.65",
     "jieba",
     "keras2onnx",
     "nltk",
@@ -142,6 +142,7 @@ _deps = [
     "tensorflow-cpu>=2.3",
     "tensorflow>=2.3",
     "timeout-decorator",
+    "timm",
     "tokenizers>=0.10.1,<0.11",
     "torch>=1.0",
     "torchaudio",
@@ -249,6 +250,7 @@ extras["integrations"] = extras["optuna"] + extras["ray"]
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["speech"] = deps_list("soundfile", "torchaudio")
 extras["vision"] = deps_list("Pillow")
+extras["timm"] = deps_list("timm")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
@@ -270,6 +272,7 @@ extras["all"] = (
     + extras["speech"]
     + extras["vision"]
     + extras["integrations"]
+    + extras["timm"]
 )
 
 extras["docs_specific"] = deps_list(

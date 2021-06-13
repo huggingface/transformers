@@ -1697,9 +1697,9 @@ def _segment_reduce(values, index, segment_reduce_fn, name):
 
     segment_means = scatter(
         src=flat_values,
-        index=flat_index.indices.type(torch.long),
+        index=flat_index.indices.long(),
         dim=0,
-        dim_size=flat_index.num_segments,
+        dim_size=int(flat_index.num_segments),
         reduce=segment_reduce_fn,
     )
 
