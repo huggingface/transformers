@@ -202,7 +202,7 @@ class TFWav2Vec2ModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config, input_values, attention_mask = self.prepare_config_and_inputs()
-        inputs_dict = {"input_ids": input_values, "attention_mask": attention_mask}
+        inputs_dict = {"input_values": input_values, "attention_mask": attention_mask}
         return config, inputs_dict
 
 

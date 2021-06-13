@@ -14,15 +14,29 @@
 # limitations under the License.
 """ TF 2.0 Wav2Vec2 model. """
 
+import inspect
+import warnings
 from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...file_utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
 from ...modeling_tf_outputs import TFBaseModelOutput, TFCausalLMOutput
-from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, input_processing, keras_serializable, shape_list
+from ...modeling_tf_utils import (
+    TFPreTrainedModel,
+    booleans_processing,
+    get_initializer,
+    keras_serializable,
+    shape_list,
+)
+from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
 from .configuration_wav2vec2 import Wav2Vec2Config
 
@@ -42,6 +56,130 @@ TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 LARGE_NEGATIVE = -1e8
+
+
+def input_values_processing(func, config, input_values, **kwargs):
+    """
+    Process the input of each TensorFlow model including the booleans. In case of a list of symbolic inputs, each input
+    has to be named accordingly to the parameters name, i.e. `input_values = tf.keras.Input(shape=(128,),
+    dtype='int32', name="input_values")` otherwise the order of the tensors will not be guaranteed during the training.
+
+    Args:
+        func (:obj:`callable`):
+            The callable function of the TensorFlow model.
+        config (:class:`~transformers.PretrainedConfig`):
+            The config of the running model.
+        **kwargs:
+            The inputs of the model.
+
+    Returns:
+        Two lists, one for the missing layers, and another one for the unexpected layers.
+    """
+    signature = dict(inspect.signature(func).parameters)
+    signature.pop("kwargs", None)
+    signature.pop("self", None)
+    parameter_names = list(signature.keys())
+    output = {}
+    allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict, np.ndarray)
+
+    if len(kwargs["kwargs_call"]) > 0:
+        raise ValueError(
+            f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
+        )
+
+    kwargs.pop("kwargs_call")
+
+    for k, v in kwargs.items():
+        if isinstance(v, allowed_types) or v is None:
+            output[k] = v
+        else:
+            raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
+
+    if isinstance(input_values, (tuple, list)):
+        for i, input in enumerate(input_values):
+            # EagerTensors don't allow to use the .name property so we check for a real Tensor
+            if type(input) == tf.Tensor:
+                # Tensor names have always the pattern `name:id` then we check only the
+                # `name` part
+                tensor_name = input.name.split(":")[0]
+
+                if tensor_name in parameter_names:
+                    output[tensor_name] = input
+                else:
+                    output[parameter_names[i]] = input
+            elif isinstance(input, allowed_types) or input is None:
+                output[parameter_names[i]] = input
+            else:
+                raise ValueError(
+                    f"Data of type {type(input)} is not allowed only {allowed_types} is accepted for {parameter_names[i]}."
+                )
+    elif isinstance(input_values, (dict, BatchEncoding)):
+        if "inputs" in input_values:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_values` instead.",
+                FutureWarning,
+            )
+
+            output["input_values"] = input_values.pop("inputs")
+
+        if "decoder_cached_states" in input_values:
+            warnings.warn(
+                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                FutureWarning,
+            )
+            output["past_key_values"] = input_values.pop("decoder_cached_states")
+
+        for k, v in dict(input_values).items():
+            if isinstance(v, allowed_types) or v is None:
+                output[k] = v
+            elif k not in parameter_names and "args" not in parameter_names:
+                logger.warning(
+                    f"The parameter {k} does not belongs to the parameter list {parameter_names} and will be ignored."
+                )
+                continue
+            else:
+                raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
+    else:
+        if isinstance(input_values, tf.Tensor) or input_values is None:
+            output[parameter_names[0]] = input_values
+        else:
+            raise ValueError(
+                f"Data of type {type(input_values)} is not allowed only {allowed_types} is accepted for {parameter_names[0]}."
+            )
+
+    for name in parameter_names:
+        if name not in list(output.keys()) and name != "args":
+            output[name] = kwargs.pop(name, signature[name].default)
+
+    # When creating a SavedModel TF calls the method with LayerCall.__call__(args, **kwargs)
+    # So to respect the proper output we have to add this exception
+    if "args" in output:
+        if output["args"] is not None and type(output["args"]) == tf.Tensor:
+            tensor_name = output["args"].name.split(":")[0]
+            output[tensor_name] = output["args"]
+        else:
+            # `args` in this case is always the first parameter, then `input_values`
+            output["input_values"] = output["args"]
+
+        del output["args"]
+
+    if "kwargs" in output:
+        del output["kwargs"]
+
+    boolean_dict = {
+        k: v
+        for k, v in output.items()
+        if k in ["return_dict", "output_attentions", "output_hidden_states", "use_cache"]
+    }
+
+    output.update(
+        booleans_processing(
+            config=config,
+            **boolean_dict,
+        )
+    )
+
+    return output
 
 
 def _sample_without_replacement(distribution, num_samples):
@@ -383,27 +521,21 @@ class TFWav2Vec2WeightNormConv1D(tf.keras.layers.Conv1D):
         self.explicit_padding = explicit_padding
         self.filter_axis = 0
         self.initialized = False
+        self.kernel_norm_axes = tf.constant([0, 1])
 
     def _init_norm(self):
         """Set the norm of the weight vector."""
         kernel_norm = tf.sqrt(tf.reduce_sum(tf.square(self.weight_v), axis=self.kernel_norm_axes))
         self.weight_g.assign(kernel_norm[:, tf.newaxis, tf.newaxis])
 
-    def _compute_weights(self):
-        """Generate weights with normalization."""
-
-        # `self.kernel_norm_axes` is determined by `self.filter_axis` and the rank
-        # of the layer kernel, and is thus statically known.
-        self.kernel = tf.nn.l2_normalize(self.weight_v, axis=self.kernel_norm_axes) * self.weight_g
+    def _normalize_kernel(self):
+        """Generate normalized weights."""
+        kernel = tf.nn.l2_normalize(self.weight_v, axis=self.kernel_norm_axes) * tf.transpose(self.weight_g)
+        self.kernel = tf.transpose(kernel)
 
     def build(self, input_shape):
         if not self.built:
             super().build(input_shape)
-            kernel_norm_axes = list(range(self.kernel.shape.rank))
-            kernel_norm_axes.pop(self.filter_axis)
-            # Convert `kernel_norm_axes` from a list to a constant Tensor to allow
-            # TF checkpoint saving.
-            self.kernel_norm_axes = tf.constant(kernel_norm_axes)
             self.kernel = tf.Variable(self.kernel, name="weight_v", trainable=True)
             self.weight_v = self.kernel
 
@@ -421,9 +553,10 @@ class TFWav2Vec2WeightNormConv1D(tf.keras.layers.Conv1D):
             self._init_norm()
             self.initialized = True
 
-        self._compute_weights()
-        output = tf.pad(inputs, ((0, 0), (self.explicit_padding, self.explicit_padding), (0, 0)))
-        output = super().call(output)
+        self._normalize_kernel()
+        padded_inputs = tf.pad(inputs, ((0, 0), (self.explicit_padding, self.explicit_padding), (0, 0)))
+        output = super().call(padded_inputs)
+
         return output
 
 
@@ -944,7 +1077,6 @@ class TFWav2Vec2EncoderStableLayerNorm(tf.keras.layers.Layer):
 
         position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
-        hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
 
         for i, layer_module in enumerate(self.layer):
@@ -966,6 +1098,8 @@ class TFWav2Vec2EncoderStableLayerNorm(tf.keras.layers.Layer):
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
+
+        hidden_states = self.layer_norm(hidden_states)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -989,12 +1123,17 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
         self.feature_extractor = TFWav2Vec2FeatureExtractor(config, name="feature_extractor")
         self.feature_projection = TFWav2Vec2FeatureProjection(config, name="feature_projection")
 
-        self.mask_spec_embed = tf.Variable(tf.random.uniform((config.hidden_size,)))
-
         if config.do_stable_layer_norm:
             self.encoder = TFWav2Vec2EncoderStableLayerNorm(config, name="encoder")
         else:
             self.encoder = TFWav2Vec2Encoder(config, name="encoder")
+
+    def build(self, input_shape: tf.TensorShape):
+        self.masked_spec_embed = self.add_weight(
+            shape=(self.config.hidden_size,), initializer="uniform", trainable=True, name="masked_spec_embed"
+        )
+
+        super().build(input_shape)
 
     def _get_feat_extract_output_lengths(self, input_lengths: tf.Tensor):
         """
@@ -1051,7 +1190,7 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
 
     def call(
         self,
-        input_ids: tf.Tensor,
+        input_values: tf.Tensor,
         attention_mask: Optional[tf.Tensor] = None,
         token_type_ids: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
@@ -1063,10 +1202,10 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
         training: bool = False,
         **kwargs: Any,
     ):
-        inputs = input_processing(
+        inputs = input_values_processing(
             func=self.call,
             config=self.config,
-            input_ids=input_ids,
+            input_values=input_values,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1079,7 +1218,9 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
             kwargs_call=kwargs,
         )
 
-        hidden_states = self.feature_extractor(tf.cast(inputs["input_ids"], tf.float32), training=inputs["training"])
+        hidden_states = self.feature_extractor(
+            tf.cast(inputs["input_values"], tf.float32), training=inputs["training"]
+        )
 
         if inputs["attention_mask"] is not None:
             # compute real output lengths according to convolution formula
@@ -1126,16 +1267,16 @@ class TFWav2Vec2PreTrainedModel(TFPreTrainedModel):
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
         pad_token = 0.0
-        input_ids = tf.convert_to_tensor(np.random.rand(1, 16000), tf.float32)
+        input_values = tf.convert_to_tensor(np.random.rand(1, 16000), tf.float32)
         dummy_inputs = {
-            "input_ids": input_ids,
-            "attention_mask": tf.cast(tf.not_equal(input_ids, pad_token), tf.float32),
+            "input_values": input_values,
+            "attention_mask": tf.cast(tf.not_equal(input_values, pad_token), tf.float32),
         }
         return dummy_inputs
 
     @tf.function
     def serving(self, inputs):
-        output = self.call(input_ids=inputs, training=False)
+        output = self.call(input_values=inputs, training=False)
 
         return self.serving_output(output)
 
@@ -1163,11 +1304,11 @@ WAV_2_VEC_2_START_DOCSTRING = r"""
         If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
         the first positional argument :
 
-        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
+        - a single Tensor with :obj:`input_values` only and nothing else: :obj:`model(inputs_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
+          :obj:`model([input_values, attention_mask])` or :obj:`model([input_values, attention_mask, token_type_ids])`
         - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+          :obj:`model({"input_values": input_values, "token_type_ids": token_type_ids})`
 
     Args:
         config (:class:`~transformers.Wav2Vec2Config`): Model configuration class with all the parameters of the model.
@@ -1178,7 +1319,7 @@ WAV_2_VEC_2_START_DOCSTRING = r"""
 
 WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`np.ndarray`, :obj:`tf.Tensor`, :obj:`List[tf.Tensor]` :obj:`Dict[str, tf.Tensor]` or :obj:`Dict[str, np.ndarray]` and each example must have the shape :obj:`({0})`):
+        input_values (:obj:`np.ndarray`, :obj:`tf.Tensor`, :obj:`List[tf.Tensor]` :obj:`Dict[str, tf.Tensor]` or :obj:`Dict[str, np.ndarray]` and each example must have the shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using :class:`~transformers.BertTokenizer`. See
@@ -1213,9 +1354,9 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
 
         inputs_embeds (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0}, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
+            Optionally, instead of passing :obj:`input_values` you can choose to directly pass an embedded
+            representation. This is useful if you want more control over how to convert :obj:`input_values` indices
+            into associated vectors than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
@@ -1247,7 +1388,7 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
     @replace_return_docstrings(output_type=TFBaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: tf.Tensor,
+        input_values: tf.Tensor,
         attention_mask: Optional[tf.Tensor] = None,
         token_type_ids: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
@@ -1284,10 +1425,10 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
             >>> hidden_states = model(input_values).last_hidden_state
         """
 
-        inputs = input_processing(
+        inputs = input_values_processing(
             func=self.call,
             config=self.config,
-            input_ids=input_ids,
+            input_values=input_values,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1309,7 +1450,7 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
         inputs["return_dict"] = inputs["return_dict"] if inputs["return_dict"] else self.config.return_dict
 
         outputs = self.wav2vec2(
-            input_ids=inputs["input_ids"],
+            input_values=inputs["input_values"],
             attention_mask=inputs["attention_mask"],
             token_type_ids=inputs["token_type_ids"],
             position_ids=inputs["position_ids"],
@@ -1353,7 +1494,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
     @replace_return_docstrings(output_type=TFCausalLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: tf.Tensor,
+        input_values: tf.Tensor,
         attention_mask: Optional[tf.Tensor] = None,
         token_type_ids: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
@@ -1369,7 +1510,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         r"""
         labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
-            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
+            config.vocab_size]`` (see ``input_values`` docstring) Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
 
         Returns:
@@ -1402,15 +1543,15 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
 
             >>> # wrap processor as target processor to encode labels
             >>> with processor.as_target_processor():
-            >>>     labels = processor(transcription, return_tensors="tf").input_ids
+            >>>     labels = processor(transcription, return_tensors="tf").input_values
 
             >>> loss = model(input_values, labels=labels).loss
         """
 
-        inputs = input_processing(
+        inputs = input_values_processing(
             func=self.call,
             config=self.config,
-            input_ids=input_ids,
+            input_values=input_values,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1424,7 +1565,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         )
 
         outputs = self.wav2vec2(
-            input_ids=inputs["input_ids"],
+            input_values=inputs["input_values"],
             attention_mask=inputs["attention_mask"],
             token_type_ids=inputs["token_type_ids"],
             position_ids=inputs["position_ids"],
@@ -1444,7 +1585,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
             attention_mask = (
                 inputs["attention_mask"]
                 if inputs["attention_mask"] is not None
-                else tf.ones_like(inputs["input_ids"], dtype=tf.float32)
+                else tf.ones_like(inputs["input_values"], dtype=tf.float32)
             )
             input_lengths = self.wav2vec2._get_feat_extract_output_lengths(tf.reduce_sum(attention_mask, axis=-1))
 
