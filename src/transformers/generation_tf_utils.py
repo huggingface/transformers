@@ -98,6 +98,78 @@ class TFGreedySearchEncoderDecoderOutput(ModelOutput):
 
 
 @dataclass
+class TFSampleDecoderOnlyOutput(ModelOutput):
+    """
+    Base class for outputs of decoder-only generation models using sampling.
+
+
+    Args:
+        sequences (:obj:`tf.Tensor` of shape :obj:`(batch_size*num_return_sequences, sequence_length)`):
+            The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
+            shorter if all batches finished early due to the :obj:`eos_token_id`.
+        scores (:obj:`tuple(tf.Tensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
+            Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
+            at each generation step. :obj:`(max_length-input_ids.shape[-1],)`-shaped tuple of :obj:`tf.Tensor` with
+            each tensor of shape :obj:`(batch_size*num_return_sequences, config.vocab_size)`).
+        attentions (:obj:`tuple(tuple(tf.Tensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`tf.Tensor` of shape :obj:`(num_return_sequences*batch_size, num_heads, generated_length,
+            sequence_length)`.
+        hidden_states (:obj:`tuple(tuple(tf.Tensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`tf.Tensor` of shape :obj:`(num_return_sequences*batch_size, generated_length, hidden_size)`.
+    """
+
+    sequences: tf.Tensor = None
+    scores: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
+
+
+@dataclass
+class TFSampleEncoderDecoderOutput(ModelOutput):
+    """
+    Base class for outputs of encoder-decoder generation models using sampling. Hidden states and attention weights of
+    the decoder (respectively the encoder) can be accessed via the encoder_attentions and the encoder_hidden_states
+    attributes (respectively the decoder_attentions and the decoder_hidden_states attributes)
+
+
+    Args:
+        sequences (:obj:`tf.Tensor` of shape :obj:`(batch_size*num_return_sequences, sequence_length)`):
+            The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
+            shorter if all batches finished early due to the :obj:`eos_token_id`.
+        scores (:obj:`tuple(tf.Tensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
+            Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
+            at each generation step. :obj:`(max_length-1,)`-shaped tuple of :obj:`tf.Tensor` with each tensor of shape
+            :obj:`(batch_size*num_return_sequences, config.vocab_size)`).
+        encoder_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` (one for each layer of the decoder) of shape
+            :obj:`(batch_size*num_return_sequences, num_heads, sequence_length, sequence_length)`.
+        encoder_hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size*num_return_sequences, sequence_length, hidden_size)`.
+        decoder_attentions (:obj:`tuple(tuple(tf.Tensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`tf.Tensor` of shape :obj:`(batch_size*num_return_sequences, num_heads, generated_length,
+            sequence_length)`.
+        cross_attentions (:obj:`tuple(tuple(tf.Tensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`tf.Tensor` of shape :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
+        decoder_hidden_states (:obj:`tuple(tuple(tf.Tensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`tf.Tensor` of shape :obj:`(batch_size*num_return_sequences, generated_length, hidden_size)`.
+    """
+
+    sequences: tf.Tensor = None
+    scores: Optional[Tuple[tf.Tensor]] = None
+    encoder_attentions: Optional[Tuple[tf.Tensor]] = None
+    encoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
+    decoder_attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    cross_attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    decoder_hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
+
+
+@dataclass
 class TFBeamSearchDecoderOnlyOutput(ModelOutput):
     """
     Base class for outputs of decoder-only generation models using beam search.
@@ -177,8 +249,86 @@ class TFBeamSearchEncoderDecoderOutput(ModelOutput):
     decoder_hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
 
 
+@dataclass
+class TFBeamSampleDecoderOnlyOutput(ModelOutput):
+    """
+    Base class for outputs of decoder-only generation models using beam sample.
+
+    Args:
+        sequences (:obj:`tf.Tensor` of shape :obj:`(batch_size*num_return_sequences, sequence_length)`):
+            The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
+            shorter if all batches finished early due to the :obj:`eos_token_id`.
+        sequences_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size * num_return_sequence)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
+            Final beam scores of the generated ``sequences``.
+        scores (:obj:`tuple(tf.Tensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
+            Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
+            softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
+            . :obj:`(max_length-input_ids.shape[-1],)`-shaped tuple of :obj:`tf.Tensor` with each tensor of shape
+            :obj:`(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
+        attentions (:obj:`tuple(tuple(tf.Tensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`tf.Tensor` of shape :obj:`(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
+        hidden_states (:obj:`tuple(tuple(tf.Tensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`tf.Tensor` of shape :obj:`(batch_size*num_beams, generated_length, hidden_size)`.
+    """
+
+    sequences: tf.Tensor = None
+    sequences_scores: Optional[tf.Tensor] = None
+    scores: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
+
+
+@dataclass
+class TFBeamSampleEncoderDecoderOutput(ModelOutput):
+    """
+    Base class for outputs of encoder-decoder generation models using beam sampling. Hidden states and attention
+    weights of the decoder (respectively the encoder) can be accessed via the encoder_attentions and the
+    encoder_hidden_states attributes (respectively the decoder_attentions and the decoder_hidden_states attributes)
+
+    Args:
+        sequences (:obj:`tf.Tensor` of shape :obj:`(batch_size*num_beams, sequence_length)`):
+            The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
+            shorter if all batches finished early due to the :obj:`eos_token_id`.
+        sequences_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size * num_return_sequence)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
+            Final beam scores of the generated ``sequences``.
+        scores (:obj:`tuple(tf.Tensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
+            Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
+            softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
+            . :obj:`(max_length-1,)`-shaped tuple of :obj:`tf.Tensor` with each tensor of shape
+            :obj:`(batch_size*num_beams, config.vocab_size)`).
+        encoder_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` (one for each layer of the decoder) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+        encoder_hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size*num_beams, sequence_length, hidden_size)`.
+        decoder_attentions (:obj:`tuple(tuple(tf.Tensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`tf.Tensor` of shape :obj:`(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
+        cross_attentions (:obj:`tuple(tuple(tf.Tensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`tf.Tensor` of shape :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
+        decoder_hidden_states (:obj:`tuple(tuple(tf.Tensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`tf.Tensor` of shape :obj:`(batch_size*num_beams, generated_length, hidden_size)`.
+    """
+
+    sequences: tf.Tensor = None
+    sequences_scores: Optional[tf.Tensor] = None
+    scores: Optional[Tuple[tf.Tensor]] = None
+    encoder_attentions: Optional[Tuple[tf.Tensor]] = None
+    encoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
+    decoder_attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    cross_attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    decoder_hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
+
+
 TFGreedySearchOutput = Union[TFGreedySearchEncoderDecoderOutput, TFGreedySearchDecoderOnlyOutput]
+TFSampleOutput = Union[TFSampleEncoderDecoderOutput, TFSampleDecoderOnlyOutput]
 TFBeamSearchOutput = Union[TFBeamSearchEncoderDecoderOutput, TFBeamSearchDecoderOnlyOutput]
+TFBeamSampleOutput = Union[TFBeamSampleEncoderDecoderOutput, TFBeamSampleDecoderOnlyOutput]
 
 
 class TFGenerationMixin:
@@ -232,7 +382,7 @@ class TFGenerationMixin:
         forced_bos_token_id=None,
         forced_eos_token_id=None,
         **model_kwargs,
-    ) -> Union[TFGreedySearchOutput, TFBeamSearchOutput, tf.Tensor]:
+    ) -> Union[TFGreedySearchOutput, TFSampleOutput, TFBeamSearchOutput, TFBeamSampleOutput, tf.Tensor]:
         r"""
         Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
         beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.
@@ -631,7 +781,7 @@ class TFGenerationMixin:
         use_cache,
         return_dict_in_generate,
         **kwargs
-    ) -> Union[TFGreedySearchOutput, tf.Tensor]:
+    ) -> Union[TFGreedySearchOutput, TFSampleOutput, tf.Tensor]:
         """
         Generate sequences for each example without beam search (num_beams == 1). All returned sequences are generated
         independently.
@@ -808,23 +958,42 @@ class TFGenerationMixin:
             decoded = input_ids
 
         if return_dict_in_generate:
-            if self.config.is_encoder_decoder:
-                return TFGreedySearchEncoderDecoderOutput(
-                    sequences=decoded,
-                    scores=scores,
-                    encoder_attentions=encoder_attentions,
-                    encoder_hidden_states=encoder_hidden_states,
-                    decoder_attentions=decoder_attentions,
-                    cross_attentions=cross_attentions,
-                    decoder_hidden_states=decoder_hidden_states,
-                )
+            if do_sample:
+                if self.config.is_encoder_decoder:
+                    return TFSampleEncoderDecoderOutput(
+                        sequences=decoded,
+                        scores=scores,
+                        encoder_attentions=encoder_attentions,
+                        encoder_hidden_states=encoder_hidden_states,
+                        decoder_attentions=decoder_attentions,
+                        cross_attentions=cross_attentions,
+                        decoder_hidden_states=decoder_hidden_states,
+                    )
+                else:
+                    return TFSampleDecoderOnlyOutput(
+                        sequences=decoded,
+                        scores=scores,
+                        attentions=decoder_attentions,
+                        hidden_states=decoder_hidden_states,
+                    )
             else:
-                return TFGreedySearchDecoderOnlyOutput(
-                    sequences=decoded,
-                    scores=scores,
-                    attentions=decoder_attentions,
-                    hidden_states=decoder_hidden_states,
-                )
+                if self.config.is_encoder_decoder:
+                    return TFGreedySearchEncoderDecoderOutput(
+                        sequences=decoded,
+                        scores=scores,
+                        encoder_attentions=encoder_attentions,
+                        encoder_hidden_states=encoder_hidden_states,
+                        decoder_attentions=decoder_attentions,
+                        cross_attentions=cross_attentions,
+                        decoder_hidden_states=decoder_hidden_states,
+                    )
+                else:
+                    return TFGreedySearchDecoderOnlyOutput(
+                        sequences=decoded,
+                        scores=scores,
+                        attentions=decoder_attentions,
+                        hidden_states=decoder_hidden_states,
+                    )
         else:
             return decoded
 
@@ -856,7 +1025,7 @@ class TFGenerationMixin:
         forced_eos_token_id,
         return_dict_in_generate,
         **kwargs,
-    ) -> Union[TFBeamSearchOutput, tf.Tensor]:
+    ) -> Union[TFBeamSearchOutput, TFBeamSampleOutput, tf.Tensor]:
         """Generate sequences for each example with beam search."""
 
         # generated hypotheses
@@ -1195,23 +1364,42 @@ class TFGenerationMixin:
             decoded = tf.stack(best)
 
         if return_dict_in_generate:
-            if self.config.is_encoder_decoder:
-                return TFBeamSearchEncoderDecoderOutput(
-                    sequences=decoded,
-                    scores=scores,
-                    encoder_attentions=encoder_attentions,
-                    encoder_hidden_states=encoder_hidden_states,
-                    decoder_attentions=decoder_attentions,
-                    cross_attentions=cross_attentions,
-                    decoder_hidden_states=decoder_hidden_states,
-                )
+            if do_sample:
+                if self.config.is_encoder_decoder:
+                    return TFBeamSampleEncoderDecoderOutput(
+                        sequences=decoded,
+                        scores=scores,
+                        encoder_attentions=encoder_attentions,
+                        encoder_hidden_states=encoder_hidden_states,
+                        decoder_attentions=decoder_attentions,
+                        cross_attentions=cross_attentions,
+                        decoder_hidden_states=decoder_hidden_states,
+                    )
+                else:
+                    return TFBeamSampleDecoderOnlyOutput(
+                        sequences=decoded,
+                        scores=scores,
+                        attentions=decoder_attentions,
+                        hidden_states=decoder_hidden_states,
+                    )
             else:
-                return TFGreedySearchDecoderOnlyOutput(
-                    sequences=decoded,
-                    scores=scores,
-                    attentions=decoder_attentions,
-                    hidden_states=decoder_hidden_states,
-                )
+                if self.config.is_encoder_decoder:
+                    return TFBeamSearchEncoderDecoderOutput(
+                        sequences=decoded,
+                        scores=scores,
+                        encoder_attentions=encoder_attentions,
+                        encoder_hidden_states=encoder_hidden_states,
+                        decoder_attentions=decoder_attentions,
+                        cross_attentions=cross_attentions,
+                        decoder_hidden_states=decoder_hidden_states,
+                    )
+                else:
+                    return TFBeamSearchDecoderOnlyOutput(
+                        sequences=decoded,
+                        scores=scores,
+                        attentions=decoder_attentions,
+                        hidden_states=decoder_hidden_states,
+                    )
         else:
             return decoded
 

@@ -28,10 +28,14 @@ from huggingface_hub import HfApi
 from requests.exceptions import HTTPError
 from transformers import is_tf_available
 from transformers.generation_tf_utils import (
+    TFBeamSampleDecoderOnlyOutput,
+    TFBeamSampleEncoderDecoderOutput,
     TFBeamSearchDecoderOnlyOutput,
     TFBeamSearchEncoderDecoderOutput,
     TFGreedySearchDecoderOnlyOutput,
     TFGreedySearchEncoderDecoderOutput,
+    TFSampleDecoderOnlyOutput,
+    TFSampleEncoderDecoderOutput,
 )
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
@@ -1110,7 +1114,15 @@ class TFModelTesterMixin:
             model = model_class(config)
             output_greedy = model.generate(
                 input_ids,
-                max_length=5,
+                do_sample=False,
+                output_scores=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+            output_sample = model.generate(
+                input_ids,
+                do_sample=True,
                 output_scores=True,
                 output_hidden_states=True,
                 output_attentions=True,
@@ -1119,8 +1131,10 @@ class TFModelTesterMixin:
 
             if model.config.is_encoder_decoder:
                 self.assertIsInstance(output_greedy, TFGreedySearchEncoderDecoderOutput)
+                self.assertIsInstance(output_sample, TFSampleEncoderDecoderOutput)
             else:
                 self.assertIsInstance(output_greedy, TFGreedySearchDecoderOnlyOutput)
+                self.assertIsInstance(output_sample, TFSampleDecoderOnlyOutput)
 
     def test_lm_head_model_random_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1171,8 +1185,17 @@ class TFModelTesterMixin:
             model = model_class(config)
             output_beam_search = model.generate(
                 input_ids,
-                max_length=5,
                 num_beams=2,
+                do_sample=False,
+                output_scores=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+            output_beam_sample = model.generate(
+                input_ids,
+                num_beams=2,
+                do_sample=True,
                 output_scores=True,
                 output_hidden_states=True,
                 output_attentions=True,
@@ -1181,8 +1204,10 @@ class TFModelTesterMixin:
 
             if model.config.is_encoder_decoder:
                 self.assertIsInstance(output_beam_search, TFBeamSearchEncoderDecoderOutput)
+                self.assertIsInstance(output_beam_sample, TFBeamSampleEncoderDecoderOutput)
             else:
                 self.assertIsInstance(output_beam_search, TFBeamSearchDecoderOnlyOutput)
+                self.assertIsInstance(output_beam_sample, TFBeamSampleDecoderOnlyOutput)
 
     def test_loss_computation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
