@@ -20,8 +20,8 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import tensorflow as tf
 
-from .utils import logging
 from .file_utils import ModelOutput
+from .utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -39,8 +39,8 @@ class TFGreedySearchDecoderOnlyOutput(ModelOutput):
             shorter if all batches finished early due to the :obj:`eos_token_id`.
         scores (:obj:`tuple(tf.Tensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. :obj:`(max_length-input_ids.shape[-1],)`-shaped tuple of :obj:`tf.Tensor`
-            with each tensor of shape :obj:`(batch_size, config.vocab_size)`).
+            at each generation step. :obj:`(max_length-input_ids.shape[-1],)`-shaped tuple of :obj:`tf.Tensor` with
+            each tensor of shape :obj:`(batch_size, config.vocab_size)`).
         attentions (:obj:`tuple(tuple(tf.Tensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             :obj:`tf.Tensor` of shape :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
@@ -50,7 +50,7 @@ class TFGreedySearchDecoderOnlyOutput(ModelOutput):
     """
 
     sequences: tf.Tensor = None
-    scores: Optional[Tuple[tf.Tesnor]] = None
+    scores: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
     hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
 
@@ -69,14 +69,14 @@ class TFGreedySearchEncoderDecoderOutput(ModelOutput):
             shorter if all batches finished early due to the :obj:`eos_token_id`.
         scores (:obj:`tuple(tf.Tensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. :obj:`(max_length-1,)`-shaped tuple of :obj:`tf.Tensor` with each tensor
-            of shape :obj:`(batch_size, config.vocab_size)`).
+            at each generation step. :obj:`(max_length-1,)`-shaped tuple of :obj:`tf.Tensor` with each tensor of shape
+            :obj:`(batch_size, config.vocab_size)`).
         encoder_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer of the decoder) of shape :obj:`(batch_size,
-            num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`tf.Tensor` (one for each layer of the decoder) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
         encoder_hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
         decoder_attentions (:obj:`tuple(tuple(tf.Tensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             :obj:`tf.Tensor` of shape :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
@@ -583,7 +583,7 @@ class TFGenerationMixin:
                 **model_inputs,
                 return_dict=True,
                 output_attentions=kwargs["output_attentions"],
-                output_hidden_states=kwargs["output_hidden_states"]
+                output_hidden_states=kwargs["output_hidden_states"],
             )  # (batch_size * num_beams, cur_len, vocab_size)
             next_token_logits = outputs.logits[:, -1, :]  # (batch_size * num_beams, vocab_size)
 
