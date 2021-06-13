@@ -579,6 +579,9 @@ class TFGenerationMixin:
         model_kwargs["output_scores"] = output_scores
         model_kwargs["output_attentions"] = output_attentions
         model_kwargs["output_hidden_states"] = output_hidden_states
+        if self.config.is_encoder_decoder:
+            model_kwargs["encoder_attentions"] = None
+            model_kwargs["encoder_hidden_states"] = None
 
         if input_ids is not None:
             batch_size = shape_list(input_ids)[0]  # overridden by the input batch_size
@@ -670,7 +673,17 @@ class TFGenerationMixin:
             # get encoder and store encoder outputs
             encoder = self.get_encoder()
 
-            encoder_outputs = encoder(input_ids, attention_mask=attention_mask)
+            encoder_outputs = encoder(
+                input_ids,
+                attention_mask=attention_mask,
+                output_attentions=model_kwargs["output_attentions"],
+                output_hidden_states=model_kwargs["output_hidden_states"],
+            )
+            if return_dict_in_generate:
+                if model_kwargs["output_attentions"]:
+                    model_kwargs["encoder_attentions"] = encoder_outputs.attentions
+                if model_kwargs["output_hidden_states"]:
+                    model_kwargs["encoder_hidden_states"] = encoder_outputs.hidden_states
 
         # Expand input ids if num_beams > 1 or num_return_sequences > 1
         if num_return_sequences > 1 or num_beams > 1:
@@ -813,6 +826,16 @@ class TFGenerationMixin:
         decoder_attentions = () if (return_dict_in_generate and kwargs["output_attentions"]) else None
         cross_attentions = () if (return_dict_in_generate and kwargs["output_attentions"]) else None
         decoder_hidden_states = () if (return_dict_in_generate and kwargs["output_hidden_states"]) else None
+        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
+        if self.config.is_encoder_decoder:
+            encoder_attentions = (
+                kwargs["encoder_attentions"] if (return_dict_in_generate and kwargs["encoder_attentions"]) else None
+            )
+            encoder_hidden_states = (
+                kwargs["encoder_hidden_states"]
+                if (return_dict_in_generate and kwargs["encoder_hidden_states"])
+                else None
+            )
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
@@ -945,13 +968,6 @@ class TFGenerationMixin:
                     [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
                 )
 
-        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
-        if return_dict_in_generate and self.config.is_encoder_decoder:
-            if kwargs["output_attentions"]:
-                encoder_attentions = outputs.encoder_attentions
-            if kwargs["output_hidden_states"]:
-                encoder_hidden_states = outputs.encoder_hidden_states
-
         # if there are different sentences lengths in the batch, some batches have to be padded
         min_sent_length = tf.math.reduce_min(sent_lengths)
         max_sent_length = tf.math.reduce_max(sent_lengths)
@@ -1068,6 +1084,16 @@ class TFGenerationMixin:
         decoder_attentions = () if (return_dict_in_generate and kwargs["output_attentions"]) else None
         cross_attentions = () if (return_dict_in_generate and kwargs["output_attentions"]) else None
         decoder_hidden_states = () if (return_dict_in_generate and kwargs["output_hidden_states"]) else None
+        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
+        if self.config.is_encoder_decoder:
+            encoder_attentions = (
+                kwargs["encoder_attentions"] if (return_dict_in_generate and kwargs["encoder_attentions"]) else None
+            )
+            encoder_hidden_states = (
+                kwargs["encoder_hidden_states"]
+                if (return_dict_in_generate and kwargs["encoder_hidden_states"])
+                else None
+            )
 
         # done sentences
         done = [False for _ in range(batch_size)]
@@ -1291,13 +1317,6 @@ class TFGenerationMixin:
                 attention_mask = tf.concat(
                     [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
                 )
-
-        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
-        if return_dict_in_generate and self.config.is_encoder_decoder:
-            if kwargs["output_attentions"]:
-                encoder_attentions = outputs.encoder_attentions
-            if kwargs["output_hidden_states"]:
-                encoder_hidden_states = outputs.encoder_hidden_states
 
         # finalize all open beam hypotheses and end to generated hypotheses
         for batch_idx in range(batch_size):
