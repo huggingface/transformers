@@ -272,6 +272,8 @@ class FlaxGenerationMixin:
         # per batch-item state bit indicating if sentence has finished.
         is_sent_finished = jnp.zeros((batch_size,), dtype=jnp.bool_)
 
+        # For Seq2Seq generation, we only need to use the decoder instead of the whole model in generation loop
+        # and pass it the `encoder_outputs`, which are part of the `model_kwargs`.
         model = self.decode if self.config.is_encoder_decoder else self
         # initialize model specific kwargs
         model_kwargs = self.prepare_inputs_for_generation(input_ids, max_length, **model_kwargs)
@@ -352,6 +354,8 @@ class FlaxGenerationMixin:
         # per batch-item state bit indicating if sentence has finished.
         is_sent_finished = jnp.zeros((batch_size,), dtype=jnp.bool_)
 
+        # For Seq2Seq generation, we only need to use the decoder instead of the whole model in generation loop
+        # and pass it the `encoder_outputs`, which are part of the `model_kwargs`.
         model = self.decode if self.config.is_encoder_decoder else self
 
         # initialize model specific kwargs

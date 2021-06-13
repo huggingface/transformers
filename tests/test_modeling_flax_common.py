@@ -167,6 +167,9 @@ class FlaxModelTesterMixin:
                 pt_model_class = getattr(transformers, pt_model_class_name)
 
                 pt_model = pt_model_class(config).eval()
+                # Flax models don't use the `use_cache` option and cache is not returned as a default.
+                # So we disable `use_cache` here for PyTorch model.
+                pt_model.config.use_cache = False
                 fx_model = model_class(config, dtype=jnp.float32)
 
                 fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
@@ -178,8 +181,7 @@ class FlaxModelTesterMixin:
                 fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-                    if not isinstance(fx_output, tuple):  # TODO(Patrick, Daniel) - let's discard use_cache for now
-                        self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-3)
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-3)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     pt_model.save_pretrained(tmpdirname)
@@ -210,6 +212,9 @@ class FlaxModelTesterMixin:
                 pt_model_class = getattr(transformers, pt_model_class_name)
 
                 pt_model = pt_model_class(config).eval()
+                # Flax models don't use the `use_cache` option and cache is not returned as a default.
+                # So we disable `use_cache` here for PyTorch model.
+                pt_model.config.use_cache = False
                 fx_model = model_class(config, dtype=jnp.float32)
 
                 pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
@@ -224,8 +229,7 @@ class FlaxModelTesterMixin:
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
 
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-                    if not isinstance(fx_output, tuple):  # TODO(Patrick, Daniel) - let's discard use_cache for now
-                        self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-3)
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-3)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     fx_model.save_pretrained(tmpdirname)

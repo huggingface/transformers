@@ -480,18 +480,18 @@ class FlaxBartEncoderLayerCollection(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
-            if deterministic and (dropout_probability < self.layerdrop):  # skip the layer
-                outputs = (None, None)
-
-            outputs = encoder_layer(
-                hidden_states,
-                attention_mask,
-                output_attentions,
-                deterministic,
-            )
-            hidden_states = outputs[0]
+            if not deterministic and (dropout_probability < self.layerdrop):  # skip the layer
+                layer_outputs = (None, None)
+            else:
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    output_attentions,
+                    deterministic,
+                )
+            hidden_states = layer_outputs[0]
             if output_attentions:
-                all_attentions = all_attentions + (outputs[1],)
+                all_attentions = all_attentions + (layer_outputs[1],)
 
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
@@ -626,20 +626,20 @@ class FlaxBartDecoderLayerCollection(nn.Module):
                 all_hidden_states += (hidden_states,)
                 # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
-            if deterministic and (dropout_probability < self.layerdrop):
-                continue
+            if not deterministic and (dropout_probability < self.layerdrop):
+                layer_outputs = (None, None, None)
+            else:
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
+                    init_cache=init_cache,
+                    output_attentions=output_attentions,
+                    deterministic=deterministic,
+                )
 
-            layer_outputs = decoder_layer(
-                hidden_states,
-                attention_mask=attention_mask,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask,
-                init_cache=init_cache,
-                output_attentions=output_attentions,
-                deterministic=deterministic,
-            )
             hidden_states = layer_outputs[0]
-
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
@@ -865,7 +865,7 @@ class FlaxBartModule(nn.Module):
         self.encoder = FlaxBartEncoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
         self.decoder = FlaxBartDecoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
 
-    def get_encoder(self):
+    def _get_encoder_module(self):
         return self.encoder
 
     def __call__(
@@ -978,6 +978,11 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
             max_length (:obj:`int`):
                 maximum possible length for auto-regressive decoding. Defines the sequence length of the initialized
                 cache.
+            encoder_outputs (:obj:`Union[FlaxBaseModelOutput, tuple(tuple(jnp.ndarray)]`):
+                ``encoder_outputs`` consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`,
+                `optional`: :obj:`attentions`). :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length,
+                hidden_size)`, `optional`) is a sequence of hidden-states at the output of the last layer of the
+                encoder. Used in the cross-attention of the decoder.
         """
         # init input variables to retrieve cache
         decoder_input_ids = jnp.ones((batch_size, max_length), dtype="i4")
@@ -1042,7 +1047,8 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
             rngs["dropout"] = dropout_rng
 
         def _encoder_forward(module, input_ids, attention_mask, position_ids, **kwargs):
-            return module.get_encoder()(input_ids, attention_mask, position_ids, **kwargs)
+            encode_module = module._get_encoder_module()
+            return encode_module(input_ids, attention_mask, position_ids, **kwargs)
 
         return self.module.apply(
             {"params": params or self.params},
@@ -1195,10 +1201,10 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
         )
         self.final_logits_bias = self.param("final_logits_bias", self.bias_init, (1, self.model.shared.num_embeddings))
 
-    def get_encoder(self):
+    def _get_encoder_module(self):
         return self.model.encoder
 
-    def get_decoder(self):
+    def _get_decoder_module(self):
         return self.model.decoder
 
     def __call__(
@@ -1340,7 +1346,7 @@ class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
             mutable = False
 
         def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs):
-            decoder_module = module.get_decoder()
+            decoder_module = module._get_decoder_module()
             outputs = decoder_module(
                 decoder_input_ids,
                 decoder_attention_mask,
@@ -1501,7 +1507,7 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
             pooler_dropout=self.config.classifier_dropout,
         )
 
-    def get_encoder(self):
+    def _get_encoder_module(self):
         return self.model.encoder
 
     def __call__(
@@ -1600,7 +1606,7 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
             self.num_labels, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
         )
 
-    def get_encoder(self):
+    def _get_encoder_module(self):
         return self.model.encoder
 
     def __call__(
