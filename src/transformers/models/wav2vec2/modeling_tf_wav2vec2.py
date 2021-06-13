@@ -44,6 +44,28 @@ TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 LARGE_NEGATIVE = -1e8
 
 
+def _sample_without_replacement(distribution, num_samples):
+    """
+    categorical sampling witouth replacement is currently not implemented the gumbel-max trick will do for now see
+    https://github.com/tensorflow/tensorflow/issues/9260 for more info
+    """
+    z = -tf.math.log(tf.random.uniform(shape_list(distribution), 0, 1))
+    _, indices = tf.nn.top_k(distribution + z, num_samples)
+    return indices
+
+
+def _scatter_values_on_batch_indices(values, batch_indices, output_shape):
+    indices_shape = shape_list(batch_indices)
+    # broadcast batch dim to indices_shape
+    broad_casted_batch_dims = tf.reshape(
+        tf.broadcast_to(tf.expand_dims(tf.range(indices_shape[0]), axis=-1), indices_shape), [1, -1]
+    )
+    # transform batch_indices to pair_indices
+    pair_indices = tf.transpose(tf.concat([broad_casted_batch_dims, tf.reshape(batch_indices, [1, -1])], 0))
+    # scatter values to pair indices
+    return tf.scatter_nd(pair_indices, tf.reshape(values, [-1]), output_shape)
+
+
 def _compute_mask_indices(
     shape: Tuple[int, int],
     mask_prob: float,
@@ -90,7 +112,7 @@ def _compute_mask_indices(
     uniform_dist = tf.ones((batch_size, sequence_length - (mask_length - 1)))
 
     # get random indices to mask
-    spec_aug_mask_idxs = tf.random.categorical(uniform_dist, num_masked_spans, dtype=tf.int32)
+    spec_aug_mask_idxs = _sample_without_replacement(uniform_dist, num_masked_spans)
 
     # expand masked indices to masked spans
     spec_aug_mask_idxs = tf.expand_dims(spec_aug_mask_idxs, -1)
@@ -100,15 +122,13 @@ def _compute_mask_indices(
     offsets = tf.range(mask_length)[tf.newaxis, tf.newaxis, :]
     offsets = tf.tile(offsets, (batch_size, num_masked_spans, 1))
     offsets = tf.reshape(offsets, (batch_size, num_masked_spans * mask_length))
+
     spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
 
     # scatter indices to mask
-    spec_aug_mask = tf.tensor_scatter_nd_update(
-        tf.transpose(spec_aug_mask, (1, 0)),
-        tf.expand_dims(spec_aug_mask_idxs, -1),
-        tf.ones((batch_size, spec_aug_mask_idxs.shape[1], batch_size), dtype=tf.int32),
+    spec_aug_mask = _scatter_values_on_batch_indices(
+        tf.ones_like(spec_aug_mask_idxs), spec_aug_mask_idxs, spec_aug_mask.shape
     )
-    spec_aug_mask = tf.transpose(spec_aug_mask, (1, 0))
 
     return tf.cast(spec_aug_mask, tf.float32)
 

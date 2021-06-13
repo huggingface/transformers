@@ -175,7 +175,7 @@ class TFWav2Vec2ModelTester:
         model.config.ctc_loss_reduction = "mean"
         mean_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss
 
-        self.parent.assertTrue(abs(labels.shape[0] * labels.shape[1] * mean_loss - sum_loss) < 1e-2)
+        self.parent.assertTrue(abs(labels.shape[0] * mean_loss - sum_loss) < 1e-2)
 
     def check_training(self, config, input_values, *args):
         model = TFWav2Vec2ForCTC(config)
@@ -379,17 +379,15 @@ class TFWav2Vec2UtilsTest(unittest.TestCase):
 
     def test_compute_mask_indices_overlap(self):
         batch_size = 4
-        sequence_length = 60
+        sequence_length = 80
         mask_prob = 0.5
         mask_length = 4
 
         mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
 
+        # because of overlap mask don't have to add up exactly to `mask_prob * sequence_length`, but have to be smaller or equal
         for batch_sum in tf.reduce_sum(mask, -1):
-            self.assertIn(
-                int(batch_sum),
-                list(range(int(mask_prob // mask_length * sequence_length), int(mask_prob * sequence_length))),
-            )
+            self.assertTrue(int(batch_sum) <= mask_prob * sequence_length)
 
 
 @require_tf
