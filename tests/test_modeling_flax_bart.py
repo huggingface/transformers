@@ -25,6 +25,13 @@ from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
 if is_flax_available():
+    import os
+
+    # The slow tests are often failing with OOM error on GPU
+    # This makes JAX allocate exactly what is needed on demand, and deallocate memory that is no longer needed
+    # but will be slower as stated here https://jax.readthedocs.io/en/latest/gpu_memory_allocation.html
+    os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+
     import jax
     import jax.numpy as jnp
     from transformers.models.bart.modeling_flax_bart import (
@@ -330,7 +337,6 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationT
         else ()
     )
     all_generative_model_classes = (FlaxBartForConditionalGeneration,) if is_flax_available() else ()
-    test_head_masking = True
 
     def setUp(self):
         self.model_tester = FlaxBartModelTester(self)
@@ -405,5 +411,7 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationT
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
             model = model_class_name.from_pretrained("facebook/bart-base", from_pt=True)
-            outputs = model(np.ones((1, 1)))
+            # FlaxBartForSequenceClassification expects eos token in input_ids
+            input_ids = np.ones((1, 1)) * model.config.eos_token_id
+            outputs = model(input_ids)
             self.assertIsNotNone(outputs)
