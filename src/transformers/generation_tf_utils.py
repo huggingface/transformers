@@ -676,13 +676,13 @@ class TFGenerationMixin:
             encoder_outputs = encoder(
                 input_ids,
                 attention_mask=attention_mask,
-                output_attentions=model_kwargs["output_attentions"],
-                output_hidden_states=model_kwargs["output_hidden_states"],
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
             )
             if return_dict_in_generate:
-                if model_kwargs["output_attentions"]:
+                if output_attentions:
                     model_kwargs["encoder_attentions"] = encoder_outputs.attentions
-                if model_kwargs["output_hidden_states"]:
+                if output_hidden_states:
                     model_kwargs["encoder_hidden_states"] = encoder_outputs.hidden_states
 
         # Expand input ids if num_beams > 1 or num_return_sequences > 1
