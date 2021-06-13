@@ -547,7 +547,7 @@ class FlaxBartDecoderLayer(nn.Module):
     def __call__(
         self,
         hidden_states: jnp.ndarray,
-        attention_mask: Optional[jnp.ndarray] = None,
+        attention_mask: jnp.ndarray,
         encoder_hidden_states: Optional[jnp.ndarray] = None,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
@@ -609,8 +609,8 @@ class FlaxBartDecoderLayerCollection(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        encoder_hidden_states,
-        encoder_attention_mask,
+        encoder_hidden_states: Optional[jnp.ndarray] = None,
+        encoder_attention_mask: Optional[jnp.ndarray] = None,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
@@ -732,8 +732,8 @@ class FlaxBartEncoder(nn.Module):
         input_ids,
         attention_mask,
         position_ids,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
     ):
@@ -809,9 +809,9 @@ class FlaxBartDecoder(nn.Module):
         position_ids,
         encoder_hidden_states: Optional[jnp.ndarray] = None,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
-        output_attentions: Optional[bool] = None,
         init_cache: bool = False,
-        output_hidden_states: Optional[bool] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
     ):
@@ -880,8 +880,8 @@ class FlaxBartModule(nn.Module):
         decoder_attention_mask,
         position_ids,
         decoder_position_ids,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
     ):
@@ -1013,8 +1013,8 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
         position_ids: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: bool = True,
-        deterministic: bool = True,
+        return_dict: Optional[bool] = None,
+        train: bool = False,
         params: dict = None,
         dropout_rng: PRNGKey = None,
     ):
@@ -1061,7 +1061,7 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            deterministic=deterministic,
+            deterministic=not train,
             rngs=rngs,
             method=_encoder_forward,
         )
@@ -1079,7 +1079,7 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        deterministic: bool = True,
+        train: bool = False,
         params: dict = None,
         dropout_rng: PRNGKey = None,
     ):
@@ -1161,7 +1161,7 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            deterministic=deterministic,
+            deterministic=not train,
             rngs=rngs,
             mutable=mutable,
             method=_decoder_forward,
@@ -1189,7 +1189,7 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        deterministic: bool = True,
+        train: bool = False,
         params: dict = None,
         dropout_rng: PRNGKey = None,
     ):
@@ -1233,7 +1233,7 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            deterministic=deterministic,
+            deterministic=not train,
             rngs=rngs,
         )
 
@@ -1282,8 +1282,8 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
         decoder_attention_mask,
         position_ids,
         decoder_position_ids,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
     ):
@@ -1452,7 +1452,7 @@ class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
             outputs = FlaxCausalLMOutputWithCrossAttentions(
                 logits=lm_logits,
                 hidden_states=decoder_outputs.hidden_states,
-                attentions=decoder_outputs.attentions, 
+                attentions=decoder_outputs.attentions,
                 cross_attentions=decoder_outputs.cross_attentions,
             )
         else:
@@ -1574,8 +1574,8 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
         decoder_attention_mask,
         position_ids,
         decoder_position_ids,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
     ):
@@ -1672,8 +1672,8 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
         decoder_attention_mask,
         position_ids,
         decoder_position_ids,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
     ):
