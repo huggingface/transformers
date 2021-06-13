@@ -923,7 +923,7 @@ class FlaxBartModule(nn.Module):
 
 class FlaxBartPretrainedModel(FlaxPreTrainedModel):
     config_class = BartConfig
-    base_model_prefix: str = "bart"
+    base_model_prefix: str = "model"
     module_class: nn.Module = None
 
     def __init__(
