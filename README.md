@@ -126,14 +126,18 @@ try:
     from collections.abc import MutableMapping
 except ImportError:
     from collections import MutableMapping
+from pathlib import Path
 
 class Checkpoint(MutableMapping):
-    def __init__(self):
-        self.checkpoint = torch.load("j6b_ckpt/m.pt", map_location="cpu")
+    def __init__(self, chkpt_dir, device="cpu"):
+        self.device = device
+        self.chkpt_dir = Path(chkpt_dir)
+        self.checkpoint = torch.load(str(chkpt_dir / Path("m.pt")))
     def __len__(self):
         return len(self.checkpoint)
     def __getitem__(self, key):
-        return torch.load(self.checkpoint[key], map_location="cpu")
+        path = self.chkpt_dir / Path(self.checkpoint[key]).name
+        return torch.load(str(path), map_location=self.device)
     def __setitem__(self, key, value):
         return
     def __delitem__(self, key, value):
@@ -144,11 +148,11 @@ class Checkpoint(MutableMapping):
         for key in self.checkpoint:
             yield (key, self.__getitem__(key))
     def __copy__(self):
-        return Checkpoint()
+        return Checkpoint(self.chkpt_dir, device=self.device)
     def copy(self):
-        return Checkpoint()
+        return Checkpoint(self.chkpt_dir, device=self.device)
 
-model = GPTNeoForCausalLM.from_pretrained(pretrained_model_name_or_path=None, config=config, state_dict=Checkpoint())
+model = GPTNeoForCausalLM.from_pretrained(pretrained_model_name_or_path=None, config=config, state_dict=Checkpoint("j6b_ckpt"))
 ```
 
 There is also an [alternative](https://gist.github.com/finetuneanon/7dd417a31338a63f219a49702e0550db) version of the conversion script that can run on colab within the regualr 12GB of RAM.
