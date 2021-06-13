@@ -889,14 +889,6 @@ class TFWav2Vec2FeedForward(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFWav2Vec2Output(tf.keras.layers.Layer):
-    def __init__(self, config: Wav2Vec2Config, **kwargs):
-        super().__init__(**kwargs)
-
-    def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
-        return hidden_states
-
-
 class TFWav2Vec2EncoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: Wav2Vec2Config, **kwargs):
         super().__init__(**kwargs)
