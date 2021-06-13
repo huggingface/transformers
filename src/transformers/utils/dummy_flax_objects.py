@@ -222,7 +222,7 @@ class FlaxBertPreTrainedModel:
         requires_backends(cls, ["flax"])
 
 
-class FlaxCLIPModel:
+class FlaxBigBirdForMaskedLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
@@ -231,27 +231,13 @@ class FlaxCLIPModel:
         requires_backends(cls, ["flax"])
 
 
-class FlaxBigBirdForMaskedLM:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
 class FlaxBigBirdForMultipleChoice:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
-class FlaxBigBirdForNextSentencePrediction:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
 
 
 class FlaxBigBirdForPreTraining:
@@ -264,8 +250,8 @@ class FlaxBigBirdForQuestionAnswering:
         requires_backends(self, ["flax"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
 
 
 class FlaxBigBirdForSequenceClassification:
@@ -273,8 +259,8 @@ class FlaxBigBirdForSequenceClassification:
         requires_backends(self, ["flax"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
 
 
 class FlaxBigBirdForTokenClassification:
@@ -282,8 +268,8 @@ class FlaxBigBirdForTokenClassification:
         requires_backends(self, ["flax"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
 
 
 class FlaxBigBirdModel:
@@ -291,8 +277,8 @@ class FlaxBigBirdModel:
         requires_backends(self, ["flax"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
 
 
 class FlaxBigBirdPreTrainedModel:
@@ -300,11 +286,20 @@ class FlaxBigBirdPreTrainedModel:
         requires_backends(self, ["flax"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
+class FlaxCLIPModel:
+    def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
 
-class FlaxElectraForMaskedLM:
+
+class FlaxCLIPPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 

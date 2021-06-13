@@ -28,8 +28,7 @@ from ..bert.modeling_flax_bert import (
     FlaxBertForTokenClassification,
     FlaxBertModel,
 )
-from ..clip.modeling_flax_clip import FlaxCLIPModel
-from ..big_bird.modeling_flax_bigbird import (
+from ..big_bird.modeling_flax_big_bird import (
     FlaxBigBirdForMaskedLM,
     FlaxBigBirdForMultipleChoice,
     FlaxBigBirdForPreTraining,
@@ -38,6 +37,7 @@ from ..big_bird.modeling_flax_bigbird import (
     FlaxBigBirdForTokenClassification,
     FlaxBigBirdModel,
 )
+from ..clip.modeling_flax_clip import FlaxCLIPModel
 from ..electra.modeling_flax_electra import (
     FlaxElectraForMaskedLM,
     FlaxElectraForMultipleChoice,
@@ -58,7 +58,15 @@ from ..roberta.modeling_flax_roberta import (
 )
 from ..vit.modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel
 from .auto_factory import auto_class_factory
-from .configuration_auto import BertConfig, BigBirdConfig, CLIPConfig, ElectraConfig, GPT2Config, RobertaConfig, ViTConfig
+from .configuration_auto import (
+    BertConfig,
+    BigBirdConfig,
+    CLIPConfig,
+    ElectraConfig,
+    GPT2Config,
+    RobertaConfig,
+    ViTConfig,
+)
 
 
 logger = logging.get_logger(__name__)

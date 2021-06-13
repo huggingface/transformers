@@ -1521,14 +1521,6 @@ if is_flax_available():
             "FlaxBertPreTrainedModel",
         ]
     )
-    _import_structure["models.clip"].extend(
-        [
-            "FlaxCLIPModel",
-            "FlaxCLIPPreTrainedModel",
-            "FlaxCLIPTextModel",
-            "FlaxCLIPVisionModel",
-        ]
-    )
     _import_structure["models.big_bird"].extend(
         [
             "FlaxBigBirdForMaskedLM",

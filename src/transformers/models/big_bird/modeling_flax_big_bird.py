@@ -32,7 +32,6 @@ from ...modeling_flax_outputs import (
     FlaxBaseModelOutputWithPooling,
     FlaxMaskedLMOutput,
     FlaxMultipleChoiceModelOutput,
-    FlaxQuestionAnsweringModelOutput,
     FlaxSequenceClassifierOutput,
     FlaxTokenClassifierOutput,
 )
@@ -80,6 +79,38 @@ class FlaxBigBirdForPreTrainingOutput(ModelOutput):
 
     prediction_logits: jax_xla.DeviceArray = None
     seq_relationship_logits: jax_xla.DeviceArray = None
+    hidden_states: Optional[Tuple[jax_xla.DeviceArray]] = None
+    attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
+
+
+@flax.struct.dataclass
+class FlaxBigBirdForQuestionAnsweringModelOutput(ModelOutput):
+    """
+    Base class for outputs of question answering models.
+
+    Args:
+        start_logits (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, sequence_length)`):
+            Span-start scores (before SoftMax).
+        end_logits (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, sequence_length)`):
+            Span-end scores (before SoftMax).
+        pooled_output (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, hidden_size)`):
+            pooled_output returned by FlaxBigBirdModel.
+        hidden_states (:obj:`tuple(jax_xla.DeviceArray)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`jax_xla.DeviceArray` (one for the output of the embeddings + one for the output of each
+            layer) of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(jax_xla.DeviceArray)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`jax_xla.DeviceArray` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    start_logits: jax_xla.DeviceArray = None
+    end_logits: jax_xla.DeviceArray = None
+    pooled_output: jax_xla.DeviceArray = None
     hidden_states: Optional[Tuple[jax_xla.DeviceArray]] = None
     attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
 
@@ -197,7 +228,8 @@ class FlaxBigBirdSelfAttention(nn.Module):
     def setup(self):
         if self.config.hidden_size % self.config.num_attention_heads != 0:
             raise ValueError(
-                "`config.hidden_size`: {self.config.hidden_size} has to be a multiple of `config.num_attention_heads`: {self.config.num_attention_heads}"
+                "`config.hidden_size`: {self.config.hidden_size} has to be a multiple of `config.num_attention_heads`\
+                    : {self.config.num_attention_heads}"
             )
 
         self.query = nn.Dense(
@@ -404,8 +436,8 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         #     3) Number of global blocks are fixed (2 blocks here) & global tokens can be
         #     controlled only by `block_size`.
 
-        # attention is calculated separately for q[0], q[1], q[2:-2], q[-2], q[-1] in order to use special trick of shifting tokens (for calculating sliding attention)
-        # hence following code can be divided into 5 parts.
+        # attention is calculated separately for q[0], q[1], q[2:-2], q[-2], q[-1] in order to use special trick of
+        # shifting tokens (for calculating sliding attention). hence following code can be divided into 5 parts.
 
         bsz, _, from_seq_len, _ = query_layer.shape
         to_seq_len = key_layer.shape[2]
@@ -429,7 +461,6 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
                 )[: (from_seq_len // from_block_size - 2)]
                 for _ in range(n_heads)
             ]
-            # rand_attn = jnp.broadcast_to(rand_attn, (n_heads,) + rand_attn.shape)
         else:
             if plan_from_length is None:
                 plan_from_length, plan_num_rand_blocks = self._get_rand_attn_plan(
@@ -503,7 +534,8 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             axis=2,
         )  # [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1]
 
-        # [bsz, n_heads, from_block_size, -1] x [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1] ==> [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size]
+        # [bsz, n_heads, from_block_size, -1] x [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1]
+        # ==> [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size]
         second_product = jnp.einsum("bhqd,bhkd->bhqk", blocked_query_matrix[:, :, 1], second_key_mat)
         second_seq_pad = jnp.concatenate(
             [
@@ -526,7 +558,8 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             second_product, axis=-1
         )  # [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size]
 
-        # [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size] x [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1] ==> [bsz, n_heads, from_block_size, -1]
+        # [bsz, n_heads, from_block_size, (4+r)*to_block_size] x [bsz, n_heads, (4+r)*to_block_size, -1]
+        #  ==> [bsz, n_heads, from_block_size, -1]
         second_context_layer = jnp.einsum("bhqk,bhkd->bhqd", second_attn_weights, second_value_mat)
         second_context_layer = jnp.expand_dims(second_context_layer, 2)
 
@@ -553,21 +586,22 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         inner_band_product = inner_band_product * rsqrt_d
 
         # randn attention scores for q[-2:2]
-        # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1] x [bsz, n_heads, from_seq_len//from_block_size-4, n_rand_blocks*to_block_size, -1]
+        # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1]
+        # x [bsz, n_heads, from_seq_len//from_block_size-4, n_rand_blocks*to_block_size, -1]
         rand_band_product = jnp.einsum("bhlqd,bhlkd->bhlqk", middle_query_matrix, gathered_key[:, :, 1:-1])
         #     ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, n_rand_blocks*to_block_size]
         rand_band_product = rand_band_product * rsqrt_d
 
         # Including 1st block (since it's global)
-        first_band_product = jnp.einsum(
-            "bhlqd,bhkd->bhlqk", middle_query_matrix, blocked_key_matrix[:, :, 0]
-        )  # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1] x [bsz, n_heads, to_block_size, -1] ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, to_block_size]
+        # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1] x [bsz, n_heads, to_block_size, -1]
+        #  ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, to_block_size]
+        first_band_product = jnp.einsum("bhlqd,bhkd->bhlqk", middle_query_matrix, blocked_key_matrix[:, :, 0])
         first_band_product = first_band_product * rsqrt_d
 
         # Including last block (since it's global)
-        last_band_product = jnp.einsum(
-            "bhlqd,bhkd->bhlqk", middle_query_matrix, blocked_key_matrix[:, :, -1]
-        )  # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1] x [bsz, n_heads, to_block_size, -1] ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, to_block_size]
+        # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1] x [bsz, n_heads, to_block_size, -1]
+        #  ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, to_block_size]
+        last_band_product = jnp.einsum("bhlqd,bhkd->bhlqk", middle_query_matrix, blocked_key_matrix[:, :, -1])
         last_band_product = last_band_product * rsqrt_d
 
         # masking padded tokens
@@ -587,14 +621,16 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         )  # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, (5+n_rand_blocks)*to_block_size]
 
         # contribution of sliding keys
-        # [bsz, n_heads, m//from_block_size-4, from_block_size, 3*to_block_size] x [bsz, n_heads, from_seq_len//from_block_size-4, 3*to_block_size, -1]
+        # [bsz, n_heads, m//from_block_size-4, from_block_size, 3*to_block_size]
+        # x [bsz, n_heads, from_seq_len//from_block_size-4, 3*to_block_size, -1]
         context_layer = jnp.einsum(
             "bhlqk,bhlkd->bhlqd", attn_weights[:, :, :, :, to_block_size : 4 * to_block_size], exp_blocked_value_matrix
         )
         #     ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1]
 
         # adding contribution of random keys
-        # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, n_rand_blocks*to_block_size] x [bsz, n_heads, from_seq_len//from_block_size-4, n_rand_blocks*to_block_size, -1]
+        # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, n_rand_blocks*to_block_size]
+        # x [bsz, n_heads, from_seq_len//from_block_size-4, n_rand_blocks*to_block_size, -1]
         context_layer += jnp.einsum(
             "bhlqk,bhlkd->bhlqd",
             attn_weights[:, :, :, :, 4 * to_block_size : -to_block_size],
@@ -603,12 +639,16 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         #     ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1]
 
         # adding contribution of global keys
+        # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, to_block_size] x [bsz, n_heads, to_block_size, -1]
+        #  ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1]
         context_layer += jnp.einsum(
             "bhlqk,bhkd->bhlqd", attn_weights[:, :, :, :, :to_block_size], blocked_value_matrix[:, :, 0]
-        )  # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, to_block_size] x [bsz, n_heads, to_block_size, -1] ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1]
+        )
+        # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, to_block_size] x [bsz, n_heads, to_block_size, -1]
+        # ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1]
         context_layer += jnp.einsum(
             "bhlqk,bhkd->bhlqd", attn_weights[:, :, :, :, -to_block_size:], blocked_value_matrix[:, :, -1]
-        )  # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, to_block_size] x [bsz, n_heads, to_block_size, -1] ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1]
+        )
 
         # 4th PART
         # last 2nd token attention scores
@@ -638,7 +678,8 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             axis=2,
         )  # [bsz, n_heads, (4+r)*to_block_size, -1]
 
-        # [bsz, n_heads, from_block_size, -1] x [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1] ==> [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size]
+        # [bsz, n_heads, from_block_size, -1] x [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1]
+        # ==> [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size]
         second_last_product = jnp.einsum("bhqd,bhkd->bhqk", blocked_query_matrix[:, :, -2], second_last_key_mat)
         second_last_seq_pad = jnp.concatenate(
             [
@@ -661,7 +702,8 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             second_last_product, axis=-1
         )  # [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size]
 
-        # [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size] x [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1] ==> [bsz, n_heads, from_block_size, -1]
+        # [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size] x [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1]
+        # ==> [bsz, n_heads, from_block_size, -1]
         second_last_context_layer = jnp.einsum("bhqk,bhkd->bhqd", second_last_attn_weights, second_last_value_mat)
         second_last_context_layer = jnp.expand_dims(second_last_context_layer, 2)
 
@@ -1904,6 +1946,7 @@ class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
         )
 
         hidden_states = outputs[0]
+        pooled_output = outputs[1] if self.add_pooling_layer else None
         logits = self.qa_classifier(hidden_states, deterministic=deterministic)
 
         if logits_mask is not None:
@@ -1917,9 +1960,10 @@ class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
         if not return_dict:
             return (start_logits, end_logits) + outputs[1:]
 
-        return FlaxQuestionAnsweringModelOutput(
+        return FlaxBigBirdForQuestionAnsweringModelOutput(
             start_logits=start_logits,
             end_logits=end_logits,
+            pooled_output=pooled_output,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -2012,6 +2056,6 @@ append_call_sample_docstring(
     FlaxBigBirdForQuestionAnswering,
     _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
-    FlaxQuestionAnsweringModelOutput,
+    FlaxBigBirdForQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
 )
