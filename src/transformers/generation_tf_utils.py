@@ -482,7 +482,7 @@ class TFGenerationMixin:
                     - :class:`~transformers.generation_utils.TFGreedySearchDecoderOnlyOutput`,
                     - :class:`~transformers.generation_utils.TFSampleDecoderOnlyOutput`,
                     - :class:`~transformers.generation_utils.TFBeamSearchDecoderOnlyOutput`,
-                    - :class:`~transformers.generation_utils.BeamSampleDecoderOnlyOutput`
+                    - :class:`~transformers.generation_utils.TFBeamSampleDecoderOnlyOutput`
 
                 If the model is an encoder-decoder model (``model.config.is_encoder_decoder=True``), the possible
                 :class:`~transformers.file_utils.ModelOutput` types are:
