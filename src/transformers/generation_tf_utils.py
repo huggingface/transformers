@@ -472,10 +472,25 @@ class TFGenerationMixin:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model.
 
         Return:
+            :class:`~transformers.file_utils.ModelOutput` or :obj:`tf.Tensor`: A
+            :class:`~transformers.file_utils.ModelOutput` (if ``return_dict_in_generate=True`` or when
+            ``config.return_dict_in_generate=True``) or a :obj:`tf.Tensor`.
 
-            :obj:`tf.Tensor` of :obj:`dtype=tf.int32` and shape :obj:`(batch_size * num_return_sequences,
-            sequence_length)`: The generated sequences. The second dimension (sequence_length) is either equal to
-            :obj:`max_length` or shorter if all batches finished early due to the :obj:`eos_token_id`.
+                If the model is `not` an encoder-decoder model (``model.config.is_encoder_decoder=False``), the
+                possible :class:`~transformers.file_utils.ModelOutput` types are:
+
+                    - :class:`~transformers.generation_utils.TFGreedySearchDecoderOnlyOutput`,
+                    - :class:`~transformers.generation_utils.TFSampleDecoderOnlyOutput`,
+                    - :class:`~transformers.generation_utils.TFBeamSearchDecoderOnlyOutput`,
+                    - :class:`~transformers.generation_utils.BeamSampleDecoderOnlyOutput`
+
+                If the model is an encoder-decoder model (``model.config.is_encoder_decoder=True``), the possible
+                :class:`~transformers.file_utils.ModelOutput` types are:
+
+                    - :class:`~transformers.generation_utils.TFGreedySearchEncoderDecoderOutput`,
+                    - :class:`~transformers.generation_utils.TFSampleEncoderDecoderOutput`,
+                    - :class:`~transformers.generation_utils.TFBeamSearchEncoderDecoderOutput`,
+                    - :class:`~transformers.generation_utils.TFBeamSampleEncoderDecoderOutput`
 
         Examples::
 
