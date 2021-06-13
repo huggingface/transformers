@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Will Rice (Spokestack) and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The Fairseq Authors and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -46,7 +46,7 @@ LARGE_NEGATIVE = -1e8
 
 def _sample_without_replacement(distribution, num_samples):
     """
-    categorical sampling witouth replacement is currently not implemented the gumbel-max trick will do for now see
+    Categorical sampling without replacement is currently not implemented. The gumbel-max trick will do for now - see
     https://github.com/tensorflow/tensorflow/issues/9260 for more info
     """
     z = -tf.math.log(tf.random.uniform(shape_list(distribution), 0, 1))
@@ -55,6 +55,9 @@ def _sample_without_replacement(distribution, num_samples):
 
 
 def _scatter_values_on_batch_indices(values, batch_indices, output_shape):
+    """
+    Scatter function as in PyTorch with indices in format (batch_dim, indixes)
+    """
     indices_shape = shape_list(batch_indices)
     # broadcast batch dim to indices_shape
     broad_casted_batch_dims = tf.reshape(
