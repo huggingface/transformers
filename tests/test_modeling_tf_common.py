@@ -27,6 +27,12 @@ from typing import List, Tuple
 from huggingface_hub import HfApi
 from requests.exceptions import HTTPError
 from transformers import is_tf_available
+from transformers.generation_tf_utils import (
+    TFBeamSearchDecoderOnlyOutput,
+    TFBeamSearchEncoderDecoderOutput,
+    TFGreedySearchDecoderOnlyOutput,
+    TFGreedySearchEncoderDecoderOutput,
+)
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
@@ -1095,6 +1101,27 @@ class TFModelTesterMixin:
             generated_ids = output_tokens[:, input_ids.shape[-1] :]
             self.assertFalse(self._check_match_tokens(generated_ids.numpy().tolist(), bad_words_ids))
 
+    def test_lm_head_model_no_beam_search_generate_dict_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = inputs_dict["input_ids"]
+
+        # iterate over all generative models
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+            output_greedy = model.generate(
+                input_ids,
+                max_length=5,
+                output_scores=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+
+            if model.config.is_encoder_decoder:
+                self.assertIsInstance(output_greedy, TFGreedySearchEncoderDecoderOutput)
+            else:
+                self.assertIsInstance(output_greedy, TFGreedySearchDecoderOnlyOutput)
+
     def test_lm_head_model_random_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict["input_ids"]
@@ -1134,6 +1161,28 @@ class TFModelTesterMixin:
             # only count generated tokens
             generated_ids = output_tokens[:, input_ids.shape[-1] :]
             self.assertFalse(self._check_match_tokens(generated_ids.numpy().tolist(), bad_words_ids))
+
+    def test_lm_head_model_beam_search_generate_dict_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = inputs_dict["input_ids"]
+
+        # iterate over all generative models
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+            output_beam_search = model.generate(
+                input_ids,
+                max_length=5,
+                num_beams=2,
+                output_scores=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+
+            if model.config.is_encoder_decoder:
+                self.assertIsInstance(output_beam_search, TFBeamSearchEncoderDecoderOutput)
+            else:
+                self.assertIsInstance(output_beam_search, TFBeamSearchDecoderOnlyOutput)
 
     def test_loss_computation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

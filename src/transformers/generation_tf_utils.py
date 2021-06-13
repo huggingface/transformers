@@ -225,9 +225,9 @@ class TFGenerationMixin:
         attention_mask=None,
         decoder_start_token_id=None,
         use_cache=None,
+        output_scores=None,
         output_attentions=None,
         output_hidden_states=None,
-        output_scores=None,
         return_dict_in_generate=None,
         forced_bos_token_id=None,
         forced_eos_token_id=None,
@@ -649,13 +649,6 @@ class TFGenerationMixin:
         cross_attentions = () if (return_dict_in_generate and kwargs["output_attentions"]) else None
         decoder_hidden_states = () if (return_dict_in_generate and kwargs["output_hidden_states"]) else None
 
-        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
-        if return_dict_in_generate and self.config.is_encoder_decoder:
-            encoder_attentions = kwargs["encoder_outputs"].get("attentions") if kwargs["output_attentions"] else None
-            encoder_hidden_states = (
-                kwargs["encoder_outputs"].get("hidden_states") if kwargs["output_hidden_states"] else None
-            )
-
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
                 input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **kwargs
@@ -787,6 +780,13 @@ class TFGenerationMixin:
                     [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
                 )
 
+        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
+        if return_dict_in_generate and self.config.is_encoder_decoder:
+            if kwargs["output_attentions"]:
+                encoder_attentions = outputs.encoder_attentions
+            if kwargs["output_hidden_states"]:
+                encoder_hidden_states = outputs.encoder_hidden_states
+
         # if there are different sentences lengths in the batch, some batches have to be padded
         min_sent_length = tf.math.reduce_min(sent_lengths)
         max_sent_length = tf.math.reduce_max(sent_lengths)
@@ -884,13 +884,6 @@ class TFGenerationMixin:
         decoder_attentions = () if (return_dict_in_generate and kwargs["output_attentions"]) else None
         cross_attentions = () if (return_dict_in_generate and kwargs["output_attentions"]) else None
         decoder_hidden_states = () if (return_dict_in_generate and kwargs["output_hidden_states"]) else None
-
-        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
-        if return_dict_in_generate and self.config.is_encoder_decoder:
-            encoder_attentions = kwargs["encoder_outputs"].get("attentions") if kwargs["output_attentions"] else None
-            encoder_hidden_states = (
-                kwargs["encoder_outputs"].get("hidden_states") if kwargs["output_hidden_states"] else None
-            )
 
         # done sentences
         done = [False for _ in range(batch_size)]
@@ -1114,6 +1107,13 @@ class TFGenerationMixin:
                 attention_mask = tf.concat(
                     [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
                 )
+
+        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
+        if return_dict_in_generate and self.config.is_encoder_decoder:
+            if kwargs["output_attentions"]:
+                encoder_attentions = outputs.encoder_attentions
+            if kwargs["output_hidden_states"]:
+                encoder_hidden_states = outputs.encoder_hidden_states
 
         # finalize all open beam hypotheses and end to generated hypotheses
         for batch_idx in range(batch_size):
