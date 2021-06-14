@@ -510,14 +510,6 @@ class Wav2Vec2FeedForward(nn.Module):
         return hidden_states
 
 
-class Wav2Vec2Output(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-
-    def forward(self, hidden_states, input_tensor):
-        return hidden_states
-
-
 class Wav2Vec2EncoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
