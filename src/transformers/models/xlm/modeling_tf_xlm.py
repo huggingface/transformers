@@ -503,7 +503,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             # encoder attention (for decoder only)
             # if self.is_decoder and src_enc is not None:
             #     attn = self.encoder_attn[i](tensor, src_mask, kv=src_enc, cache=cache)
-            #     attn = F.dropout(attn, p=self.dropout, training=self.training)
+            #     attn = nn.functional.dropout(attn, p=self.dropout, training=self.training)
             #     tensor = tensor + attn
             #     tensor = self.layer_norm15[i](tensor)
 
