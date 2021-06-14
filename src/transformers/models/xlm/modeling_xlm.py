@@ -25,7 +25,6 @@ import numpy as np
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from torch.nn import functional as F
 
 from ...activations import gelu
 from ...file_utils import (
@@ -190,8 +189,8 @@ class MultiHeadAttention(nn.Module):
         mask = (mask == 0).view(mask_reshape).expand_as(scores)  # (bs, n_heads, qlen, klen)
         scores.masked_fill_(mask, -float("inf"))  # (bs, n_heads, qlen, klen)
 
-        weights = F.softmax(scores.float(), dim=-1).type_as(scores)  # (bs, n_heads, qlen, klen)
-        weights = F.dropout(weights, p=self.dropout, training=self.training)  # (bs, n_heads, qlen, klen)
+        weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)  # (bs, n_heads, qlen, klen)
+        weights = nn.functional.dropout(weights, p=self.dropout, training=self.training)  # (bs, n_heads, qlen, klen)
 
         # Mask heads if we want to
         if head_mask is not None:
@@ -212,7 +211,7 @@ class TransformerFFN(nn.Module):
         self.dropout = config.dropout
         self.lin1 = nn.Linear(in_dim, dim_hidden)
         self.lin2 = nn.Linear(dim_hidden, out_dim)
-        self.act = gelu if config.gelu_activation else F.relu
+        self.act = gelu if config.gelu_activation else nn.functional.relu
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
 
@@ -223,7 +222,7 @@ class TransformerFFN(nn.Module):
         x = self.lin1(input)
         x = self.act(x)
         x = self.lin2(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         return x
 
 
@@ -578,7 +577,7 @@ class XLMModel(XLMPreTrainedModel):
         if token_type_ids is not None:
             tensor = tensor + self.embeddings(token_type_ids)
         tensor = self.layer_norm_emb(tensor)
-        tensor = F.dropout(tensor, p=self.dropout, training=self.training)
+        tensor = nn.functional.dropout(tensor, p=self.dropout, training=self.training)
         tensor *= mask.unsqueeze(-1).to(tensor.dtype)
 
         # transformer layers
@@ -599,14 +598,14 @@ class XLMModel(XLMPreTrainedModel):
             attn = attn_outputs[0]
             if output_attentions:
                 attentions = attentions + (attn_outputs[1],)
-            attn = F.dropout(attn, p=self.dropout, training=self.training)
+            attn = nn.functional.dropout(attn, p=self.dropout, training=self.training)
             tensor = tensor + attn
             tensor = self.layer_norm1[i](tensor)
 
             # encoder attention (for decoder only)
             # if self.is_decoder and src_enc is not None:
             #     attn = self.encoder_attn[i](tensor, src_mask, kv=src_enc, cache=cache)
-            #     attn = F.dropout(attn, p=self.dropout, training=self.training)
+            #     attn = nn.functional.dropout(attn, p=self.dropout, training=self.training)
             #     tensor = tensor + attn
             #     tensor = self.layer_norm15[i](tensor)
 
@@ -661,7 +660,9 @@ class XLMPredLayer(nn.Module):
             scores = self.proj(x)
             outputs = (scores,) + outputs
             if y is not None:
-                loss = F.cross_entropy(scores.view(-1, self.n_words), y.view(-1), reduction="elementwise_mean")
+                loss = nn.functional.cross_entropy(
+                    scores.view(-1, self.n_words), y.view(-1), reduction="elementwise_mean"
+                )
                 outputs = (loss,) + outputs
         else:
             scores = self.proj.log_prob(x)

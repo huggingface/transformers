@@ -15,8 +15,8 @@
 import math
 
 import torch
-import torch.nn.functional as F
 from packaging import version
+from torch import nn
 
 from .utils import logging
 
@@ -28,8 +28,8 @@ def _gelu_python(x):
     """
     Original Implementation of the GELU activation function in Google BERT repo when initially created. For
     information: OpenAI GPT's GELU is slightly different (and gives slightly different results): 0.5 * x * (1 +
-    torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3)))) This is now written in C in
-    torch.nn.functional Also see the Gaussian Error Linear Units paper: https://arxiv.org/abs/1606.08415
+    torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3)))) This is now written in C in nn.functional
+    Also see the Gaussian Error Linear Units paper: https://arxiv.org/abs/1606.08415
     """
     return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
@@ -45,7 +45,7 @@ def gelu_new(x):
 if version.parse(torch.__version__) < version.parse("1.4"):
     gelu = _gelu_python
 else:
-    gelu = F.gelu
+    gelu = nn.functional.gelu
 
 
 def gelu_fast(x):
@@ -70,11 +70,11 @@ def _silu_python(x):
 if version.parse(torch.__version__) < version.parse("1.7"):
     silu = _silu_python
 else:
-    silu = F.silu
+    silu = nn.functional.silu
 
 
 def mish(x):
-    return x * torch.tanh(torch.nn.functional.softplus(x))
+    return x * torch.tanh(nn.functional.softplus(x))
 
 
 def linear_act(x):
@@ -82,7 +82,7 @@ def linear_act(x):
 
 
 ACT2FN = {
-    "relu": F.relu,
+    "relu": nn.functional.relu,
     "silu": silu,
     "swish": silu,
     "gelu": gelu,

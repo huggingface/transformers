@@ -92,7 +92,7 @@ class SqueezeBertEmbeddings(nn.Module):
         return embeddings
 
 
-class MatMulWrapper(torch.nn.Module):
+class MatMulWrapper(nn.Module):
     """
     Wrapper for torch.matmul(). This makes flop-counting easier to implement. Note that if you directly call
     torch.matmul() in your code, the flop counter will typically ignore the flops of the matmul.

@@ -20,7 +20,6 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
@@ -449,7 +448,7 @@ class Wav2Vec2Attention(nn.Module):
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        attn_weights = F.softmax(attn_weights, dim=-1)
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
         if layer_head_mask is not None:
             if layer_head_mask.size() != (self.num_heads,):
@@ -469,7 +468,7 @@ class Wav2Vec2Attention(nn.Module):
         else:
             attn_weights_reshaped = None
 
-        attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
         attn_output = torch.bmm(attn_probs, value_states)
 
@@ -805,9 +804,9 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
 
         if self.training:
             # sample code vector probs via gumbel in differentiateable way
-            codevector_probs = F.gumbel_softmax(hidden_states.float(), tau=self.temperature, hard=True).type_as(
-                hidden_states
-            )
+            codevector_probs = nn.functional.gumbel_softmax(
+                hidden_states.float(), tau=self.temperature, hard=True
+            ).type_as(hidden_states)
 
             # compute perplexity
             codevector_soft_dist = torch.softmax(
@@ -867,12 +866,12 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
                 if hasattr(module, "weight_v") and hasattr(module, "weight_g"):
                     with deepspeed.zero.GatheredParameters([module.weight_v, module.weight_g], modifier_rank=0):
-                        torch.nn.init.kaiming_normal_(module.weight.data)
+                        nn.init.kaiming_normal_(module.weight.data)
                 else:
                     with deepspeed.zero.GatheredParameters(module.weight, modifier_rank=0):
-                        torch.nn.init.kaiming_normal_(module.weight.data)
+                        nn.init.kaiming_normal_(module.weight.data)
             else:
-                torch.nn.init.kaiming_normal_(module.weight.data)
+                nn.init.kaiming_normal_(module.weight.data)
 
         if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
@@ -1296,7 +1295,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             # -log(exp(sim(c_t, q_t)/\kappa) / \sum_{\sim{q}} exp(sim(c_t, \sim{q})/\kappa))
             preds = logits.transpose(0, 2).reshape(-1, logits.size(0))
             target = ((1 - mask_time_indices.long()) * -100).transpose(0, 1).flatten()
-            contrastive_loss = F.cross_entropy(preds.float(), target, reduction="sum")
+            contrastive_loss = nn.functional.cross_entropy(preds.float(), target, reduction="sum")
 
             # 7. compute diversity loss: \mathbf{L}_d
             num_codevectors = self.config.num_codevectors_per_group * self.config.num_codevector_groups
@@ -1502,10 +1501,10 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
             flattened_targets = labels.masked_select(labels_mask)
 
             # ctc_loss doesn't support fp16
-            log_probs = F.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
+            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
 
             with torch.backends.cudnn.flags(enabled=False):
-                loss = F.ctc_loss(
+                loss = nn.functional.ctc_loss(
                     log_probs,
                     flattened_targets,
                     input_lengths,

@@ -19,8 +19,7 @@ import decimal
 
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from torch import nn
 from torch.autograd import Function
 
 from ...utils import logging
@@ -79,7 +78,7 @@ class QuantEmbedding(nn.Module):
     def forward(self, x, positions=None, incremental_state=None):
         if not self.quant_mode:
             return (
-                F.embedding(
+                nn.functional.embedding(
                     x,
                     self.weight,
                     self.padding_idx,
@@ -101,7 +100,7 @@ class QuantEmbedding(nn.Module):
             self.weight, self.weight_bit, self.percentile_mode, self.weight_scaling_factor
         )
 
-        emb_int = F.embedding(
+        emb_int = nn.functional.embedding(
             x,
             self.weight_integer,
             self.padding_idx,
@@ -264,7 +263,7 @@ class QuantLinear(nn.Module):
 
     def forward(self, x, prev_act_scaling_factor=None):
         if not self.quant_mode:
-            return F.linear(x, weight=self.weight, bias=self.bias), None
+            return nn.functional.linear(x, weight=self.weight, bias=self.bias), None
 
         # assert that prev_act_scaling_factor is a scalar tensor
         assert prev_act_scaling_factor is not None and prev_act_scaling_factor.shape == (1,), (
@@ -295,7 +294,7 @@ class QuantLinear(nn.Module):
         x_int = x / prev_act_scaling_factor
 
         return (
-            F.linear(x_int, weight=self.weight_integer, bias=self.bias_integer) * bias_scaling_factor,
+            nn.functional.linear(x_int, weight=self.weight_integer, bias=self.bias_integer) * bias_scaling_factor,
             bias_scaling_factor,
         )
 
