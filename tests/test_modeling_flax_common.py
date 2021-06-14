@@ -22,6 +22,7 @@ import numpy as np
 
 import transformers
 from transformers import is_flax_available, is_torch_available
+from transformers.models.auto import get_values
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax
 
 
@@ -31,6 +32,7 @@ if is_flax_available():
     import jax
     import jax.numpy as jnp
     import jaxlib.xla_extension as jax_xla
+    from transformers import FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
@@ -40,6 +42,14 @@ if is_flax_available():
 
 if is_torch_available():
     import torch
+
+
+def _config_zero_init(config):
+    configs_no_init = copy.deepcopy(config)
+    for key in configs_no_init.__dict__.keys():
+        if "_range" in key or "_std" in key or "initializer_factor" in key:
+            setattr(configs_no_init, key, 1e-10)
+    return configs_no_init
 
 
 def ids_tensor(shape, vocab_size, rng=None):
@@ -87,6 +97,7 @@ def random_attention_mask(shape, rng=None):
 class FlaxModelTesterMixin:
     model_tester = None
     all_model_classes = ()
+    is_encoder_decoder = False
 
     def _prepare_for_class(self, inputs_dict, model_class):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -156,6 +167,9 @@ class FlaxModelTesterMixin:
                 pt_model_class = getattr(transformers, pt_model_class_name)
 
                 pt_model = pt_model_class(config).eval()
+                # Flax models don't use the `use_cache` option and cache is not returned as a default.
+                # So we disable `use_cache` here for PyTorch model.
+                pt_model.config.use_cache = False
                 fx_model = model_class(config, dtype=jnp.float32)
 
                 fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
@@ -167,7 +181,7 @@ class FlaxModelTesterMixin:
                 fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-3)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     pt_model.save_pretrained(tmpdirname)
@@ -178,7 +192,10 @@ class FlaxModelTesterMixin:
                     len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
                 )
                 for fx_output_loaded, pt_output in zip(fx_outputs_loaded, pt_outputs):
-                    self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 4e-2)
+                    if not isinstance(
+                        fx_output_loaded, tuple
+                    ):  # TODO(Patrick, Daniel) - let's discard use_cache for now
+                        self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 1e-3)
 
     @is_pt_flax_cross_test
     def test_equivalence_flax_to_pt(self):
@@ -195,6 +212,9 @@ class FlaxModelTesterMixin:
                 pt_model_class = getattr(transformers, pt_model_class_name)
 
                 pt_model = pt_model_class(config).eval()
+                # Flax models don't use the `use_cache` option and cache is not returned as a default.
+                # So we disable `use_cache` here for PyTorch model.
+                pt_model.config.use_cache = False
                 fx_model = model_class(config, dtype=jnp.float32)
 
                 pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
@@ -207,8 +227,9 @@ class FlaxModelTesterMixin:
 
                 fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-3)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     fx_model.save_pretrained(tmpdirname)
@@ -221,7 +242,8 @@ class FlaxModelTesterMixin:
                     len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch"
                 )
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs_loaded):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
+                    if not isinstance(fx_output, tuple):  # TODO(Patrick, Daniel) - let's discard use_cache for now
+                        self.assert_almost_equals(fx_output, pt_output.numpy(), 5e-3)
 
     def test_from_pretrained_save_pretrained(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -276,6 +298,7 @@ class FlaxModelTesterMixin:
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
+
                     self.assertEqual(jitted_output.shape, output.shape)
 
     def test_forward_signature(self):
@@ -287,8 +310,17 @@ class FlaxModelTesterMixin:
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["input_ids", "attention_mask"]
-            self.assertListEqual(arg_names[:2], expected_arg_names)
+            if model.config.is_encoder_decoder:
+                expected_arg_names = [
+                    "input_ids",
+                    "attention_mask",
+                    "decoder_input_ids",
+                    "decoder_attention_mask",
+                ]
+                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            else:
+                expected_arg_names = ["input_ids", "attention_mask"]
+                self.assertListEqual(arg_names[:2], expected_arg_names)
 
     def test_naming_convention(self):
         for model_class in self.all_model_classes:
@@ -306,15 +338,35 @@ class FlaxModelTesterMixin:
             model = model_class(config)
 
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            hidden_states = outputs.hidden_states
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
-            self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
-            seq_length = self.model_tester.seq_length
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            if hasattr(self.model_tester, "encoder_seq_length"):
+                seq_length = self.model_tester.encoder_seq_length
+            else:
+                seq_length = self.model_tester.seq_length
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
                 [seq_length, self.model_tester.hidden_size],
             )
+
+            if config.is_encoder_decoder:
+                hidden_states = outputs.decoder_hidden_states
+
+                self.assertIsInstance(hidden_states, (list, tuple))
+                self.assertEqual(len(hidden_states), expected_num_layers)
+                seq_len = getattr(self.model_tester, "seq_length", None)
+                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+
+                self.assertListEqual(
+                    list(hidden_states[0].shape[-2:]),
+                    [decoder_seq_length, self.model_tester.hidden_size],
+                )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -333,13 +385,17 @@ class FlaxModelTesterMixin:
         config.return_dict = True
 
         seq_length = getattr(self.model_tester, "seq_length", None)
+        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_length)
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_length)
+        decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             model = model_class(config)
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -347,14 +403,45 @@ class FlaxModelTesterMixin:
             config.output_attentions = True
             model = model_class(config)
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, seq_length, seq_length],
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
             out_len = len(outputs)
+
+            if self.is_encoder_decoder:
+                correct_outlen = 5
+
+                # Question Answering model returns start_logits and end_logits
+                if model_class in get_values(FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING):
+                    correct_outlen += 1  # start_logits and end_logits instead of only 1 output
+
+                self.assertEqual(out_len, correct_outlen)
+
+                # decoder attentions
+                decoder_attentions = outputs.decoder_attentions
+                self.assertIsInstance(decoder_attentions, (list, tuple))
+                self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(decoder_attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                )
+
+                # cross attentions
+                cross_attentions = outputs.cross_attentions
+                self.assertIsInstance(cross_attentions, (list, tuple))
+                self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(cross_attentions[0].shape[-3:]),
+                    [
+                        self.model_tester.num_attention_heads,
+                        decoder_seq_length,
+                        encoder_key_length,
+                    ],
+                )
 
             # Check attention is always last and order is fine
             inputs_dict["output_attentions"] = True
@@ -362,7 +449,12 @@ class FlaxModelTesterMixin:
             model = model_class(config)
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            added_hidden_states = 1
+            if hasattr(self.model_tester, "num_hidden_states_types"):
+                added_hidden_states = self.model_tester.num_hidden_states_types
+            elif self.is_encoder_decoder:
+                added_hidden_states = 2
+            else:
+                added_hidden_states = 1
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
             self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
@@ -370,5 +462,5 @@ class FlaxModelTesterMixin:
 
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, seq_length, seq_length],
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
