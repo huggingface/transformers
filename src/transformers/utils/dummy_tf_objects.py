@@ -1647,6 +1647,32 @@ class TFTransfoXLPreTrainedModel:
         requires_backends(cls, ["tf"])
 
 
+TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFWav2Vec2ForCTC:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFWav2Vec2Model:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFWav2Vec2PreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
 TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

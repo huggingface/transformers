@@ -1430,6 +1430,14 @@ if is_tf_available():
             "TFTransfoXLPreTrainedModel",
         ]
     )
+    _import_structure["models.wav2vec2"].extend(
+        [
+            "TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFWav2Vec2ForCTC",
+            "TFWav2Vec2Model",
+            "TFWav2Vec2PreTrainedModel",
+        ]
+    )
     _import_structure["models.xlm"].extend(
         [
             "TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2742,6 +2750,12 @@ if TYPE_CHECKING:
             TFTransfoXLMainLayer,
             TFTransfoXLModel,
             TFTransfoXLPreTrainedModel,
+        )
+        from .models.wav2vec2 import (
+            TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFWav2Vec2ForCTC,
+            TFWav2Vec2Model,
+            TFWav2Vec2PreTrainedModel,
         )
         from .models.xlm import (
             TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
