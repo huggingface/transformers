@@ -43,7 +43,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel, SequenceSummary, apply_chunking_to_forward
+from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
 from ...utils import logging
 from .configuration_big_bird import BigBirdConfig
 
@@ -2309,7 +2309,6 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
         )
 
         sequence_output, pooled_output = outputs[:2]
-
         prediction_scores, seq_relationship_score = self.cls(sequence_output, pooled_output)
 
         total_loss = None
@@ -2709,7 +2708,7 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
         super().__init__(config)
 
         self.bert = BigBirdModel(config)
-        self.sequence_summary = SequenceSummary(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         self.init_weights()
@@ -2767,9 +2766,9 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        pooled_output = outputs[1]
 
-        pooled_output = self.sequence_summary(sequence_output)
+        pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
         reshaped_logits = logits.view(-1, num_choices)
 

@@ -1537,6 +1537,18 @@ if is_flax_available():
             "FlaxBertPreTrainedModel",
         ]
     )
+    _import_structure["models.big_bird"].extend(
+        [
+            "FlaxBigBirdForMaskedLM",
+            "FlaxBigBirdForMultipleChoice",
+            "FlaxBigBirdForPreTraining",
+            "FlaxBigBirdForQuestionAnswering",
+            "FlaxBigBirdForSequenceClassification",
+            "FlaxBigBirdForTokenClassification",
+            "FlaxBigBirdModel",
+            "FlaxBigBirdPreTrainedModel",
+        ]
+    )
     _import_structure["models.clip"].extend(
         [
             "FlaxCLIPModel",
@@ -2846,6 +2858,16 @@ if TYPE_CHECKING:
             FlaxBertForTokenClassification,
             FlaxBertModel,
             FlaxBertPreTrainedModel,
+        )
+        from .models.big_bird import (
+            FlaxBigBirdForMaskedLM,
+            FlaxBigBirdForMultipleChoice,
+            FlaxBigBirdForPreTraining,
+            FlaxBigBirdForQuestionAnswering,
+            FlaxBigBirdForSequenceClassification,
+            FlaxBigBirdForTokenClassification,
+            FlaxBigBirdModel,
+            FlaxBigBirdPreTrainedModel,
         )
         from .models.clip import FlaxCLIPModel, FlaxCLIPPreTrainedModel, FlaxCLIPTextModel, FlaxCLIPVisionModel
         from .models.electra import (
