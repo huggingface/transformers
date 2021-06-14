@@ -18,6 +18,7 @@ import math
 from typing import Callable, Iterable, Optional, Tuple, Union
 
 import torch
+from torch import nn
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
 
@@ -272,7 +273,7 @@ class AdamW(Optimizer):
     <https://arxiv.org/abs/1711.05101>`__.
 
     Parameters:
-        params (:obj:`Iterable[torch.nn.parameter.Parameter]`):
+        params (:obj:`Iterable[nn.parameter.Parameter]`):
             Iterable of parameters to optimize or dictionaries defining parameter groups.
         lr (:obj:`float`, `optional`, defaults to 1e-3):
             The learning rate to use.
@@ -288,7 +289,7 @@ class AdamW(Optimizer):
 
     def __init__(
         self,
-        params: Iterable[torch.nn.parameter.Parameter],
+        params: Iterable[nn.parameter.Parameter],
         lr: float = 1e-3,
         betas: Tuple[float, float] = (0.9, 0.999),
         eps: float = 1e-6,
@@ -379,7 +380,7 @@ class Adafactor(Optimizer):
     `relative_step=False`.
 
     Arguments:
-        params (:obj:`Iterable[torch.nn.parameter.Parameter]`):
+        params (:obj:`Iterable[nn.parameter.Parameter]`):
             Iterable of parameters to optimize or dictionaries defining parameter groups.
         lr (:obj:`float`, `optional`):
             The external learning rate.
