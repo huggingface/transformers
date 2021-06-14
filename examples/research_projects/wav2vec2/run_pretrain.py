@@ -5,9 +5,9 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
 import torch
-import torch.nn as nn
 from datasets import DatasetDict, load_dataset
 from packaging import version
+from torch import nn
 
 import librosa
 from transformers import (
