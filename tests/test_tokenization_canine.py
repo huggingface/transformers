@@ -25,10 +25,6 @@ from transformers.tokenization_utils import AddedToken
 from .test_tokenization_common import TokenizerTesterMixin
 
 
-if is_torch_available():
-    FRAMEWORK = "pt"
-
-
 class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = CanineTokenizer
@@ -53,7 +49,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: off
         expected_src_tokens = [57344, 76, 105, 102, 101, 32, 105, 115, 32, 108, 105, 107, 101, 32, 97, 32, 98, 111, 120, 32, 111, 102, 32, 99, 104, 111, 99, 111, 108, 97, 116, 101, 115, 46, 57345, 0, 0, 0, 0]
         # fmt: on
-        batch = tokenizer(src_text, padding=True, return_tensors=FRAMEWORK)
+        batch = tokenizer(src_text, padding=True, return_tensors="pt")
         self.assertIsInstance(batch, BatchEncoding)
 
         result = list(batch.input_ids.numpy()[0])
@@ -66,7 +62,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_encoding_keys(self):
         tokenizer = self.canine_tokenizer
         src_text = ["Once there was a man.", "He wrote a test in HuggingFace Tranformers."]
-        batch = tokenizer(src_text, padding=True, return_tensors=FRAMEWORK)
+        batch = tokenizer(src_text, padding=True, return_tensors="pt")
         # check if input_ids, attention_mask and token_type_ids are returned
         self.assertIn("input_ids", batch)
         self.assertIn("attention_mask", batch)
@@ -79,9 +75,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "It's about 25 degrees.",
         ]
         with tokenizer.as_target_tokenizer():
-            targets = tokenizer(
-                tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors=FRAMEWORK
-            )
+            targets = tokenizer(tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors="pt")
         self.assertEqual(32, targets["input_ids"].shape[1])
 
     # cannot use default save_and_load_tokenzier test method because tokenzier has no vocab
