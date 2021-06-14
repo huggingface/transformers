@@ -474,14 +474,14 @@ class TrainingSummary:
     ):
         # Infer default from dataset
         one_dataset = trainer.train_dataset if trainer.train_dataset is not None else trainer.eval_dataset
-        if dataset_tags is None and is_hf_dataset(one_dataset):
+        if is_hf_dataset(one_dataset) and (dataset_tags is None or dataset_args is None):
             default_tag = one_dataset.builder_name
             # Those are not real datasets from the Hub so we exclude them.
-            if default_tag not in ["csv", "json", "text"]:
-                dataset_tags = [default_tag]
-
-        if dataset_args is None and is_hf_dataset(one_dataset):
-            dataset_args = [one_dataset.config_name]
+            if default_tag not in ["csv", "json", "pandas", "parquet", "text"]:
+                if dataset_tags is None:
+                    dataset_tags = [default_tag]
+                if dataset_args is None:
+                    dataset_args = [one_dataset.config_name]
 
         if dataset is None and dataset_tags is not None:
             dataset = dataset_tags
