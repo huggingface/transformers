@@ -445,7 +445,8 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationT
             input_ids=dct["input_ids"],
             attention_mask=dct["attention_mask"],
             num_beams=2,
-        )
+        ).sequences
+        import ipdb; ipdb.set_trace()
         assert hypotheses_batch[:, 1].eq(0).all().item()
 
         EXPECTED = [

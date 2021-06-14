@@ -15,7 +15,6 @@
 
 import inspect
 from abc import ABC
-from typing import Iterable, List
 
 import jax
 import jax.lax as lax
@@ -216,9 +215,14 @@ class FlaxForcedBOSTokenLogitsProcessor(FlaxLogitsProcessor):
     def __call__(
         self, input_ids: jax_xla.DeviceArray, scores: jax_xla.DeviceArray, cur_len: int
     ) -> jax_xla.DeviceArray:
-        if cur_len == 1:
-            new_scores = jnp.full(scores.shape, -float("inf"))
-            scores = jax.ops.index_update(new_scores, jax.ops.index[:, self.bos_token_id], 0)
+        new_scores = jnp.full(scores.shape, -float("inf"))
+
+        apply_penalty = 1 - jnp.bool_(cur_len - 1)
+
+        scores = jnp.where(
+            apply_penalty, jax.ops.index_update(new_scores, jax.ops.index[:, self.bos_token_id], 0), scores
+        )
+
         return scores
 
 
@@ -241,9 +245,14 @@ class FlaxForcedEOSTokenLogitsProcessor(FlaxLogitsProcessor):
     def __call__(
         self, input_ids: jax_xla.DeviceArray, scores: jax_xla.DeviceArray, cur_len: int
     ) -> jax_xla.DeviceArray:
-        if cur_len == self.max_length - 1:
-            new_scores = jnp.full(scores.shape, -float("inf"))
-            scores = jax.ops.index_update(new_scores, jax.ops.index[:, self.eos_token_id], 0)
+        new_scores = jnp.full(scores.shape, -float("inf"))
+
+        apply_penalty = 1 - jnp.bool_(cur_len - self.max_length + 1)
+
+        scores = jnp.where(
+            apply_penalty, jax.ops.index_update(new_scores, jax.ops.index[:, self.eos_token_id], 0), scores
+        )
+
         return scores
 
 
@@ -271,71 +280,12 @@ class FlaxMinLengthLogitsProcessor(FlaxLogitsProcessor):
     def __call__(
         self, input_ids: jax_xla.DeviceArray, scores: jax_xla.DeviceArray, cur_len: int
     ) -> jax_xla.DeviceArray:
-        if cur_len < self.min_length:
-            scores = jax.ops.index_update(scores, jax.ops.index[:, self.eos_token_id], -float("inf"))
-        return scores
 
+        # create boolean flag to decide if min length penalty should be applied
+        apply_penalty = 1 - jnp.clip(cur_len - self.min_length, 0, 1)
 
-class FlaxNoRepeatNGramLogitsProcessor(FlaxLogitsProcessor):
-    r"""
-    :class:`transformers.LogitsProcessor` that enforces no repetition of n-grams. See `Fairseq
-    <https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345>`__.
-
-    Args:
-        ngram_size (:obj:`int`):
-            All ngrams of size :obj:`ngram_size` can only occur once.
-    """
-
-    def __init__(self, ngram_size: int):
-        if not isinstance(ngram_size, int) or ngram_size <= 0:
-            raise ValueError(f"`ngram_size` has to be a strictly positive integer, but is {ngram_size}")
-        self.ngram_size = ngram_size
-
-    def __call__(
-        self, input_ids: jax_xla.DeviceArray, scores: jax_xla.DeviceArray, cur_len: int
-    ) -> jax_xla.DeviceArray:
-        num_batch_hypotheses = scores.shape[0]
-
-        banned_batch_tokens = _calc_banned_ngram_tokens(
-            self.ngram_size, input_ids[:, :cur_len], num_batch_hypotheses, cur_len
+        scores = jnp.where(
+            apply_penalty, jax.ops.index_update(scores, jax.ops.index[:, self.eos_token_id], -float("inf")), scores
         )
 
-        for i, banned_tokens in enumerate(banned_batch_tokens):
-            scores = jax.ops.index_update(scores, jax.ops.index[i, banned_tokens], -float("inf"))
-
         return scores
-
-
-def _calc_banned_ngram_tokens(
-    ngram_size: int, prev_input_ids: jax_xla.DeviceArray, num_hypos: int, cur_len: int
-) -> List[Iterable[int]]:
-    """Copied from fairseq for no_repeat_ngram in beam_search"""
-    if cur_len + 1 < ngram_size:
-        # return no banned tokens if we haven't generated no_repeat_ngram_size tokens yet
-        return [[] for _ in range(num_hypos)]
-
-    generated_ngrams = _get_ngrams(ngram_size, prev_input_ids, num_hypos)
-
-    banned_tokens = [
-        _get_generated_ngrams(generated_ngrams[hypo_idx], prev_input_ids[hypo_idx], ngram_size, cur_len)
-        for hypo_idx in range(num_hypos)
-    ]
-    return banned_tokens
-
-
-def _get_ngrams(ngram_size: int, prev_input_ids: jax_xla.DeviceArray, num_hypos: int):
-    generated_ngrams = [{} for _ in range(num_hypos)]
-    for idx in range(num_hypos):
-        gen_tokens = prev_input_ids[idx].tolist()
-        generated_ngram = generated_ngrams[idx]
-        for ngram in zip(*[gen_tokens[i:] for i in range(ngram_size)]):
-            prev_ngram_tuple = tuple(ngram[:-1])
-            generated_ngram[prev_ngram_tuple] = generated_ngram.get(prev_ngram_tuple, []) + [ngram[-1]]
-    return generated_ngrams
-
-
-def _get_generated_ngrams(banned_ngrams, prev_input_ids, ngram_size, cur_len):
-    # Before decoding the next token, prevent decoding of ngrams that have already appeared
-    start_idx = cur_len + 1 - ngram_size
-    ngram_idx = tuple(prev_input_ids[start_idx:cur_len].tolist())
-    return banned_ngrams.get(ngram_idx, [])

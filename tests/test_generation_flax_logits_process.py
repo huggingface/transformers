@@ -32,7 +32,6 @@ if is_flax_available():
         FlaxForcedEOSTokenLogitsProcessor,
         FlaxLogitsProcessorList,
         FlaxMinLengthLogitsProcessor,
-        FlaxNoRepeatNGramLogitsProcessor,
         FlaxTemperatureLogitsWarper,
         FlaxTopKLogitsWarper,
         FlaxTopPLogitsWarper,
@@ -134,40 +133,6 @@ class LogitsProcessorTest(unittest.TestCase):
         # first batch should keep three tokens, second batch would keep only 1, but due to `min_tokens_to_keep=2` keeps 2.
         self.assertListEqual((filtered_dist != 0.0).sum(axis=-1).tolist(), [3, 2])
 
-    def test_processor_list(self):
-        batch_size = 4
-        sequence_length = 10
-        vocab_size = 15
-
-        # dummy input_ids and scores
-        input_ids = ids_tensor((batch_size, sequence_length), vocab_size)
-        input_ids_comp = input_ids.copy()
-
-        scores = self._get_uniform_logits(batch_size, vocab_size)
-        scores_comp = scores.copy()
-
-        # instantiate all dist processors
-        temp_dist_warp = FlaxTemperatureLogitsWarper(temperature=0.5)
-        top_k_warp = FlaxTopKLogitsWarper(3)
-        top_p_warp = FlaxTopPLogitsWarper(0.8)
-
-        cur_len = 10
-
-        # no processor list
-        scores = temp_dist_warp(input_ids, scores, cur_len=cur_len)
-        scores = top_k_warp(input_ids, scores, cur_len=cur_len)
-        scores = top_p_warp(input_ids, scores, cur_len=cur_len)
-
-        # with processor list
-        processor = FlaxLogitsProcessorList([temp_dist_warp, top_k_warp, top_p_warp])
-        scores_comp = processor(input_ids, scores_comp, cur_len=cur_len)
-
-        # scores should be equal
-        self.assertTrue(jnp.allclose(scores, scores_comp, atol=1e-3))
-
-        # input_ids should never be changed
-        self.assertListEqual(input_ids.tolist(), input_ids_comp.tolist())
-
     def test_min_length_dist_processor(self):
         vocab_size = 20
         batch_size = 4
@@ -231,22 +196,106 @@ class LogitsProcessorTest(unittest.TestCase):
         scores = logits_processor(input_ids, scores, cur_len=cur_len)
         self.assertFalse(jnp.isinf(scores).any())
 
-    def test_no_repeat_ngram_dist_processor(self):
-        vocab_size = 3
-        batch_size = 2
+    def test_processor_list(self):
+        batch_size = 4
+        sequence_length = 10
+        vocab_size = 15
+        eos_token_id = 2
+        bos_token_id = 1
+        max_length = 15
 
-        cur_len = 4
-        input_ids = jnp.array([[1, 1, 2, 1, 0, 0, 0], [0, 1, 0, 1, 0, 0, 0]], dtype="i4")
+        # dummy input_ids and scores
+        input_ids = ids_tensor((batch_size, sequence_length), vocab_size)
+        input_ids_comp = input_ids.copy()
+
         scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores_comp = scores.copy()
 
-        no_repeat_proc_2_gram = FlaxNoRepeatNGramLogitsProcessor(2)
-        no_repeat_proc_3_gram = FlaxNoRepeatNGramLogitsProcessor(3)
+        # instantiate all dist processors
+        temp_dist_warp = FlaxTemperatureLogitsWarper(temperature=0.5)
+        top_k_warp = FlaxTopKLogitsWarper(3)
+        top_p_warp = FlaxTopPLogitsWarper(0.8)
 
-        filtered_scores_2_gram = no_repeat_proc_2_gram(input_ids, scores.copy(), cur_len)
-        filtered_scores_3_gram = no_repeat_proc_3_gram(input_ids, scores.copy(), cur_len)
+        # instantiate all logits processors
+        min_dist_proc = FlaxMinLengthLogitsProcessor(min_length=10, eos_token_id=eos_token_id)
+        bos_dist_proc = FlaxForcedBOSTokenLogitsProcessor(bos_token_id=bos_token_id)
+        eos_dist_proc = FlaxForcedEOSTokenLogitsProcessor(max_length=max_length, eos_token_id=eos_token_id)
 
-        # 2-gram would forbid 2nd and 3rd token (1,2) at 1st batch and 1st token (0) at 2nd batch
-        self.assertListEqual(jnp.isinf(filtered_scores_2_gram).tolist(), [[False, True, True], [True, False, False]])
+        cur_len = 10
 
-        # 3-gram would forbid no token at 1st batch and 1st token (0) at 2nd batch
-        self.assertListEqual(jnp.isinf(filtered_scores_3_gram).tolist(), [[False, False, False], [True, False, False]])
+        # no processor list
+        scores = temp_dist_warp(input_ids, scores, cur_len=cur_len)
+        scores = top_k_warp(input_ids, scores, cur_len=cur_len)
+        scores = top_p_warp(input_ids, scores, cur_len=cur_len)
+        scores = min_dist_proc(input_ids, scores, cur_len=cur_len)
+        scores = bos_dist_proc(input_ids, scores, cur_len=cur_len)
+        scores = eos_dist_proc(input_ids, scores, cur_len=cur_len)
+
+        # with processor list
+        processor = FlaxLogitsProcessorList(
+            [temp_dist_warp, top_k_warp, top_p_warp, min_dist_proc, bos_dist_proc, eos_dist_proc]
+        )
+        scores_comp = processor(input_ids, scores_comp, cur_len=cur_len)
+
+        # scores should be equal
+        self.assertTrue(jnp.allclose(scores, scores_comp, atol=1e-3))
+
+        # input_ids should never be changed
+        self.assertListEqual(input_ids.tolist(), input_ids_comp.tolist())
+
+    def test_processor_list_jitted(self):
+        batch_size = 4
+        sequence_length = 10
+        vocab_size = 15
+        eos_token_id = 2
+        bos_token_id = 1
+        max_length = 15
+
+        # dummy input_ids and scores
+        input_ids = ids_tensor((batch_size, sequence_length), vocab_size)
+        input_ids_comp = input_ids.copy()
+
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores_comp = scores.copy()
+
+        # instantiate all dist processors
+        temp_dist_warp = FlaxTemperatureLogitsWarper(temperature=0.5)
+        top_k_warp = FlaxTopKLogitsWarper(3)
+        top_p_warp = FlaxTopPLogitsWarper(0.8)
+
+        # instantiate all logits processors
+        min_dist_proc = FlaxMinLengthLogitsProcessor(min_length=10, eos_token_id=eos_token_id)
+        bos_dist_proc = FlaxForcedBOSTokenLogitsProcessor(bos_token_id=bos_token_id)
+        eos_dist_proc = FlaxForcedEOSTokenLogitsProcessor(max_length=max_length, eos_token_id=eos_token_id)
+
+        cur_len = 10
+
+        # no processor list
+        def run_no_processor_list(input_ids, scores, cur_len):
+            scores = temp_dist_warp(input_ids, scores, cur_len=cur_len)
+            scores = top_k_warp(input_ids, scores, cur_len=cur_len)
+            scores = top_p_warp(input_ids, scores, cur_len=cur_len)
+            scores = min_dist_proc(input_ids, scores, cur_len=cur_len)
+            scores = bos_dist_proc(input_ids, scores, cur_len=cur_len)
+            scores = eos_dist_proc(input_ids, scores, cur_len=cur_len)
+            return scores
+
+        # with processor list
+        def run_processor_list(input_ids, scores, cur_len):
+            processor = FlaxLogitsProcessorList(
+                [temp_dist_warp, top_k_warp, top_p_warp, min_dist_proc, bos_dist_proc, eos_dist_proc]
+            )
+            scores = processor(input_ids, scores, cur_len=cur_len)
+            return scores
+
+        jitted_run_no_processor_list = jax.jit(run_no_processor_list)
+        jitted_run_processor_list = jax.jit(run_processor_list)
+
+        scores = jitted_run_no_processor_list(input_ids, scores, cur_len)
+        scores_comp = jitted_run_processor_list(input_ids, scores_comp, cur_len)
+
+        # scores should be equal
+        self.assertTrue(jnp.allclose(scores, scores_comp, atol=1e-3))
+
+        # input_ids should never be changed
+        self.assertListEqual(input_ids.tolist(), input_ids_comp.tolist())
