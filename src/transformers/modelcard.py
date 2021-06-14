@@ -42,7 +42,30 @@ from .file_utils import (
 )
 from .training_args import ParallelMode
 from .utils import logging
+from .utils.modeling_auto_mapping import (
+    MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+    MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_MASKED_LM_MAPPING_NAMES,
+    MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES,
+    MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
+    MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
+    MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES,
+    MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+)
 
+
+PIPELINE_TAGS_MAPPING = {
+    "text-generation": MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+    "image-classification": MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    "fill-mask": MODEL_FOR_MASKED_LM_MAPPING_NAMES,
+    "object-detection": MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES,
+    "question-answering": MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
+    "text2text-generation": MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
+    "text-classification": MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
+    "table-question-answering": MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES,
+    "token-classification": MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+}
 
 logger = logging.get_logger(__name__)
 
@@ -246,9 +269,12 @@ should probably proofread and complete it, then remove this comment. -->
 
 TASK_TAG_TO_NAME_MAPPING = {
     "fill-mask": "Masked Language Modeling",
+    "image-classification": "Image Classification",
     "multiple-choice": "Multiple Choice",
+    "object-detection": "Object Detection",
     "question-answering": "Question Answering",
     "summarization": "Summarization",
+    "table-question-answering": "Table Question Answering",
     "text-classification": "Text Classification",
     "text-generation": "Causal Language Modeling",
     "text2text-generation": "Sequence-to-sequence Language Modeling",
@@ -311,6 +337,16 @@ def is_hf_dataset(dataset):
     from datasets import Dataset
 
     return isinstance(dataset, Dataset)
+
+
+def _get_mapping_values(mapping):
+    result = []
+    for v in mapping.values():
+        if isinstance(v, (tuple, list)):
+            result += list(v)
+        else:
+            result.append(v)
+    return result
 
 
 @dataclass
@@ -499,7 +535,13 @@ class TrainingSummary:
         ):
             finetuned_from = trainer.model.config._name_or_path
 
-        # TODO (Sylvain) Add a default for `pipeline-tag` inferred from the model.
+        # Infer default task tag:
+        if tags is None:
+            model_class_name = trainer.model.__class__.__name__
+            for task, mapping in PIPELINE_TAGS_MAPPING.items():
+                if model_class_name in _get_mapping_values(mapping):
+                    tags = task
+
         if model_name is None:
             model_name = Path(trainer.args.output_dir).name
 
