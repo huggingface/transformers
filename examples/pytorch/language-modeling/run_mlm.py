@@ -72,6 +72,13 @@ class ModelArguments:
         default=None,
         metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
     )
+    config_overrides: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Override some existing default config settings when a model is trained from scratch. Example: "
+            "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+        },
+    )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
@@ -97,6 +104,12 @@ class ModelArguments:
             "with private models)."
         },
     )
+
+    def __post_init__(self):
+        if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
+            raise ValueError(
+                "--config_overrides can't be used in combination with --config_name or --model_name_or_path"
+            )
 
 
 @dataclass
@@ -283,6 +296,9 @@ def main():
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
+        if model_args.config_overrides is not None:
+            logger.info(f"Overriding config: {model_args.config_overrides}")
+            config.update_from_string(model_args.config_overrides)
 
     tokenizer_kwargs = {
         "cache_dir": model_args.cache_dir,
