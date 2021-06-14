@@ -30,7 +30,7 @@ from ...utils import logging
 
 if is_torch_available():
     import torch
-    import torch.nn.functional as F
+    from torch import nn
 
 logger = logging.get_logger(__name__)
 
@@ -374,7 +374,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             # use PyTorch as current workaround
             # TODO replace by self.resize
             masks = torch.from_numpy(target["masks"][:, None]).float()
-            interpolated_masks = F.interpolate(masks, size=(h, w), mode="nearest")[:, 0] > 0.5
+            interpolated_masks = nn.functional.interpolate(masks, size=(h, w), mode="nearest")[:, 0] > 0.5
             target["masks"] = interpolated_masks.numpy()
 
         return rescaled_image, target
@@ -697,7 +697,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             target_sizes.shape[1] == 2
         ), "Each element of target_sizes must contain the size (h, w) of each image of the batch"
 
-        prob = F.softmax(out_logits, -1)
+        prob = nn.functional.softmax(out_logits, -1)
         scores, labels = prob[..., :-1].max(-1)
 
         # convert to [x0, y0, x1, y1] format
@@ -742,13 +742,15 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         ), "Make sure to pass in as many orig_target_sizes as max_target_sizes"
         max_h, max_w = max_target_sizes.max(0)[0].tolist()
         outputs_masks = outputs.pred_masks.squeeze(2)
-        outputs_masks = F.interpolate(outputs_masks, size=(max_h, max_w), mode="bilinear", align_corners=False)
+        outputs_masks = nn.functional.interpolate(
+            outputs_masks, size=(max_h, max_w), mode="bilinear", align_corners=False
+        )
         outputs_masks = (outputs_masks.sigmoid() > threshold).cpu()
 
         for i, (cur_mask, t, tt) in enumerate(zip(outputs_masks, max_target_sizes, orig_target_sizes)):
             img_h, img_w = t[0], t[1]
             results[i]["masks"] = cur_mask[:, :img_h, :img_w].unsqueeze(1)
-            results[i]["masks"] = F.interpolate(
+            results[i]["masks"] = nn.functional.interpolate(
                 results[i]["masks"].float(), size=tuple(tt.tolist()), mode="nearest"
             ).byte()
 
@@ -810,7 +812,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             cur_scores = cur_scores[keep]
             cur_classes = cur_classes[keep]
             cur_masks = cur_masks[keep]
-            cur_masks = F.interpolate(cur_masks[:, None], to_tuple(size), mode="bilinear").squeeze(1)
+            cur_masks = nn.functional.interpolate(cur_masks[:, None], to_tuple(size), mode="bilinear").squeeze(1)
             cur_boxes = center_to_corners_format(cur_boxes[keep])
 
             h, w = cur_masks.shape[-2:]

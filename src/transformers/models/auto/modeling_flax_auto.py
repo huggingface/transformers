@@ -18,6 +18,12 @@
 from collections import OrderedDict
 
 from ...utils import logging
+from ..bart.modeling_flax_bart import (
+    FlaxBartForConditionalGeneration,
+    FlaxBartForQuestionAnswering,
+    FlaxBartForSequenceClassification,
+    FlaxBartModel,
+)
 from ..bert.modeling_flax_bert import (
     FlaxBertForMaskedLM,
     FlaxBertForMultipleChoice,
@@ -59,6 +65,7 @@ from ..roberta.modeling_flax_roberta import (
 from ..vit.modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel
 from .auto_factory import auto_class_factory
 from .configuration_auto import (
+    BartConfig,
     BertConfig,
     BigBirdConfig,
     CLIPConfig,
@@ -78,6 +85,7 @@ FLAX_MODEL_MAPPING = OrderedDict(
         (RobertaConfig, FlaxRobertaModel),
         (BertConfig, FlaxBertModel),
         (BigBirdConfig, FlaxBigBirdModel),
+        (BartConfig, FlaxBartModel),
         (GPT2Config, FlaxGPT2Model),
         (ElectraConfig, FlaxElectraModel),
         (CLIPConfig, FlaxCLIPModel),
@@ -91,6 +99,7 @@ FLAX_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (RobertaConfig, FlaxRobertaForMaskedLM),
         (BertConfig, FlaxBertForPreTraining),
         (BigBirdConfig, FlaxBigBirdForPreTraining),
+        (BartConfig, FlaxBartForConditionalGeneration),
         (ElectraConfig, FlaxElectraForPreTraining),
     ]
 )
@@ -101,6 +110,7 @@ FLAX_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (RobertaConfig, FlaxRobertaForMaskedLM),
         (BertConfig, FlaxBertForMaskedLM),
         (BigBirdConfig, FlaxBigBirdForMaskedLM),
+        (BartConfig, FlaxBartForConditionalGeneration),
         (ElectraConfig, FlaxElectraForMaskedLM),
     ]
 )
@@ -125,6 +135,7 @@ FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (RobertaConfig, FlaxRobertaForSequenceClassification),
         (BertConfig, FlaxBertForSequenceClassification),
         (BigBirdConfig, FlaxBigBirdForSequenceClassification),
+        (BartConfig, FlaxBartForSequenceClassification),
         (ElectraConfig, FlaxElectraForSequenceClassification),
     ]
 )
@@ -135,6 +146,7 @@ FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (RobertaConfig, FlaxRobertaForQuestionAnswering),
         (BertConfig, FlaxBertForQuestionAnswering),
         (BigBirdConfig, FlaxBigBirdForQuestionAnswering),
+        (BartConfig, FlaxBartForQuestionAnswering),
         (ElectraConfig, FlaxElectraForQuestionAnswering),
     ]
 )

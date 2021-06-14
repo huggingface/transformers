@@ -1430,6 +1430,14 @@ if is_tf_available():
             "TFTransfoXLPreTrainedModel",
         ]
     )
+    _import_structure["models.wav2vec2"].extend(
+        [
+            "TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFWav2Vec2ForCTC",
+            "TFWav2Vec2Model",
+            "TFWav2Vec2PreTrainedModel",
+        ]
+    )
     _import_structure["models.xlm"].extend(
         [
             "TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1506,6 +1514,14 @@ if is_flax_available():
             "FlaxAutoModelForQuestionAnswering",
             "FlaxAutoModelForSequenceClassification",
             "FlaxAutoModelForTokenClassification",
+        ]
+    )
+    _import_structure["models.bart"].extend(
+        [
+            "FlaxBartForConditionalGeneration",
+            "FlaxBartForQuestionAnswering",
+            "FlaxBartForSequenceClassification",
+            "FlaxBartModel",
         ]
     )
     _import_structure["models.bert"].extend(
@@ -2747,6 +2763,12 @@ if TYPE_CHECKING:
             TFTransfoXLModel,
             TFTransfoXLPreTrainedModel,
         )
+        from .models.wav2vec2 import (
+            TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFWav2Vec2ForCTC,
+            TFWav2Vec2Model,
+            TFWav2Vec2PreTrainedModel,
+        )
         from .models.xlm import (
             TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFXLMForMultipleChoice,
@@ -2819,6 +2841,12 @@ if TYPE_CHECKING:
             FlaxAutoModelForQuestionAnswering,
             FlaxAutoModelForSequenceClassification,
             FlaxAutoModelForTokenClassification,
+        )
+        from .models.bart import (
+            FlaxBartForConditionalGeneration,
+            FlaxBartForQuestionAnswering,
+            FlaxBartForSequenceClassification,
+            FlaxBartModel,
         )
         from .models.bert import (
             FlaxBertForMaskedLM,

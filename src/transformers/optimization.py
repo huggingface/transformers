@@ -18,6 +18,7 @@ import math
 from typing import Callable, Iterable, Optional, Tuple, Union
 
 import torch
+from torch import nn
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
 
@@ -272,7 +273,7 @@ class AdamW(Optimizer):
     <https://arxiv.org/abs/1711.05101>`__.
 
     Parameters:
-        params (:obj:`Iterable[torch.nn.parameter.Parameter]`):
+        params (:obj:`Iterable[nn.parameter.Parameter]`):
             Iterable of parameters to optimize or dictionaries defining parameter groups.
         lr (:obj:`float`, `optional`, defaults to 1e-3):
             The learning rate to use.
@@ -288,7 +289,7 @@ class AdamW(Optimizer):
 
     def __init__(
         self,
-        params: Iterable[torch.nn.parameter.Parameter],
+        params: Iterable[nn.parameter.Parameter],
         lr: float = 1e-3,
         betas: Tuple[float, float] = (0.9, 0.999),
         eps: float = 1e-6,
@@ -379,7 +380,7 @@ class Adafactor(Optimizer):
     `relative_step=False`.
 
     Arguments:
-        params (:obj:`Iterable[torch.nn.parameter.Parameter]`):
+        params (:obj:`Iterable[nn.parameter.Parameter]`):
             Iterable of parameters to optimize or dictionaries defining parameter groups.
         lr (:obj:`float`, `optional`):
             The external learning rate.
@@ -420,6 +421,12 @@ class Adafactor(Optimizer):
 
             Adafactor(model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None)
 
+        When using ``lr=None`` with :class:`~transformers.Trainer` you will most likely need to use :class:`~transformers.optimization.AdafactorSchedule` scheduler as following::
+
+            from transformers.optimization import Adafactor, AdafactorSchedule
+            optimizer = Adafactor(model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None)
+            lr_scheduler = AdafactorSchedule(optimizer)
+            trainer = Trainer(..., optimizers=(optimizer, lr_scheduler))
 
     Usage::
 
@@ -588,3 +595,52 @@ class Adafactor(Optimizer):
                     p.data.copy_(p_data_fp32)
 
         return loss
+
+
+class AdafactorSchedule(LambdaLR):
+    """
+    Since :class:`~transformers.optimization.Adafactor` performs its own scheduling, if the training loop relies on a
+    scheduler (e.g., for logging), this class creates a proxy object that retrieves the current lr values from the
+    optimizer.
+
+    It returns ``initial_lr`` during startup and the actual ``lr`` during stepping.
+    """
+
+    def __init__(self, optimizer, initial_lr=0.0):
+        def lr_lambda(_):
+            return initial_lr
+
+        for group in optimizer.param_groups:
+            group["initial_lr"] = initial_lr
+        super().__init__(optimizer, lr_lambda)
+        for group in optimizer.param_groups:
+            del group["initial_lr"]
+
+    def get_lr(self):
+        opt = self.optimizer
+        lrs = [
+            opt._get_lr(group, opt.state[group["params"][0]])
+            for group in opt.param_groups
+            if group["params"][0].grad is not None
+        ]
+        if len(lrs) == 0:
+            lrs = self.base_lrs  # if called before stepping
+        return lrs
+
+
+def get_adafactor_schedule(optimizer, initial_lr=0.0):
+    """
+    Get a proxy schedule for :class:`~transformers.optimization.Adafactor`
+
+    Args:
+        optimizer (:class:`~torch.optim.Optimizer`):
+            The optimizer for which to schedule the learning rate.
+        initial_lr (:obj:`float`, `optional`, defaults to 0.0):
+            Initial lr
+
+    Return:
+        :class:`~transformers.optimization.Adafactor` proxy schedule object.
+
+
+    """
+    return AdafactorSchedule(optimizer, initial_lr)
