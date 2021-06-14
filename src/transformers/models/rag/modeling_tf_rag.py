@@ -1799,7 +1799,6 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         model_kwargs["num_beams"] = num_beams
         model_kwargs["num_return_sequences"] = num_beams  # put here so that not confused with num_doc_return_sequences
         model_kwargs["attention_mask"] = None
-        
 
         batch_size = input_ids.shape[0] if input_ids is not None else context_input_ids.shape[0] // n_docs
 
