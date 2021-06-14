@@ -32,6 +32,7 @@ SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixture
 class BertGenerationTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = BertGenerationTokenizer
+    test_rust_tokenizer = False
     test_sentencepiece = True
 
     def setUp(self):

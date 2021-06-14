@@ -30,6 +30,7 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = CLIPTokenizer
     rust_tokenizer_class = CLIPTokenizerFast
+    test_rust_tokenizer = False
     from_pretrained_kwargs = {"add_prefix_space": True}
     test_seq2seq = False
 
