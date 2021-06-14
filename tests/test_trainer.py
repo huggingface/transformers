@@ -53,6 +53,7 @@ from transformers.utils.hp_naming import TrialShortNamer
 
 if is_torch_available():
     import torch
+    from torch import nn
     from torch.utils.data import IterableDataset
 
     from transformers import (
@@ -154,11 +155,11 @@ if is_torch_available():
             for i in range(len(self.dataset)):
                 yield self.dataset[i]
 
-    class RegressionModel(torch.nn.Module):
+    class RegressionModel(nn.Module):
         def __init__(self, a=0, b=0, double_output=False):
             super().__init__()
-            self.a = torch.nn.Parameter(torch.tensor(a).float())
-            self.b = torch.nn.Parameter(torch.tensor(b).float())
+            self.a = nn.Parameter(torch.tensor(a).float())
+            self.b = nn.Parameter(torch.tensor(b).float())
             self.double_output = double_output
             self.config = None
 
@@ -166,21 +167,21 @@ if is_torch_available():
             y = input_x * self.a + self.b
             if labels is None:
                 return (y, y) if self.double_output else (y,)
-            loss = torch.nn.functional.mse_loss(y, labels)
+            loss = nn.functional.mse_loss(y, labels)
             return (loss, y, y) if self.double_output else (loss, y)
 
-    class RegressionDictModel(torch.nn.Module):
+    class RegressionDictModel(nn.Module):
         def __init__(self, a=0, b=0):
             super().__init__()
-            self.a = torch.nn.Parameter(torch.tensor(a).float())
-            self.b = torch.nn.Parameter(torch.tensor(b).float())
+            self.a = nn.Parameter(torch.tensor(a).float())
+            self.b = nn.Parameter(torch.tensor(b).float())
             self.config = None
 
         def forward(self, input_x, labels=None, **kwargs):
             y = input_x * self.a + self.b
             result = {"output": y}
             if labels is not None:
-                result["loss"] = torch.nn.functional.mse_loss(y, labels)
+                result["loss"] = nn.functional.mse_loss(y, labels)
             return result
 
     class RegressionPreTrainedModel(PreTrainedModel):
@@ -189,15 +190,15 @@ if is_torch_available():
 
         def __init__(self, config):
             super().__init__(config)
-            self.a = torch.nn.Parameter(torch.tensor(config.a).float())
-            self.b = torch.nn.Parameter(torch.tensor(config.b).float())
+            self.a = nn.Parameter(torch.tensor(config.a).float())
+            self.b = nn.Parameter(torch.tensor(config.b).float())
             self.double_output = config.double_output
 
         def forward(self, input_x, labels=None, **kwargs):
             y = input_x * self.a + self.b
             if labels is None:
                 return (y, y) if self.double_output else (y,)
-            loss = torch.nn.functional.mse_loss(y, labels)
+            loss = nn.functional.mse_loss(y, labels)
             return (loss, y, y) if self.double_output else (loss, y)
 
     class RegressionRandomPreTrainedModel(PreTrainedModel):
@@ -206,8 +207,8 @@ if is_torch_available():
 
         def __init__(self, config):
             super().__init__(config)
-            self.a = torch.nn.Parameter(torch.tensor(config.a).float())
-            self.b = torch.nn.Parameter(torch.tensor(config.b).float())
+            self.a = nn.Parameter(torch.tensor(config.a).float())
+            self.b = nn.Parameter(torch.tensor(config.b).float())
 
         def forward(self, input_x, labels=None, **kwargs):
             y = input_x * self.a + self.b
@@ -219,21 +220,21 @@ if is_torch_available():
 
             if labels is None:
                 return (y,)
-            loss = torch.nn.functional.mse_loss(y, labels)
+            loss = nn.functional.mse_loss(y, labels)
             return (loss, y)
 
-    class TstLayer(torch.nn.Module):
+    class TstLayer(nn.Module):
         def __init__(self, hidden_size):
             super().__init__()
-            self.linear1 = torch.nn.Linear(hidden_size, hidden_size)
-            self.ln1 = torch.nn.LayerNorm(hidden_size)
-            self.linear2 = torch.nn.Linear(hidden_size, hidden_size)
-            self.ln2 = torch.nn.LayerNorm(hidden_size)
-            self.bias = torch.nn.Parameter(torch.zeros(hidden_size))
+            self.linear1 = nn.Linear(hidden_size, hidden_size)
+            self.ln1 = nn.LayerNorm(hidden_size)
+            self.linear2 = nn.Linear(hidden_size, hidden_size)
+            self.ln2 = nn.LayerNorm(hidden_size)
+            self.bias = nn.Parameter(torch.zeros(hidden_size))
 
         def forward(self, x):
-            h = self.ln1(torch.nn.functional.relu(self.linear1(x)))
-            h = torch.nn.functional.relu(self.linear2(x))
+            h = self.ln1(nn.functional.relu(self.linear1(x)))
+            h = nn.functional.relu(self.linear2(x))
             return self.ln2(x + h + self.bias)
 
     def get_regression_trainer(a=0, b=0, double_output=False, train_len=64, eval_len=64, pretrained=True, **kwargs):
@@ -1065,7 +1066,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         assert_flos_extraction(trainer, trainer.model)
 
         # with enforced DataParallel
-        assert_flos_extraction(trainer, torch.nn.DataParallel(trainer.model))
+        assert_flos_extraction(trainer, nn.DataParallel(trainer.model))
 
         trainer.train()
         self.assertTrue(isinstance(trainer.state.total_flos, float))
@@ -1186,7 +1187,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
 
     def test_no_wd_param_group(self):
-        model = torch.nn.Sequential(TstLayer(128), torch.nn.ModuleList([TstLayer(128), TstLayer(128)]))
+        model = nn.Sequential(TstLayer(128), nn.ModuleList([TstLayer(128), TstLayer(128)]))
         trainer = Trainer(model=model)
         trainer.create_optimizer_and_scheduler(10)
         # fmt: off
