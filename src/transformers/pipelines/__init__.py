@@ -95,8 +95,6 @@ if is_torch_available():
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
     )
-    from ..models.speech_to_text.modeling_speech_to_text import Speech2TextForConditionalGeneration
-    from ..models.wav2vec2.modeling_wav2vec2 import Wav2Vec2ForCTC
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
     from ..modeling_utils import PreTrainedModel
@@ -112,8 +110,10 @@ TASK_ALIASES = {
 SUPPORTED_TASKS = {
     "automatic-speech-recognition": {
         "impl": AutomaticSpeechRecognitionPipeline,
-        "tf": None,
-        "pt": "config" if is_torch_available() else None,
+        "tf": (),
+        # Only load from `config.architectures`, AutoModelForCTC and AutoModelForConditionalGeneration
+        # do not exist yet.
+        "pt": () if is_torch_available() else (),
         "default": {"model": {"pt": "facebook/wav2vec2-base-960h"}},
     },
     "feature-extraction": {

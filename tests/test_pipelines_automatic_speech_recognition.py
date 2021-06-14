@@ -16,13 +16,14 @@ import unittest
 
 from transformers import AutoFeatureExtractor, AutoTokenizer, Speech2TextForConditionalGeneration, Wav2Vec2ForCTC
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
-from transformers.testing_utils import require_datasets, require_torch, require_torchaudio, slow
+from transformers.testing_utils import is_pipeline_test, require_datasets, require_torch, require_torchaudio, slow
 
 
 # We can't use this mixin because it assumes TF support.
 # from .test_pipelines_common import CustomInputPipelineCommonMixin
 
 
+@is_pipeline_test
 class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @require_torch
     @slow
