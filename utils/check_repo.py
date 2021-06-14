@@ -127,7 +127,6 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "VisualBertForQuestionAnswering",
     "VisualBertForMultipleChoice",
     "TFWav2Vec2ForCTC",
-    "TFWav2Vec2Model",
 ]
 
 # This is to make sure the transformers module imported is the one in the repo.

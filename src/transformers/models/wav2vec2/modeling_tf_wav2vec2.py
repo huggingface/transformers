@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 Wav2Vec2 model. """
+""" TensorFlow Wav2Vec2 model. """
 
 import inspect
 import warnings
@@ -61,7 +61,7 @@ LARGE_NEGATIVE = -1e8
 def input_values_processing(func, config, input_values, **kwargs):
     """
     Process the input of each TensorFlow model including the booleans. In case of a list of symbolic inputs, each input
-    has to be named accordingly to the parameters name, i.e. `input_values = tf.keras.Input(shape=(128,),
+    has to be named accordingly to the parameters name, i.e. :obj:`input_values = tf.keras.Input(shape=(128,),
     dtype='float32', name="input_values")` otherwise the order of the tensors will not be guaranteed during the
     training.
 
@@ -173,12 +173,7 @@ def input_values_processing(func, config, input_values, **kwargs):
         if k in ["return_dict", "output_attentions", "output_hidden_states", "use_cache"]
     }
 
-    output.update(
-        booleans_processing(
-            config=config,
-            **boolean_dict,
-        )
-    )
+    output.update(booleans_processing(config=config, **boolean_dict))
 
     return output
 
