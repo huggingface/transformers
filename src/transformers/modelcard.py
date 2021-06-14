@@ -329,7 +329,12 @@ class TrainingSummary:
 
     def __post_init__(self):
         # Infer default license from the checkpoint used, if possible.
-        if self.license is None and not is_offline_mode() and self.finetuned_from is not None:
+        if (
+            self.license is None
+            and not is_offline_mode()
+            and self.finetuned_from is not None
+            and len(self.finetuned_from) > 0
+        ):
             try:
                 model_info = HfApi().model_info(self.finetuned_from)
                 for tag in model_info.tags:
