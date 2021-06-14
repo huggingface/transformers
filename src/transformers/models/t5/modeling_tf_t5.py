@@ -625,7 +625,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             err_msg_prefix = "decoder_" if self.is_decoder else ""
             raise ValueError(
-                f"You cannot specify both {err_msg_prefix}inputs and {err_msg_prefix}inputs_embeds at the same time"
+                f"You cannot specify both {err_msg_prefix}input_ids and {err_msg_prefix}inputs_embeds at the same time"
             )
         elif inputs["input_ids"] is not None:
             input_shape = shape_list(inputs["input_ids"])
@@ -634,7 +634,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             input_shape = shape_list(inputs["inputs_embeds"])[:-1]
         else:
             err_msg_prefix = "decoder_" if self.is_decoder else ""
-            raise ValueError(f"You have to specify either {err_msg_prefix}inputs or {err_msg_prefix}inputs_embeds")
+            raise ValueError(f"You have to specify either {err_msg_prefix}input_ids or {err_msg_prefix}inputs_embeds")
 
         if inputs["inputs_embeds"] is None:
             assert self.embed_tokens is not None, "You have to initialize the model with valid token embeddings"
@@ -1092,6 +1092,7 @@ class TFT5Model(TFT5PreTrainedModel):
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
+        decoder_config.num_layers = config.num_decoder_layers
         self.decoder = TFT5MainLayer(decoder_config, embed_tokens, name="decoder")
 
     def get_encoder(self):
@@ -1255,6 +1256,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
+        decoder_config.num_layers = config.num_decoder_layers
         self.decoder = TFT5MainLayer(decoder_config, embed_tokens, name="decoder")
 
         if not config.tie_word_embeddings:
@@ -1464,7 +1466,14 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             encoder_attentions=enc_attns,
         )
 
-    def prepare_inputs_for_generation(self, inputs, past, attention_mask, use_cache, **kwargs):
+    def prepare_inputs_for_generation(
+        self,
+        inputs,
+        past,
+        attention_mask,
+        use_cache=None,
+        **kwargs,
+    ):
         assert past is not None, "past has to be defined for encoder_outputs"
 
         # first step

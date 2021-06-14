@@ -445,6 +445,8 @@ class TFModelTesterMixin:
             for name, key in self._prepare_for_class(inputs_dict, model_class).items():
                 if type(key) == bool:
                     pt_inputs_dict[name] = key
+                elif name == "input_values":
+                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
                 else:
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
 
@@ -455,6 +457,7 @@ class TFModelTesterMixin:
             with torch.no_grad():
                 pto = pt_model(**pt_inputs_dict)
             tfo = tf_model(self._prepare_for_class(inputs_dict, model_class), training=False)
+
             tf_hidden_states = tfo[0].numpy()
             pt_hidden_states = pto[0].numpy()
 
@@ -486,6 +489,8 @@ class TFModelTesterMixin:
                 if type(key) == bool:
                     key = np.array(key, dtype=bool)
                     pt_inputs_dict[name] = torch.from_numpy(key).to(torch.long)
+                elif name == "input_values":
+                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
                 else:
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
             # need to rename encoder-decoder "inputs" for PyTorch
@@ -1061,7 +1066,7 @@ class TFModelTesterMixin:
 
     def test_lm_head_model_random_no_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict["input_ids"]
+        input_ids = inputs_dict.get("input_ids", None)
 
         # iterate over all generative models
         for model_class in self.all_generative_model_classes:
@@ -1097,7 +1102,7 @@ class TFModelTesterMixin:
 
     def test_lm_head_model_random_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict["input_ids"]
+        input_ids = inputs_dict.get("input_ids", None)
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
@@ -1194,6 +1199,40 @@ class TFModelTesterMixin:
                 loss = model(tuple_input[:-1])[0]
 
                 self.assertEqual(loss.shape, [loss_size])
+
+    def test_generate_with_headmasking(self):
+        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+
+            # We want to test only encoder-decoder models
+            if not config.is_encoder_decoder:
+                continue
+
+            head_masking = {
+                "head_mask": tf.zeros((config.encoder_layers, config.encoder_attention_heads)),
+                "decoder_head_mask": tf.zeros((config.decoder_layers, config.decoder_attention_heads)),
+                "cross_attn_head_mask": tf.zeros((config.decoder_layers, config.decoder_attention_heads)),
+            }
+
+            signature = inspect.signature(model.call)
+            if set(head_masking.keys()) < set([*signature.parameters.keys()]):
+                continue
+
+            for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
+                out = model.generate(
+                    inputs_dict["input_ids"],
+                    num_beams=1,
+                    max_length=inputs_dict["input_ids"] + 5,
+                    output_attentions=True,
+                    return_dict_in_generate=True,
+                    **{name: mask},
+                )
+                # We check the state of decoder_attentions and cross_attentions just from the last step
+                attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
+                self.assertEqual(sum([tf.reduce_sum(w).numpy() for w in attn_weights]), 0.0)
 
     def _generate_random_bad_tokens(self, num_bad_tokens, model):
         # special tokens cannot be bad tokens

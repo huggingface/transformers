@@ -327,9 +327,11 @@ def main():
 
         def tokenize_function(examples):
             # Remove empty lines
-            examples["text"] = [line for line in examples["text"] if len(line) > 0 and not line.isspace()]
+            examples[text_column_name] = [
+                line for line in examples[text_column_name] if len(line) > 0 and not line.isspace()
+            ]
             return tokenizer(
-                examples["text"],
+                examples[text_column_name],
                 padding=padding,
                 truncation=True,
                 max_length=max_seq_length,
@@ -486,7 +488,10 @@ def main():
 
         losses = torch.cat(losses)
         losses = losses[: len(eval_dataset)]
-        perplexity = math.exp(torch.mean(losses))
+        try:
+            perplexity = math.exp(torch.mean(losses))
+        except OverflowError:
+            perplexity = float("inf")
 
         logger.info(f"epoch {epoch}: perplexity: {perplexity}")
 

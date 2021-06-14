@@ -22,7 +22,6 @@ import numpy as np
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from torch.nn import functional as F
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -196,7 +195,7 @@ class FunnelAttentionStructure(nn.Module):
         position_embeds = self.get_position_embeds(seq_len, inputs_embeds.dtype, inputs_embeds.device)
         token_type_mat = self.token_type_ids_to_mat(token_type_ids) if token_type_ids is not None else None
         cls_mask = (
-            F.pad(inputs_embeds.new_ones([seq_len - 1, seq_len - 1]), (1, 0, 1, 0))
+            nn.functional.pad(inputs_embeds.new_ones([seq_len - 1, seq_len - 1]), (1, 0, 1, 0))
             if self.config.separate_cls
             else None
         )
@@ -368,11 +367,11 @@ class FunnelAttentionStructure(nn.Module):
         stride = (stride, 1)
 
         if mode == "mean":
-            tensor = F.avg_pool2d(tensor, stride, stride=stride, ceil_mode=True)
+            tensor = nn.functional.avg_pool2d(tensor, stride, stride=stride, ceil_mode=True)
         elif mode == "max":
-            tensor = F.max_pool2d(tensor, stride, stride=stride, ceil_mode=True)
+            tensor = nn.functional.max_pool2d(tensor, stride, stride=stride, ceil_mode=True)
         elif mode == "min":
-            tensor = -F.max_pool2d(-tensor, stride, stride=stride, ceil_mode=True)
+            tensor = -nn.functional.max_pool2d(-tensor, stride, stride=stride, ceil_mode=True)
         else:
             raise NotImplementedError("The supported modes are 'mean', 'max' and 'min'.")
 
@@ -1298,7 +1297,10 @@ class FunnelForSequenceClassification(FunnelPreTrainedModel):
 
             if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels)
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
@@ -1546,8 +1548,8 @@ class FunnelForQuestionAnswering(FunnelPreTrainedModel):
 
         logits = self.qa_outputs(last_hidden_state)
         start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
+        start_logits = start_logits.squeeze(-1).contiguous()
+        end_logits = end_logits.squeeze(-1).contiguous()
 
         total_loss = None
         if start_positions is not None and end_positions is not None:
@@ -1558,8 +1560,8 @@ class FunnelForQuestionAnswering(FunnelPreTrainedModel):
                 end_positions = end_positions.squeeze(-1)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
+            start_positions = start_positions.clamp(0, ignored_index)
+            end_positions = end_positions.clamp(0, ignored_index)
 
             loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
             start_loss = loss_fct(start_logits, start_positions)

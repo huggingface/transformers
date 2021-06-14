@@ -29,12 +29,11 @@ import jax
 import jax.numpy as jnp
 import optax
 import transformers
-from flax import linen as nn
 from flax import struct, traverse_util
 from flax.jax_utils import replicate, unreplicate
 from flax.metrics import tensorboard
 from flax.training import train_state
-from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
+from flax.training.common_utils import get_metrics, onehot, shard
 from transformers import AutoConfig, AutoTokenizer, FlaxAutoModelForSequenceClassification, PretrainedConfig
 
 
@@ -123,7 +122,7 @@ def parse_args():
         "--num_warmup_steps", type=int, default=0, help="Number of steps for the warmup in the lr scheduler."
     )
     parser.add_argument("--output_dir", type=str, default=None, help="Where to store the final model.")
-    parser.add_argument("--seed", type=int, default=5, help="A seed for reproducible training.")
+    parser.add_argument("--seed", type=int, default=3, help="A seed for reproducible training.")
     args = parser.parse_args()
 
     # Sanity checks
@@ -166,25 +165,17 @@ def create_train_state(
         logits_fn: Callable = struct.field(pytree_node=False)
         loss_fn: Callable = struct.field(pytree_node=False)
 
-    # Creates a multi-optimizer consisting of two "Adam with weight decay" optimizers.
-    def adamw(decay):
-        return optax.adamw(learning_rate=learning_rate_fn, b1=0.9, b2=0.999, eps=1e-6, weight_decay=decay)
+    # We use Optax's "masking" functionality to not apply weight decay
+    # to bias and LayerNorm scale parameters. decay_mask_fn returns a
+    # mask boolean with the same structure as the parameters.
+    # The mask is True for parameters that should be decayed.
+    def decay_mask_fn(params):
+        flat_params = traverse_util.flatten_dict(params)
+        flat_mask = {path: (path[-1] != "bias" and path[-2:] != ("LayerNorm", "scale")) for path in flat_params}
+        return traverse_util.unflatten_dict(flat_mask)
 
-    def traverse(fn):
-        def mask(data):
-            flat = traverse_util.flatten_dict(data)
-            return traverse_util.unflatten_dict({k: fn(k, v) for k, v in flat.items()})
-
-        return mask
-
-    # We use Optax's "masking" functionality to create a multi-optimizer, one
-    # with weight decay and the other without. Note masking means the optimizer
-    # will ignore these paths.
-    decay_path = lambda p: not any(x in p for x in ["bias", "LayerNorm.weight"])  # noqa: E731
-
-    tx = optax.chain(
-        optax.masked(adamw(0.0), mask=traverse(lambda path, _: decay_path(path))),
-        optax.masked(adamw(weight_decay), mask=traverse(lambda path, _: not decay_path(path))),
+    tx = optax.adamw(
+        learning_rate=learning_rate_fn, b1=0.9, b2=0.999, eps=1e-6, weight_decay=weight_decay, mask=decay_mask_fn
     )
 
     if is_regression:
@@ -202,7 +193,6 @@ def create_train_state(
     else:  # Classification.
 
         def cross_entropy_loss(logits, labels):
-            logits = nn.log_softmax(logits)
             xentropy = optax.softmax_cross_entropy(logits, onehot(labels, num_classes=num_labels))
             return jnp.mean(xentropy)
 
@@ -407,6 +397,7 @@ def main():
 
     num_epochs = int(args.num_train_epochs)
     rng = jax.random.PRNGKey(args.seed)
+    dropout_rngs = jax.random.split(rng, jax.local_device_count())
 
     train_batch_size = args.per_device_train_batch_size * jax.local_device_count()
     eval_batch_size = args.per_device_eval_batch_size * jax.local_device_count()
@@ -424,6 +415,7 @@ def main():
         state: train_state.TrainState, batch: Dict[str, Array], dropout_rng: PRNGKey
     ) -> Tuple[train_state.TrainState, float]:
         """Trains model with an optimizer (both in `state`) on `batch`, returning a pair `(new_state, loss)`."""
+        dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
         targets = batch.pop("labels")
 
         def loss_fn(params):
@@ -436,7 +428,7 @@ def main():
         grad = jax.lax.pmean(grad, "batch")
         new_state = state.apply_gradients(grads=grad)
         metrics = jax.lax.pmean({"loss": loss, "learning_rate": learning_rate_fn(state.step)}, axis_name="batch")
-        return new_state, metrics
+        return new_state, metrics, new_dropout_rng
 
     p_train_step = jax.pmap(train_step, axis_name="batch", donate_argnums=(0,))
 
@@ -467,9 +459,7 @@ def main():
 
         # train
         for batch in glue_train_data_collator(input_rng, train_dataset, train_batch_size):
-            rng, dropout_rng = jax.random.split(rng)
-            dropout_rngs = shard_prng_key(dropout_rng)
-            state, metrics = p_train_step(state, batch, dropout_rngs)
+            state, metrics, dropout_rngs = p_train_step(state, batch, dropout_rngs)
             train_metrics.append(metrics)
         train_time += time.time() - train_start
         logger.info(f"    Done! Training metrics: {unreplicate(metrics)}")
