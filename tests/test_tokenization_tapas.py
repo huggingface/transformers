@@ -311,8 +311,8 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         assert encoded_pair == [101] + text + [102] + text_2
 
     def test_offsets_with_special_characters(self):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+        for pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{self.rust_tokenizer_class.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
                 sentence = f"A, naïve {tokenizer_r.mask_token} AllenNLP sentence."

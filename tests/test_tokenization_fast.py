@@ -29,14 +29,17 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_vocab_key = "tokenizer_file"
 
     def setUp(self):
-        self.test_rust_tokenizer = False  # because we don't have pretrained_vocab_files_map
+        # self.test_rust_tokenizer = False  # because we don't have pretrained_vocab_files_map
         super().setUp()
-        self.test_rust_tokenizer = True
+        # self.test_rust_tokenizer = True
 
-        self.tokenizers_list = [(PreTrainedTokenizerFast, "robot-test/dummy-tokenizer-fast", {})]
+        # self.tokenizers_list = [(PreTrainedTokenizerFast, "robot-test/dummy-tokenizer-fast", {})]
 
         tokenizer = PreTrainedTokenizerFast.from_pretrained("robot-test/dummy-tokenizer-fast")
         tokenizer.save_pretrained(self.tmpdirname)
+    
+    def get_tokenizer_path_from_rust(self):
+            return ["robot-test/dummy-tokenizer-fast"]
 
     def test_pretrained_model_lists(self):
         # We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any

@@ -248,8 +248,8 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(tgt_text, slow_text)
 
     def test_special_tokens_initialization(self):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+        for pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{self.tokenizer_class.__name__} and {self.rust_tokenizer_class.__name__} ({pretrained_name})"):
 
                 added_tokens = [f"<extra_id_{i}>" for i in range(100)] + [AddedToken("<special>", lstrip=True)]
 
