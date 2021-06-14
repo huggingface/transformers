@@ -265,8 +265,8 @@ Let's apply the SoftMax activation to get predictions.
 .. code-block::
 
     >>> ## PYTORCH CODE
-    >>> import torch.nn.functional as F
-    >>> pt_predictions = F.softmax(pt_outputs.logits, dim=-1)
+    >>> from torch import nn
+    >>> pt_predictions = nn.functional.softmax(pt_outputs.logits, dim=-1)
     >>> ## TENSORFLOW CODE
     >>> import tensorflow as tf
     >>> tf.nn.softmax(tf_outputs.logits, axis=-1)
