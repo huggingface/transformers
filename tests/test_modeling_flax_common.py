@@ -23,7 +23,7 @@ import numpy as np
 import transformers
 from transformers import is_flax_available, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import is_pt_flax_cross_test, require_flax
+from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 
 
 if is_flax_available():
@@ -273,6 +273,7 @@ class FlaxModelTesterMixin:
                 for output_loaded, output in zip(outputs_loaded, outputs):
                     self.assert_almost_equals(output_loaded, output, 1e-3)
 
+    @slow
     def test_jit_compilation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

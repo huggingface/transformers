@@ -57,9 +57,9 @@ class BigBirdPegasusConfig(PretrainedConfig):
             Dimension of the "intermediate" (often named feed-forward) layer in decoder.
         encoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
             Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu_fast"`):
+        activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu_new"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
-            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"`, :obj:`"gelu_fast"` and :obj:`"gelu_new"` are supported.
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
         dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (:obj:`float`, `optional`, defaults to 0.0):
@@ -127,7 +127,7 @@ class BigBirdPegasusConfig(PretrainedConfig):
         decoder_layerdrop=0.0,
         use_cache=True,
         is_encoder_decoder=True,
-        activation_function="gelu_fast",
+        activation_function="gelu_new",
         d_model=1024,
         dropout=0.1,
         attention_dropout=0.0,

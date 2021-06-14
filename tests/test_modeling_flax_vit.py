@@ -179,6 +179,7 @@ class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
     # We neeed to override this test because ViT expects pixel_values instead of input_ids
+    @slow
     def test_jit_compilation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
