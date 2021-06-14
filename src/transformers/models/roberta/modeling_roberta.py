@@ -789,9 +789,9 @@ class RobertaModel(RobertaPreTrainedModel):
 
         if token_type_ids is None:
             if hasattr(self.embeddings, "token_type_ids"):
-                self.embeddings.token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
-                self.embeddings.token_type_ids = self.embeddings.token_type_ids.expand(batch_size, seq_length)
-                token_type_ids = self.embeddings.token_type_ids
+                buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
+                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(batch_size, seq_length)
+                token_type_ids = buffered_token_type_ids_expanded
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
