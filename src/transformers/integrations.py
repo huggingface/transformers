@@ -204,8 +204,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         trainer.use_tune_checkpoints = True
         if kwargs["keep_checkpoints_num"] > 1:
             logger.warning(
-                f"Currently keeping {kwargs['keep_checkpoints_num']} "
-                f"checkpoints for each trial. "
+                f"Currently keeping {kwargs['keep_checkpoints_num']} checkpoints for each trial. "
                 "Checkpoints are usually huge, "
                 "consider setting `keep_checkpoints_num=1`."
             )
