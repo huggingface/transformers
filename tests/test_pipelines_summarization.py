@@ -23,6 +23,7 @@ from .test_pipelines_common import MonoInputPipelineCommonMixin
 
 if is_torch_available():
     import torch
+    from torch import nn
 
     from transformers.models.bart import BartConfig, BartForConditionalGeneration
 
@@ -55,7 +56,7 @@ class SimpleSummarizationPipelineTests(unittest.TestCase):
         bias = torch.zeros(V)
         bias[76] = 10
 
-        model.lm_head.bias = torch.nn.Parameter(bias)
+        model.lm_head.bias = nn.Parameter(bias)
 
         # # Generated with:
         # import tempfile

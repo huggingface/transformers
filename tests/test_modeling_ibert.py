@@ -26,7 +26,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 
 if is_torch_available():
     import torch
-    import torch.nn as nn
+    from torch import nn
 
     from transformers import (
         IBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -304,9 +304,9 @@ class IBertModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config)
             self.assertIsInstance(model.get_input_embeddings(), QuantEmbedding)
-            model.set_input_embeddings(torch.nn.Embedding(10, 10))
+            model.set_input_embeddings(nn.Embedding(10, 10))
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
 
     # Override
     def test_feed_forward_chunking(self):
@@ -350,7 +350,7 @@ class IBertModelIntegrationTest(unittest.TestCase):
         weight_bit = 8
         embedding = QuantEmbedding(2, 4, quant_mode=True, weight_bit=weight_bit)
         embedding_weight = torch.tensor([[-1.0, -2.0, -3.0, -4.0], [5.0, 6.0, 7.0, 8.0]])
-        embedding.weight = torch.nn.Parameter(embedding_weight)
+        embedding.weight = nn.Parameter(embedding_weight)
 
         expected_scaling_factor = embedding_weight.abs().max() / (2 ** (weight_bit - 1) - 1)
         x, x_scaling_factor = embedding(torch.tensor(0))
@@ -447,8 +447,8 @@ class IBertModelIntegrationTest(unittest.TestCase):
             linear_q = QuantLinear(2, 4, quant_mode=True, per_channel=per_channel, weight_bit=weight_bit)
             linear_dq = QuantLinear(2, 4, quant_mode=False, per_channel=per_channel, weight_bit=weight_bit)
             linear_weight = torch.tensor([[-1.0, 2.0, 3.0, -4.0], [5.0, -6.0, -7.0, 8.0]]).T
-            linear_q.weight = torch.nn.Parameter(linear_weight)
-            linear_dq.weight = torch.nn.Parameter(linear_weight)
+            linear_q.weight = nn.Parameter(linear_weight)
+            linear_dq.weight = nn.Parameter(linear_weight)
 
             q, q_scaling_factor = linear_q(x, x_scaling_factor)
             q_int = q / q_scaling_factor
@@ -477,7 +477,7 @@ class IBertModelIntegrationTest(unittest.TestCase):
 
     def test_int_gelu(self):
         gelu_q = IntGELU(quant_mode=True)
-        gelu_dq = torch.nn.GELU()
+        gelu_dq = nn.GELU()
 
         x_int = torch.range(-10000, 10000, 1)
         x_scaling_factor = torch.tensor(0.001)
@@ -523,7 +523,7 @@ class IBertModelIntegrationTest(unittest.TestCase):
     def test_int_softmax(self):
         output_bit = 8
         softmax_q = IntSoftmax(output_bit, quant_mode=True)
-        softmax_dq = torch.nn.Softmax()
+        softmax_dq = nn.Softmax()
 
         # x_int = torch.range(-10000, 10000, 1)
         def _test(array):
@@ -590,12 +590,12 @@ class IBertModelIntegrationTest(unittest.TestCase):
         x = x_int * x_scaling_factor
 
         ln_q = IntLayerNorm(x.shape[1:], 1e-5, quant_mode=True, output_bit=output_bit)
-        ln_dq = torch.nn.LayerNorm(x.shape[1:], 1e-5)
+        ln_dq = nn.LayerNorm(x.shape[1:], 1e-5)
 
-        ln_q.weight = torch.nn.Parameter(torch.ones(x.shape[1:]))
-        ln_q.bias = torch.nn.Parameter(torch.ones(x.shape[1:]))
-        ln_dq.weight = torch.nn.Parameter(torch.ones(x.shape[1:]))
-        ln_dq.bias = torch.nn.Parameter(torch.ones(x.shape[1:]))
+        ln_q.weight = nn.Parameter(torch.ones(x.shape[1:]))
+        ln_q.bias = nn.Parameter(torch.ones(x.shape[1:]))
+        ln_dq.weight = nn.Parameter(torch.ones(x.shape[1:]))
+        ln_dq.bias = nn.Parameter(torch.ones(x.shape[1:]))
 
         q, q_scaling_factor = ln_q(x, x_scaling_factor)
         q_int = q / q_scaling_factor
@@ -627,13 +627,13 @@ class IBertModelIntegrationTest(unittest.TestCase):
             ],
         }
 
-        ln_dq.weight = torch.nn.Parameter(torch.ones(x.shape[1:]))
-        ln_dq.bias = torch.nn.Parameter(torch.ones(x.shape[1:]))
+        ln_dq.weight = nn.Parameter(torch.ones(x.shape[1:]))
+        ln_dq.bias = nn.Parameter(torch.ones(x.shape[1:]))
         dq, dq_scaling_factor = ln_dq(x, x_scaling_factor)
         for label, ln_fdqs in ln_fdqs_dict.items():
             for ln_fdq in ln_fdqs:
-                ln_fdq.weight = torch.nn.Parameter(torch.ones(x.shape[1:]))
-                ln_fdq.bias = torch.nn.Parameter(torch.ones(x.shape[1:]))
+                ln_fdq.weight = nn.Parameter(torch.ones(x.shape[1:]))
+                ln_fdq.bias = nn.Parameter(torch.ones(x.shape[1:]))
                 q, q_scaling_factor = ln_fdq(x, x_scaling_factor)
                 if label:
                     self.assertTrue(torch.allclose(q, dq, atol=1e-4))
