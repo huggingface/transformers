@@ -20,7 +20,7 @@ from shutil import copyfile
 from transformers import SPIECE_UNDERLINE, is_sentencepiece_available
 from transformers.models.speech_to_text import Speech2TextTokenizer
 from transformers.models.speech_to_text.tokenization_speech_to_text import VOCAB_FILES_NAMES, save_json
-from transformers.testing_utils import require_sentencepiece, require_tokenizers
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -60,6 +60,25 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = Speech2TextTokenizer.from_pretrained(self.tmpdirname)
         tokenizer.save_pretrained(self.tmpdirname)
 
+    def test_convert_token_and_id(self):
+        """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
+        token = "<pad>"
+        token_id = 1
+
+        self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
+        self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
+
+    def test_get_vocab(self):
+        vocab_keys = list(self.get_tokenizer().get_vocab().keys())
+
+        self.assertEqual(vocab_keys[0], "<s>")
+        self.assertEqual(vocab_keys[1], "<pad>")
+        self.assertEqual(vocab_keys[-1], "j")
+        self.assertEqual(len(vocab_keys), 1_001)
+
+    def test_vocab_size(self):
+        self.assertEqual(self.get_tokenizer().vocab_size, 1_001)
+
     def test_full_tokenizer(self):
         tokenizer = Speech2TextTokenizer.from_pretrained(self.tmpdirname)
 
@@ -89,6 +108,18 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             # fmt: on
         )
 
+    @slow
+    def test_tokenizer_integration(self):
+        # fmt: off
+        expected_encoding = {'input_ids': [[3791, 797, 31, 11, 64, 797, 31, 2429, 433, 12, 1176, 12, 20, 786, 915, 142, 2413, 240, 37, 3238, 797, 31, 11, 35, 93, 915, 142, 2413, 240, 37, 5540, 567, 1276, 93, 37, 610, 40, 62, 455, 657, 1042, 123, 780, 177, 37, 309, 241, 1298, 514, 20, 292, 2737, 114, 2469, 241, 85, 64, 302, 548, 528, 423, 4, 509, 406, 423, 37, 601, 4, 777, 302, 548, 528, 423, 284, 4, 3388, 511, 459, 4, 3555, 40, 321, 302, 705, 4, 3388, 511, 583, 326, 5, 5, 5, 62, 3310, 560, 177, 2680, 217, 1508, 32, 31, 853, 418, 64, 583, 511, 1605, 62, 35, 93, 560, 177, 2680, 217, 1508, 1521, 64, 583, 511, 519, 62, 20, 1515, 764, 20, 149, 261, 5625, 7972, 20, 5540, 567, 1276, 93, 3925, 1675, 11, 15, 802, 7972, 576, 217, 1508, 11, 35, 93, 1253, 2441, 15, 289, 652, 31, 416, 321, 3842, 115, 40, 911, 8, 476, 619, 4, 380, 142, 423, 335, 240, 35, 93, 264, 8, 11, 335, 569, 420, 163, 5, 2], [260, 548, 528, 423, 20, 451, 20, 2681, 1153, 3434, 20, 5540, 37, 567, 126, 1253, 2441, 3376, 449, 210, 431, 1563, 177, 767, 5540, 11, 1203, 472, 11, 2953, 685, 285, 364, 706, 1153, 20, 6799, 20, 2869, 20, 4464, 126, 40, 2429, 20, 1040, 866, 2664, 418, 20, 318, 20, 1726, 186, 20, 265, 522, 35, 93, 2191, 4634, 20, 1040, 12, 6799, 15, 228, 2356, 142, 31, 11, 5, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [2575, 2666, 684, 1582, 1176, 12, 627, 149, 619, 20, 4902, 563, 11, 20, 149, 261, 3420, 2356, 174, 142, 4714, 131, 5, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # noqa: E501
+        # fmt: on
+
+        self.tokenizer_integration_test_util(
+            expected_encoding=expected_encoding,
+            model_name="facebook/s2t-small-mustc-en-de-st",
+            revision="a14f04cf0776c02f62a8cb800cf7909e15ea23ad",
+        )
+
 
 @require_sentencepiece
 class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
@@ -107,6 +138,9 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         self.assertEqual(self.tokenizer.lang_code_to_id["ru"], 6)
         self.assertEqual(self.tokenizer.lang_code_to_id["it"], 9)
         self.assertEqual(self.tokenizer.lang_code_to_id["de"], 11)
+
+    def test_vocab_size(self):
+        self.assertEqual(self.tokenizer.vocab_size, 10_000)
 
     def test_tokenizer_decode_ignores_language_codes(self):
         self.assertIn(ES_CODE, self.tokenizer.all_special_ids)
