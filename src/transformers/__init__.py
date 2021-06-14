@@ -1430,6 +1430,14 @@ if is_tf_available():
             "TFTransfoXLPreTrainedModel",
         ]
     )
+    _import_structure["models.wav2vec2"].extend(
+        [
+            "TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFWav2Vec2ForCTC",
+            "TFWav2Vec2Model",
+            "TFWav2Vec2PreTrainedModel",
+        ]
+    )
     _import_structure["models.xlm"].extend(
         [
             "TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1527,6 +1535,18 @@ if is_flax_available():
             "FlaxBertForTokenClassification",
             "FlaxBertModel",
             "FlaxBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.big_bird"].extend(
+        [
+            "FlaxBigBirdForMaskedLM",
+            "FlaxBigBirdForMultipleChoice",
+            "FlaxBigBirdForPreTraining",
+            "FlaxBigBirdForQuestionAnswering",
+            "FlaxBigBirdForSequenceClassification",
+            "FlaxBigBirdForTokenClassification",
+            "FlaxBigBirdModel",
+            "FlaxBigBirdPreTrainedModel",
         ]
     )
     _import_structure["models.clip"].extend(
@@ -2743,6 +2763,12 @@ if TYPE_CHECKING:
             TFTransfoXLModel,
             TFTransfoXLPreTrainedModel,
         )
+        from .models.wav2vec2 import (
+            TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFWav2Vec2ForCTC,
+            TFWav2Vec2Model,
+            TFWav2Vec2PreTrainedModel,
+        )
         from .models.xlm import (
             TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFXLMForMultipleChoice,
@@ -2832,6 +2858,16 @@ if TYPE_CHECKING:
             FlaxBertForTokenClassification,
             FlaxBertModel,
             FlaxBertPreTrainedModel,
+        )
+        from .models.big_bird import (
+            FlaxBigBirdForMaskedLM,
+            FlaxBigBirdForMultipleChoice,
+            FlaxBigBirdForPreTraining,
+            FlaxBigBirdForQuestionAnswering,
+            FlaxBigBirdForSequenceClassification,
+            FlaxBigBirdForTokenClassification,
+            FlaxBigBirdModel,
+            FlaxBigBirdPreTrainedModel,
         )
         from .models.clip import FlaxCLIPModel, FlaxCLIPPreTrainedModel, FlaxCLIPTextModel, FlaxCLIPVisionModel
         from .models.electra import (

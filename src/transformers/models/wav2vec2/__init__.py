@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_tokenizers_available, is_torch_available
+from ...file_utils import _BaseLazyModule, is_tf_available, is_torch_available
 
 
 _import_structure = {
@@ -38,6 +38,15 @@ if is_torch_available():
     ]
 
 
+if is_tf_available():
+    _import_structure["modeling_tf_wav2vec2"] = [
+        "TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFWav2Vec2ForCTC",
+        "TFWav2Vec2Model",
+        "TFWav2Vec2PreTrainedModel",
+    ]
+
+
 if TYPE_CHECKING:
     from .configuration_wav2vec2 import WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP, Wav2Vec2Config
     from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
@@ -52,6 +61,14 @@ if TYPE_CHECKING:
             Wav2Vec2ForPreTraining,
             Wav2Vec2Model,
             Wav2Vec2PreTrainedModel,
+        )
+
+    if is_tf_available():
+        from .modeling_tf_wav2vec2 import (
+            TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFWav2Vec2ForCTC,
+            TFWav2Vec2Model,
+            TFWav2Vec2PreTrainedModel,
         )
 
 
