@@ -1115,8 +1115,6 @@ class CanineModel(CaninePreTrainedModel):
             molecule_attention_mask, (batch_size, molecule_attention_mask.shape[-1]), device
         )
 
-        encoder_extended_attention_mask = None
-
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N

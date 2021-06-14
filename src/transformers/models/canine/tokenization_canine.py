@@ -139,8 +139,13 @@ class CanineTokenizer(PreTrainedTokenizer):
             raise ValueError(f"invalid token: '{token}'")
 
     def _convert_id_to_token(self, index: int) -> str:
-        """Converts an integer Unicode code point (integer) in a token (str)."""
+        """
+        Converts a Unicode code point (integer) in a token (str). In case it's a special code point, convert to
+        human-readable format.
+        """
         try:
+            if index in SPECIAL_CODEPOINTS:
+                return SPECIAL_CODEPOINTS[index]
             return chr(index)
         except TypeError:
             raise ValueError(f"invalid id: {index}")
