@@ -121,14 +121,6 @@ BART_INPUTS_DOCSTRING = r"""
         decoder_position_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
             range ``[0, config.max_position_embeddings - 1]``.
-        encoder_outputs (:obj:`tuple(tuple(jnp.ndarray)`, `optional`):
-            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
-            :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
-            `optional`) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
-            cross-attention of the decoder.
-        past_key_values (:obj:`Dict[str, np.ndarray]`, `optional`, returned by ``init_cache`` or when passing previous ``past_key_values``):
-            Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
-            auto-regressive decoding. Pre-computed key and value hidden-states are of shape `[batch_size, max_length]`.
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
@@ -1333,7 +1325,7 @@ class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
     dtype: jnp.dtype = jnp.float32
 
     @add_start_docstrings(BART_DECODE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FlaxSeq2SeqLMOutput, config_class=BartConfig)
+    @replace_return_docstrings(output_type=FlaxCausalLMOutputWithCrossAttentions, config_class=BartConfig)
     def decode(
         self,
         decoder_input_ids,
