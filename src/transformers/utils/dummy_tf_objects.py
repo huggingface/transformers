@@ -1803,6 +1803,36 @@ class TFRoFormerPreTrainedModel:
         requires_backends(cls, ["tf"])
 
 
+TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFSpeech2TextForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFSpeech2TextModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFSpeech2TextPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
 TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
