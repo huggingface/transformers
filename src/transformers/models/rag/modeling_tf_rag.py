@@ -1067,7 +1067,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         output_attentions=None,
         output_hidden_states=None,
         return_dict_in_generate=None,
-        **kwargs
+        **model_kwargs
     ):
         """
         Implements TFRAG token decoding.
@@ -1192,11 +1192,11 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
         )
 
-        kwargs["output_scores"] = output_scores
-        kwargs["output_attentions"] = output_attentions
-        kwargs["output_hidden_states"] = output_hidden_states
-        kwargs["encoder_attentions"] = None
-        kwargs["encoder_hidden_states"] = None
+        model_kwargs["output_scores"] = output_scores
+        model_kwargs["output_attentions"] = output_attentions
+        model_kwargs["output_hidden_states"] = output_hidden_states
+        model_kwargs["encoder_attentions"] = None
+        model_kwargs["encoder_hidden_states"] = None
 
         # retrieve docs
         if self.retriever is not None and context_input_ids is None:
@@ -1241,9 +1241,9 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
 
         if return_dict_in_generate:
             if output_attentions:
-                kwargs["encoder_attentions"] = encoder_outputs.attentions
+                model_kwargs["encoder_attentions"] = encoder_outputs.attentions
             if output_hidden_states:
-                kwargs["encoder_hidden_states"] = encoder_outputs.hidden_states
+                model_kwargs["encoder_hidden_states"] = encoder_outputs.hidden_states
 
         decoder_input_ids = tf.fill(
             (batch_size * num_beams, 1),
@@ -1281,9 +1281,9 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         # define start_len & additional parameters
         cur_len = 1
         vocab_size = self.config.generator.vocab_size
-        kwargs["doc_scores"] = doc_scores
-        kwargs["encoder_outputs"] = encoder_outputs
-        kwargs["n_docs"] = n_docs
+        model_kwargs["doc_scores"] = doc_scores
+        model_kwargs["encoder_outputs"] = encoder_outputs
+        model_kwargs["n_docs"] = n_docs
 
         # not needed. TODO(PVP): change after generate refactor
         do_sample = False
@@ -1318,7 +1318,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 forced_bos_token_id=None,
                 forced_eos_token_id=None,
                 return_dict_in_generate=return_dict_in_generate,
-                **kwargs,  # encoder_outputs is here as in Pytorch's version
+                **model_kwargs,  # encoder_outputs is here as in Pytorch's version
             )
         else:
             return self._generate_no_beam_search(
@@ -1342,7 +1342,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 forced_bos_token_id=None,
                 forced_eos_token_id=None,
                 return_dict_in_generate=return_dict_in_generate,
-                **kwargs,  # encoder_outputs is here as in Pytorch's version
+                **model_kwargs,  # encoder_outputs is here as in Pytorch's version
             )
 
     def get_input_embeddings(self):
@@ -1725,7 +1725,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         num_return_sequences=None,  # defaults to 1
         num_beams=None,  # defaults to 1
         n_docs=None,
-        **kwargs
+        **model_kwargs
     ):
         """
         Implements RAG sequence "thorough" decoding. Read the
@@ -1796,9 +1796,10 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
             )["context_input_ids"]
 
         hypos = []
-        kwargs["num_beams"] = num_beams
-        kwargs["num_return_sequences"] = num_beams  # put here so that not confused with num_doc_return_sequences
-        kwargs["attention_mask"] = None
+        model_kwargs["num_beams"] = num_beams
+        model_kwargs["num_return_sequences"] = num_beams  # put here so that not confused with num_doc_return_sequences
+        model_kwargs["attention_mask"] = None
+        
 
         batch_size = input_ids.shape[0] if input_ids is not None else context_input_ids.shape[0] // n_docs
 
@@ -1808,7 +1809,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
 
             output_sequences = self.generator.generate(
                 generator_input_ids,
-                **kwargs,
+                **model_kwargs,
             )  # n_docs * n_beam, tgt_len
             if do_deduplication:
                 # do_deduplication -- for TF, work on Eager mode only!
