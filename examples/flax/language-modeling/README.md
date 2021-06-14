@@ -176,18 +176,16 @@ Next we can run the example script to pretrain the model:
     --block_size="512" \
     --per_device_train_batch_size="64" \
     --per_device_eval_batch_size="64" \
-    --learning_rate="5e-3" \
-    --warmup_steps="1000" \
+    --learning_rate="5e-3" --warmup_steps="1000" \
+    --adam_beta1="0.9" --adam_beta2="0.98" --weight_decay="0.01" \
     --overwrite_output_dir \
     --num_train_epochs="20" \
 ```
 
 Training should converge at a loss and perplexity 
-of 3.28 and 26.63 respectively after 20 epochs on a single TPUv3-8.
+of 3.24 and 25.72 respectively after 20 epochs on a single TPUv3-8.
 This should take less than ~21 hours.
-Training statistics can be accessed on [tfhub.de](hhttps://tensorboard.dev/experiment/D1hRUJL1S8Wy3Hrz8hY8zQ/).
-
-TODO(Suraj): Update the hyper-parameters and metrics
+Training statistics can be accessed on [tfhub.de](https://tensorboard.dev/experiment/2zEhLwJ0Qp2FAkI3WVH9qA).
 
 
 ## TODO(Patrick): Add comparison with PyTorch GPU/TPU
