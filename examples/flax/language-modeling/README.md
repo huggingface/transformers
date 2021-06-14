@@ -98,23 +98,23 @@ Next we can run the example script to pretrain the model:
 
 ```bash
 ./run_mlm_flax.py \
-        --output_dir="./runs" \
-        --model_type="roberta" \
-        --config_name="${MODEL_DIR}" \
-        --tokenizer_name="${MODEL_DIR}" \
-        --dataset_name="oscar" \
-        --dataset_config_name="unshuffled_deduplicated_no" \
-        --max_seq_length="128" \
-        --weight_decay="0.01" \
-        --per_device_train_batch_size="128" \
-        --per_device_eval_batch_size="128" \
-        --learning_rate="3e-4" \
-        --warmup_steps="1000" \
-        --overwrite_output_dir \
-        --pad_to_max_length \
-        --num_train_epochs="18" \
-        --adam_beta1="0.9" \
-        --adam_beta2="0.98"
+    --output_dir="./runs" \
+    --model_type="roberta" \
+    --config_name="${MODEL_DIR}" \
+    --tokenizer_name="${MODEL_DIR}" \
+    --dataset_name="oscar" \
+    --dataset_config_name="unshuffled_deduplicated_no" \
+    --max_seq_length="128" \
+    --weight_decay="0.01" \
+    --per_device_train_batch_size="128" \
+    --per_device_eval_batch_size="128" \
+    --learning_rate="3e-4" \
+    --warmup_steps="1000" \
+    --overwrite_output_dir \
+    --pad_to_max_length \
+    --num_train_epochs="18" \
+    --adam_beta1="0.9" \
+    --adam_beta2="0.98"
 ```
 
 Training should converge at a loss and accuracy 
@@ -235,27 +235,27 @@ mkdir -p ${MODEL_DIR}
 
 ```bash
 python3 xla_spawn.py --num_cores ${NUM_TPUS} run_mlm.py --output_dir="./runs" \
-										--model_type="roberta" \
-										--config_name="${MODEL_DIR}" \
-										--tokenizer_name="${MODEL_DIR}" \
-										--dataset_name="oscar" \
-										--dataset_config_name="unshuffled_deduplicated_no" \
-										--max_seq_length="128" \
-										--weight_decay="0.01" \
-										--per_device_train_batch_size="128" \
-										--per_device_eval_batch_size="128" \
-										--learning_rate="3e-4" \
-										--warmup_steps="1000" \
-										--overwrite_output_dir \
-										--num_train_epochs="18" \
-										--adam_beta1="0.9" \
-										--adam_beta2="0.98" \
-										--do_train \
-										--do_eval \
-										--logging_steps="500" \
-										--evaluation_strategy="epoch" \
-										--report_to="tensorboard" \
-										--save_strategy="no"
+    --model_type="roberta" \
+    --config_name="${MODEL_DIR}" \
+    --tokenizer_name="${MODEL_DIR}" \
+    --dataset_name="oscar" \
+    --dataset_config_name="unshuffled_deduplicated_no" \
+    --max_seq_length="128" \
+    --weight_decay="0.01" \
+    --per_device_train_batch_size="128" \
+    --per_device_eval_batch_size="128" \
+    --learning_rate="3e-4" \
+    --warmup_steps="1000" \
+    --overwrite_output_dir \
+    --num_train_epochs="18" \
+    --adam_beta1="0.9" \
+    --adam_beta2="0.98" \
+    --do_train \
+    --do_eval \
+    --logging_steps="500" \
+    --evaluation_strategy="epoch" \
+    --report_to="tensorboard" \
+    --save_strategy="no"
 ```
 
 ### Script to compare pre-training with PyTorch on 8 GPU V100's
@@ -281,27 +281,27 @@ mkdir -p ${MODEL_DIR}
 
 ```bash
 python3 -m torch.distributed.launch --nproc_per_node ${NUM_GPUS} run_mlm.py \
-                        --output_dir="./runs" \
-                        --model_type="roberta" \
-                        --config_name="${MODEL_DIR}" \
-                        --tokenizer_name="${MODEL_DIR}" \
-                        --dataset_name="oscar" \
-                        --dataset_config_name="unshuffled_deduplicated_no" \
-                        --max_seq_length="128" \
-                        --weight_decay="0.01" \
-                        --per_device_train_batch_size="32" \
-                        --per_device_eval_batch_size="32" \
-                        --gradient_accumulation="4" \
-                        --learning_rate="3e-4" \
-                        --warmup_steps="1000" \
-                        --overwrite_output_dir \
-                        --num_train_epochs="18" \
-                        --adam_beta1="0.9" \
-                        --adam_beta2="0.98" \
-                        --do_train \
-                        --do_eval \
-                        --logging_steps="500" \
-                        --evaluation_strategy="steps" \
-                        --report_to="tensorboard" \
-                        --save_strategy="no"
+    --output_dir="./runs" \
+    --model_type="roberta" \
+    --config_name="${MODEL_DIR}" \
+    --tokenizer_name="${MODEL_DIR}" \
+    --dataset_name="oscar" \
+    --dataset_config_name="unshuffled_deduplicated_no" \
+    --max_seq_length="128" \
+    --weight_decay="0.01" \
+    --per_device_train_batch_size="32" \
+    --per_device_eval_batch_size="32" \
+    --gradient_accumulation="4" \
+    --learning_rate="3e-4" \
+    --warmup_steps="1000" \
+    --overwrite_output_dir \
+    --num_train_epochs="18" \
+    --adam_beta1="0.9" \
+    --adam_beta2="0.98" \
+    --do_train \
+    --do_eval \
+    --logging_steps="500" \
+    --evaluation_strategy="steps" \
+    --report_to="tensorboard" \
+    --save_strategy="no"
 ```
