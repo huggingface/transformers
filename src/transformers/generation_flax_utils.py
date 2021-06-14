@@ -22,6 +22,7 @@ import jax
 import jax.numpy as jnp
 import jaxlib.xla_extension as jax_xla
 from jax import lax
+import numpy as np
 
 from .file_utils import ModelOutput
 from .generation_flax_logits_process import (
@@ -43,9 +44,8 @@ class FlaxGreedySearchOutput(ModelOutput):
 
 
     Args:
-        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            The generated sequences. If all batches finished early due to the :obj:`eos_token_id`, :obj:`sequences` is
-            padded to :obj:`max_length`.
+        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size, max_length)`):
+            The generated sequences.
     """
 
     sequences: jax_xla.DeviceArray = None
@@ -59,8 +59,7 @@ class FlaxSampleOutput(ModelOutput):
 
     Args:
         sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size, max_length)`):
-            The generated sequences. If all batches finished early due to the :obj:`eos_token_id`, :obj:`sequences` is
-            padded to :obj:`max_length`.
+            The generated sequences.
     """
 
     sequences: jax_xla.DeviceArray = None
@@ -73,12 +72,14 @@ class FlaxBeamSearchOutput(ModelOutput):
 
 
     Args:
-        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            The generated sequences. If all batches finished early due to the :obj:`eos_token_id`, :obj:`sequences` is
-            padded to :obj:`max_length`.
+        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size, max_length)`):
+            The generated sequences.
+        scores (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`):
+            The scores (log probabilites) of the generated sequences.
     """
 
     sequences: jax_xla.DeviceArray = None
+    scores: jax_xla.DeviceArray = None
 
 
 @flax.struct.dataclass
@@ -103,10 +104,11 @@ class SampleState:
 @flax.struct.dataclass
 class BeamSearchState:
     cur_len: jax_xla.DeviceArray
+    current_sequences: jax_xla.DeviceArray
+    current_scores: jax_xla.DeviceArray
     sequences: jax_xla.DeviceArray
-    current_token: jax_xla.DeviceArray
+    scores: jax_xla.DeviceArray
     is_sent_finished: jax_xla.DeviceArray
-    prng_key: jax_xla.DeviceArray
     model_kwargs: Dict[str, jax_xla.DeviceArray]
 
 
@@ -248,6 +250,13 @@ class FlaxGenerationMixin:
                 trace=trace,
             )
         elif not do_sample and num_beams > 1:
+            # broadcast input_ids & encoder_outputs
+            batch_size, sequence_length = input_ids.shape
+
+            input_ids = jnp.broadcast_to(input_ids[:, None, :], (batch_size, num_beams, sequence_length))
+            last_hidden_state = model_kwargs["encoder_outputs"]["last_hidden_state"]
+            model_kwargs["encoder_outputs"]["last_hidden_state"] = jnp.broadcast_to(last_hidden_state[:, None, :], (batch_size, num_beams,) + last_hidden_state.shape[1:])
+
             return self._beam_search(
                 input_ids, max_length, pad_token_id, eos_token_id, trace=trace, model_kwargs=model_kwargs
             )
@@ -464,66 +473,234 @@ class FlaxGenerationMixin:
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
 
-        batch_size, cur_len = input_ids.shape
+        batch_size, num_beams, cur_len = input_ids.shape
 
         eos_token_id = jnp.array(eos_token_id)
         pad_token_id = jnp.array(pad_token_id)
         cur_len = jnp.array(cur_len)
 
-        # per batch-item holding current token in loop.
-        sequences = jnp.full((batch_size, max_length), pad_token_id, dtype=jnp.int32)
-        sequences = lax.dynamic_update_slice(sequences, input_ids, (0, 0))
+        # per batch,beam-item holding current token in loop.
+        sequences = jnp.full((batch_size, num_beams, max_length), pad_token_id, dtype=jnp.int32)
+        current_sequences = jnp.full((batch_size, num_beams, max_length), pad_token_id, dtype=jnp.int32)
+        current_sequences = lax.dynamic_update_slice(sequences, input_ids, (0, 0, 0))
 
-        # per batch-item state bit indicating if sentence has finished.
-        is_sent_finished = jnp.zeros((batch_size,), dtype=jnp.bool_)
+        # per batch,beam-item state bit indicating if sentence has finished.
+        is_sent_finished = jnp.zeros((batch_size, num_beams), dtype=jnp.bool_)
 
-        model = self
+        # per batch,beam-item score, logprobs
+        current_scores = jnp.tile(jnp.array([0.0] + [np.array(-1.0e7)] * (num_beams - 1)), [batch_size, 1])
+        scores = jnp.ones((batch_size, num_beams)) * np.array(-1.0e7)
+
+        # For Seq2Seq generation, we only need to use the decoder instead of the whole model in generation loop
+        # and pass it the `encoder_outputs`, which are part of the `model_kwargs`.
+        model = self.decode if self.config.is_encoder_decoder else self
+
+        # reshape
+        reshaped_input_ids = input_ids.reshape((batch_size * num_beams, cur_len))
+        last_hidden_state = model_kwargs["encoder_outputs"]["last_hidden_state"]
+        model_kwargs["encoder_outputs"]["last_hidden_state"] = last_hidden_state.reshape((batch_size * num_beams,) + last_hidden_state.shape[2:])
 
         # initialize model specific kwargs
-        model_kwargs = model.prepare_inputs_for_generation(input_ids, max_length, **model_kwargs)
+        model_kwargs = self.prepare_inputs_for_generation(reshaped_input_ids, max_length, **model_kwargs)
 
         # initialize state
-        state = GreedyState(
+        state = BeamSearchState(
             cur_len=cur_len,
+            current_sequences=current_sequences,
+            current_scores=current_scores,
             sequences=sequences,
-            current_token=input_ids,
+            scores=scores,
             is_sent_finished=is_sent_finished,
             model_kwargs=model_kwargs,
         )
 
-        def greedy_search_cond_fn(state):
+        def beam_search_cond_fn(state):
             """state termination condition fn."""
             has_reached_max_length = state.cur_len == max_length
-            all_sequence_finished = jnp.all(state.is_sent_finished)
-            finish_generation = jnp.logical_or(has_reached_max_length, all_sequence_finished)
-            return ~finish_generation
 
-        def greedy_search_body_fn(state):
+            best_curr_score = state.current_scores[:, -1:]
+            worst_finished_score = jnp.min(state.scores, axis=1, keepdims=True)
+            worst_finished_score = jnp.where(state.is_sent_finished, worst_finished_score, np.array(-1.0e7))
+
+            no_improvement_possible = jnp.all(worst_finished_score > best_curr_score)
+
+            return (~has_reached_max_length) & (~no_improvement_possible)
+
+        def flatten_beam_dim(tensor):
+            """Flattens the first two dimensions of a non-scalar array."""
+            if tensor.ndim == 0:  # ignore scalars (e.g. cache index)
+                return tensor
+            return tensor.reshape((tensor.shape[0] * tensor.shape[1],) + tensor.shape[2:])
+
+        def unflatten_beam_dim(x, batch_size, num_beams):
+            """Unflattens the first, flat batch*beam dimension of a non-scalar array."""
+            if x.ndim == 0:  # ignore scalars (e.g. cache index)
+                return x
+            assert batch_size * num_beams == x.shape[0]
+            return x.reshape((batch_size, num_beams) + x.shape[1:])
+
+        def gather_beams(nested, beam_indices, batch_size, new_num_beams):
+            """Gathers the beam slices indexed by beam_indices into new beam array.
+                Args:
+                    nested: pytree of arrays or scalars (the latter ignored).
+                    beam_indices: array of beam_indices
+                    batch_size: int: size of batch.
+                    new_num_beams: int: size of _new_ beam dimension.
+                Returns:
+                    New pytree with new beam arrays.
+                    [batch_size, old_num_beams, ...] --> [batch_size, new_num_beams, ...]
+            """
+            batch_indices = jnp.reshape(jnp.arange(batch_size * new_num_beams) // new_num_beams, (batch_size, new_num_beams))
+
+            def gather_fn(x):
+                if x.ndim == 0:  # ignore scalars (e.g. cache index)
+                    return x
+                else:
+                    return x[batch_indices, beam_indices]
+
+            return jax.tree_map(gather_fn, nested)
+
+        def gather_topk_beams(nested, score_or_log_prob, batch_size, new_beam_size):
+            _, topk_indices = lax.top_k(score_or_log_prob, k=new_beam_size)
+            topk_indices = jnp.flip(topk_indices, axis=1)
+            return gather_beams(nested, topk_indices, batch_size, new_beam_size)
+
+        def beam_search_body_fn(state):
             """state update fn."""
-            model_outputs = model(state.current_token, **state.model_kwargs)
-            next_token = jnp.argmax(model_outputs.logits[:, -1], axis=-1)
+            """Beam search loop state update function."""
+            # Collect the current position slice along length to feed the fast
+            # autoregressive decoder model.  Flatten the beam dimension into batch
+            # dimension for feeding into the model.
+            # --> [batch * beam, 1]
+            input_token = flatten_beam_dim(lax.dynamic_slice(
+                state.current_sequences,
+                (0, 0, state.cur_len),
+                (batch_size, num_beams, 1)))
 
-            next_is_sent_finished = state.is_sent_finished | (next_token == eos_token_id)
-            next_token = next_token * ~next_is_sent_finished + pad_token_id * next_is_sent_finished
-            next_token = next_token[:, None]
+            # Call fast-decoder model on current tokens to get next-position logits.
+            # --> [batch * beam, vocab]
+            model_outputs = model(input_token, **state.model_kwargs)
 
-            next_sequences = lax.dynamic_update_slice(state.sequences, next_token, (0, state.cur_len))
-            next_model_kwargs = model.update_inputs_for_generation(model_outputs, model_kwargs)
+            # unflatten beam dimension
+            # [batch * beam, vocab] --> [batch, beam, vocab]
+            new_logits = unflatten_beam_dim(model_outputs.logits, batch_size, num_beams)
+            # Unflatten beam dimension in attention cache arrays
+            # {[batch * beam, ...], ...} --> {[batch, beam, ...], ...}
+            new_cache = jax.tree_map(
+                lambda x: unflatten_beam_dim(x, batch_size, num_beams), model_outputs.past_key_values)
 
-            return GreedyState(
+            # Gather log probabilities from logits
+            candidate_log_probs = jax.nn.log_softmax(new_logits[:, :, 0, :])
+            # Add new logprobs to existing prefix logprobs.
+            # --> [batch, beam, vocab]
+            log_probs = candidate_log_probs + jnp.expand_dims(state.current_scores, axis=2)
+            # We'll need the vocab size, gather it from the log probability dimension.
+            vocab_size = log_probs.shape[2]
+
+            # Each item in batch has num_beams * vocab_size candidate sequences.
+            # For each item, get the top 2*k candidates with the highest log-
+            # probabilities. We gather the top 2*K beams here so that even if the best
+            # K sequences reach EOS simultaneously, we have another K sequences
+            # remaining to continue the live beam search.
+            beams_to_keep = 2 * num_beams
+            # Flatten beam and vocab dimensions.
+            flat_log_probs = log_probs.reshape((batch_size, num_beams * vocab_size))
+            # Gather the top 2*K scores from _all_ beams.
+            # --> [batch, 2*beams], [batch, 2*beams]
+            topk_log_probs, topk_indices = lax.top_k(flat_log_probs, k=beams_to_keep)
+            # Recover the beam index by floor division.
+            topk_beam_indices = topk_indices // vocab_size
+            # Gather 2*k top beams.
+            # --> [batch, 2*beams, length]
+            topk_seq = gather_beams(state.current_sequences,
+                                    topk_beam_indices,
+                                    batch_size, beams_to_keep)
+
+            # Append the most probable 2*K token IDs to the top 2*K sequences
+            # Recover token id by modulo division and expand Id array for broadcasting.
+            # --> [batch, 2*beams, 1]
+            topk_ids = jnp.expand_dims(topk_indices % vocab_size, axis=2)
+            # Update sequences for the 2*K top-k new sequences.
+            # --> [batch, 2*beams, length]
+            topk_seq = lax.dynamic_update_slice(
+                topk_seq, topk_ids, (0, 0, state.cur_len + 1))
+
+            # Update LIVE (in-progress) sequences:
+            # Did any of these sequences reach an end marker?
+            # --> [batch, 2*beams]
+            newly_finished = (topk_seq[:, :, state.cur_len + 1] == eos_token_id)
+            # To prevent these newly finished sequences from being added to the LIVE
+            # set of active beam search sequences, set their log probs to a very large
+            # negative value.
+            new_log_probs = topk_log_probs + newly_finished * np.array(-1.0e7)
+            # Determine the top k beam indices (from top 2*k beams) from log probs.
+            # --> [batch, beams]
+            _, new_topk_indices = lax.top_k(new_log_probs, k=num_beams)
+            new_topk_indices = jnp.flip(new_topk_indices, axis=1)
+            # Gather the top k beams (from top 2*k beams).
+            # --> [batch, beams, length], [batch, beams]
+            top_alive_seq, top_alive_log_probs = gather_beams(
+                [topk_seq, new_log_probs], new_topk_indices, batch_size, num_beams)
+
+            # Determine the top k beam indices from the original set of all beams.
+            # --> [batch, beams]
+            top_alive_indices = gather_beams(
+                topk_beam_indices, new_topk_indices, batch_size, num_beams)
+            # With these, gather the top k beam-associated caches.
+            # --> {[batch, beams, ...], ...}
+            top_alive_cache = gather_beams(
+                new_cache, top_alive_indices, batch_size, num_beams)
+
+            # Update FINISHED (reached end of sentence) sequences:
+            # Calculate new seq scores from log probabilities.
+            new_scores = topk_log_probs
+            # Mask out the still unfinished sequences by adding large negative value.
+            # --> [batch, 2*beams]
+            new_scores += (~newly_finished) * np.array(-1.0e7)
+
+            # Combine sequences, scores, and flags along the beam dimension and compare
+            # new finished sequence scores to existing finished scores and select the
+            # best from the new set of beams.
+            finished_seqs = jnp.concatenate(  # --> [batch, 3*beams, length]
+                [state.sequences, topk_seq], axis=1)
+            finished_scores = jnp.concatenate(  # --> [batch, 3*beams]
+                [state.scores, new_scores], axis=1)
+            finished_flags = jnp.concatenate(  # --> [batch, 3*beams]
+                [state.is_sent_finished, newly_finished], axis=1)
+            # --> [batch, beams, length], [batch, beams], [batch, beams]
+            top_finished_seq, top_finished_scores, top_finished_flags = (
+                gather_topk_beams([finished_seqs, finished_scores, finished_flags],
+                                  finished_scores, batch_size, num_beams))
+
+            model_outputs["past_key_values"] = jax.tree_map(lambda x: flatten_beam_dim(x), top_alive_cache)
+            new_model_kwargs = self.update_inputs_for_generation(model_outputs, state.model_kwargs)
+
+            return BeamSearchState(
                 cur_len=state.cur_len + 1,
-                sequences=next_sequences,
-                current_token=next_token,
-                is_sent_finished=next_is_sent_finished,
-                model_kwargs=next_model_kwargs,
+                current_scores=top_alive_log_probs,
+                current_sequences=top_alive_seq,
+                scores=top_finished_scores,
+                sequences=top_finished_seq,
+                is_sent_finished=top_finished_flags,
+                model_kwargs=new_model_kwargs,
             )
 
-        # The very first prompt often has sequence length > 1, so run outside of `lax.while_loop` to comply with TPU
-        state = greedy_search_body_fn(state)
+            # The very first prompt often has sequence length > 1, so run outside of `lax.while_loop` to comply with TPU
+        state = beam_search_body_fn(state)
 
         if not trace:
-            state = self._run_loop_in_debug(greedy_search_cond_fn, greedy_search_body_fn, state)
+            state = self._run_loop_in_debug(beam_search_cond_fn, beam_search_body_fn, state)
         else:
-            state = lax.while_loop(greedy_search_cond_fn, greedy_search_body_fn, state)
+            state = lax.while_loop(beam_search_cond_fn, beam_search_body_fn, state)
 
-        return FlaxGreedySearchOutput(sequences=state.sequences)
+        # Account for the edge-case where there are no finished sequences for a
+        # particular batch item. If so, return live sequences for that batch item.
+        # --> [batch]
+        none_finished = jnp.any(state.is_sent_finished, axis=1)
+        # --> [batch, beams, length]
+        sequences = jnp.where(none_finished[:, None, None], state.sequences, state.current_sequences)
+
+        # --> [batch, beams]
+        scores = jnp.where(none_finished[:, None], state.scores, state.current_scores)
+
+        return FlaxBeamSearchOutput(sequences=sequences, scores=scores)
