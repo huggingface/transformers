@@ -27,16 +27,6 @@ from typing import List, Tuple
 from huggingface_hub import HfApi
 from requests.exceptions import HTTPError
 from transformers import is_tf_available
-from transformers.generation_tf_utils import (
-    TFBeamSampleDecoderOnlyOutput,
-    TFBeamSampleEncoderDecoderOutput,
-    TFBeamSearchDecoderOnlyOutput,
-    TFBeamSearchEncoderDecoderOutput,
-    TFGreedySearchDecoderOnlyOutput,
-    TFGreedySearchEncoderDecoderOutput,
-    TFSampleDecoderOnlyOutput,
-    TFSampleEncoderDecoderOutput,
-)
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
@@ -70,6 +60,16 @@ if is_tf_available():
         TFBertModel,
         TFSharedEmbeddings,
         tf_top_k_top_p_filtering,
+    )
+    from transformers.generation_tf_utils import (
+        TFBeamSampleDecoderOnlyOutput,
+        TFBeamSampleEncoderDecoderOutput,
+        TFBeamSearchDecoderOnlyOutput,
+        TFBeamSearchEncoderDecoderOutput,
+        TFGreedySearchDecoderOnlyOutput,
+        TFGreedySearchEncoderDecoderOutput,
+        TFSampleDecoderOnlyOutput,
+        TFSampleEncoderDecoderOutput,
     )
 
     if _tf_gpu_memory_limit is not None:
