@@ -151,3 +151,18 @@ Speech2TextForConditionalGeneration
 
 .. autoclass:: transformers.Speech2TextForConditionalGeneration
     :members: forward
+
+
+
+TFSpeech2TextModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFSpeech2TextModel
+    :members: call
+
+
+TFSpeech2TextForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFSpeech2TextForConditionalGeneration
+    :members: call

@@ -583,8 +583,13 @@ class TFGenerationMixin:
             model_kwargs["encoder_attentions"] = None
             model_kwargs["encoder_hidden_states"] = None
 
+        # get input features if that exists
+        input_features = model_kwargs.get("input_features")
+
         if input_ids is not None:
             batch_size = shape_list(input_ids)[0]  # overridden by the input batch_size
+        elif input_features is not None:
+            batch_size = shape_list(input_features)[0]  # overridden by the input batch_size
         else:
             batch_size = 1
 
@@ -673,12 +678,20 @@ class TFGenerationMixin:
             # get encoder and store encoder outputs
             encoder = self.get_encoder()
 
-            encoder_outputs = encoder(
-                input_ids,
-                attention_mask=attention_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-            )
+            if input_features is not None:
+                encoder_outputs = encoder(
+                    input_features,
+                    attention_mask=attention_mask,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                )
+            else:
+                encoder_outputs = encoder(
+                    input_ids,
+                    attention_mask=attention_mask,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                )
             if return_dict_in_generate:
                 if output_attentions:
                     model_kwargs["encoder_attentions"] = encoder_outputs.attentions

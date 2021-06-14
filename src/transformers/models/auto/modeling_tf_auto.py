@@ -66,6 +66,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("blenderbot-small", "TFBlenderbotSmallModel"),
         ("wav2vec2", "TFWav2Vec2Model"),
         ("hubert", "TFHubertModel"),
+        ("speech_to_text", "TFSpeech2TextModel"),
     ]
 )
 
@@ -181,6 +182,7 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("blenderbot", "TFBlenderbotForConditionalGeneration"),
         ("blenderbot-small", "TFBlenderbotSmallForConditionalGeneration"),
         ("bart", "TFBartForConditionalGeneration"),
+        ("speech_to_text", "TFSpeech2TextForConditionalGeneration"),
     ]
 )
 
