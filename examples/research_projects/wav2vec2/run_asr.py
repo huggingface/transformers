@@ -9,8 +9,8 @@ from typing import Any, Callable, Dict, List, Optional, Set, Union
 import datasets
 import numpy as np
 import torch
-import torch.nn as nn
 from packaging import version
+from torch import nn
 
 import librosa
 from lang_trans import arabic
