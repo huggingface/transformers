@@ -923,8 +923,8 @@ class CanineForMultipleChoice:
         requires_backends(self, ["torch"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class CanineForQuestionAnswering:
@@ -932,8 +932,8 @@ class CanineForQuestionAnswering:
         requires_backends(self, ["torch"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class CanineForSequenceClassification:
@@ -941,8 +941,8 @@ class CanineForSequenceClassification:
         requires_backends(self, ["torch"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class CanineForTokenClassification:
@@ -950,8 +950,8 @@ class CanineForTokenClassification:
         requires_backends(self, ["torch"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class CanineLayer:
@@ -964,8 +964,8 @@ class CanineModel:
         requires_backends(self, ["torch"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class CaninePreTrainedModel:
@@ -973,8 +973,8 @@ class CaninePreTrainedModel:
         requires_backends(self, ["torch"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 def load_tf_weights_in_canine(*args, **kwargs):
