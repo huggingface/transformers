@@ -135,7 +135,6 @@ For reproducibility, we state the training commands used for PyTorch/XLA and PyT
 | Task  | [TPU v3-8 (Flax)](https://tensorboard.dev/experiment/GdYmdak2TWeVz0DDRYOrrg/)  | [TPU v3-8 (Pytorch/XLA)](https://tensorboard.dev/experiment/7Jq1kcQQRAmy12KOdXek7A/)| [8 GPU (PyTorch)](https://tensorboard.dev/experiment/PJneV8FQRxa2unPw1QnVHA)  |
 |-------|-----------|------------|------------|
 | MLM   |  15h32m   |  23h46m    | 44h14m     |
-|-------|
 | **COST*** | $124.24  | $187.84 | $877.92 |
 
 *All experiments are ran on Google Cloud Platform. Prices are on-demand prices
@@ -230,7 +229,7 @@ python3 -m torch.distributed.launch --nproc_per_node ${NUM_GPUS} run_mlm.py \
                         --weight_decay="0.01" \
                         --per_device_train_batch_size="32" \
                         --per_device_eval_batch_size="32" \
-												--gradient_accumulation="4" \
+                        --gradient_accumulation="4" \
                         --learning_rate="3e-4" \
                         --warmup_steps="1000" \
                         --overwrite_output_dir \
@@ -242,5 +241,5 @@ python3 -m torch.distributed.launch --nproc_per_node ${NUM_GPUS} run_mlm.py \
                         --logging_steps="500" \
                         --evaluation_strategy="steps" \
                         --report_to="tensorboard" \
-												--save_strategy="no"
+                        --save_strategy="no"
 ```
