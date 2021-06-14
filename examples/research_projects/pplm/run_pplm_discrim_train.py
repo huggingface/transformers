@@ -23,10 +23,10 @@ import time
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data as data
 from nltk.tokenize.treebank import TreebankWordDetokenizer
+from torch import nn
 from torchtext import data as torchtext_data
 from torchtext import datasets
 from tqdm import tqdm, trange
@@ -42,7 +42,7 @@ example_sentence = "This is incredible! I love it, this is the best chicken I ha
 max_length_seq = 100
 
 
-class Discriminator(torch.nn.Module):
+class Discriminator(nn.Module):
     """Transformer encoder followed by a Classification Head"""
 
     def __init__(self, class_size, pretrained_model="gpt2-medium", cached_mode=False, device="cpu"):
@@ -76,7 +76,7 @@ class Discriminator(torch.nn.Module):
             avg_hidden = self.avg_representation(x.to(self.device))
 
         logits = self.classifier_head(avg_hidden)
-        probs = F.log_softmax(logits, dim=-1)
+        probs = nn.functional.log_softmax(logits, dim=-1)
 
         return probs
 
@@ -140,7 +140,7 @@ def train_epoch(data_loader, discriminator, optimizer, epoch=0, log_interval=10,
         optimizer.zero_grad()
 
         output_t = discriminator(input_t)
-        loss = F.nll_loss(output_t, target_t)
+        loss = nn.functional.nll_loss(output_t, target_t)
         loss.backward(retain_graph=True)
         optimizer.step()
 
@@ -167,7 +167,7 @@ def evaluate_performance(data_loader, discriminator, device="cpu"):
             input_t, target_t = input_t.to(device), target_t.to(device)
             output_t = discriminator(input_t)
             # sum up batch loss
-            test_loss += F.nll_loss(output_t, target_t, reduction="sum").item()
+            test_loss += nn.functional.nll_loss(output_t, target_t, reduction="sum").item()
             # get the index of the max log-probability
             pred_t = output_t.argmax(dim=1, keepdim=True)
             correct += pred_t.eq(target_t.view_as(pred_t)).sum().item()
