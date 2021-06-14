@@ -127,30 +127,54 @@ class ForcedBOSTokenLogitsProcessor:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class ForcedEOSTokenLogitsProcessor:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class HammingDiversityLogitsProcessor:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class InfNanRemoveLogitsProcessor:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class LogitsProcessor:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class LogitsProcessorList:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class LogitsWarper:
@@ -162,25 +186,45 @@ class MinLengthLogitsProcessor:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class NoBadWordsLogitsProcessor:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class NoRepeatNGramLogitsProcessor:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class PrefixConstrainedLogitsProcessor:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
 
 class RepetitionPenaltyLogitsProcessor:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class TemperatureLogitsWarper:
