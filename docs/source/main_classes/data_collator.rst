@@ -69,3 +69,10 @@ DataCollatorForPermutationLanguageModeling
 
 .. autoclass:: transformers.data.data_collator.DataCollatorForPermutationLanguageModeling
     :members: mask_tokens
+
+
+TFDataCollatorForLanguageModeling
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.data.data_tf_collator.TFDataCollatorForLanguageModeling
+    :members: tf_mask_tokens

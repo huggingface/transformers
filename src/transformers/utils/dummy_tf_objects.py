@@ -12,6 +12,15 @@ class TensorFlowBenchmark:
         requires_backends(self, ["tf"])
 
 
+class TFDataCollatorForLanguageModeling:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
 def tf_top_k_top_p_filtering(*args, **kwargs):
     requires_backends(tf_top_k_top_p_filtering, ["tf"])
 
