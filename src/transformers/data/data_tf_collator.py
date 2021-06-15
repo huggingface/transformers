@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import tensorflow as tf
 
