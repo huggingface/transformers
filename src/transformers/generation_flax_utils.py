@@ -284,9 +284,11 @@ class FlaxGenerationMixin:
         elif not do_sample and num_beams > 1:
             # broadcast input_ids & encoder_outputs
             input_ids = self._expand_to_num_beams(input_ids, num_beams=num_beams)
-            model_kwargs["encoder_outputs"]["last_hidden_state"] = self._expand_to_num_beams(
-                model_kwargs["encoder_outputs"]["last_hidden_state"], num_beams=num_beams
-            )
+
+            if "encoder_outputs" in model_kwargs:
+                model_kwargs["encoder_outputs"]["last_hidden_state"] = self._expand_to_num_beams(
+                    model_kwargs["encoder_outputs"]["last_hidden_state"], num_beams=num_beams
+                )
 
             if "attention_mask" in model_kwargs:
                 model_kwargs["attention_mask"] = self._expand_to_num_beams(
@@ -638,9 +640,10 @@ class FlaxGenerationMixin:
         model = self.decode if self.config.is_encoder_decoder else self
 
         # flatten beam dim
-        model_kwargs["encoder_outputs"]["last_hidden_state"] = flatten_beam_dim(
-            model_kwargs["encoder_outputs"]["last_hidden_state"]
-        )
+        if "encoder_outputs" in model_kwargs:
+            model_kwargs["encoder_outputs"]["last_hidden_state"] = flatten_beam_dim(
+                model_kwargs["encoder_outputs"]["last_hidden_state"]
+            )
         if "attention_mask" in model_kwargs:
             model_kwargs["attention_mask"] = flatten_beam_dim(model_kwargs["attention_mask"])
 
