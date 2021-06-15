@@ -124,7 +124,7 @@ class FlaxGenerationMixin:
         top_p: Optional[float] = None,
         temperature: Optional[float] = None,
         trace: bool = True,
-        params: dict = None,
+        params: Optional[Dict[str, jax_xla.DeviceArray]] = None,
         **model_kwargs,
     ):
         r"""
