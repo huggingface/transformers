@@ -26,6 +26,9 @@ from io import StringIO
 from pathlib import Path
 from typing import Iterator, Union
 
+from transformers import logging as transformers_logging
+
+from .deepspeed import is_deepspeed_available
 from .file_utils import (
     is_datasets_available,
     is_faiss_available,
@@ -36,6 +39,7 @@ from .file_utils import (
     is_sentencepiece_available,
     is_soundfile_availble,
     is_tf_available,
+    is_timm_available,
     is_tokenizers_available,
     is_torch_available,
     is_torch_tpu_available,
@@ -222,6 +226,19 @@ def require_git_lfs(test_case):
 def require_onnx(test_case):
     if not is_onnx_available():
         return unittest.skip("test requires ONNX")(test_case)
+    else:
+        return test_case
+
+
+def require_timm(test_case):
+    """
+    Decorator marking a test that requires Timm.
+
+    These tests are skipped when Timm isn't installed.
+
+    """
+    if not is_timm_available():
+        return unittest.skip("test requires Timm")(test_case)
     else:
         return test_case
 
@@ -452,6 +469,16 @@ def require_soundfile(test_case):
         return test_case
 
 
+def require_deepspeed(test_case):
+    """
+    Decorator marking a test that requires deepspeed
+    """
+    if not is_deepspeed_available():
+        return unittest.skip("test requires deepspeed")(test_case)
+    else:
+        return test_case
+
+
 def get_gpu_count():
     """
     Return the number of available gpus (regardless of whether torch or tf is used)
@@ -646,6 +673,26 @@ class CaptureLogger:
 
     def __repr__(self):
         return f"captured: {self.out}\n"
+
+
+@contextlib.contextmanager
+def LoggingLevel(level):
+    """
+    This is a context manager to temporarily change transformers modules logging level to the desired value and have it
+    restored to the original setting at the end of the scope.
+
+    For example ::
+
+        with LoggingLevel(logging.INFO):
+            AutoModel.from_pretrained("gpt2") # calls logger.info() several times
+
+    """
+    orig_level = transformers_logging.get_verbosity()
+    try:
+        transformers_logging.set_verbosity(level)
+        yield
+    finally:
+        transformers_logging.set_verbosity(orig_level)
 
 
 @contextlib.contextmanager

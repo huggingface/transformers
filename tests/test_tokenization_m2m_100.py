@@ -20,7 +20,7 @@ from shutil import copyfile
 
 from transformers import M2M100Tokenizer, is_torch_available
 from transformers.file_utils import is_sentencepiece_available
-from transformers.testing_utils import nested_simplify, require_sentencepiece, require_tokenizers, require_torch
+from transformers.testing_utils import nested_simplify, require_sentencepiece, require_tokenizers, require_torch, slow
 
 
 if is_sentencepiece_available():
@@ -69,6 +69,25 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "This is a test",
         )
 
+    def test_convert_token_and_id(self):
+        """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
+        token = "</s>"
+        token_id = 0
+
+        self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
+        self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
+
+    def test_get_vocab(self):
+        vocab_keys = list(self.get_tokenizer().get_vocab().keys())
+
+        self.assertEqual(vocab_keys[0], "</s>")
+        self.assertEqual(vocab_keys[1], "<unk>")
+        self.assertEqual(vocab_keys[-1], "<s>")
+        self.assertEqual(len(vocab_keys), 10)
+
+    def test_vocab_size(self):
+        self.assertEqual(self.get_tokenizer().vocab_size, 117)
+
     @unittest.skip("Skip this test while all models are still to be uploaded.")
     def test_pretrained_model_lists(self):
         pass
@@ -89,6 +108,18 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         text = tokenizer.convert_tokens_to_string(tokens)
         self.assertEqual(text, "This is a test")
+
+    @slow
+    def test_tokenizer_integration(self):
+        # fmt: off
+        expected_encoding = {'input_ids': [[128022, 110108, 397, 11, 38272, 2247, 124811, 285, 18105, 1586, 207, 7, 39534, 4428, 397, 1019, 18105, 1586, 207, 7, 41337, 16786, 241, 7, 20214, 17, 125690, 10398, 7, 44378, 58069, 68342, 7798, 7343, 11, 299, 33310, 4, 158, 37350, 94077, 4569, 299, 33310, 90, 4, 52840, 290, 4, 31270, 112, 299, 682, 4, 52840, 39953, 14079, 193, 52519, 90894, 17894, 120697, 11, 40445, 551, 17, 1019, 52519, 90894, 17756, 963, 11, 40445, 480, 17, 9792, 1120, 5173, 1393, 6240, 16786, 241, 120996, 28, 1245, 1393, 118240, 11123, 1019, 93612, 2691, 10618, 98058, 120409, 1928, 279, 4, 40683, 367, 178, 207, 1019, 103, 103121, 506, 65296, 5, 2], [128022, 21217, 367, 117, 125450, 128, 719, 7, 7308, 40, 93612, 12669, 1116, 16704, 71, 17785, 3699, 15592, 35, 144, 9584, 241, 11943, 713, 950, 799, 2247, 88427, 150, 149, 118813, 120706, 1019, 106906, 81518, 28, 1224, 22799, 397, 5, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [128022, 1658, 123311, 5155, 5578, 4722, 279, 14947, 2366, 1120, 1197, 14, 1348, 9232, 5, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # noqa: E501
+        # fmt: on
+
+        self.tokenizer_integration_test_util(
+            expected_encoding=expected_encoding,
+            model_name="facebook/m2m100_418M",
+            revision="c168bae485c864188cf9aa0e4108b0b6934dc91e",
+        )
 
 
 @require_torch

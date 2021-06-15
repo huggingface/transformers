@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     PASS,
     USER,
     TestCasePlus,
+    get_gpu_count,
     get_tests_dir,
     is_staging_test,
     require_datasets,
@@ -52,6 +53,7 @@ from transformers.utils.hp_naming import TrialShortNamer
 
 if is_torch_available():
     import torch
+    from torch import nn
     from torch.utils.data import IterableDataset
 
     from transformers import (
@@ -153,11 +155,11 @@ if is_torch_available():
             for i in range(len(self.dataset)):
                 yield self.dataset[i]
 
-    class RegressionModel(torch.nn.Module):
+    class RegressionModel(nn.Module):
         def __init__(self, a=0, b=0, double_output=False):
             super().__init__()
-            self.a = torch.nn.Parameter(torch.tensor(a).float())
-            self.b = torch.nn.Parameter(torch.tensor(b).float())
+            self.a = nn.Parameter(torch.tensor(a).float())
+            self.b = nn.Parameter(torch.tensor(b).float())
             self.double_output = double_output
             self.config = None
 
@@ -165,21 +167,21 @@ if is_torch_available():
             y = input_x * self.a + self.b
             if labels is None:
                 return (y, y) if self.double_output else (y,)
-            loss = torch.nn.functional.mse_loss(y, labels)
+            loss = nn.functional.mse_loss(y, labels)
             return (loss, y, y) if self.double_output else (loss, y)
 
-    class RegressionDictModel(torch.nn.Module):
+    class RegressionDictModel(nn.Module):
         def __init__(self, a=0, b=0):
             super().__init__()
-            self.a = torch.nn.Parameter(torch.tensor(a).float())
-            self.b = torch.nn.Parameter(torch.tensor(b).float())
+            self.a = nn.Parameter(torch.tensor(a).float())
+            self.b = nn.Parameter(torch.tensor(b).float())
             self.config = None
 
         def forward(self, input_x, labels=None, **kwargs):
             y = input_x * self.a + self.b
             result = {"output": y}
             if labels is not None:
-                result["loss"] = torch.nn.functional.mse_loss(y, labels)
+                result["loss"] = nn.functional.mse_loss(y, labels)
             return result
 
     class RegressionPreTrainedModel(PreTrainedModel):
@@ -188,15 +190,15 @@ if is_torch_available():
 
         def __init__(self, config):
             super().__init__(config)
-            self.a = torch.nn.Parameter(torch.tensor(config.a).float())
-            self.b = torch.nn.Parameter(torch.tensor(config.b).float())
+            self.a = nn.Parameter(torch.tensor(config.a).float())
+            self.b = nn.Parameter(torch.tensor(config.b).float())
             self.double_output = config.double_output
 
         def forward(self, input_x, labels=None, **kwargs):
             y = input_x * self.a + self.b
             if labels is None:
                 return (y, y) if self.double_output else (y,)
-            loss = torch.nn.functional.mse_loss(y, labels)
+            loss = nn.functional.mse_loss(y, labels)
             return (loss, y, y) if self.double_output else (loss, y)
 
     class RegressionRandomPreTrainedModel(PreTrainedModel):
@@ -205,8 +207,8 @@ if is_torch_available():
 
         def __init__(self, config):
             super().__init__(config)
-            self.a = torch.nn.Parameter(torch.tensor(config.a).float())
-            self.b = torch.nn.Parameter(torch.tensor(config.b).float())
+            self.a = nn.Parameter(torch.tensor(config.a).float())
+            self.b = nn.Parameter(torch.tensor(config.b).float())
 
         def forward(self, input_x, labels=None, **kwargs):
             y = input_x * self.a + self.b
@@ -218,21 +220,21 @@ if is_torch_available():
 
             if labels is None:
                 return (y,)
-            loss = torch.nn.functional.mse_loss(y, labels)
+            loss = nn.functional.mse_loss(y, labels)
             return (loss, y)
 
-    class TstLayer(torch.nn.Module):
+    class TstLayer(nn.Module):
         def __init__(self, hidden_size):
             super().__init__()
-            self.linear1 = torch.nn.Linear(hidden_size, hidden_size)
-            self.ln1 = torch.nn.LayerNorm(hidden_size)
-            self.linear2 = torch.nn.Linear(hidden_size, hidden_size)
-            self.ln2 = torch.nn.LayerNorm(hidden_size)
-            self.bias = torch.nn.Parameter(torch.zeros(hidden_size))
+            self.linear1 = nn.Linear(hidden_size, hidden_size)
+            self.ln1 = nn.LayerNorm(hidden_size)
+            self.linear2 = nn.Linear(hidden_size, hidden_size)
+            self.ln2 = nn.LayerNorm(hidden_size)
+            self.bias = nn.Parameter(torch.zeros(hidden_size))
 
         def forward(self, x):
-            h = self.ln1(torch.nn.functional.relu(self.linear1(x)))
-            h = torch.nn.functional.relu(self.linear2(x))
+            h = self.ln1(nn.functional.relu(self.linear1(x)))
+            h = nn.functional.relu(self.linear2(x))
             return self.ln2(x + h + self.bias)
 
     def get_regression_trainer(a=0, b=0, double_output=False, train_len=64, eval_len=64, pretrained=True, **kwargs):
@@ -311,13 +313,11 @@ class TrainerIntegrationCommon:
         log_history = state.pop("log_history", None)
         log_history1 = state1.pop("log_history", None)
         self.assertEqual(state, state1)
+        skip_log_keys = ["train_runtime", "train_samples_per_second", "train_steps_per_second", "train_loss"]
         for log, log1 in zip(log_history, log_history1):
-            _ = log.pop("train_runtime", None)
-            _ = log1.pop("train_runtime", None)
-            _ = log.pop("train_samples_per_second", None)
-            _ = log1.pop("train_samples_per_second", None)
-            _ = log.pop("train_steps_per_second", None)
-            _ = log1.pop("train_steps_per_second", None)
+            for key in skip_log_keys:
+                _ = log.pop(key, None)
+                _ = log1.pop(key, None)
             self.assertEqual(log, log1)
 
 
@@ -589,6 +589,25 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertFalse(torch.allclose(trainer.model.a, a))
         self.assertFalse(torch.allclose(trainer.model.b, b))
         self.assertEqual(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 1.0)
+
+    @require_torch
+    def test_adafactor_lr_none(self):
+        # test the special case where lr=None, since Trainer can't not have lr_scheduler
+
+        from transformers.optimization import Adafactor, AdafactorSchedule
+
+        train_dataset = RegressionDataset()
+        args = TrainingArguments("./regression")
+        model = RegressionModel()
+        optimizer = Adafactor(model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None)
+        lr_scheduler = AdafactorSchedule(optimizer)
+        trainer = Trainer(model, args, train_dataset=train_dataset, optimizers=(optimizer, lr_scheduler))
+        trainer.train()
+
+        (a, b) = self.default_trained_model
+        self.assertFalse(torch.allclose(trainer.model.a, a))
+        self.assertFalse(torch.allclose(trainer.model.b, b))
+        self.assertGreater(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 0)
 
     def test_model_init(self):
         train_dataset = RegressionDataset()
@@ -1047,7 +1066,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         assert_flos_extraction(trainer, trainer.model)
 
         # with enforced DataParallel
-        assert_flos_extraction(trainer, torch.nn.DataParallel(trainer.model))
+        assert_flos_extraction(trainer, nn.DataParallel(trainer.model))
 
         trainer.train()
         self.assertTrue(isinstance(trainer.state.total_flos, float))
@@ -1115,15 +1134,17 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # this is a sensitive test so let's keep debugging printouts in place for quick diagnosis.
         # it's using pretty large safety margins, but small enough to detect broken functionality.
         debug = 0
+        n_gpus = get_gpu_count()
 
         bs = 8
+        eval_len = 16 * n_gpus
         # make the params somewhat big so that there will be enough RAM consumed to be able to
         # measure things. We should get about 64KB for a+b in fp32
         a = torch.ones(1000, bs) + 0.001
         b = torch.ones(1000, bs) - 0.001
 
         # 1. with mem metrics enabled
-        trainer = get_regression_trainer(a=a, b=b, eval_len=16, skip_memory_metrics=False)
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, skip_memory_metrics=False)
         metrics = trainer.evaluate()
         del trainer
         gc.collect()
@@ -1144,7 +1165,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertLess(fp32_eval, 5_000)
 
         # 2. with mem metrics disabled
-        trainer = get_regression_trainer(a=a, b=b, eval_len=16, fp16_full_eval=True, skip_memory_metrics=False)
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, fp16_full_eval=True, skip_memory_metrics=False)
         metrics = trainer.evaluate()
         fp16_init = metrics["init_mem_gpu_alloc_delta"]
         fp16_eval = metrics["eval_mem_gpu_alloc_delta"]
@@ -1166,7 +1187,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
 
     def test_no_wd_param_group(self):
-        model = torch.nn.Sequential(TstLayer(128), torch.nn.ModuleList([TstLayer(128), TstLayer(128)]))
+        model = nn.Sequential(TstLayer(128), nn.ModuleList([TstLayer(128), TstLayer(128)]))
         trainer = Trainer(model=model)
         trainer.create_optimizer_and_scheduler(10)
         # fmt: off

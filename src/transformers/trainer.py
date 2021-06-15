@@ -44,8 +44,6 @@ from .integrations import (  # isort: split
     is_ray_tune_available,
     run_hp_search_optuna,
     run_hp_search_ray,
-    deepspeed_init,
-    is_deepspeed_zero3_enabled,
 )
 
 import numpy as np
@@ -61,6 +59,7 @@ from . import __version__
 from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
+from .deepspeed import deepspeed_init, is_deepspeed_zero3_enabled
 from .dependency_versions_check import dep_version_check
 from .file_utils import (
     CONFIG_NAME,
@@ -265,7 +264,7 @@ class Trainer:
 
     def __init__(
         self,
-        model: Union[PreTrainedModel, torch.nn.Module] = None,
+        model: Union[PreTrainedModel, nn.Module] = None,
         args: TrainingArguments = None,
         data_collator: Optional[DataCollator] = None,
         train_dataset: Optional[Dataset] = None,
@@ -773,7 +772,7 @@ class Trainer:
         Trainer's init through :obj:`optimizers`, or subclass and override this method in a subclass.
         """
         if self.optimizer is None:
-            decay_parameters = get_parameter_names(self.model, [torch.nn.LayerNorm])
+            decay_parameters = get_parameter_names(self.model, [nn.LayerNorm])
             decay_parameters = [name for name in decay_parameters if "bias" not in name]
             optimizer_grouped_parameters = [
                 {
@@ -861,6 +860,11 @@ class Trainer:
             setattr(self.args, key, value)
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             logger.info("Trial:", trial.params)
+        if self.args.deepspeed:
+            # Rebuild the deepspeed config to reflect the updated training parameters
+            from transformers.deepspeed import HfDeepSpeedConfig
+
+            self.args.hf_deepspeed_config = HfDeepSpeedConfig(self.args)
 
     def _report_to_hp_search(
         self, trial: Union["optuna.Trial", Dict[str, Any]], epoch: int, metrics: Dict[str, float]
@@ -929,7 +933,7 @@ class Trainer:
 
         # Multi-gpu training (should be after apex fp16 initialization)
         if self.args.n_gpu > 1:
-            model = torch.nn.DataParallel(model)
+            model = nn.DataParallel(model)
 
         # Note: in torch.distributed mode, there's no point in wrapping the model
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
@@ -966,7 +970,7 @@ class Trainer:
                 find_unused_parameters = not getattr(model.config, "gradient_checkpointing", False)
             else:
                 find_unused_parameters = True
-            model = torch.nn.parallel.DistributedDataParallel(
+            model = nn.parallel.DistributedDataParallel(
                 model,
                 device_ids=[self.args.local_rank],
                 output_device=self.args.local_rank,
@@ -1284,7 +1288,7 @@ class Trainer:
                             model.clip_grad_norm_(args.max_grad_norm)
                         else:
                             # Revert to normal clipping otherwise, handling Apex or full precision
-                            torch.nn.utils.clip_grad_norm_(
+                            nn.utils.clip_grad_norm_(
                                 amp.master_params(self.optimizer) if self.use_apex else model.parameters(),
                                 args.max_grad_norm,
                             )
@@ -1357,20 +1361,24 @@ class Trainer:
                     self.state.best_model_checkpoint, load_optimizer_states=False, load_lr_scheduler_states=False
                 )
 
+        # add remaining tr_loss
+        self._total_loss_scalar += tr_loss.item()
+        train_loss = self._total_loss_scalar / self.state.global_step
+
         metrics = speed_metrics("train", start_time, num_samples=num_train_samples, num_steps=self.state.max_steps)
         self.store_flos()
         metrics["total_flos"] = self.state.total_flos
-        self.log(metrics)
-
-        self.control = self.callback_handler.on_train_end(args, self.state, self.control)
-        # add remaining tr_loss
-        self._total_loss_scalar += tr_loss.item()
+        metrics["train_loss"] = train_loss
 
         self.is_in_train = False
 
         self._memory_tracker.stop_and_update_metrics(metrics)
 
-        return TrainOutput(self.state.global_step, self._total_loss_scalar / self.state.global_step, metrics)
+        self.log(metrics)
+
+        self.control = self.callback_handler.on_train_end(args, self.state, self.control)
+
+        return TrainOutput(self.state.global_step, train_loss, metrics)
 
     def _load_state_dict_in_model(self, state_dict):
         load_result = self.model.load_state_dict(state_dict, strict=False)
@@ -1693,7 +1701,14 @@ class Trainer:
         """
         for k, v in inputs.items():
             if isinstance(v, torch.Tensor):
-                inputs[k] = v.to(self.args.device)
+                kwargs = dict(device=self.args.device)
+                if self.deepspeed and inputs[k].dtype != torch.int64:
+                    # NLP models inputs are int64 and those get adjusted to the right dtype of the
+                    # embedding. Other models such as wav2vec2's inputs are already float and thus
+                    # may need special handling to match the dtypes of the model
+                    kwargs.update(dict(dtype=self.args.hf_deepspeed_config.dtype()))
+
+                inputs[k] = v.to(**kwargs)
 
         if self.args.past_index >= 0 and self._past is not None:
             inputs["mems"] = self._past
