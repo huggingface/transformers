@@ -18,7 +18,7 @@ import tempfile
 import unittest
 
 from transformers import BatchEncoding, CanineTokenizer
-from transformers.file_utils import cached_property, is_torch_available
+from transformers.file_utils import cached_property
 from transformers.testing_utils import require_tokenizers
 from transformers.tokenization_utils import AddedToken
 

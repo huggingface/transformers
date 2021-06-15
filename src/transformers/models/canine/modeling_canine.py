@@ -36,7 +36,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import (
     PreTrainedModel,
-    SequenceSummary,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
@@ -1271,7 +1270,7 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
@@ -1294,7 +1293,7 @@ class CanineForMultipleChoice(CaninePreTrainedModel):
         super().__init__(config)
 
         self.canine = CanineModel(config)
-        self.sequence_summary = SequenceSummary(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         self.init_weights()
@@ -1350,9 +1349,9 @@ class CanineForMultipleChoice(CaninePreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        pooled_output = outputs[1]
 
-        pooled_output = self.sequence_summary(sequence_output)
+        pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
         reshaped_logits = logits.view(-1, num_choices)
 
@@ -1362,7 +1361,7 @@ class CanineForMultipleChoice(CaninePreTrainedModel):
             loss = loss_fct(reshaped_logits, labels)
 
         if not return_dict:
-            output = (reshaped_logits,) + outputs[1:]
+            output = (reshaped_logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
@@ -1450,7 +1449,7 @@ class CanineForTokenClassification(CaninePreTrainedModel):
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
@@ -1471,8 +1470,6 @@ class CanineForTokenClassification(CaninePreTrainedModel):
 class CanineForQuestionAnswering(CaninePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-
-        config.num_labels = 2
         self.num_labels = config.num_labels
 
         self.canine = CanineModel(config)
@@ -1550,7 +1547,7 @@ class CanineForQuestionAnswering(CaninePreTrainedModel):
             total_loss = (start_loss + end_loss) / 2
 
         if not return_dict:
-            output = (start_logits, end_logits) + outputs[1:]
+            output = (start_logits, end_logits) + outputs[2:]
             return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
