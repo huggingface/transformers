@@ -467,7 +467,7 @@ def main():
         trainer.save_metrics("eval", metrics)
 
     if training_args.push_to_hub:
-        kwargs = {"finetuned_from": model_args.model_name_or_path, "tags": "text-generation"}
+        kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "text-generation"}
         if data_args.dataset_name is not None:
             kwargs["dataset_tags"] = data_args.dataset_name
             if data_args.dataset_config_name is not None:

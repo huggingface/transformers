@@ -356,6 +356,7 @@ class TrainingSummary:
     license: Optional[str] = None
     tags: Optional[Union[str, List[str]]] = None
     finetuned_from: Optional[str] = None
+    tasks: Optional[Union[str, List[str]]] = None
     dataset: Optional[Union[str, List[str]]] = None
     dataset_tags: Optional[Union[str, List[str]]] = None
     dataset_args: Optional[Union[str, List[str]]] = None
@@ -392,7 +393,7 @@ class TrainingSummary:
         dataset_arg_mapping = {tag: arg for tag, arg in zip(dataset_tags, dataset_args)}
 
         task_mapping = {
-            tag: TASK_TAG_TO_NAME_MAPPING[tag] for tag in _listify(self.tags) if tag in TASK_TAG_TO_NAME_MAPPING
+            task: TASK_TAG_TO_NAME_MAPPING[task] for task in _listify(self.tasks) if task in TASK_TAG_TO_NAME_MAPPING
         }
 
         if len(task_mapping) == 0 and len(dataset_mapping) == 0:
@@ -509,6 +510,7 @@ class TrainingSummary:
         tags=None,
         model_name=None,
         finetuned_from=None,
+        tasks=None,
         dataset_tags=None,
         dataset=None,
         dataset_args=None,
@@ -536,11 +538,11 @@ class TrainingSummary:
             finetuned_from = trainer.model.config._name_or_path
 
         # Infer default task tag:
-        if tags is None:
+        if tasks is None:
             model_class_name = trainer.model.__class__.__name__
             for task, mapping in PIPELINE_TAGS_MAPPING.items():
                 if model_class_name in _get_mapping_values(mapping):
-                    tags = task
+                    tasks = task
 
         if model_name is None:
             model_name = Path(trainer.args.output_dir).name
@@ -554,6 +556,7 @@ class TrainingSummary:
             tags=tags,
             model_name=model_name,
             finetuned_from=finetuned_from,
+            tasks=tasks,
             dataset_tags=dataset_tags,
             dataset=dataset,
             dataset_args=dataset_args,
