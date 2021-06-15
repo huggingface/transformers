@@ -967,7 +967,7 @@ class HubertForCTC(HubertPreTrainedModel):
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(HUBERT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
