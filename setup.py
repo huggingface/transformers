@@ -225,10 +225,14 @@ extras["sklearn"] = deps_list("scikit-learn")
 
 extras["tf"] = deps_list("tensorflow", "tensorflow-probability", "onnxconverter-common", "keras2onnx")
 <<<<<<< HEAD
+<<<<<<< HEAD
 extras["tf-cpu"] = deps_list("tensorflow-cpu", "tensorflow-probability", "onnxconverter-common", "keras2onnx")
 =======
 extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "keras2onnx")
 >>>>>>> Added TensorFlow_Probability.
+=======
+extras["tf-cpu"] = deps_list("tensorflow-cpu", "tensorflow-probability", "onnxconverter-common", "keras2onnx")
+>>>>>>> Added TensorFlow_Probability to tf-cpu.
 
 extras["torch"] = deps_list("torch")
 
