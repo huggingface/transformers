@@ -412,15 +412,31 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationT
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
             model = model_class_name.from_pretrained("facebook/bart-base", from_pt=True)
-            # FlaxBartForSequenceClassification expects eos token in input_ids
+            # FlaxBartForSequenceClassification expects eos tokenizeren in input_ids
             input_ids = np.ones((1, 1)) * model.config.eos_token_id
             outputs = model(input_ids)
             self.assertIsNotNone(outputs)
 
     @slow
+    def test_summarization_fast(self):
+        model = FlaxBartForConditionalGeneration.from_pretrained("sshleifer/distilbart-cnn-6-6")
+        tokenizer = BartTokenizer.from_pretrained("sshleifer/distilbart-cnn-6-6")
+
+        input_str = "This sentence is made of three parts. Each part is important on its own. One part is about animals, the other part about planes, and the last part about housing."
+
+        input_ids = tokenizer(input_str, return_tensors="np").input_ids
+        sequences = model.generate(input_ids, num_beams=2, max_length=20).sequences
+
+        output_str = tokenizer.batch_decode(sequences)[0]
+
+        assert (
+            output_str == "</s><s>This sentence is made of three parts. One part is about animals, the other part</s>"
+        )
+
+    @slow
     def test_cnn_summarization_same_as_fairseq(self):
-        hf = FlaxBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
-        tok = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        model = FlaxBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
+        tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
 
         FRANCE_ARTICLE = ' Marseille, France (CNN)The French prosecutor leading an investigation into the crash of Germanwings Flight 9525 insisted Wednesday that he was not aware of any video footage from on board the plane. Marseille prosecutor Brice Robin told CNN that "so far no videos were used in the crash investigation." He added, "A person who has such a video needs to immediately give it to the investigators." Robin\'s comments follow claims by two magazines, German daily Bild and French Paris Match, of a cell phone video showing the harrowing final seconds from on board Germanwings Flight 9525 as it crashed into the French Alps. All 150 on board were killed. Paris Match and Bild reported that the video was recovered from a phone at the wreckage site. The two publications described the supposed video, but did not post it on their websites. The publications said that they watched the video, which was found by a source close to the investigation. "One can hear cries of \'My God\' in several languages," Paris Match reported. "Metallic banging can also be heard more than three times, perhaps of the pilot trying to open the cockpit door with a heavy object.  Towards the end, after a heavy shake, stronger than the others, the screaming intensifies. Then nothing." "It is a very disturbing scene," said Julian Reichelt, editor-in-chief of Bild online. An official with France\'s accident investigation agency, the BEA, said the agency is not aware of any such video. Lt. Col. Jean-Marc Menichini, a French Gendarmerie spokesman in charge of communications on rescue efforts around the Germanwings crash site, told CNN that the reports were "completely wrong" and "unwarranted." Cell phones have been collected at the site, he said, but that they "hadn\'t been exploited yet." Menichini said he believed the cell phones would need to be sent to the Criminal Research Institute in Rosny sous-Bois, near Paris, in order to be analyzed by specialized technicians working hand-in-hand with investigators. But none of the cell phones found so far have been sent to the institute, Menichini said. Asked whether staff involved in the search could have leaked a memory card to the media, Menichini answered with a categorical "no." Reichelt told "Erin Burnett: Outfront" that he had watched the video and stood by the report, saying Bild and Paris Match are "very confident" that the clip is real. He noted that investigators only revealed they\'d recovered cell phones from the crash site after Bild and Paris Match published their reports. "That is something we did not know before. ... Overall we can say many things of the investigation weren\'t revealed by the investigation at the beginning," he said. What was mental state of Germanwings co-pilot? German airline Lufthansa confirmed Tuesday that co-pilot Andreas Lubitz had battled depression years before he took the controls of Germanwings Flight 9525, which he\'s accused of deliberately crashing last week in the French Alps. Lubitz told his Lufthansa flight training school in 2009 that he had a "previous episode of severe depression," the airline said Tuesday. Email correspondence between Lubitz and the school discovered in an internal investigation, Lufthansa said, included medical documents he submitted in connection with resuming his flight training. The announcement indicates that Lufthansa, the parent company of Germanwings, knew of Lubitz\'s battle with depression, allowed him to continue training and ultimately put him in the cockpit. Lufthansa, whose CEO Carsten Spohr previously said Lubitz was 100% fit to fly, described its statement Tuesday as a "swift and seamless clarification" and said it was sharing the information and documents -- including training and medical records -- with public prosecutors. Spohr traveled to the crash site Wednesday, where recovery teams have been working for the past week to recover human remains and plane debris scattered across a steep mountainside. He saw the crisis center set up in Seyne-les-Alpes, laid a wreath in the village of Le Vernet, closer to the crash site, where grieving families have left flowers at a simple stone memorial. Menichini told CNN late Tuesday that no visible human remains were left at the site but recovery teams would keep searching. French President Francois Hollande, speaking Tuesday, said that it should be possible to identify all the victims using DNA analysis by the end of the week, sooner than authorities had previously suggested. In the meantime, the recovery of the victims\' personal belongings will start Wednesday, Menichini said. Among those personal belongings could be more cell phones belonging to the 144 passengers and six crew on board. Check out the latest from our correspondents . The details about Lubitz\'s correspondence with the flight school during his training were among several developments as investigators continued to delve into what caused the crash and Lubitz\'s possible motive for downing the jet. A Lufthansa spokesperson told CNN on Tuesday that Lubitz had a valid medical certificate, had passed all his examinations and "held all the licenses required." Earlier, a spokesman for the prosecutor\'s office in Dusseldorf, Christoph Kumpa, said medical records reveal Lubitz suffered from suicidal tendencies at some point before his aviation career and underwent psychotherapy before he got his pilot\'s license. Kumpa emphasized there\'s no evidence suggesting Lubitz was suicidal or acting aggressively before the crash. Investigators are looking into whether Lubitz feared his medical condition would cause him to lose his pilot\'s license, a European government official briefed on the investigation told CNN on Tuesday. While flying was "a big part of his life," the source said, it\'s only one theory being considered. Another source, a law enforcement official briefed on the investigation, also told CNN that authorities believe the primary motive for Lubitz to bring down the plane was that he feared he would not be allowed to fly because of his medical problems. Lubitz\'s girlfriend told investigators he had seen an eye doctor and a neuropsychologist, both of whom deemed him unfit to work recently and concluded he had psychological issues, the European government official said. But no matter what details emerge about his previous mental health struggles, there\'s more to the story, said Brian Russell, a forensic psychologist. "Psychology can explain why somebody would turn rage inward on themselves about the fact that maybe they weren\'t going to keep doing their job and they\'re upset about that and so they\'re suicidal," he said. "But there is no mental illness that explains why somebody then feels entitled to also take that rage and turn it outward on 149 other people who had nothing to do with the person\'s problems." Germanwings crash compensation: What we know . Who was the captain of Germanwings Flight 9525? CNN\'s Margot Haddad reported from Marseille and Pamela Brown from Dusseldorf, while Laura Smith-Spark wrote from London. CNN\'s Frederik Pleitgen, Pamela Boykoff, Antonia Mortensen, Sandrine Amiel and Anna-Maja Rappard contributed to this report.'  # @noq
 
@@ -431,7 +447,7 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationT
 
         ARTICLE_SUBWAY = ' New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York. A year later, she got married again in Westchester County, but to a different man and without divorcing her first husband.  Only 18 days after that marriage, she got hitched yet again. Then, Barrientos declared "I do" five more times, sometimes only within two weeks of each other. In 2010, she married once more, this time in the Bronx. In an application for a marriage license, she stated it was her "first and only" marriage. Barrientos, now 39, is facing two criminal counts of "offering a false instrument for filing in the first degree," referring to her false statements on the 2010 marriage license application, according to court documents. Prosecutors said the marriages were part of an immigration scam. On Friday, she pleaded not guilty at State Supreme Court in the Bronx, according to her attorney, Christopher Wright, who declined to comment further. After leaving court, Barrientos was arrested and charged with theft of service and criminal trespass for allegedly sneaking into the New York subway through an emergency exit, said Detective Annette Markowski, a police spokeswoman. In total, Barrientos has been married 10 times, with nine of her marriages occurring between 1999 and 2002.  All occurred either in Westchester County, Long Island, New Jersey or the Bronx. She is believed to still be married to four men, and at one time, she was married to eight men at once, prosecutors say. Prosecutors said the immigration scam involved some of her husbands, who filed for permanent residence status shortly after the marriages.  Any divorces happened only after such filings were approved. It was unclear whether any of the men will be prosecuted. The case was referred to the Bronx District Attorney\'s Office by Immigration and Customs Enforcement and the Department of Homeland Security\'s Investigation Division. Seven of the men are from so-called "red-flagged" countries, including Egypt, Turkey, Georgia, Pakistan and Mali. Her eighth husband, Rashid Rajput, was deported in 2006 to his native Pakistan after an investigation by the Joint Terrorism Task Force. If convicted, Barrientos faces up to four years in prison.  Her next court appearance is scheduled for May 18.'
 
-        dct = tok.batch_encode_plus(
+        dct = tokenizer.batch_encode_plus(
             [FRANCE_ARTICLE, SHORTER_ARTICLE, IRAN_ARTICLE, ARTICLE_SUBWAY],
             max_length=1024,
             padding="max_length",
@@ -441,33 +457,21 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationT
         )
 
         self.assertEqual(1024, dct["input_ids"].shape[1])
-        hypotheses_batch = hf.generate(
+        hypotheses_batch = model.generate(
             input_ids=dct["input_ids"],
             attention_mask=dct["attention_mask"],
             num_beams=2,
         ).sequences
-        import ipdb; ipdb.set_trace()
-        assert hypotheses_batch[:, 1].eq(0).all().item()
+        assert (hypotheses_batch[:, 1] == 0).all().item()
 
         EXPECTED = [
-            "A French prosecutor says he is not aware of any video footage from on board the plane. Two German "
-            "magazines claim to have found a cell phone video showing the crash. The publications say they watched "
-            "the video, which was found by a source close to the investigation. All 150 on board Germanwings Flight "
-            "9525 were killed.",
-            "Palestinian Authority becomes 123rd member of the International Criminal Court. The move gives the court "
-            "jurisdiction over alleged crimes in Palestinian territories. Israel and the United States opposed the "
-            "Palestinians' efforts to join the body. But Palestinian Foreign Minister Riad al-Malki said it was a "
-            "move toward greater justice.",
-            "U.S. and its negotiating partners reached a strong framework agreement with Iran. Peter Bergen: The "
-            "debate that has already begun will likely result in more heat than light. He says critics have made "
-            "dubious assumptions and doubtful assertions. Bergen says the goal was to block Iran from building a "
-            "nuclear weapon.",
-            "Liana Barrientos, 39, has been married 10 times, sometimes within two weeks of each other. Prosecutors "
-            "say the marriages were part of an immigration scam. She pleaded not guilty at State Supreme Court in the "
-            "Bronx on Friday. If convicted, she faces up to four years in prison.",
+            "A French prosecutor says he is not aware of any video footage from on board the plane. Two German magazines claim to have found a cell phone video showing the crash. The publications say they watched the video, which was found by a source close to the investigation. All 150 on board the Germanwings flight were killed.",
+            "Palestinian Authority becomes 123rd member of the International Criminal Court. The move gives the court jurisdiction over alleged crimes in Palestinian territories. Israel and the United States opposed the Palestinians' efforts to join the body. But Palestinian Foreign Minister Riad al-Malki said it was a move toward greater justice.",
+            "U.S. and its negotiating partners reached a strong framework agreement with Iran. Peter Bergen: The debate that has already begun will likely result in more heat than light. Bergen: The most misleading assertion is that the negotiations' objective at the outset was the total elimination of any nuclear program.",
+            "Liana Barrientos, 39, has been married 10 times, sometimes within two weeks of each other. Prosecutors say the marriages were part of an immigration scam. She pleaded not guilty at State Supreme Court in the Bronx on Friday. If convicted, Barrientos faces up to four years in prison.",
         ]
 
-        generated_summaries = tok.batch_decode(
+        generated_summaries = tokenizer.batch_decode(
             hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
         )
         assert generated_summaries == EXPECTED
