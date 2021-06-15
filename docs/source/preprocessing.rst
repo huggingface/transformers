@@ -39,6 +39,12 @@ To automatically download the vocab used during pretraining or fine-tuning a giv
 Base use
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/Yffk5aydLzg" title="YouTube video player"
+   frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
+   picture-in-picture" allowfullscreen></iframe>
+
 A :class:`~transformers.PreTrainedTokenizer` has many methods, but the only one you need to remember for preprocessing
 is its ``__call__``: you just need to feed your sentence to your tokenizer object.
 
@@ -137,6 +143,12 @@ can safely ignore it. You can also pass ``verbose=False`` to stop the tokenizer 
 
 Preprocessing pairs of sentences
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/0u3ioSwev3s" title="YouTube video player"
+   frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
+   picture-in-picture" allowfullscreen></iframe>
 
 Sometimes you need to feed a pair of sentences to your model. For instance, if you want to classify if two sentences in
 a pair are similar, or for question-answering models, which take a context and a question. For BERT models, the input
