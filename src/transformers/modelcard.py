@@ -55,7 +55,7 @@ from .utils.modeling_auto_mapping import (
 )
 
 
-PIPELINE_TAGS_MAPPING = {
+TASK_MAPPING = {
     "text-generation": MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     "image-classification": MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     "fill-mask": MODEL_FOR_MASKED_LM_MAPPING_NAMES,
@@ -542,7 +542,7 @@ class TrainingSummary:
         # Infer default task tag:
         if tasks is None:
             model_class_name = trainer.model.__class__.__name__
-            for task, mapping in PIPELINE_TAGS_MAPPING.items():
+            for task, mapping in TASK_MAPPING.items():
                 if model_class_name in _get_mapping_values(mapping):
                     tasks = task
 
