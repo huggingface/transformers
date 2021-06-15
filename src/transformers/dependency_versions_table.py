@@ -34,6 +34,7 @@ deps = {
     "parameterized": "parameterized",
     "protobuf": "protobuf",
     "psutil": "psutil",
+    "pyaml": "pyaml>=20.4.0",
     "pydantic": "pydantic",
     "pytest": "pytest",
     "pytest-sugar": "pytest-sugar",
