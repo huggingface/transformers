@@ -1261,7 +1261,7 @@ def pytest_xdist_worker_id():
 
 def get_torch_dist_unique_port():
     """
-    Returns a port number that can be fed to ``--master_port`` to ``torch.distributed.launch``.
+    Returns a port number that can be fed to ``torch.distributed.launch``'s ``--master_port`` argument.
 
     Under ``pytest-xdist`` it adds a delta number based on a worker id so that concurrent tests don't try to use the
     same port at once.
