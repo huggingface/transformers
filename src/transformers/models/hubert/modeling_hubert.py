@@ -699,7 +699,12 @@ class HubertPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
+        # gumbel softmax requires special init
+        if isinstance(module, HubertGumbelVectorQuantizer):
+            module.weight_proj.weight.data.normal_(mean=0.0, std=1)
+            module.weight_proj.bias.data.zero_()
+            nn.init.uniform_(module.codevectors)
+        elif isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -962,7 +967,7 @@ class HubertForCTC(HubertPreTrainedModel):
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
 
-    @add_start_docstrings_to_model_forward(HUBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1061,7 +1066,7 @@ class HubertForCTC(HubertPreTrainedModel):
                 )
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
