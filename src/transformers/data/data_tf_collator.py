@@ -22,13 +22,13 @@ import tensorflow_probability as tfp
 from ..tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 
 
-InputDataClass = NewType("InputDataClass", Any)
+# InputDataClass = NewType("InputDataClass", Any)
 
 """
 A DataCollator is a function that takes a list of samples from a Dataset and collate them into a batch, as a dictionary
 of Tensorflow Tensors.
 """
-TFDataCollator = NewType("TFDataCollator", Callable[[List[InputDataClass]], Dict[str, tf.Tensor]])
+# DataCollator = NewType("DataCollator", Callable[[List[InputDataClass]], Dict[str, tf.Tensor]])
 
 
 def _tf_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
