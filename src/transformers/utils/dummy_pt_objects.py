@@ -1722,8 +1722,8 @@ class HubertModel:
         requires_backends(self, ["torch"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 class HubertPreTrainedModel:
@@ -1731,8 +1731,8 @@ class HubertPreTrainedModel:
         requires_backends(self, ["torch"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 IBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
