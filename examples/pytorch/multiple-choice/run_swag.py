@@ -430,7 +430,7 @@ def main():
     if training_args.push_to_hub:
         trainer.push_to_hub(
             finetuned_from=model_args.model_name_or_path,
-            tags="multiple-choice",
+            tasks="multiple-choice",
             dataset_tags="swag",
             dataset_args="regular",
             dataset="SWAG",
