@@ -109,7 +109,7 @@ class TFDataCollatorForLanguageModeling:
     def __call__(self, examples: List[Union[List[int], tf.Tensor, Dict[str, tf.Tensor]]]) -> Dict[str, tf.Tensor]:
         # Handle dict or lists with proper padding and conversion to tensor.
         if isinstance(examples[0], (dict, BatchEncoding)):
-            batch = self.tokenizer.pad(examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of)
+            batch = self.tokenizer.pad(examples, return_tensors="tf", pad_to_multiple_of=self.pad_to_multiple_of)
         else:
             batch = {
                 "input_ids": _tf_collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
