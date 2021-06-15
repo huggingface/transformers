@@ -106,7 +106,8 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
         if pt_tuple_key in random_flax_state_dict:
             if pt_tensor.shape != random_flax_state_dict[pt_tuple_key].shape:
                 raise ValueError(
-                    "PyTorch checkpoint seems to be incorrect. Weight {pt_key} was expected to be of shape {random_flax_state_dict[pt_tuple_key].shape}, but is {pt_tensor.shape}."
+                    f"PyTorch checkpoint seems to be incorrect. Weight {pt_key} was expected to be of shape "
+                    f"{random_flax_state_dict[pt_tuple_key].shape}, but is {pt_tensor.shape}."
                 )
 
         # also add unexpected weight so that warning is thrown

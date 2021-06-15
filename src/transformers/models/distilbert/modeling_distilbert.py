@@ -23,7 +23,7 @@ import math
 
 import numpy as np
 import torch
-import torch.nn as nn
+from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import gelu

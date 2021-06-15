@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_torch_available, is_vision_available
+from ...file_utils import _BaseLazyModule, is_flax_available, is_torch_available, is_vision_available
 
 
 _import_structure = {
@@ -36,6 +36,9 @@ if is_torch_available():
     ]
 
 
+if is_flax_available():
+    _import_structure["modeling_flax_vit"] = ["FlaxViTForImageClassification", "FlaxViTModel"]
+
 if TYPE_CHECKING:
     from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
 
@@ -49,6 +52,9 @@ if TYPE_CHECKING:
             ViTModel,
             ViTPreTrainedModel,
         )
+
+    if is_flax_available():
+        from .modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel
 
 
 else:
