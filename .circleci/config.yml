@@ -81,7 +81,7 @@ jobs:
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,speech,vision]
-            - run: pip install torch==1.8.1
+            - run: pip install -U torch==1.8.1 torchvision==0.9.1 torchaudio==0.8.1
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cpu.html
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
@@ -112,7 +112,7 @@ jobs:
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,flax,torch,testing,sentencepiece,speech,vision]
-            - run: pip install torch==1.8.1
+            - run: pip install -U torch==1.8.1 torchvision==0.9.1 torchaudio==0.8.1
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cpu.html
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
@@ -142,7 +142,7 @@ jobs:
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,speech,vision,timm]
-            - run: pip install torch==1.8.1
+            - run: pip install -U torch==1.8.1 torchaudio==0.8.1 torchvision==0.9.1
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cpu.html
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
@@ -227,7 +227,7 @@ jobs:
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,speech,vision]
-            - run: pip install torch==1.8.1
+            - run: pip install -U torch==1.8.1 torchvision==0.9.1 torchaudio==0.8.1
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cpu.html
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
