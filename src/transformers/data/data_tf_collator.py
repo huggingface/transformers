@@ -28,7 +28,11 @@ InputDataClass = NewType("InputDataClass", Any)
 A DataCollator is a function that takes a list of samples from a Dataset and collate them into a batch, as a dictionary
 of Tensorflow Tensors.
 """
+<<<<<<< HEAD
 TFDataCollator = NewType("TFDataCollator", Callable[[List[InputDataClass]], Dict[str, tf.Tensor]])
+=======
+DataCollator = NewType("DataCollator", Callable[[List[InputDataClass]], Dict[str, tf.Tensor]])
+>>>>>>> Tensorflow variant of DataCollatorForLanguageModeling.
 
 
 def _tf_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
@@ -109,7 +113,11 @@ class TFDataCollatorForLanguageModeling:
     def __call__(self, examples: List[Union[List[int], tf.Tensor, Dict[str, tf.Tensor]]]) -> Dict[str, tf.Tensor]:
         # Handle dict or lists with proper padding and conversion to tensor.
         if isinstance(examples[0], (dict, BatchEncoding)):
+<<<<<<< HEAD
             batch = self.tokenizer.pad(examples, return_tensors="tf", pad_to_multiple_of=self.pad_to_multiple_of)
+=======
+            batch = self.tokenizer.pad(examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of)
+>>>>>>> Tensorflow variant of DataCollatorForLanguageModeling.
         else:
             batch = {
                 "input_ids": _tf_collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
