@@ -25,7 +25,6 @@ from typing import Dict, List, Tuple
 import numpy as np
 import torch
 from torch import nn
-from torch.nn import functional as F
 from torch.nn.modules.batchnorm import BatchNorm2d
 from torchvision.ops import RoIPool
 from torchvision.ops.boxes import batched_nms, nms
@@ -85,7 +84,7 @@ def pad_list_tensors(
             too_small = True
             tensor_i = tensor_i.unsqueeze(-1)
         assert isinstance(tensor_i, torch.Tensor)
-        tensor_i = F.pad(
+        tensor_i = nn.functional.pad(
             input=tensor_i,
             pad=(0, 0, 0, max_detections - preds_per_image[i]),
             mode="constant",
@@ -701,7 +700,7 @@ class RPNOutputs(object):
 
 
 # Main Classes
-class Conv2d(torch.nn.Conv2d):
+class Conv2d(nn.Conv2d):
     def __init__(self, *args, **kwargs):
         norm = kwargs.pop("norm", None)
         activation = kwargs.pop("activation", None)
@@ -712,9 +711,9 @@ class Conv2d(torch.nn.Conv2d):
 
     def forward(self, x):
         if x.numel() == 0 and self.training:
-            assert not isinstance(self.norm, torch.nn.SyncBatchNorm)
+            assert not isinstance(self.norm, nn.SyncBatchNorm)
         if x.numel() == 0:
-            assert not isinstance(self.norm, torch.nn.GroupNorm)
+            assert not isinstance(self.norm, nn.GroupNorm)
             output_shape = [
                 (i + 2 * p - (di * (k - 1) + 1)) // s + 1
                 for i, p, di, k, s in zip(
@@ -752,7 +751,7 @@ class LastLevelMaxPool(nn.Module):
         self.in_feature = "p5"
 
     def forward(self, x):
-        return [F.max_pool2d(x, kernel_size=1, stride=2, padding=0)]
+        return [nn.functional.max_pool2d(x, kernel_size=1, stride=2, padding=0)]
 
 
 class LastLevelP6P7(nn.Module):
@@ -769,7 +768,7 @@ class LastLevelP6P7(nn.Module):
 
     def forward(self, c5):
         p6 = self.p6(c5)
-        p7 = self.p7(F.relu(p6))
+        p7 = self.p7(nn.functional.relu(p6))
         return [p6, p7]
 
 
@@ -790,11 +789,11 @@ class BasicStem(nn.Module):
 
     def forward(self, x):
         x = self.conv1(x)
-        x = F.relu_(x)
+        x = nn.functional.relu_(x)
         if self.caffe_maxpool:
-            x = F.max_pool2d(x, kernel_size=3, stride=2, padding=0, ceil_mode=True)
+            x = nn.functional.max_pool2d(x, kernel_size=3, stride=2, padding=0, ceil_mode=True)
         else:
-            x = F.max_pool2d(x, kernel_size=3, stride=2, padding=1)
+            x = nn.functional.max_pool2d(x, kernel_size=3, stride=2, padding=1)
         return x
 
     @property
@@ -881,10 +880,10 @@ class BottleneckBlock(ResNetBlockBase):
 
     def forward(self, x):
         out = self.conv1(x)
-        out = F.relu_(out)
+        out = nn.functional.relu_(out)
 
         out = self.conv2(out)
-        out = F.relu_(out)
+        out = nn.functional.relu_(out)
 
         out = self.conv3(out)
 
@@ -894,7 +893,7 @@ class BottleneckBlock(ResNetBlockBase):
             shortcut = x
 
         out += shortcut
-        out = F.relu_(out)
+        out = nn.functional.relu_(out)
         return out
 
 
@@ -1159,7 +1158,7 @@ class ROIOutputs(object):
         return boxes.view(num_pred, K * B).split(preds_per_image, dim=0)
 
     def _predict_objs(self, obj_logits, preds_per_image):
-        probs = F.softmax(obj_logits, dim=-1)
+        probs = nn.functional.softmax(obj_logits, dim=-1)
         probs = probs.split(preds_per_image, dim=0)
         return probs
 
@@ -1490,7 +1489,7 @@ class RPNHead(nn.Module):
         pred_objectness_logits = []
         pred_anchor_deltas = []
         for x in features:
-            t = F.relu(self.conv(x))
+            t = nn.functional.relu(self.conv(x))
             pred_objectness_logits.append(self.objectness_logits(t))
             pred_anchor_deltas.append(self.anchor_deltas(t))
         return pred_objectness_logits, pred_anchor_deltas
@@ -1650,7 +1649,7 @@ class FastRCNNOutputLayers(nn.Module):
             cls_emb = self.cls_embedding(max_class)  # [b] --> [b, 256]
             roi_features = torch.cat([roi_features, cls_emb], -1)  # [b, 2048] + [b, 256] --> [b, 2304]
             roi_features = self.fc_attr(roi_features)
-            roi_features = F.relu(roi_features)
+            roi_features = nn.functional.relu(roi_features)
             attr_scores = self.attr_score(roi_features)
             return scores, attr_scores, proposal_deltas
         else:

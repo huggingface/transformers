@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 import pytorch_lightning as pl
 import torch
+from torch import nn
 
 import lightning_base
 from convert_pl_checkpoint_to_hf import convert_pl_to_hf
@@ -183,7 +184,7 @@ class TestSummarizationDistiller(TestCasePlus):
 
         logits = model(input_ids, attention_mask=mask, decoder_input_ids=decoder_input_ids, use_cache=False).logits
 
-        lprobs = torch.nn.functional.log_softmax(logits, dim=-1)
+        lprobs = nn.functional.log_softmax(logits, dim=-1)
         smoothed_loss, nll_loss = label_smoothed_nll_loss(
             lprobs, lm_labels, 0.1, ignore_index=model.config.pad_token_id
         )

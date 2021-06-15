@@ -21,7 +21,6 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import Tensor, nn
 from torch.nn import LayerNorm
@@ -183,9 +182,9 @@ PROPHETNET_STANDALONE_INPUTS_DOCSTRING = r"""
 
 def softmax(hidden_state, dim, onnx_trace=False):
     if onnx_trace:
-        return F.softmax(hidden_state.float(), dim=dim)
+        return nn.functional.softmax(hidden_state.float(), dim=dim)
     else:
-        return F.softmax(hidden_state, dim=dim, dtype=torch.float32)
+        return nn.functional.softmax(hidden_state, dim=dim, dtype=torch.float32)
 
 
 def ngram_attention_bias(sequence_length, ngram, device, dtype):
@@ -732,7 +731,7 @@ class ProphetNetAttention(nn.Module):
         else:
             attn_weights_reshaped = None
 
-        attn_weights = F.softmax(attn_weights, dim=-1)
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
         if layer_head_mask is not None:
             assert layer_head_mask.size() == (
@@ -746,7 +745,7 @@ class ProphetNetAttention(nn.Module):
             # apply head_mask also on attn_weights_reshaped which is used for n-gram attention inside the model
             attn_weights_reshaped = layer_head_mask.view(1, -1, 1, 1) * attn_weights_reshaped
 
-        attn_probs = F.dropout(
+        attn_probs = nn.functional.dropout(
             attn_weights,
             p=self.attention_dropout,
             training=self.training,
@@ -767,7 +766,7 @@ class ProphetNetAttention(nn.Module):
 
         attn_output = self.out_proj(attn_output)
 
-        attn_output = F.dropout(attn_output, p=self.dropout, training=self.training)
+        attn_output = nn.functional.dropout(attn_output, p=self.dropout, training=self.training)
         return attn_output, attn_weights_reshaped, past_key_value
 
 
@@ -788,9 +787,9 @@ class ProphetNetFeedForward(nn.Module):
         hidden_states = self.intermediate(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
 
-        hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.output(hidden_states)
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         return hidden_states
 
 
@@ -924,7 +923,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
             )
             main_attn_probs = main_attn_probs.view(batch_size * self.num_attn_heads, -1, sequence_length)
 
-        main_attn_probs = F.dropout(main_attn_probs, p=self.attention_dropout, training=self.training)
+        main_attn_probs = nn.functional.dropout(main_attn_probs, p=self.attention_dropout, training=self.training)
         # project to attn_output
         main_attn_output = torch.bmm(main_attn_probs, main_value_states)
 
@@ -989,7 +988,9 @@ class ProphetNetNgramSelfAttention(nn.Module):
                 self.ngram, batch_size * self.num_attn_heads, sequence_length, 2 * sequence_length
             )
 
-        predict_attn_probs = F.dropout(predict_attn_probs, p=self.attention_dropout, training=self.training)
+        predict_attn_probs = nn.functional.dropout(
+            predict_attn_probs, p=self.attention_dropout, training=self.training
+        )
         # project to attention output
         # [ngram, B*head, T, c]
         predict_attn_output = torch.einsum("nbts,nbsc->nbtc", (predict_attn_probs, predict_value_states))
@@ -1012,7 +1013,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
             self.ngram, batch_size, self.num_attn_heads, sequence_length, -1
         ).transpose(0, 1)
 
-        attn_output = F.dropout(attn_output, p=self.dropout, training=self.training)
+        attn_output = nn.functional.dropout(attn_output, p=self.dropout, training=self.training)
 
         return attn_output, main_attn_probs, predict_attn_probs, past_key_value
 
@@ -1321,7 +1322,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
 
         hidden_states = inputs_embeds + position_embeddings
         hidden_states = self.embeddings_layer_norm(hidden_states)
-        hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.config.dropout, training=self.training)
 
         encoder_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1538,7 +1539,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         if self.embeddings_layer_norm:
             hidden_states = self.embeddings_layer_norm(hidden_states)
 
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # init attentions, hidden_states and cache with empty tuples
         all_main_stream_hidden_states = () if output_hidden_states else None
@@ -1995,13 +1996,13 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
                 break
             expend_targets[i, :, :] = labels
 
-        lprobs = F.log_softmax(
+        lprobs = nn.functional.log_softmax(
             logits.view(-1, logits.size(-1)),
             dim=-1,
             dtype=torch.float32,
         )
 
-        loss = F.nll_loss(lprobs, expend_targets.view(-1), reduction="mean")
+        loss = nn.functional.nll_loss(lprobs, expend_targets.view(-1), reduction="mean")
 
         if self.config.eps > 0.0:
             smooth_loss = -lprobs.sum(dim=-1, keepdim=True)
@@ -2239,13 +2240,13 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
                 break
             expend_targets[i, :, :] = labels
 
-        lprobs = F.log_softmax(
+        lprobs = nn.functional.log_softmax(
             logits.view(-1, logits.size(-1)),
             dim=-1,
             dtype=torch.float32,
         )
 
-        loss = F.nll_loss(lprobs, expend_targets.view(-1), reduction="mean")
+        loss = nn.functional.nll_loss(lprobs, expend_targets.view(-1), reduction="mean")
 
         if self.config.eps > 0.0:
             smooth_loss = -lprobs.sum(dim=-1, keepdim=True)

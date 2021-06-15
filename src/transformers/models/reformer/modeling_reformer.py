@@ -1782,7 +1782,7 @@ class ReformerPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         if isinstance(module, AxialPositionEmbeddings):
             for weight in module.weights:
-                torch.nn.init.normal_(weight, std=self.config.axial_norm_std)
+                nn.init.normal_(weight, std=self.config.axial_norm_std)
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
