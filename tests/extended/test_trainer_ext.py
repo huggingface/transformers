@@ -25,6 +25,7 @@ from transformers.testing_utils import (
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
+    get_torch_dist_unique_port,
     require_torch_gpu,
     require_torch_multi_gpu,
     require_torch_non_multi_gpu,
@@ -223,9 +224,11 @@ class TestTrainerExt(TestCasePlus):
 
         if distributed:
             n_gpu = get_gpu_count()
+            master_port = get_torch_dist_unique_port()
             distributed_args = f"""
                 -m torch.distributed.launch
                 --nproc_per_node={n_gpu}
+                --master_port={master_port}
                 {self.examples_dir_str}/pytorch/translation/run_translation.py
             """.split()
             cmd = [sys.executable] + distributed_args + args
