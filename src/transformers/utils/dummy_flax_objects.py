@@ -6,10 +6,18 @@ class FlaxLogitsProcessor:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
 
 class FlaxLogitsProcessorList:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
 
 
 class FlaxLogitsWarper:
