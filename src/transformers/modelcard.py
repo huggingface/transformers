@@ -456,6 +456,8 @@ class TrainingSummary:
         else:
             if isinstance(self.dataset, str):
                 model_card += f"the {self.dataset} dataset."
+            elif isinstance(self.dataset, (tuple, list)) and len(self.dataset) == 1:
+                model_card += f"the {self.dataset[0]} dataset."
             else:
                 model_card += (
                     ", ".join([f"the {ds}" for ds in self.dataset[:-1]]) + f" and the {self.dataset[-1]} datasets."
