@@ -29,10 +29,14 @@ A DataCollator is a function that takes a list of samples from a Dataset and col
 of Tensorflow Tensors.
 """
 <<<<<<< HEAD
+<<<<<<< HEAD
 TFDataCollator = NewType("TFDataCollator", Callable[[List[InputDataClass]], Dict[str, tf.Tensor]])
 =======
 DataCollator = NewType("DataCollator", Callable[[List[InputDataClass]], Dict[str, tf.Tensor]])
 >>>>>>> Tensorflow variant of DataCollatorForLanguageModeling.
+=======
+TFDataCollator = NewType("TFDataCollator", Callable[[List[InputDataClass]], Dict[str, tf.Tensor]])
+>>>>>>> Specifying new TFDataCollator type.
 
 
 def _tf_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
