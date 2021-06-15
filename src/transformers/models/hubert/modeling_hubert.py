@@ -943,7 +943,6 @@ class HubertModel(HubertPreTrainedModel):
     """Hubert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC). """,
     HUBERT_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->Hubert, with hubert->hubert
 class HubertForCTC(HubertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1060,7 +1059,7 @@ class HubertForCTC(HubertPreTrainedModel):
                 )
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
