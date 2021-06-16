@@ -876,9 +876,9 @@ class HubertModel(HubertPreTrainedModel):
             >>> model = HubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
 
             >>> def map_to_array(batch):
-            >>>     speech, _ = sf.read(batch["file"])
-            >>>     batch["speech"] = speech
-            >>>     return batch
+            ...     speech, _ = sf.read(batch["file"])
+            ...     batch["speech"] = speech
+            ...     return batch
 
             >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
             >>> ds = ds.map(map_to_array)
@@ -959,7 +959,7 @@ class HubertForCTC(HubertPreTrainedModel):
         self.hubert.feature_extractor._freeze_parameters()
 
     @add_start_docstrings_to_model_forward(HUBERT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=CausalLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_values,
@@ -989,9 +989,9 @@ class HubertForCTC(HubertPreTrainedModel):
             >>> model = HubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft")
 
             >>> def map_to_array(batch):
-            >>>     speech, _ = sf.read(batch["file"])
-            >>>     batch["speech"] = speech
-            >>>     return batch
+            ...     speech, _ = sf.read(batch["file"])
+            ...     batch["speech"] = speech
+            ...     return batch
 
             >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
             >>> ds = ds.map(map_to_array)
@@ -1007,7 +1007,7 @@ class HubertForCTC(HubertPreTrainedModel):
 
             >>> # wrap processor as target processor to encode labels
             >>> with processor.as_target_processor():
-            >>>     labels = processor(target_transcription, return_tensors="pt").input_ids
+            ...     labels = processor(target_transcription, return_tensors="pt").input_ids
 
             >>> loss = model(input_values, labels=labels).loss
         """
