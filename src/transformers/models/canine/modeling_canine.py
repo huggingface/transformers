@@ -576,6 +576,7 @@ class CanineAttention(nn.Module):
 
             # next, compute attention scores for each pair of windows and concatenate
             attention_output_chunks = []
+            attention_probs_chunks = []
             for (from_start, from_end), (to_start, to_end) in zip(from_chunks, to_chunks):
                 from_tensor_chunk = from_tensor[:, from_start:from_end, :]
                 to_tensor_chunk = to_tensor[:, to_start:to_end, :]
@@ -593,6 +594,8 @@ class CanineAttention(nn.Module):
                     from_tensor_chunk, to_tensor_chunk, attention_mask_chunk, head_mask, output_attentions
                 )
                 attention_output_chunks.append(attention_outputs_chunk[0])
+                if output_attentions:
+                    attention_probs_chunks.append(attention_outputs_chunk[1])
 
             attention_output = torch.cat(attention_output_chunks, dim=1)
 
@@ -600,6 +603,8 @@ class CanineAttention(nn.Module):
         outputs = (attention_output,)
         if not self.local:
             outputs = outputs + self_outputs[1:]  # add attentions if we output them
+        else:
+            outputs = outputs + tuple(attention_probs_chunks) # add attentions if we output them
         return outputs
 
 
@@ -1058,6 +1063,8 @@ class CanineModel(CaninePreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
@@ -1107,7 +1114,11 @@ class CanineModel(CaninePreTrainedModel):
         # We use a 3D attention mask for the local attention.
         # `input_char_encoding`: shape (batch_size, char_seq_len, char_dim)
         char_attention_mask = self._create_3d_attention_mask_from_input_mask(input_ids, attention_mask)
-        init_chars_encoder_outputs = self.initial_char_encoder(input_char_embeddings, char_attention_mask)
+        init_chars_encoder_outputs = self.initial_char_encoder(input_char_embeddings, 
+                                                               attention_mask=char_attention_mask, 
+                                                               output_attentions=output_attentions,
+                                                               output_hidden_states=output_hidden_states,
+                                                               )
         input_char_encoding = init_chars_encoder_outputs.last_hidden_state
 
         # Downsample chars to molecules.
@@ -1153,8 +1164,31 @@ class CanineModel(CaninePreTrainedModel):
 
         # Apply final shallow Transformer
         # `sequence_output`: shape (batch_size, char_seq_len, hidden_size])
-        final_chars_encoder_outputs = self.final_char_encoder(sequence_output, extended_attention_mask)
+        final_chars_encoder_outputs = self.final_char_encoder(sequence_output, 
+                                                              attention_mask=extended_attention_mask,
+                                                              output_attentions=output_attentions,
+                                                              output_hidden_states=output_hidden_states
+        )
         sequence_output = final_chars_encoder_outputs.last_hidden_state
+        
+        if output_hidden_states:
+            if return_dict:
+                all_hidden_states = (
+                    all_hidden_states + init_chars_encoder_outputs.hidden_states + encoder_outputs.hidden_states + final_chars_encoder_outputs.hidden_states
+                )
+            else:
+                all_hidden_states = (
+                    all_hidden_states + init_chars_encoder_outputs[1] + encoder_outputs[1] + final_chars_encoder_outputs[1]
+                )
+        if output_attentions:
+            if return_dict:
+                all_self_attentions = (
+                    all_self_attentions + init_chars_encoder_outputs.attentions + encoder_outputs.attentions + final_chars_encoder_outputs.attentions
+                )
+            else:
+                all_self_attentions = (
+                    all_self_attentions + init_chars_encoder_outputs[2] + encoder_outputs[2] + final_chars_encoder_outputs[2]
+                )
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
@@ -1162,8 +1196,8 @@ class CanineModel(CaninePreTrainedModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
         )
 
 

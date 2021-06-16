@@ -259,17 +259,27 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             hidden_states = outputs.hidden_states
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-            )
+            # expected_num_layers equals num_hidden_layers of the deep encoder + 1, + 2 for the first shallow encoder, + 2
+            # for the final shallow encoder
+            expected_num_layers = self.model_tester.num_hidden_layers + 1 + 2 + 2
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             seq_length = self.model_tester.seq_length
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                # expected length of the hidden_states needs to be updated for CANINE since it downsamples the seq length
-                [seq_length // config.downsampling_rate, self.model_tester.hidden_size],
-            )
+            for i in range(expected_num_layers):
+                if (i < 2) or ((expected_num_layers - i) < 3):
+                    # the expected length of the hidden_states of the first and final shallow encoders
+                    # is equal to the seq_length
+                    self.assertListEqual(
+                        list(hidden_states[i].shape[-2:]),
+                        [seq_length, self.model_tester.hidden_size],
+                    )
+                else:
+                    # the expected length of the hidden_states of the deep encoder need to be updated 
+                    # for CANINE since the seq length is downsampled
+                    self.assertListEqual(
+                        list(hidden_states[i].shape[-2:]),
+                        [seq_length // config.downsampling_rate, self.model_tester.hidden_size],
+                )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -287,8 +297,7 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
-        # expected length of the attentions needs to be updated for CANINE since it downsamples the seq length
-        seq_len = getattr(self.model_tester, "seq_length", None) // config.downsampling_rate
+        seq_len = getattr(self.model_tester, "seq_length", None) 
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -300,7 +309,8 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            # we add + 2 due to the 2 shallow encoders
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers + 2)
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -311,7 +321,8 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            # we add + 2 due to the 2 shallow encoders
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers + 2)
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
@@ -336,12 +347,12 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
 
             self_attentions = outputs.attentions
 
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers + 2)
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, seq_len, seq_len],
             )
-
+    
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
