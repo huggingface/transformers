@@ -17,8 +17,8 @@
 import types
 
 from ...configuration_utils import PretrainedConfig
+from ...deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
 from ...file_utils import copy_func
-from ...integrations import deepspeed_config, is_deepspeed_zero3_enabled
 from ...utils import logging
 from .configuration_auto import AutoConfig, replace_list_option_in_docstrings
 
@@ -357,7 +357,7 @@ class _BaseAutoModelClass:
     # Base class for auto models.
     _model_mapping = None
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         raise EnvironmentError(
             f"{self.__class__.__name__} is designed to be instantiated "
             f"using the `{self.__class__.__name__}.from_pretrained(pretrained_model_name_or_path)` or "

@@ -90,21 +90,21 @@ _deps = [
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
-    "deepspeed>=0.3.16",
+    "deepspeed>=0.4.0",
     "docutils==0.16.0",
     "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
     "filelock",
     "flake8>=3.8.3",
-    "flax>=0.3.2",
+    "flax>=0.3.4",
     "fugashi>=1.0",
     "huggingface-hub==0.0.8",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
     "jax>=0.2.8",
-    "jaxlib>=0.1.59",
+    "jaxlib>=0.1.65",
     "jieba",
     "keras2onnx",
     "nltk",
@@ -112,6 +112,7 @@ _deps = [
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
+    "optuna",
     "packaging",
     "parameterized",
     "protobuf",
@@ -121,6 +122,7 @@ _deps = [
     "pytest-sugar",
     "pytest-xdist",
     "python>=3.6.0",
+    "ray",
     "recommonmark",
     "regex!=2019.12.17",
     "requests",
@@ -140,6 +142,7 @@ _deps = [
     "tensorflow-cpu>=2.3",
     "tensorflow>=2.3",
     "timeout-decorator",
+    "timm",
     "tokenizers>=0.10.1,<0.11",
     "torch>=1.0",
     "torchaudio",
@@ -239,10 +242,15 @@ extras["modelcreation"] = deps_list("cookiecutter")
 extras["sagemaker"] = deps_list("sagemaker")
 extras["deepspeed"] = deps_list("deepspeed")
 extras["fairscale"] = deps_list("fairscale")
+extras["optuna"] = deps_list("optuna")
+extras["ray"] = deps_list("ray")
+
+extras["integrations"] = extras["optuna"] + extras["ray"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["speech"] = deps_list("soundfile", "torchaudio")
 extras["vision"] = deps_list("Pillow")
+extras["timm"] = deps_list("timm")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
@@ -263,6 +271,8 @@ extras["all"] = (
     + extras["tokenizers"]
     + extras["speech"]
     + extras["vision"]
+    + extras["integrations"]
+    + extras["timm"]
 )
 
 extras["docs_specific"] = deps_list(

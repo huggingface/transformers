@@ -34,10 +34,11 @@ import numpy as np
 from datasets import load_dataset
 from tqdm import tqdm
 
+import flax
 import jax
 import jax.numpy as jnp
 import optax
-from flax import jax_utils
+from flax import jax_utils, traverse_util
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
 from transformers import (
@@ -185,9 +186,7 @@ class DataTrainingArguments:
                 assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
 
 
-# Adapted from transformers/data/data_collator.py
-# Letting here for now, let's discuss where it should live
-@dataclass
+@flax.struct.dataclass
 class FlaxDataCollatorForLanguageModeling:
     """
     Data collator used for language modeling. Inputs are dynamically padded to the maximum length of a batch if they
@@ -196,12 +195,8 @@ class FlaxDataCollatorForLanguageModeling:
     Args:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
             The tokenizer used for encoding the data.
-        mlm (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to use masked language modeling. If set to :obj:`False`, the labels are the same as the
-            inputs with the padding tokens ignored (by setting them to -100). Otherwise, the labels are -100 for
-            non-masked tokens and the value to predict for the masked token.
         mlm_probability (:obj:`float`, `optional`, defaults to 0.15):
-            The probability with which to (randomly) mask tokens in the input, when :obj:`mlm` is set to :obj:`True`.
+            The probability with which to (randomly) mask tokens in the input.
 
     .. note::
 
@@ -212,11 +207,10 @@ class FlaxDataCollatorForLanguageModeling:
     """
 
     tokenizer: PreTrainedTokenizerBase
-    mlm: bool = True
     mlm_probability: float = 0.15
 
     def __post_init__(self):
-        if self.mlm and self.tokenizer.mask_token is None:
+        if self.tokenizer.mask_token is None:
             raise ValueError(
                 "This tokenizer does not have a mask token which is necessary for masked language modeling. "
                 "You should pass `mlm=False` to train on causal language modeling instead."
@@ -228,15 +222,10 @@ class FlaxDataCollatorForLanguageModeling:
 
         # If special token mask has been preprocessed, pop it from the dict.
         special_tokens_mask = batch.pop("special_tokens_mask", None)
-        if self.mlm:
-            batch["input_ids"], batch["labels"] = self.mask_tokens(
-                batch["input_ids"], special_tokens_mask=special_tokens_mask
-            )
-        else:
-            labels = batch["input_ids"].copy()
-            if self.tokenizer.pad_token_id is not None:
-                labels[labels == self.tokenizer.pad_token_id] = -100
-            batch["labels"] = labels
+
+        batch["input_ids"], batch["labels"] = self.mask_tokens(
+            batch["input_ids"], special_tokens_mask=special_tokens_mask
+        )
         return batch
 
     def mask_tokens(
@@ -515,6 +504,15 @@ if __name__ == "__main__":
         schedules=[warmup_fn, decay_fn], boundaries=[training_args.warmup_steps]
     )
 
+    # We use Optax's "masking" functionality to not apply weight decay
+    # to bias and LayerNorm scale parameters. decay_mask_fn returns a
+    # mask boolean with the same structure as the parameters.
+    # The mask is True for parameters that should be decayed.
+    def decay_mask_fn(params):
+        flat_params = traverse_util.flatten_dict(params)
+        flat_mask = {path: (path[-1] != "bias" and path[-2:] != ("LayerNorm", "scale")) for path in flat_params}
+        return traverse_util.unflatten_dict(flat_mask)
+
     # create adam optimizer
     adamw = optax.adamw(
         learning_rate=linear_decay_lr_schedule_fn,
@@ -522,6 +520,7 @@ if __name__ == "__main__":
         b2=training_args.adam_beta2,
         eps=1e-8,
         weight_decay=training_args.weight_decay,
+        mask=decay_mask_fn,
     )
 
     # Setup train state

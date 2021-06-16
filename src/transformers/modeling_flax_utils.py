@@ -41,11 +41,16 @@ from .file_utils import (
     is_remote_url,
     replace_return_docstrings,
 )
+from .generation_flax_utils import FlaxGenerationMixin
 from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
 from .utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+
+def quick_gelu(x):
+    return x * jax.nn.sigmoid(1.702 * x)
 
 
 ACT2FN = {
@@ -54,10 +59,11 @@ ACT2FN = {
     "silu": nn.swish,
     "swish": nn.swish,
     "gelu_new": partial(nn.gelu, approximate=True),
+    "quick_gelu": quick_gelu,
 }
 
 
-class FlaxPreTrainedModel(PushToHubMixin):
+class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     r"""
     Base class for all models.
 

@@ -14,13 +14,14 @@
 # limitations under the License.
 """ PyTorch Hubert model. """
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
+
+from transformers.deepspeed import is_deepspeed_zero3_enabled
 
 from ...activations import ACT2FN
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
@@ -197,7 +198,17 @@ class HubertPositionalConvEmbedding(nn.Module):
             padding=config.num_conv_pos_embeddings // 2,
             groups=config.num_conv_pos_embedding_groups,
         )
-        self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
+
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
+                self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
+            deepspeed.zero.register_external_parameter(self, self.conv.weight_v)
+            deepspeed.zero.register_external_parameter(self, self.conv.weight_g)
+        else:
+            self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
+
         self.padding = HubertSamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
 
@@ -255,7 +266,6 @@ class HubertFeatureExtractor(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureProjection with Wav2Vec2->Hubert
 class HubertFeatureProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -264,6 +274,7 @@ class HubertFeatureProjection(nn.Module):
         self.dropout = nn.Dropout(config.feat_proj_dropout)
 
     def forward(self, hidden_states):
+        # non-projected hidden states are needed for quantization
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.projection(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -370,7 +381,7 @@ class HubertAttention(nn.Module):
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        attn_weights = F.softmax(attn_weights, dim=-1)
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
         if layer_head_mask is not None:
             if layer_head_mask.size() != (self.num_heads,):
@@ -390,7 +401,7 @@ class HubertAttention(nn.Module):
         else:
             attn_weights_reshaped = None
 
-        attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
         attn_output = torch.bmm(attn_probs, value_states)
 
@@ -430,15 +441,6 @@ class HubertFeedForward(nn.Module):
 
         hidden_states = self.output_dense(hidden_states)
         hidden_states = self.output_dropout(hidden_states)
-        return hidden_states
-
-
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Output with Wav2Vec2->Hubert
-class HubertOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-
-    def forward(self, hidden_states, input_tensor):
         return hidden_states
 
 
@@ -546,15 +548,18 @@ class HubertEncoder(nn.Module):
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
+        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+
         for layer in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = np.random.uniform(0, 1)
-            if self.training and (dropout_probability < self.config.layerdrop):  # skip the layer
-                layer_outputs = (None, None)
-            else:
+
+            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
+            if not skip_the_layer or deepspeed_zero3_is_enabled:
+                # under deepspeed zero3 all gpus must run in sync
                 if getattr(self.config, "gradient_checkpointing", False) and self.training:
                     # create gradient checkpointing function
                     def create_custom_forward(module):
@@ -573,6 +578,9 @@ class HubertEncoder(nn.Module):
                         hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
                     )
                 hidden_states = layer_outputs[0]
+
+            if skip_the_layer:
+                layer_outputs = (None, None)
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -626,15 +634,19 @@ class HubertEncoderStableLayerNorm(nn.Module):
         hidden_states = hidden_states + position_embeddings
         hidden_states = self.dropout(hidden_states)
 
+        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+
         for layer in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = np.random.uniform(0, 1)
-            if self.training and (dropout_probability < self.config.layerdrop):  # skip the layer
-                layer_outputs = (None, None)
-            else:
+
+            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
+            if not skip_the_layer or deepspeed_zero3_is_enabled:
+                # under deepspeed zero3 all gpus must run in sync
+                # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
                 if getattr(self.config, "gradient_checkpointing", False) and self.training:
                     # create gradient checkpointing function
                     def create_custom_forward(module):
@@ -654,6 +666,9 @@ class HubertEncoderStableLayerNorm(nn.Module):
                     )
                 hidden_states = layer_outputs[0]
 
+            if skip_the_layer:
+                layer_outputs = (None, None)
+
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
@@ -671,7 +686,6 @@ class HubertEncoderStableLayerNorm(nn.Module):
         )
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PreTrainedModel with Wav2Vec2->Hubert, with hubert->hubert
 class HubertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -692,11 +706,22 @@ class HubertPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
-            torch.nn.init.kaiming_normal_(module.weight.data)
+            if is_deepspeed_zero3_enabled():
+                import deepspeed
+
+                if hasattr(module, "weight_v") and hasattr(module, "weight_g"):
+                    with deepspeed.zero.GatheredParameters([module.weight_v, module.weight_g], modifier_rank=0):
+                        nn.init.kaiming_normal_(module.weight.data)
+                else:
+                    with deepspeed.zero.GatheredParameters(module.weight, modifier_rank=0):
+                        nn.init.kaiming_normal_(module.weight.data)
+            else:
+                nn.init.kaiming_normal_(module.weight.data)
+
         if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
 
-    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
+    def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
         """
         Computes the output length of the convolutional layers
         """
@@ -709,7 +734,7 @@ class HubertPreTrainedModel(PreTrainedModel):
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
 
-        return input_lengths.to(torch.long)
+        return input_lengths
 
 
 HUBERT_START_DOCSTRING = r"""
@@ -772,9 +797,8 @@ HUBERT_INPUTS_DOCSTRING = r"""
     "The bare Hubert Model transformer outputting raw hidden-states without any specific head on top.",
     HUBERT_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model with Wav2Vec2->Hubert, with hubert->hubert
 class HubertModel(HubertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: HubertConfig):
         super().__init__(config)
         self.config = config
         self.feature_extractor = HubertFeatureExtractor(config)
@@ -789,12 +813,53 @@ class HubertModel(HubertPreTrainedModel):
 
         self.init_weights()
 
+    def _mask_hidden_states(
+        self, hidden_states: torch.FloatTensor, mask_time_indices: Optional[torch.FloatTensor] = None
+    ):
+        """
+        Masks extracted features along time axis and/or along feature axis according to `SpecAugment
+        <https://arxiv.org/abs/1904.08779>`__ .
+        """
+
+        # `config.apply_spec_augment` can set masking to False
+        if not getattr(self.config, "apply_spec_augment", True):
+            return hidden_states
+
+        if mask_time_indices is not None:
+            # apply SpecAugment along time axis with given mask_time_indices
+            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+        elif self.config.mask_time_prob > 0 and self.training:
+            # generate indices & apply SpecAugment along time axis
+            batch_size, sequence_length, hidden_size = hidden_states.size()
+
+            mask_time_indices = _compute_mask_indices(
+                (batch_size, sequence_length),
+                mask_prob=self.config.mask_time_prob,
+                mask_length=self.config.mask_time_length,
+                device=hidden_states.device,
+                min_masks=2,
+            )
+            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+
+        if self.config.mask_feature_prob > 0 and self.training:
+            # generate indices & apply SpecAugment along feature axis
+            mask_feature_indices = _compute_mask_indices(
+                (batch_size, hidden_size),
+                mask_prob=self.config.mask_feature_prob,
+                mask_length=self.config.mask_feature_length,
+                device=hidden_states.device,
+            )
+            hidden_states[mask_feature_indices[:, None].expand(-1, sequence_length, -1)] = 0
+
+        return hidden_states
+
     @add_start_docstrings_to_model_forward(HUBERT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_values,
         attention_mask=None,
+        mask_time_indices=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -829,49 +894,30 @@ class HubertModel(HubertPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        hidden_states = self.feature_extractor(input_values)
-        hidden_states = hidden_states.transpose(1, 2)
+        extract_features = self.feature_extractor(input_values)
+        extract_features = extract_features.transpose(1, 2)
 
         if attention_mask is not None:
             # compute real output lengths according to convolution formula
-            output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
+            output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
 
             attention_mask = torch.zeros(
-                hidden_states.shape[:2], dtype=hidden_states.dtype, device=hidden_states.device
+                extract_features.shape[:2], dtype=extract_features.dtype, device=extract_features.device
             )
 
             # these two operations makes sure that all values
             # before the output lengths indices are attended to
             attention_mask[
-                (torch.arange(attention_mask.shape[0], device=hidden_states.device), output_lengths - 1)
+                (torch.arange(attention_mask.shape[0], device=extract_features.device), output_lengths - 1)
             ] = 1
             attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
 
-        hidden_states = self.feature_projection(hidden_states)
+        hidden_states = self.feature_projection(extract_features)
 
-        if self.config.apply_spec_augment and self.training:
-            batch_size, sequence_length, hidden_size = hidden_states.size()
+        if mask_time_indices is not None:  # apply SpecAugment along time axis with given indices
+            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
 
-            # apply SpecAugment along time axis
-            if self.config.mask_time_prob > 0:
-                mask_time_indices = _compute_mask_indices(
-                    (batch_size, sequence_length),
-                    mask_prob=self.config.mask_time_prob,
-                    mask_length=self.config.mask_time_length,
-                    device=hidden_states.device,
-                    min_masks=2,
-                )
-                hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
-
-            # apply SpecAugment along feature axis
-            if self.config.mask_feature_prob > 0:
-                mask_feature_indices = _compute_mask_indices(
-                    (batch_size, hidden_size),
-                    mask_prob=self.config.mask_feature_prob,
-                    mask_length=self.config.mask_feature_length,
-                    device=hidden_states.device,
-                )
-                hidden_states[mask_feature_indices[:, None].expand(-1, sequence_length, -1)] = 0
+        hidden_states = self._mask_hidden_states(hidden_states)
 
         encoder_outputs = self.encoder(
             hidden_states,
@@ -897,7 +943,6 @@ class HubertModel(HubertPreTrainedModel):
     """Hubert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC). """,
     HUBERT_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->Hubert, with hubert->hubert
 class HubertForCTC(HubertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -991,7 +1036,7 @@ class HubertForCTC(HubertPreTrainedModel):
             attention_mask = (
                 attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
             )
-            input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
+            input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
 
             # assuming that padded tokens are filled with -100
             # when not being attended to
@@ -999,10 +1044,11 @@ class HubertForCTC(HubertPreTrainedModel):
             target_lengths = labels_mask.sum(-1)
             flattened_targets = labels.masked_select(labels_mask)
 
-            log_probs = F.log_softmax(logits, dim=-1).transpose(0, 1)
+            # ctc_loss doesn't support fp16
+            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
 
             with torch.backends.cudnn.flags(enabled=False):
-                loss = F.ctc_loss(
+                loss = nn.functional.ctc_loss(
                     log_probs,
                     flattened_targets,
                     input_lengths,

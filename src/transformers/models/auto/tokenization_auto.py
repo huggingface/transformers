@@ -27,6 +27,7 @@ from ..bert_japanese.tokenization_bert_japanese import BertJapaneseTokenizer
 from ..bertweet.tokenization_bertweet import BertweetTokenizer
 from ..blenderbot.tokenization_blenderbot import BlenderbotTokenizer
 from ..blenderbot_small.tokenization_blenderbot_small import BlenderbotSmallTokenizer
+from ..byt5.tokenization_byt5 import ByT5Tokenizer
 from ..convbert.tokenization_convbert import ConvBertTokenizer
 from ..ctrl.tokenization_ctrl import CTRLTokenizer
 from ..deberta.tokenization_deberta import DebertaTokenizer
@@ -156,6 +157,7 @@ else:
     Speech2TextTokenizer = None
 
 if is_tokenizers_available():
+    from ...tokenization_utils_fast import PreTrainedTokenizerFast
     from ..albert.tokenization_albert_fast import AlbertTokenizerFast
     from ..bart.tokenization_bart_fast import BartTokenizerFast
     from ..barthez.tokenization_barthez_fast import BarthezTokenizerFast
@@ -222,6 +224,7 @@ else:
     T5TokenizerFast = None
     XLMRobertaTokenizerFast = None
     XLNetTokenizerFast = None
+    PreTrainedTokenizerFast = None
 
 
 logger = logging.get_logger(__name__)
@@ -287,6 +290,7 @@ TOKENIZER_MAPPING = OrderedDict(
 NO_CONFIG_TOKENIZER = [
     BertJapaneseTokenizer,
     BertweetTokenizer,
+    ByT5Tokenizer,
     CpmTokenizer,
     HerbertTokenizer,
     HerbertTokenizerFast,
@@ -295,6 +299,7 @@ NO_CONFIG_TOKENIZER = [
     BarthezTokenizerFast,
     MBart50Tokenizer,
     MBart50TokenizerFast,
+    PreTrainedTokenizerFast,
 ]
 
 

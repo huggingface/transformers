@@ -308,8 +308,13 @@ class HubertModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
+                uniform_init_parms = [
+                    "conv.weight",
+                    "masked_spec_embed",
+                    "quantizer.weight_proj.weight",
+                ]
                 if param.requires_grad:
-                    if "conv.weight" in name or "masked_spec_embed" in name:
+                    if any([x in name for x in uniform_init_parms]):
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
@@ -325,10 +330,14 @@ class HubertModelTest(ModelTesterMixin, unittest.TestCase):
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
             module.weight.data.fill_(3)
-        if hasattr(module, "weight_g") and module.weight is not None:
+        if hasattr(module, "weight_g") and module.weight_g is not None:
             module.weight_g.data.fill_(3)
+        if hasattr(module, "weight_v") and module.weight_v is not None:
+            module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
             module.bias.data.fill_(3)
+        if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
+            module.masked_spec_embed.data.fill_(3)
 
     @slow
     def test_model_from_pretrained(self):
@@ -434,8 +443,13 @@ class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
+                uniform_init_parms = [
+                    "conv.weight",
+                    "masked_spec_embed",
+                    "quantizer.weight_proj.weight",
+                ]
                 if param.requires_grad:
-                    if "conv.weight" in name or "masked_spec_embed" in name:
+                    if any([x in name for x in uniform_init_parms]):
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
@@ -451,10 +465,14 @@ class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
             module.weight.data.fill_(3)
-        if hasattr(module, "weight_g") and module.weight is not None:
+        if hasattr(module, "weight_g") and module.weight_g is not None:
             module.weight_g.data.fill_(3)
+        if hasattr(module, "weight_v") and module.weight_v is not None:
+            module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
             module.bias.data.fill_(3)
+        if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
+            module.masked_spec_embed.data.fill_(3)
 
     @slow
     def test_model_from_pretrained(self):
@@ -476,24 +494,21 @@ class HubertUtilsTest(unittest.TestCase):
 
     def test_compute_mask_indices_overlap(self):
         batch_size = 4
-        sequence_length = 60
+        sequence_length = 80
         mask_prob = 0.5
         mask_length = 4
 
         mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length, torch_device)
 
-        # because of overlap there is a range of possible masks
+        # because of overlap mask don't have to add up exactly to `mask_prob * sequence_length`, but have to be smaller or equal
         for batch_sum in mask.sum(axis=-1):
-            self.assertIn(
-                int(batch_sum),
-                list(range(int(mask_prob // mask_length * sequence_length), int(mask_prob * sequence_length))),
-            )
+            self.assertTrue(int(batch_sum) <= mask_prob * sequence_length)
 
 
 @require_torch
-@slow
 @require_datasets
 @require_soundfile
+@slow
 class HubertModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
@@ -520,13 +535,30 @@ class HubertModelIntegrationTest(unittest.TestCase):
         processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft", do_lower_case=True)
 
         input_speech = self._load_datasamples(2)
+        input_values = processor(input_speech, return_tensors="pt").input_values.to(torch_device)
+
+        with torch.no_grad():
+            logits = model(input_values).logits
+
+        predicted_ids = torch.argmax(logits, dim=-1)
+        predicted_trans = processor.batch_decode(predicted_ids)
+
+        EXPECTED_TRANSCRIPTIONS = ["a man said to the universe sir i exist"]
+        self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
+
+    def test_inference_ctc_robust_batched(self):
+        model = HubertForCTC.from_pretrained("facebook/hubert-large-960h-lv60-self").to(torch_device)
+        processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-960h-lv60-self", do_lower_case=True)
+
+        input_speech = self._load_datasamples(4)
 
         inputs = processor(input_speech, return_tensors="pt", padding=True, truncation=True)
 
         input_values = inputs.input_values.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
 
         with torch.no_grad():
-            logits = model(input_values).logits
+            logits = model(input_values, attention_mask=attention_mask).logits
 
         predicted_ids = torch.argmax(logits, dim=-1)
         predicted_trans = processor.batch_decode(predicted_ids)
