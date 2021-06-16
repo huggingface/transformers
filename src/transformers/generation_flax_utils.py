@@ -48,7 +48,7 @@ class FlaxGreedySearchOutput(ModelOutput):
 
 
     Args:
-        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size, max_length)`):
+        sequences (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, max_length)`):
             The generated sequences.
     """
 
@@ -62,7 +62,7 @@ class FlaxSampleOutput(ModelOutput):
 
 
     Args:
-        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size, max_length)`):
+        sequences (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, max_length)`):
             The generated sequences.
     """
 
@@ -76,9 +76,9 @@ class FlaxBeamSearchOutput(ModelOutput):
 
 
     Args:
-        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size, max_length)`):
+        sequences (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, max_length)`):
             The generated sequences.
-        scores (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`):
+        scores (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size,)`):
             The scores (log probabilites) of the generated sequences.
     """
 
