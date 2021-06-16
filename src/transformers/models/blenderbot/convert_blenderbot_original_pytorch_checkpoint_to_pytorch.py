@@ -59,14 +59,14 @@ def rename_state_dict_key(k):
 
 def rename_layernorm_keys(sd):
     keys = [
-        "model.encoder.layernorm_embedding.weight",
-        "model.encoder.layernorm_embedding.bias",
-        "model.decoder.layernorm_embedding.weight",
-        "model.decoder.layernorm_embedding.bias",
+        "encoder.norm_embeddings.weight",
+        "encoder.norm_embeddings.bias",
+        "decoder.norm_embeddings.weight",
+        "decoder.norm_embeddings.bias",
     ]
     for k in keys:
         v = sd.pop(k)
-        new_k = k.replace("layernorm_embedding", "layer_norm")
+        new_k = "model." + k.replace("norm_embeddings", "layer_norm")
         assert new_k not in sd
         sd[new_k] = v
 
