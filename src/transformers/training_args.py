@@ -50,15 +50,15 @@ if is_sagemaker_mp_enabled():
 logger = logging.get_logger(__name__)
 
 
-def default_logdir() -> str:
+def default_logdir(output_dir: str) -> str:
     """
-    Same default as PyTorch
+    Same default as PyTorch, nested under `output_dir`.
     """
     import socket
     from datetime import datetime
 
     current_time = datetime.now().strftime("%b%d_%H-%M-%S")
-    return os.path.join("runs", current_time + "_" + socket.gethostname())
+    return os.path.join(output_dir, "runs", current_time + "_" + socket.gethostname())
 
 
 @dataclass
@@ -397,7 +397,7 @@ class TrainingArguments:
     )
     warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
-    logging_dir: Optional[str] = field(default_factory=default_logdir, metadata={"help": "Tensorboard log dir."})
+    logging_dir: Optional[str] = field(default=None, metadata={"help": "Tensorboard log dir, defaults to runs/ under the output_dir."})
     logging_strategy: IntervalStrategy = field(
         default="steps",
         metadata={"help": "The logging strategy to use."},
@@ -583,10 +583,11 @@ class TrainingArguments:
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
         #  see https://github.com/huggingface/transformers/issues/10628
-        if self.output_dir is not None:
-            self.output_dir = os.path.expanduser(self.output_dir)
+        self.output_dir = os.path.expanduser(self.output_dir)
         if self.logging_dir is not None:
             self.logging_dir = os.path.expanduser(self.logging_dir)
+        else:
+            self.logging_dir = default_logdir(self.output_dir)
 
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
