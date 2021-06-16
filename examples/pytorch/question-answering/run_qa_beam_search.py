@@ -640,7 +640,7 @@ def main():
         trainer.save_metrics("predict", metrics)
 
     if training_args.push_to_hub:
-        kwargs = {"finetuned_from": model_args.model_name_or_path, "tags": "question-answering"}
+        kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "question-answering"}
         if data_args.dataset_name is not None:
             kwargs["dataset_tags"] = data_args.dataset_name
             if data_args.dataset_config_name is not None:
