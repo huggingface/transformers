@@ -16,22 +16,14 @@ limitations under the License.
 
 # Run training on Amazon SageMaker
 
-Hugging Face and Amazon are introducing new [Hugging Face Deep Learning Containers (DLCs)](https://github.com/aws/deep-learning-containers/blob/master/available_images.md#huggingface-training-containers) to make it easier than ever to train Hugging Face Transformer models in [Amazon SageMaker](https://aws.amazon.com/sagemaker/).
+Hugging Face and Amazon are introducing new [Hugging Face Deep Learning Containers (DLCs)](#deep-learning-container-dlc-overview) to make it easier than ever to train Hugging Face Transformer models in [Amazon SageMaker](https://aws.amazon.com/sagemaker/).
+
+You can find a full list of all available [Hugging Face Deep Learning Containers](#deep-learning-container-dlc-overview) at the end of this page. 
 
 To learn how to access and use the new Hugging Face DLCs with the Amazon SageMaker Python SDK, check out the guides and resources below.
 
 ---
 
-## Deep Learning Container (DLC) overview
-
-The Deep Learning Container are in every available where Amazon SageMaker is available. You can see the [AWS region table](https://aws.amazon.com/about-aws/global-infrastructure/regional-product-services/) for all AWS global infrastructure. To get an detailed overview of all included packages look [here in the release notes](https://docs.aws.amazon.com/deep-learning-containers/latest/devguide/deep-learning-containers-images.html).
-
-| 🤗 Transformers version | 🤗 Datasets version | PyTorch/TensorFlow version | type     | device | Python Version | Example `image_uri`                                                                                                               |
-| ----------------------- | ------------------- | -------------------------- | -------- | ------ | -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| 4.4.2                   | 1.5.0               | PyTorch 1.6.0              | training | GPU    | 3.6            | `763104351884.dkr.ecr.us-west-2.amazonaws.com/huggingface-pytorch-training:1.6.0-transformers4.4.2-gpu-py36-cu110-ubuntu18.04`    |
-| 4.4.2                   | 1.5.0               | TensorFlow 2.4.1           | training | GPU    | 3.7            | `763104351884.dkr.ecr.us-west-2.amazonaws.com/huggingface-tensorflow-training:2.4.1-transformers4.4.2-gpu-py37-cu110-ubuntu18.04` |
-
----
 
 ## Getting Started: Train a 🤗 Transformers Model
 
@@ -194,8 +186,8 @@ You can find here a list of the official notebooks provided by Hugging Face.
 | [Spot Instances and continues training](https://github.com/huggingface/notebooks/blob/master/sagemaker/05_spot_instances/sagemaker-notebook.ipynb)                                              | End-to-End to Text-Classification example using spot instances with continued training.                          |
 | [SageMaker Metrics](https://github.com/huggingface/notebooks/blob/master/sagemaker/06_sagemaker_metrics/sagemaker-notebook.ipynb)                                                               | End-to-End to Text-Classification example using SageMaker Metrics to extract and log metrics during training     |
 | [Distributed Training Data Parallelism Tensorflow](https://github.com/huggingface/notebooks/blob/master/sagemaker/07_tensorflow_distributed_training_data_parallelism/sagemaker-notebook.ipynb) | End-to-End distributed binary Text-Classification example using `Keras` and `TensorFlow`                    
-| [Distributed Seq2Seq Training with Data Parallelism and BART](https://github.com/huggingface/notebooks/blob/master/sagemaker/08_distributed_summarization_bart_t5/sagemaker-notebook.ipynb) | End-to-End distributed summarization example `BART-large` and 🤗 Transformers example script for `summarization`                        |
-
+| [Distributed Seq2Seq Training with Data Parallelism and BART](https://github.com/huggingface/notebooks/blob/master/sagemaker/08_distributed_summarization_bart_t5/sagemaker-notebook.ipynb) | End-to-End distributed summarization example with `BART-large` and 🤗 Transformers example script for `summarization`                        |
+| [Image Classification using Vision Transformer](https://github.com/huggingface/notebooks/blob/master/sagemaker/09_image_classification_vision_transformer/sagemaker-notebook.ipynb) | End-to-End image classification example with `Vision Transformers`                 |
 
 ---
 
@@ -381,6 +373,24 @@ huggingface_estimator = HuggingFace(
         hyperparameters = hyperparameters)
 
 ```
+
+
+## Deep Learning Container (DLC) overview
+
+The Deep Learning Container are in every available where Amazon SageMaker is available. You can see the [AWS region table](https://aws.amazon.com/about-aws/global-infrastructure/regional-product-services/) for all AWS global infrastructure. To get an detailed overview of all included packages look [here in the release notes](https://docs.aws.amazon.com/deep-learning-containers/latest/devguide/deep-learning-containers-images.html).
+
+| 🤗 Transformers version | 🤗 Datasets version | PyTorch/TensorFlow version | type     | device | Python Version | Example `image_uri`                                                                                                               |
+| ----------------------- | ------------------- | -------------------------- | -------- | ------ | -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 4.4.2                   | 1.5.0               | PyTorch 1.6.0              | training | GPU    | 3.6            | `763104351884.dkr.ecr.us-west-2.amazonaws.com/huggingface-pytorch-training:1.6.0-transformers4.4.2-gpu-py36-cu110-ubuntu18.04`    |
+| 4.4.2                   | 1.5.0               | TensorFlow 2.4.1           | training | GPU    | 3.7            | `763104351884.dkr.ecr.us-west-2.amazonaws.com/huggingface-tensorflow-training:2.4.1-transformers4.4.2-gpu-py37-cu110-ubuntu18.04` |
+| 4.5.0                   | 1.5.0               | PyTorch 1.6.0              | training | GPU    | 3.6            | `763104351884.dkr.ecr.us-west-2.amazonaws.com/huggingface-pytorch-training:1.6.0-transformers4.4.2-gpu-py36-cu110-ubuntu18.04`    |
+| 4.5.0                   | 1.5.0               | TensorFlow 2.4.1           | training | GPU    | 3.7            | `763104351884.dkr.ecr.us-west-2.amazonaws.com/huggingface-tensorflow-training:2.4.1-transformers4.5.0-gpu-py37-cu110-ubuntu18.04` |
+| 4.6.1                   | 1.6.2               | PyTorch 1.6.0              | training | GPU    | 3.6            | `763104351884.dkr.ecr.us-west-2.amazonaws.com/huggingface-pytorch-training:1.6.0-transformers4.5.0-gpu-py36-cu110-ubuntu18.04`    |
+| 4.6.1                   | 1.6.2               | PyTorch 1.7.1               | training | GPU    | 3.6            | `763104351884.dkr.ecr.us-west-2.amazonaws.com/huggingface-pytorch-training:1.7.1-transformers4.6.1-gpu-py36-cu110-ubuntu18.04` |
+| 4.6.1                   | 1.6.2               | TensorFlow 2.4.1           | training | GPU    | 3.7            | `763104351884.dkr.ecr.us-west-2.amazonaws.com/huggingface-tensorflow-training:2.4.1-transformers4.6.1-gpu-py37-cu110-ubuntu18.04` |
+
+---
+
 
 ## Additional Resources
 
