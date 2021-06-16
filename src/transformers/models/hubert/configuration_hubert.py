@@ -40,9 +40,9 @@ class HubertConfig(PretrainedConfig):
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 32):
             Vocabulary size of the Hubert model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.HubertModel` or
-            :class:`~transformers.TFHubertModel`. Vocabulary size of the model. Defines the different tokens that can
-            be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.HubertModel`.
+            :obj:`inputs_ids` passed when calling :class:`~transformers.HubertModel`. Vocabulary size of the model.
+            Defines the different tokens that can be represented by the `inputs_ids` passed to the forward method of
+            :class:`~transformers.HubertModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
