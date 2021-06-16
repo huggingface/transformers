@@ -458,7 +458,7 @@ class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = HubertModel.from_pretrained("facebook/hubert-base-960h")
+        model = HubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
         self.assertIsNotNone(model)
 
 
@@ -514,27 +514,10 @@ class HubertModelIntegrationTest(unittest.TestCase):
 
         return ds["speech"][:num_samples]
 
-    def test_inference_ctc_normal(self):
-        model = HubertForCTC.from_pretrained("facebook/hubert-base-960h")
-        model.to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-base-960h", do_lower_case=True)
-        input_speech = self._load_datasamples(1)
-
-        input_values = processor(input_speech, return_tensors="pt").input_values.to(torch_device)
-
-        with torch.no_grad():
-            logits = model(input_values).logits
-
-        predicted_ids = torch.argmax(logits, dim=-1)
-        predicted_trans = processor.batch_decode(predicted_ids)
-
-        EXPECTED_TRANSCRIPTIONS = ["a man said to the universe sir i exist"]
-        self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
-
     def test_inference_ctc_normal_batched(self):
-        model = HubertForCTC.from_pretrained("facebook/hubert-base-960h")
+        model = HubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft")
         model.to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-base-960h", do_lower_case=True)
+        processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft", do_lower_case=True)
 
         input_speech = self._load_datasamples(2)
 
@@ -550,31 +533,6 @@ class HubertModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_TRANSCRIPTIONS = [
             "a man said to the universe sir i exist",
-            "sweat covered brion's body trickling into the tight lowing cloth that was the only garment he wore",
-        ]
-        self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
-
-    def test_inference_ctc_robust_batched(self):
-        model = HubertForCTC.from_pretrained("facebook/hubert-large-960h-lv60-self").to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-960h-lv60-self", do_lower_case=True)
-
-        input_speech = self._load_datasamples(4)
-
-        inputs = processor(input_speech, return_tensors="pt", padding=True, truncation=True)
-
-        input_values = inputs.input_values.to(torch_device)
-        attention_mask = inputs.attention_mask.to(torch_device)
-
-        with torch.no_grad():
-            logits = model(input_values, attention_mask=attention_mask).logits
-
-        predicted_ids = torch.argmax(logits, dim=-1)
-        predicted_trans = processor.batch_decode(predicted_ids)
-
-        EXPECTED_TRANSCRIPTIONS = [
-            "a man said to the universe sir i exist",
             "sweat covered brion's body trickling into the tight loin cloth that was the only garment he wore",
-            "the cut on his chest still dripping blood the ache of his overstrained eyes even the soaring arena around him with the thousands of spectators were trivialities not worth thinking about",
-            "his instant panic was followed by a small sharp blow high on his chest",
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
