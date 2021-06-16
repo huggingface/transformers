@@ -557,6 +557,9 @@ class TrainingArguments:
     push_to_hub: bool = field(
         default=False, metadata={"help": "Whether or not to upload the trained model to the model hub after training."}
     )
+    push_to_hub_model_id: Optional[str]
+    push_to_hub_organization: Optional[str]
+
     resume_from_checkpoint: Optional[str] = field(
         default=None,
         metadata={"help": "The path to a folder with a valid checkpoint for your model."},
