@@ -25,6 +25,7 @@ from typing import Optional
 
 import numpy as np
 from datasets import load_dataset, load_metric
+from huggingface_hub import HfApi, Repository
 
 import transformers
 from transformers import (
@@ -231,6 +232,29 @@ def main():
                 f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
             )
+
+    if training_args.push_to_hub:
+        token = HfFolder.get_token()
+        if token is None:
+            raise EnvironmentError(
+                "You specified push_to_hub, but a huggingface token was not found."
+            )
+        if training_args.push_to_hub_model_id is None:
+            raise EnvironmentError(
+                "Please specify the model id you want to push to the hub under."
+                "If already exists, will be cloned locally."
+                "Otherwise will be created through the HF API"
+            )
+        repo_url = HfApi().create_repo(
+            token=token,
+            name=training_args.push_to_hub_model_id,
+            organization=training_args.push_to_hub_organization,
+            exist_ok=True,
+        )
+        repo = Repository(
+            training_args.output_dir,
+            clone_from=repo_url,
+        )
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
@@ -545,7 +569,11 @@ def main():
             kwargs["dataset_args"] = data_args.task_name
             kwargs["dataset"] = f"GLUE {data_args.task_name.upper()}"
 
-        trainer.push_to_hub(**kwargs)
+        trainer.create_model_card(model_name=training_args.model_name, **kwargs)
+
+        repo.git_add(".")
+        repo.git_commit("commit from script")
+        repo.git_push()
 
 
 def _mp_fn(index):
