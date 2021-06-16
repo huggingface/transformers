@@ -529,28 +529,11 @@ class HubertModelIntegrationTest(unittest.TestCase):
 
         return ds["speech"][:num_samples]
 
-    def test_inference_ctc_normal_batched(self):
-        model = HubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft")
-        model.to(torch_device)
+    def test_inference_ctc_batched(self):
+        model = HubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft").to(torch_device)
         processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft", do_lower_case=True)
 
         input_speech = self._load_datasamples(2)
-        input_values = processor(input_speech, return_tensors="pt").input_values.to(torch_device)
-
-        with torch.no_grad():
-            logits = model(input_values).logits
-
-        predicted_ids = torch.argmax(logits, dim=-1)
-        predicted_trans = processor.batch_decode(predicted_ids)
-
-        EXPECTED_TRANSCRIPTIONS = ["a man said to the universe sir i exist"]
-        self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
-
-    def test_inference_ctc_robust_batched(self):
-        model = HubertForCTC.from_pretrained("facebook/hubert-large-960h-lv60-self").to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-960h-lv60-self", do_lower_case=True)
-
-        input_speech = self._load_datasamples(4)
 
         inputs = processor(input_speech, return_tensors="pt", padding=True, truncation=True)
 
