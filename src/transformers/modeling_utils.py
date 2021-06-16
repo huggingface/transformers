@@ -854,9 +854,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 .. warning::
 
-                    Using :obj:`push_to_hub=True` might be unsafe if the folder you are passing along is not in sync
-                    with the repository you want to push to (it will pull the repo before saving to be able to push
-                    after the model is saved, so it might erase some uncommitted changes in that folder)
+                    Using :obj:`push_to_hub=True` will synchronize the repository you are pushing to with
+                    :obj:`save_directory`, which may add files in it.
 
             kwargs:
                 Additional key word arguments passed along to the

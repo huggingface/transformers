@@ -1913,30 +1913,26 @@ class PushToHubMixin:
 
     def push_to_hub(
         self,
-        repo_name: Optional[str] = None,
+        repo_path_or_name: Optional[str] = None,
         repo_url: Optional[str] = None,
-        working_directory: Optional[str] = None,
         commit_message: Optional[str] = None,
         organization: Optional[str] = None,
         private: bool = None,
         use_auth_token: Optional[Union[bool, str]] = None,
     ) -> str:
         """
-        Upload model checkpoint or tokenizer files to the 🤗 model hub.
+        Upload model checkpoint or tokenizer files to the 🤗 Model Hub while synchronize a local clone of the repo in
+        :obj:`repo_path_or_name`.
 
         Parameters:
-            repo_name (:obj:`str`, `optional`):
-                Repository name for your model or tokenizer in the hub. If not specified, the repository name will be
-                the stem of :obj:`save_directory`.
+            repo_path_or_name (:obj:`str`, `optional`):
+                Can either be a repository name for your model or tokenizer in the Hub or a path to a local folder (in
+                which case the repository will have the name of that local folder). If not specified, will default to
+                the name given by :obj:`repo_url` and a local directory with that name will be created.
             repo_url (:obj:`str`, `optional`):
                 Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
                 repository will be created in your namespace (unless you specify an :obj:`organization`) with
                 :obj:`repo_name`.
-            working_directory (:obj:`str`, `optional`):
-                Folder where the repository has already been cloned (if it exists). This is useful if you are pushing
-                to an existing repo, to avoid cloning it again, but it might replace some files in that folder if you
-                are not up to date (like would happen in a :obj:`git pull`), so you should only use it if you don't
-                have uncommited files inside.
             commit_message (:obj:`str`, `optional`):
                 Message to commit while pushing. Will default to :obj:`"add config"`, :obj:`"add tokenizer"` or
                 :obj:`"add model"` depending on the type of the class.
@@ -1954,47 +1950,98 @@ class PushToHubMixin:
         Returns:
             The url of the commit of your model in the given repository.
         """
-        working_dir = working_directory if working_directory is not None else tempfile.tempfile.mkdtemp()
         # Create or clone the repo
         repo = self._create_or_get_repo(
-            working_directory=working_dir,
-            repo_name=repo_name,
+            repo_path_or_name=repo_path_or_name,
             repo_url=repo_url,
             organization=organization,
             private=private,
             use_auth_token=use_auth_token,
         )
         # Save the files in the cloned repo
-        self.save_pretrained(working_dir)
+        self.save_pretrained(repo_path_or_name)
         # Commit and push!
         url = self._push_to_hub(repo, commit_message=commit_message)
+        return url
 
-        # Clean up! Clean up! Everybody everywhere!
-        if working_directory is None:
-            shutil.rmtree(working_dir)
+    def save_to_hub(
+        self,
+        repo_name: Optional[str] = None,
+        repo_url: Optional[str] = None,
+        commit_message: Optional[str] = None,
+        organization: Optional[str] = None,
+        private: bool = None,
+        use_auth_token: Optional[Union[bool, str]] = None,
+    ) -> str:
+        """
+        Upload model checkpoint or tokenizer files to the 🤗 Model Hub with no local save.
 
+        Parameters:
+            repo_name (:obj:`str`, `optional`):
+                The repository name for your model or tokenizer in the Hub.
+            repo_url (:obj:`str`, `optional`):
+                Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
+                repository will be created in your namespace (unless you specify an :obj:`organization`) with
+                :obj:`repo_name`.
+            commit_message (:obj:`str`, `optional`):
+                Message to commit while pushing. Will default to :obj:`"add config"`, :obj:`"add tokenizer"` or
+                :obj:`"add model"` depending on the type of the class.
+            organization (:obj:`str`, `optional`):
+                Organization in which you want to push your model or tokenizer (you must be a member of this
+                organization).
+            private (:obj:`bool`, `optional`):
+                Whether or not the repository created should be private (requires a paying subscription).
+            use_auth_token (:obj:`bool` or :obj:`str`, `optional`):
+                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`). Will default to
+                :obj:`True` if :obj:`repo_url` is not specified.
+
+
+        Returns:
+            The url of the commit of your model in the given repository.
+        """
+        if repo_name is None and repo_url is None:
+            raise ValueError("You need to specify a `repo_name` or a `repo_url`.")
+        if repo_name is None:
+            repo_name = repo_url.split("/")[-1]
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Make sure the temp folder has the right name!
+            repo_path_or_name = os.path.join(tmp_dir, repo_name)
+            # Clone the repo
+            repo = self._create_or_get_repo(
+                # Make sure the temp folder has the right name!
+                repo_path_or_name=repo_path_or_name,
+                repo_url=repo_url,
+                organization=organization,
+                private=private,
+                use_auth_token=use_auth_token,
+            )
+            # Save the files in the cloned repo
+            self.save_pretrained(repo_path_or_name)
+            # Commit and push!
+            url = self._push_to_hub(repo, commit_message=commit_message)
         return url
 
     def _create_or_get_repo(
         self,
-        working_directory: Optional[str] = None,
-        repo_name: Optional[str] = None,
+        repo_path_or_name: Optional[str] = None,
         repo_url: Optional[str] = None,
         organization: Optional[str] = None,
         private: bool = None,
         use_auth_token: Optional[Union[bool, str]] = None,
     ):
-        if repo_name is None and repo_url is None and working_directory is None:
-            raise ValueError("Need either a `repo_name` or `repo_url` to know where to push!")
+        if repo_path_or_name is None and repo_url is None:
+            raise ValueError("You need to specify a `repo_path_or_name` or a `repo_url`.")
 
-        if repo_name is None and repo_url is None:
-            repo_name = Path(working_directory).name
         if use_auth_token is None and repo_url is None:
             use_auth_token = True
 
-        # Create workind_directory if it does not exist.
-        if working_directory is not None and not os.path.isdir(working_directory):
-            os.makedirs(working_directory)
+        if repo_path_or_name is None:
+            repo_path_or_name = repo_url.split("/")[-1]
+
+        # Create a working directory if it does not exist.
+        os.makedirs(repo_path_or_name, exist_ok=True)
 
         if isinstance(use_auth_token, str):
             token = use_auth_token
@@ -2010,6 +2057,7 @@ class PushToHubMixin:
             token = None
 
         if repo_url is None:
+            repo_name = Path(repo_path_or_name).name
             # Special provision for the test endpoint (CI)
             repo_url = HfApi(endpoint=HUGGINGFACE_CO_RESOLVE_ENDPOINT).create_repo(
                 token,
@@ -2020,7 +2068,7 @@ class PushToHubMixin:
                 exist_ok=True,
             )
 
-        return Repository(working_directory, clone_from=repo_url, use_auth_token=use_auth_token)
+        return Repository(repo_path_or_name, clone_from=repo_url, use_auth_token=use_auth_token)
 
     @classmethod
     def _push_to_hub(cls, repo: Repository, commit_message: Optional[str] = None) -> str:
