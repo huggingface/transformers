@@ -30,7 +30,6 @@ from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
 from .file_utils import (
-    CONFIG_NAME,
     DUMMY_INPUTS,
     FLAX_WEIGHTS_NAME,
     TF2_WEIGHTS_NAME,
@@ -852,6 +851,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 need to replace :obj:`torch.save` by another method.
             push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to push your model to the Hugging Face model hub after saving it.
+
+                .. warning::
+
+                    Using :obj:`push_to_hub=True` might be unsafe if the folder you are passing along is not in sync
+                    with the repository you want to push to (it will pull the repo before saving to be able to push
+                    after the model is saved, so it might erase some uncommitted changes in that folder)
+
             kwargs:
                 Additional key word arguments passed along to the
                 :meth:`~transformers.file_utils.PushToHubMixin.push_to_hub` method.
@@ -860,6 +866,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
         os.makedirs(save_directory, exist_ok=True)
+
+        if push_to_hub:
+            commit_message = kwargs.pop("commit_message", None)
+            repo = self._create_or_get_repo(save_directory, **kwargs)
 
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
@@ -886,10 +896,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         logger.info(f"Model weights saved in {output_model_file}")
 
         if push_to_hub:
-            saved_files = [output_model_file]
-            if save_config:
-                saved_files.append(os.path.join(save_directory, CONFIG_NAME))
-            url = self._push_to_hub(save_files=saved_files, **kwargs)
+            url = self._push_to_hub(repo, commit_message=commit_message)
             logger.info(f"Model pushed to the hub in this commit: {url}")
 
     @classmethod

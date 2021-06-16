@@ -31,7 +31,6 @@ import types
 from collections import OrderedDict, UserDict
 from contextlib import contextmanager
 from dataclasses import fields
-from distutils.dir_util import copy_tree
 from enum import Enum
 from functools import partial, wraps
 from hashlib import sha256
@@ -1916,6 +1915,7 @@ class PushToHubMixin:
         self,
         repo_name: Optional[str] = None,
         repo_url: Optional[str] = None,
+        working_directory: Optional[str] = None,
         commit_message: Optional[str] = None,
         organization: Optional[str] = None,
         private: bool = None,
@@ -1932,6 +1932,11 @@ class PushToHubMixin:
                 Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
                 repository will be created in your namespace (unless you specify an :obj:`organization`) with
                 :obj:`repo_name`.
+            working_directory (:obj:`str`, `optional`):
+                Folder where the repository has already been cloned (if it exists). This is useful if you are pushing
+                to an existing repo, to avoid cloning it again, but it might replace some files in that folder if you
+                are not up to date (like would happen in a :obj:`git pull`), so you should only use it if you don't
+                have uncommited files inside.
             commit_message (:obj:`str`, `optional`):
                 Message to commit while pushing. Will default to :obj:`"add config"`, :obj:`"add tokenizer"` or
                 :obj:`"add model"` depending on the type of the class.
@@ -1949,38 +1954,41 @@ class PushToHubMixin:
         Returns:
             The url of the commit of your model in the given repository.
         """
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            self.save_pretrained(tmp_dir)
-            self._push_to_hub(
-                save_directory=tmp_dir,
-                repo_name=repo_name,
-                repo_url=repo_url,
-                commit_message=commit_message,
-                organization=organization,
-                private=private,
-                use_auth_token=use_auth_token,
-            )
+        working_dir = working_directory if working_directory is not None else tempfile.tempfile.mkdtemp()
+        # Create or clone the repo
+        repo = self._create_or_get_repo(
+            working_directory=working_dir,
+            repo_name=repo_name,
+            repo_url=repo_url,
+            organization=organization,
+            private=private,
+            use_auth_token=use_auth_token,
+        )
+        # Save the files in the cloned repo
+        self.save_pretrained(working_dir)
+        # Commit and push!
+        url = self._push_to_hub(repo, commit_message=commit_message)
 
-    @classmethod
-    def _push_to_hub(
-        cls,
-        save_directory: Optional[str] = None,
-        save_files: Optional[List[str]] = None,
+        # Clean up! Clean up! Everybody everywhere!
+        if working_directory is None:
+            shutil.rmtree(working_dir)
+
+        return url
+
+    def _create_or_get_repo(
+        self,
+        working_directory: Optional[str] = None,
         repo_name: Optional[str] = None,
         repo_url: Optional[str] = None,
-        commit_message: Optional[str] = None,
         organization: Optional[str] = None,
         private: bool = None,
         use_auth_token: Optional[Union[bool, str]] = None,
-    ) -> str:
-        # Private version of push_to_hub, that either accepts a folder to push or a list of files.
-        if save_directory is None and save_files is None:
-            raise ValueError("_push_to_hub requires either a `save_directory` or a list of `save_files`.")
-        if repo_name is None and repo_url is None and save_directory is None:
+    ):
+        if repo_name is None and repo_url is None and working_directory is None:
             raise ValueError("Need either a `repo_name` or `repo_url` to know where to push!")
 
-        if repo_name is None and repo_url is None and save_files is None:
-            repo_name = Path(save_directory).name
+        if repo_name is None and repo_url is None:
+            repo_name = Path(working_directory).name
         if use_auth_token is None and repo_url is None:
             use_auth_token = True
 
@@ -2008,6 +2016,10 @@ class PushToHubMixin:
                 exist_ok=True,
             )
 
+        return Repository(working_directory, clone_from=repo_url, use_auth_token=use_auth_token)
+
+    @classmethod
+    def _push_to_hub(cls, repo: Repository, commit_message: Optional[str] = None) -> str:
         if commit_message is None:
             if "Tokenizer" in cls.__name__:
                 commit_message = "add tokenizer"
@@ -2016,14 +2028,4 @@ class PushToHubMixin:
             else:
                 commit_message = "add model"
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            # First create the repo (and clone its content if it's nonempty), then add the files (otherwise there is
-            # no diff so nothing is pushed).
-            repo = Repository(tmp_dir, clone_from=repo_url, use_auth_token=use_auth_token)
-            if save_directory is None:
-                for filename in save_files:
-                    shutil.copy(filename, Path(tmp_dir) / Path(filename).name)
-            else:
-                copy_tree(save_directory, tmp_dir)
-
-            return repo.push_to_hub(commit_message=commit_message)
+        return repo.push_to_hub(commit_message=commit_message)
