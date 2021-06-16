@@ -1472,7 +1472,7 @@ class QuestionAwareSpanSelectionHead(nn.Module):
         start_reps = start_reps.permute(0, 2, 1)  # [batch_size, dim, seq_length]
         start_logits = torch.matmul(temp, start_reps)
 
-        temp = self.start_classifier(query_end_reps)
+        temp = self.end_classifier(query_end_reps)
         end_reps = end_reps.permute(0, 2, 1)
         end_logits = torch.matmul(temp, end_reps)
 
@@ -1500,15 +1500,17 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
 
         self.splinter = SplinterModel(config)
         self.initialize_new_qass = config.initialize_new_qass
-        self.cls = ClassificationHead(config) if not self.initialize_new_qass else None
-        self.new_cls = ClassificationHead(config) if self.initialize_new_qass else None
+        #self.cls = ClassificationHead(config) if not self.initialize_new_qass else None
+        #self.new_cls = ClassificationHead(config) if self.initialize_new_qass else None
+        self.splinter_qass = QuestionAwareSpanSelectionHead(config) if not self.initialize_new_qass else None
+        self.new_splinter_qass = QuestionAwareSpanSelectionHead(config) if self.initialize_new_qass else None
         self.question_token_id = config.question_token_id
 
         self.init_weights()
 
-    def _get_cls(self):
+    def _get_qass(self):
         """ Controls whether we use the pretrained QASS layer's parameters, or randomly initialized ones """
-        return self.cls if not self.initialize_new_qass else self.new_cls
+        return self.splinter_qass if not self.initialize_new_qass else self.new_splinter_qass
 
     @add_start_docstrings_to_model_forward(SPLINTER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
@@ -1562,10 +1564,13 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
             question_positions = question_position_for_each_example.unsqueeze(-1)
             question_positions_were_none = True
 
+        if attention_mask is not None:
+            attention_mask[input_ids == 102] = 0
+
         outputs = self.splinter(
             input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
+            # token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -1575,7 +1580,7 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         )
 
         sequence_output = outputs[0]
-        cls = self._get_cls()
+        cls = self._get_qass()
         start_logits, end_logits = cls(sequence_output, question_positions)
 
         if question_positions_were_none:

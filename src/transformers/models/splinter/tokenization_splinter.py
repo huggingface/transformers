@@ -61,7 +61,7 @@ class SplinterTokenizer(BertTokenizer):
     def __init__(
             self,
             vocab_file,
-            do_lower_case=True,
+            do_lower_case=False,
             do_basic_tokenize=True,
             never_split=None,
             unk_token="[UNK]",
