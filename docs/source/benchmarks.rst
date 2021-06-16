@@ -359,5 +359,5 @@ available `here
 
 With the new `benchmark` tools, it is easier than ever to share your benchmark results with the community
 
-- :prefix_link:`Pytorch Benchmarking Results<examples/pytorch/benchmarking/README.md>`.
+- :prefix_link:`PyTorch Benchmarking Results<examples/pytorch/benchmarking/README.md>`.
 - :prefix_link:`Tensorflow Benchmarking Results<examples/tensorflow/benchmarking/README.md>`.
