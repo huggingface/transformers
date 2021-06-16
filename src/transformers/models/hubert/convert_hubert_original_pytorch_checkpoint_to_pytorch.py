@@ -86,7 +86,7 @@ def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
     unused_weights = []
     fairseq_dict = fairseq_model.state_dict()
 
-    feature_extractor = hf_model.wav2vec2.feature_extractor if is_finetuned else hf_model.feature_extractor
+    feature_extractor = hf_model.hubert.feature_extractor if is_finetuned else hf_model.feature_extractor
 
     for name, value in fairseq_dict.items():
         is_used = False
@@ -101,7 +101,7 @@ def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
             is_used = True
         else:
             for key, mapped_key in MAPPING.items():
-                mapped_key = "wav2vec2." + mapped_key if (is_finetuned and mapped_key != "lm_head") else mapped_key
+                mapped_key = "hubert." + mapped_key if (is_finetuned and mapped_key != "lm_head") else mapped_key
 
                 if key in name or (key.split("w2v_model.")[-1] == name.split(".")[0] and not is_finetuned):
                     is_used = True
@@ -163,7 +163,7 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 
 
 @torch.no_grad()
-def convert_wav2vec2_checkpoint(
+def convert_hubert_checkpoint(
     checkpoint_path, pytorch_dump_folder_path, config_path=None, dict_path=None, is_finetuned=True
 ):
     """
@@ -239,6 +239,6 @@ if __name__ == "__main__":
         "--not_finetuned", action="store_true", help="Whether the model to convert is a fine-tuned model or not"
     )
     args = parser.parse_args()
-    convert_wav2vec2_checkpoint(
+    convert_hubert_checkpoint(
         args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path, args.dict_path, not args.not_finetuned
     )
