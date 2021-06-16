@@ -341,7 +341,7 @@ class HubertModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = HubertModel.from_pretrained("facebook/hubert-base-960h")
+        model = HubertModel.from_pretrained("facebook/hubert-base-ls960")
         self.assertIsNotNone(model)
 
 

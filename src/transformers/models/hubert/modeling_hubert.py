@@ -36,7 +36,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "HubertConfig"
 
 HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/hubert-base-960h",
+    "facebook/hubert-base-ls960",
     "facebook/hubert-large-960h",
     "facebook/hubert-large-960h-lv60",
     "facebook/hubert-large-960h-lv60-self",
@@ -777,7 +777,7 @@ HUBERT_INPUTS_DOCSTRING = r"""
                 :obj:`attention_mask` should only be passed if the corresponding processor has
                 ``config.return_attention_mask == True``. For all models whose processor has
                 ``config.return_attention_mask == False``, such as `hubert-base
-                <https://huggingface.co/facebook/hubert-base-960h>`__, :obj:`attention_mask` should **not** be passed
+                <https://huggingface.co/facebook/hubert-base-ls960>`__, :obj:`attention_mask` should **not** be passed
                 to avoid degraded performance when doing batched inference. For such models :obj:`input_values` should
                 simply be padded with 0 and passed without :obj:`attention_mask`. Be aware that these models also yield
                 slightly different results depending on whether :obj:`input_values` is padded or not.

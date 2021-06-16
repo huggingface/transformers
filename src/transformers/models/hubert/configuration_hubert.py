@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/hubert-base-960h": "https://huggingface.co/facebook/hubert-base-960h/resolve/main/config.json",
+    "facebook/hubert-base-ls960": "https://huggingface.co/facebook/hubert-base-ls960/resolve/main/config.json",
     # See all Hubert models at https://huggingface.co/models?filter=hubert
 }
 
@@ -30,8 +30,8 @@ class HubertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.HubertModel`. It is used to
     instantiate an Hubert model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Hubert `facebook/hubert-base-960h
-    <https://huggingface.co/facebook/hubert-base-960h>`__ architecture.
+    configuration with the defaults will yield a similar configuration to that of the Hubert `facebook/hubert-base-ls960
+    <https://huggingface.co/facebook/hubert-base-ls960>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -122,10 +122,10 @@ class HubertConfig(PretrainedConfig):
 
         >>> from transformers import HubertModel, HubertConfig
 
-        >>> # Initializing a Hubert facebook/hubert-base-960h style configuration
+        >>> # Initializing a Hubert facebook/hubert-base-ls960 style configuration
         >>> configuration = HubertConfig()
 
-        >>> # Initializing a model from the facebook/hubert-base-960h style configuration
+        >>> # Initializing a model from the facebook/hubert-base-ls960 style configuration
         >>> model = HubertModel(configuration)
 
         >>> # Accessing the model configuration
