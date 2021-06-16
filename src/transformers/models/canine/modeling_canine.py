@@ -22,7 +22,7 @@ import os
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
@@ -201,7 +201,7 @@ class CanineEmbeddings(nn.Module):
     def _embed_hash_buckets(self, input_ids, embedding_size: int, num_hashes: int, num_buckets: int):
         """Converts IDs (e.g. codepoints) into embeddings via multiple hashing."""
         if embedding_size % num_hashes != 0:
-            raise ValueError(f"Expected `embedding_size` ({embedding_size}) % " f"`num_hashes` ({num_hashes}) == 0")
+            raise ValueError(f"Expected `embedding_size` ({embedding_size}) % `num_hashes` ({num_hashes}) == 0")
 
         hash_bucket_tensors = self._hash_bucket_tensors(input_ids, num_hashes=num_hashes, num_buckets=num_buckets)
         embedding_shards = []
@@ -342,15 +342,8 @@ class ConvProjection(nn.Module):
             # Limit transformer query seq and attention mask to these character
             # positions to greatly reduce the compute cost. Typically, this is just
             # done for the MLM training task.
-
-            # `query_seq`: [batch, final_char_seq, char_dim]
-            # query_seq = tf.gather(
-            #     final_char_seq, final_seq_char_positions, batch_dims=1)
-            # char_attention_mask = tf.gather(
-            #     char_attention_mask,
-            #     final_seq_char_positions,
-            #     batch_dims=1)
-            raise NotImplementedError("To do: add support for MLM")
+            # TODO add support for MLM
+            raise NotImplementedError("CanineForMaskedLM is currently not supported")
         else:
             query_seq = final_char_seq
 
@@ -475,13 +468,17 @@ class CanineAttention(nn.Module):
     """
     Additional arguments related to local attention:
 
-        local: Whether to apply local attention. always_attend_to_first_position: Should all blocks be able to attend
-        to the `to_tensor`'s first position (e.g. a [CLS] position)? first_position_attends_to_all: Should the
-        `from_tensor`'s first position be able to attend to all positions within the `from_tensor`?
-        attend_from_chunk_width: The width of each block-wise chunk in `from_tensor`. attend_from_chunk_stride: The
-        number of elements to skip when moving to the next block in `from_tensor`. attend_to_chunk_width: The width of
-        each block-wise chunk in `to_tensor`. attend_to_chunk_stride: The number of elements to skip when moving to the
-        next block in `to_tensor`.
+        - **local** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether to apply local attention.
+        - **always_attend_to_first_position** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Should all blocks
+          be able to attend
+        to the :obj:`to_tensor`'s first position (e.g. a [CLS] position)? - **first_position_attends_to_all**
+        (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Should the `from_tensor`'s first position be able to
+        attend to all positions within the `from_tensor`? - **attend_from_chunk_width** (:obj:`int`, `optional`,
+        defaults to 128) -- The width of each block-wise chunk in :obj:`from_tensor`. - **attend_from_chunk_stride**
+        (:obj:`int`, `optional`, defaults to 128) -- The number of elements to skip when moving to the next block in
+        :obj:`from_tensor`. - **attend_to_chunk_width** (:obj:`int`, `optional`, defaults to 128) -- The width of each
+        block-wise chunk in `to_tensor`. - **attend_to_chunk_stride** (:obj:`int`, `optional`, defaults to 128) -- The
+        number of elements to skip when moving to the next block in :obj:`to_tensor`.
     """
 
     def __init__(
@@ -544,13 +541,7 @@ class CanineAttention(nn.Module):
         output_attentions=False,
     ):
         if not self.local:
-            self_outputs = self.self(
-                hidden_states,
-                hidden_states,
-                attention_mask,
-                head_mask,
-                output_attentions,
-            )
+            self_outputs = self.self(hidden_states, hidden_states, attention_mask, head_mask, output_attentions)
             attention_output = self_outputs[0]
         else:
             from_seq_length = to_seq_length = hidden_states.shape[1]
@@ -599,11 +590,7 @@ class CanineAttention(nn.Module):
                     to_tensor_chunk = torch.cat([cls_position, to_tensor_chunk], dim=1)
 
                 attention_outputs_chunk = self.self(
-                    from_tensor_chunk,
-                    to_tensor_chunk,
-                    attention_mask_chunk,
-                    head_mask,
-                    output_attentions,
+                    from_tensor_chunk, to_tensor_chunk, attention_mask_chunk, head_mask, output_attentions
                 )
                 attention_output_chunks.append(attention_outputs_chunk[0])
 
@@ -766,12 +753,7 @@ class CanineEncoder(nn.Module):
                     layer_head_mask,
                 )
             else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                )
+                layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -781,15 +763,7 @@ class CanineEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    all_hidden_states,
-                    all_self_attentions,
-                ]
-                if v is not None
-            )
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -1179,10 +1153,7 @@ class CanineModel(CaninePreTrainedModel):
 
         # Apply final shallow Transformer
         # `sequence_output`: shape (batch_size, char_seq_len, hidden_size])
-        final_chars_encoder_outputs = self.final_char_encoder(
-            sequence_output,
-            extended_attention_mask,
-        )
+        final_chars_encoder_outputs = self.final_char_encoder(sequence_output, extended_attention_mask)
         sequence_output = final_chars_encoder_outputs.last_hidden_state
 
         if not return_dict:
@@ -1261,14 +1232,26 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output

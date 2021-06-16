@@ -19,6 +19,8 @@ import warnings
 from collections import OrderedDict
 
 from ...utils import logging
+
+# Add modeling imports here
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -79,8 +81,6 @@ from ..camembert.modeling_camembert import (
     CamembertForTokenClassification,
     CamembertModel,
 )
-
-# Add modeling imports here
 from ..canine.modeling_canine import (
     CanineForMultipleChoice,
     CanineForQuestionAnswering,
