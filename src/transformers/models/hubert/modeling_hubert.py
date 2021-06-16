@@ -690,7 +690,7 @@ class HubertPreTrainedModel(PreTrainedModel):
     """
 
     config_class = HubertConfig
-    base_model_prefix = "wav2vec2"
+    base_model_prefix = "hubert"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
@@ -868,12 +868,12 @@ class HubertModel(HubertPreTrainedModel):
 
         Example::
 
-            >>> from transformers import HubertProcessor, HubertModel
+            >>> from transformers import Wav2Vec2Processor, HubertModel
             >>> from datasets import load_dataset
             >>> import soundfile as sf
 
-            >>> processor = HubertProcessor.from_pretrained("facebook/wav2vec2-base-960h")
-            >>> model = HubertModel.from_pretrained("facebook/wav2vec2-base-960h")
+            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft")
+            >>> model = HubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
 
             >>> def map_to_array(batch):
             >>>     speech, _ = sf.read(batch["file"])
@@ -945,7 +945,7 @@ class HubertForCTC(HubertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.wav2vec2 = HubertModel(config)
+        self.hubert = HubertModel(config)
         self.dropout = nn.Dropout(config.final_dropout)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
@@ -956,7 +956,7 @@ class HubertForCTC(HubertPreTrainedModel):
         Calling this function will disable the gradient computation for the feature extractor so that its parameter
         will not be updated during training.
         """
-        self.wav2vec2.feature_extractor._freeze_parameters()
+        self.hubert.feature_extractor._freeze_parameters()
 
     @add_start_docstrings_to_model_forward(HUBERT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -981,12 +981,12 @@ class HubertForCTC(HubertPreTrainedModel):
         Example::
 
             >>> import torch
-            >>> from transformers import HubertProcessor, HubertForCTC
+            >>> from transformers import Wav2Vec2Processor, HubertForCTC
             >>> from datasets import load_dataset
             >>> import soundfile as sf
 
-            >>> processor = HubertProcessor.from_pretrained("facebook/wav2vec2-base-960h")
-            >>> model = HubertForCTC.from_pretrained("facebook/wav2vec2-base-960h")
+            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft")
+            >>> model = HubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft")
 
             >>> def map_to_array(batch):
             >>>     speech, _ = sf.read(batch["file"])
@@ -1014,7 +1014,7 @@ class HubertForCTC(HubertPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.wav2vec2(
+        outputs = self.hubert(
             input_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
