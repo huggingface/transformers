@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import requests
+import yaml
 from huggingface_hub import HfApi
 
 from . import __version__
@@ -307,15 +308,15 @@ def _listify(obj):
         return obj
 
 
-def _list_possibilities(name, tags):
-    if tags is None:
-        return ""
-    if isinstance(tags, str):
-        tags = [tags]
-    if len(tags) == 0:
-        return ""
-    name_tags = [f"- {tag}" for tag in tags]
-    return f"{name}:\n" + "\n".join(name_tags) + "\n"
+def _insert_values_as_list(metadata, name, values):
+    if values is None:
+        return metadata
+    if isinstance(values, str):
+        values = [values]
+    if len(values) == 0:
+        return metadata
+    metadata[name] = values
+    return metadata
 
 
 def infer_metric_tags_from_eval_results(eval_results):
@@ -328,6 +329,13 @@ def infer_metric_tags_from_eval_results(eval_results):
         elif key.lower() == "rouge1":
             result["rouge"] = key
     return result
+
+
+def _insert_value(metadata, name, value):
+    if value is None:
+        return metadata
+    metadata[name] = value
+    return metadata
 
 
 def is_hf_dataset(dataset):
@@ -381,7 +389,7 @@ class TrainingSummary:
                 pass
 
     def create_model_index(self, metric_mapping):
-        model_index = f"model-index:\n- name: {self.model_name}\n"
+        model_index = {"name": self.model_name}
 
         # Dataset mapping tag -> name
         dataset_names = _listify(self.dataset)
@@ -402,42 +410,50 @@ class TrainingSummary:
             task_mapping = {None: None}
         if len(dataset_mapping) == 0:
             dataset_mapping = {None: None}
+
+        model_index["results"] = []
+
+        # One entry per dataset and per task
         all_possibilities = [(task_tag, ds_tag) for task_tag in task_mapping for ds_tag in dataset_mapping]
-
-        model_index += "  results:\n"
         for task_tag, ds_tag in all_possibilities:
-            result = ""
+            result = {}
             if task_tag is not None:
-                result += f"  - task:\n      name: {task_mapping[task_tag]}\n      type: {task_tag}\n"
+                result["task"] = {"name": task_mapping[task_tag], "type": task_tag}
+
             if ds_tag is not None:
-                prefix = "  - " if task_tag is None else "    "
-                result += f"{prefix}dataset:\n      name: {dataset_mapping[ds_tag]}\n      type: {ds_tag}\n"
+                result["dataset"] = {"name": dataset_mapping[ds_tag], "type": ds_tag}
                 if dataset_arg_mapping[ds_tag] is not None:
-                    result += f"      args: {dataset_arg_mapping[ds_tag]}\n"
+                    result["dataset"]["args"] = dataset_arg_mapping[ds_tag]
+
             if len(metric_mapping) > 0:
-                result += "    metrics:\n"
                 for metric_tag, metric_name in metric_mapping.items():
-                    value = self.eval_results[metric_name]
-                    result += f"      - name: {metric_name}\n        type: {metric_tag}\n        value: {value}\n"
+                    result["metric"] = {
+                        "name": metric_name,
+                        "type": metric_tag,
+                        "value": self.eval_results[metric_name],
+                    }
 
-            model_index += result
+            model_index["results"].append(result)
 
-        return model_index
+        return [model_index]
+
+    def create_metadata(self):
+        metric_mapping = infer_metric_tags_from_eval_results(self.eval_results)
+
+        metadata = {}
+        metadata = _insert_values_as_list(metadata, "language", self.language)
+        metadata = _insert_value(metadata, "license", self.license)
+        metadata = _insert_values_as_list(metadata, "tags", self.tags)
+        metadata = _insert_values_as_list(metadata, "datasets", self.dataset_tags)
+        metadata = _insert_values_as_list(metadata, "metrics", list(metric_mapping.keys()))
+        metadata["model_index"] = self.create_model_index(metric_mapping)
+
+        return metadata
 
     def to_model_card(self):
         model_card = ""
 
-        metric_mapping = infer_metric_tags_from_eval_results(self.eval_results)
-
-        # Metadata
-        metadata = ""
-        metadata += _list_possibilities("language", self.language)
-        if self.license is not None:
-            metadata += f"license: {self.license}\n"
-        metadata += _list_possibilities("tags", self.tags)
-        metadata += _list_possibilities("datasets", self.dataset_tags)
-        metadata += _list_possibilities("metrics", list(metric_mapping.keys()))
-        metadata += "\n" + self.create_model_index(metric_mapping)
+        metadata = yaml.dump(self.create_metadata(), sort_keys=False)
         if len(metadata) > 0:
             model_card = f"---\n{metadata}---\n"
 
