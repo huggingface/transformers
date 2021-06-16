@@ -173,7 +173,7 @@ python run_clm.py --model_type gpt2 --tokenizer_name gpt2 \ --config_overrides="
 [...]
 ```
 
-At the moment this is only available in `run_clm.py` but eventually should be copied to all other LM examples.
+This feature is only available in `run_clm.py`, `run_plm.py` and `run_mlm.py`.
 
 This feature can also be used to activate gradient checkpointing by passing:
 ```

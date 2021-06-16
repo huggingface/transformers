@@ -20,8 +20,8 @@ from typing import Tuple
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from PIL import Image
+from torch import nn
 
 from utils import img_tensorize
 
@@ -63,7 +63,9 @@ class ResizeShortestEdge:
                 img = np.asarray(pil_image)
             else:
                 img = img.permute(2, 0, 1).unsqueeze(0)  # 3, 0, 1)  # hw(c) -> nchw
-                img = F.interpolate(img, (newh, neww), mode=self.interp_method, align_corners=False).squeeze(0)
+                img = nn.functional.interpolate(
+                    img, (newh, neww), mode=self.interp_method, align_corners=False
+                ).squeeze(0)
             img_augs.append(img)
 
         return img_augs
@@ -85,7 +87,7 @@ class Preprocess:
         max_size = tuple(max(s) for s in zip(*[img.shape for img in images]))
         image_sizes = [im.shape[-2:] for im in images]
         images = [
-            F.pad(
+            nn.functional.pad(
                 im,
                 [0, max_size[-1] - size[1], 0, max_size[-2] - size[0]],
                 value=self.pad_value,

@@ -1430,6 +1430,14 @@ if is_tf_available():
             "TFTransfoXLPreTrainedModel",
         ]
     )
+    _import_structure["models.wav2vec2"].extend(
+        [
+            "TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFWav2Vec2ForCTC",
+            "TFWav2Vec2Model",
+            "TFWav2Vec2PreTrainedModel",
+        ]
+    )
     _import_structure["models.xlm"].extend(
         [
             "TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1478,9 +1486,12 @@ else:
 # FLAX-backed objects
 if is_flax_available():
     _import_structure["generation_flax_logits_process"] = [
+        "FlaxForcedBOSTokenLogitsProcessor",
+        "FlaxForcedEOSTokenLogitsProcessor",
         "FlaxLogitsProcessor",
         "FlaxLogitsProcessorList",
         "FlaxLogitsWarper",
+        "FlaxMinLengthLogitsProcessor",
         "FlaxTemperatureLogitsWarper",
         "FlaxTopKLogitsWarper",
         "FlaxTopPLogitsWarper",
@@ -1508,6 +1519,14 @@ if is_flax_available():
             "FlaxAutoModelForTokenClassification",
         ]
     )
+    _import_structure["models.bart"].extend(
+        [
+            "FlaxBartForConditionalGeneration",
+            "FlaxBartForQuestionAnswering",
+            "FlaxBartForSequenceClassification",
+            "FlaxBartModel",
+        ]
+    )
     _import_structure["models.bert"].extend(
         [
             "FlaxBertForMaskedLM",
@@ -1519,6 +1538,18 @@ if is_flax_available():
             "FlaxBertForTokenClassification",
             "FlaxBertModel",
             "FlaxBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.big_bird"].extend(
+        [
+            "FlaxBigBirdForMaskedLM",
+            "FlaxBigBirdForMultipleChoice",
+            "FlaxBigBirdForPreTraining",
+            "FlaxBigBirdForQuestionAnswering",
+            "FlaxBigBirdForSequenceClassification",
+            "FlaxBigBirdForTokenClassification",
+            "FlaxBigBirdModel",
+            "FlaxBigBirdPreTrainedModel",
         ]
     )
     _import_structure["models.clip"].extend(
@@ -1553,6 +1584,7 @@ if is_flax_available():
             "FlaxRobertaPreTrainedModel",
         ]
     )
+    _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel"])
 else:
     from .utils import dummy_flax_objects
 
@@ -2734,6 +2766,12 @@ if TYPE_CHECKING:
             TFTransfoXLModel,
             TFTransfoXLPreTrainedModel,
         )
+        from .models.wav2vec2 import (
+            TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFWav2Vec2ForCTC,
+            TFWav2Vec2Model,
+            TFWav2Vec2PreTrainedModel,
+        )
         from .models.xlm import (
             TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFXLMForMultipleChoice,
@@ -2779,9 +2817,12 @@ if TYPE_CHECKING:
 
     if is_flax_available():
         from .generation_flax_logits_process import (
+            FlaxForcedBOSTokenLogitsProcessor,
+            FlaxForcedEOSTokenLogitsProcessor,
             FlaxLogitsProcessor,
             FlaxLogitsProcessorList,
             FlaxLogitsWarper,
+            FlaxMinLengthLogitsProcessor,
             FlaxTemperatureLogitsWarper,
             FlaxTopKLogitsWarper,
             FlaxTopPLogitsWarper,
@@ -2807,6 +2848,12 @@ if TYPE_CHECKING:
             FlaxAutoModelForSequenceClassification,
             FlaxAutoModelForTokenClassification,
         )
+        from .models.bart import (
+            FlaxBartForConditionalGeneration,
+            FlaxBartForQuestionAnswering,
+            FlaxBartForSequenceClassification,
+            FlaxBartModel,
+        )
         from .models.bert import (
             FlaxBertForMaskedLM,
             FlaxBertForMultipleChoice,
@@ -2817,6 +2864,16 @@ if TYPE_CHECKING:
             FlaxBertForTokenClassification,
             FlaxBertModel,
             FlaxBertPreTrainedModel,
+        )
+        from .models.big_bird import (
+            FlaxBigBirdForMaskedLM,
+            FlaxBigBirdForMultipleChoice,
+            FlaxBigBirdForPreTraining,
+            FlaxBigBirdForQuestionAnswering,
+            FlaxBigBirdForSequenceClassification,
+            FlaxBigBirdForTokenClassification,
+            FlaxBigBirdModel,
+            FlaxBigBirdPreTrainedModel,
         )
         from .models.clip import FlaxCLIPModel, FlaxCLIPPreTrainedModel, FlaxCLIPTextModel, FlaxCLIPVisionModel
         from .models.electra import (
@@ -2839,6 +2896,7 @@ if TYPE_CHECKING:
             FlaxRobertaModel,
             FlaxRobertaPreTrainedModel,
         )
+        from .models.vit import FlaxViTForImageClassification, FlaxViTModel
     else:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.

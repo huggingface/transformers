@@ -4,6 +4,7 @@ import inspect
 from typing import Any, Dict, List, Optional, Union
 
 import torch
+from torch import nn
 from torch.fx import Graph, GraphModule, Node, Proxy, Tracer
 from torch.fx.node import Argument
 
@@ -277,7 +278,7 @@ class HFTracer(Tracer):
 
         return path
 
-    def path_of_module(self, mod: torch.nn.Module) -> str:
+    def path_of_module(self, mod: nn.Module) -> str:
         """
         Helper method to find the qualified name of ``mod`` in the Module hierarchy of ``root``. For example, if
         ``root`` has a submodule named ``foo``, which has a submodule named ``bar``, passing ``bar`` into this function

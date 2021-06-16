@@ -89,10 +89,10 @@ class VisualBertEmbeddings(nn.Module):
         self.visual_position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
 
         if config.special_visual_initialize:
-            self.visual_token_type_embeddings.weight.data = torch.nn.Parameter(
+            self.visual_token_type_embeddings.weight.data = nn.Parameter(
                 self.token_type_embeddings.weight.data.clone(), requires_grad=True
             )
-            self.visual_position_embeddings.weight.data = torch.nn.Parameter(
+            self.visual_position_embeddings.weight.data = nn.Parameter(
                 self.position_embeddings.weight.data.clone(), requires_grad=True
             )
 
@@ -1253,8 +1253,8 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fct = torch.nn.KLDivLoss(reduction="batchmean")
-            log_softmax = torch.nn.LogSoftmax(dim=-1)
+            loss_fct = nn.KLDivLoss(reduction="batchmean")
+            log_softmax = nn.LogSoftmax(dim=-1)
             reshaped_logits = log_softmax(reshaped_logits)
             loss = loss_fct(reshaped_logits, labels.contiguous())
         if not return_dict:
