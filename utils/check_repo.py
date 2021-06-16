@@ -119,6 +119,7 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "TFRagSequenceForGeneration",
     "TFRagTokenForGeneration",
     "Wav2Vec2ForCTC",
+    "HubertForCTC",
     "XLMForQuestionAnswering",
     "XLNetForQuestionAnswering",
     "SeparableConv1D",

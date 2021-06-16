@@ -49,6 +49,7 @@ from ..fsmt.configuration_fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTCo
 from ..funnel.configuration_funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig
 from ..gpt2.configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
 from ..gpt_neo.configuration_gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
+from ..hubert.configuration_hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
 from ..ibert.configuration_ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
 from ..layoutlm.configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig
 from ..led.configuration_led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig
@@ -144,6 +145,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -193,6 +195,7 @@ CONFIG_MAPPING = OrderedDict(
         ("flaubert", FlaubertConfig),
         ("fsmt", FSMTConfig),
         ("squeezebert", SqueezeBertConfig),
+        ("hubert", HubertConfig),
         ("bert", BertConfig),
         ("openai-gpt", OpenAIGPTConfig),
         ("gpt2", GPT2Config),
@@ -274,6 +277,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mt5", "mT5"),
         ("mpnet", "MPNet"),
         ("tapas", "TAPAS"),
+        ("hubert", "Hubert"),
     ]
 )
 

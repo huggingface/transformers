@@ -201,6 +201,7 @@ _import_structure = {
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
     "models.herbert": ["HerbertTokenizer"],
+    "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
@@ -775,6 +776,14 @@ if is_torch_available():
             "GPTNeoModel",
             "GPTNeoPreTrainedModel",
             "load_tf_weights_in_gpt_neo",
+        ]
+    )
+    _import_structure["models.hubert"].extend(
+        [
+            "HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "HubertForCTC",
+            "HubertModel",
+            "HubertPreTrainedModel",
         ]
     )
     _import_structure["models.ibert"].extend(
@@ -1742,6 +1751,7 @@ if TYPE_CHECKING:
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
     from .models.herbert import HerbertTokenizer
+    from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
     from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
@@ -2229,6 +2239,12 @@ if TYPE_CHECKING:
             GPTNeoModel,
             GPTNeoPreTrainedModel,
             load_tf_weights_in_gpt_neo,
+        )
+        from .models.hubert import (
+            HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            HubertForCTC,
+            HubertModel,
+            HubertPreTrainedModel,
         )
         from .models.ibert import (
             IBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
