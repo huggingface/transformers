@@ -1486,9 +1486,12 @@ else:
 # FLAX-backed objects
 if is_flax_available():
     _import_structure["generation_flax_logits_process"] = [
+        "FlaxForcedBOSTokenLogitsProcessor",
+        "FlaxForcedEOSTokenLogitsProcessor",
         "FlaxLogitsProcessor",
         "FlaxLogitsProcessorList",
         "FlaxLogitsWarper",
+        "FlaxMinLengthLogitsProcessor",
         "FlaxTemperatureLogitsWarper",
         "FlaxTopKLogitsWarper",
         "FlaxTopPLogitsWarper",
@@ -2814,9 +2817,12 @@ if TYPE_CHECKING:
 
     if is_flax_available():
         from .generation_flax_logits_process import (
+            FlaxForcedBOSTokenLogitsProcessor,
+            FlaxForcedEOSTokenLogitsProcessor,
             FlaxLogitsProcessor,
             FlaxLogitsProcessorList,
             FlaxLogitsWarper,
+            FlaxMinLengthLogitsProcessor,
             FlaxTemperatureLogitsWarper,
             FlaxTopKLogitsWarper,
             FlaxTopPLogitsWarper,
