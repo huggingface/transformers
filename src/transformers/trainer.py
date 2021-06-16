@@ -2430,7 +2430,7 @@ class Trainer:
         self,
         language: Optional[str] = None,
         license: Optional[str] = None,
-        tags: Optional[str] = None,
+        tags: List[str] = [],
         model_name: Optional[str] = None,
         finetuned_from: Optional[str] = None,
         tasks: Optional[str] = None,
@@ -2438,6 +2438,8 @@ class Trainer:
         dataset: Optional[Union[str, List[str]]] = None,
         dataset_args: Optional[Union[str, List[str]]] = None,
     ):
+        if "generated-from-trainer" not in tags:
+            tags.append("generated-from-trainer")
         training_summary = TrainingSummary.from_trainer(
             self,
             language=language,
