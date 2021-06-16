@@ -66,7 +66,8 @@ CANINE works on raw characters, so it can be used without a tokenizer:
     model = CanineModel.from_pretrained('google/canine-s') # model pre-trained with autoregressive character loss
 
     text = "hello world"
-    input_ids = torch.tensor([[ord(char) for char in text]]) # use Python's built-in ord() function to turn each character into its unicode code point id
+    # use Python's built-in ord() function to turn each character into its unicode code point id
+    input_ids = torch.tensor([[ord(char) for char in text]])
 
     outputs = model(input_ids) # forward pass
     pooled_output = outputs.pooler_output
@@ -83,7 +84,8 @@ sequences to the same length):
     model = CanineModel.from_pretrained('google/canine-s')
     tokenizer = CanineTokenizer.from_pretrained('google/canine-s')
 
-    encoding = tokenizer(["Life is like a box of chocolates.", "You never know what you gonna get."], padding="longest", return_tensors="pt")
+    inputs = ["Life is like a box of chocolates.", "You never know what you gonna get."]
+    encoding = tokenizer(inputs, padding="longest", truncation=True, return_tensors="pt")
 
     outputs = model(**encoding) # forward pass
     pooled_output = outputs.pooler_output
