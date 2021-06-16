@@ -117,7 +117,7 @@ _deps = [
     "parameterized",
     "protobuf",
     "psutil",
-    "pyaml>=20.4.0",
+    "pyyaml>=20.4.0",
     "pydantic",
     "pytest",
     "pytest-sugar",
@@ -322,7 +322,7 @@ install_requires = [
     deps["huggingface-hub"],
     deps["numpy"],
     deps["packaging"],  # utilities from PyPA to e.g., compare versions
-    deps["pyaml"], # used for the model cards metadata
+    deps["pyyaml"], # used for the model cards metadata
     deps["regex"],  # for OpenAI GPT
     deps["requests"],  # for downloading models over HTTPS
     deps["sacremoses"],  # for XLM
