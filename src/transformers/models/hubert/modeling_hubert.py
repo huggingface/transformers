@@ -738,8 +738,8 @@ class HubertPreTrainedModel(PreTrainedModel):
 
 
 HUBERT_START_DOCSTRING = r"""
-    Hubert was proposed in `wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations
-    <https://arxiv.org/abs/2006.11477>`__ by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael Auli.
+    Hubert was proposed in `HuBERT: Self-Supervised Speech Representation Learning by Masked Prediction of Hidden Units
+    <https://arxiv.org/abs/2106.07447>`__ by Wei-Ning Hsu, Benjamin Bolte, Yao-Hung Hubert Tsai, Kushal Lakhotia, Ruslan Salakhutdinov, Abdelrahman Mohamed.
 
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving etc.).
