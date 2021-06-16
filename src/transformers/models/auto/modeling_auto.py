@@ -147,6 +147,7 @@ from ..funnel.modeling_funnel import (
 )
 from ..gpt2.modeling_gpt2 import GPT2ForSequenceClassification, GPT2LMHeadModel, GPT2Model
 from ..gpt_neo.modeling_gpt_neo import GPTNeoForCausalLM, GPTNeoForSequenceClassification, GPTNeoModel
+from ..hubert.modeling_hubert import HubertModel
 from ..ibert.modeling_ibert import (
     IBertForMaskedLM,
     IBertForMultipleChoice,
@@ -327,6 +328,7 @@ from .configuration_auto import (
     FunnelConfig,
     GPT2Config,
     GPTNeoConfig,
+    HubertConfig,
     IBertConfig,
     LayoutLMConfig,
     LEDConfig,
@@ -380,6 +382,7 @@ MODEL_MAPPING = OrderedDict(
         (Speech2TextConfig, Speech2TextModel),
         (ViTConfig, ViTModel),
         (Wav2Vec2Config, Wav2Vec2Model),
+        (HubertConfig, HubertModel),
         (M2M100Config, M2M100Model),
         (ConvBertConfig, ConvBertModel),
         (LEDConfig, LEDModel),
