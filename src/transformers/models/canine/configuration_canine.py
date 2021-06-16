@@ -64,15 +64,18 @@ class CanineConfig(PretrainedConfig):
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
         downsampling_rate (:obj:`int`, `optional`, defaults to 4):
-            ...
+            The rate at which to downsample the original character sequence length before applying the deep Transformer
+            encoder.
         upsampling_kernel_size (:obj:`int`, `optional`, defaults to 4):
-            ...
+            The kernel size (i.e. the number of characters in each window) of the convolutional projection layer when
+            projecting back from :obj:`hidden_size`*2 to :obj:`hidden_size`.
         num_hash_functions (:obj:`int`, `optional`, defaults to 8):
-            ...
+            The number of hash functions to use. Each hash function has its own embedding matrix.
         num_hash_buckets (:obj:`int`, `optional`, defaults to 16384):
-            ...
+            The number of hash buckets to use.
         local_transformer_stride (:obj:`int`, `optional`, defaults to 128):
-            ... Good TPU/XLA memory alignment.
+            The stride of the local attention of the first shallow Transformer encoder. Defaults to 128 for good
+            TPU/XLA memory alignment.
 
     Example::
 
