@@ -37,9 +37,6 @@ _CONFIG_FOR_DOC = "HubertConfig"
 
 HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/hubert-base-ls960",
-    "facebook/hubert-large-960h",
-    "facebook/hubert-large-960h-lv60",
-    "facebook/hubert-large-960h-lv60-self",
     # See all Hubert models at https://huggingface.co/models?filter=hubert
 ]
 
@@ -739,7 +736,8 @@ class HubertPreTrainedModel(PreTrainedModel):
 
 HUBERT_START_DOCSTRING = r"""
     Hubert was proposed in `HuBERT: Self-Supervised Speech Representation Learning by Masked Prediction of Hidden Units
-    <https://arxiv.org/abs/2106.07447>`__ by Wei-Ning Hsu, Benjamin Bolte, Yao-Hung Hubert Tsai, Kushal Lakhotia, Ruslan Salakhutdinov, Abdelrahman Mohamed.
+    <https://arxiv.org/abs/2106.07447>`__ by Wei-Ning Hsu, Benjamin Bolte, Yao-Hung Hubert Tsai, Kushal Lakhotia,
+    Ruslan Salakhutdinov, Abdelrahman Mohamed.
 
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving etc.).

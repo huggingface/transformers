@@ -30,8 +30,8 @@ class HubertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.HubertModel`. It is used to
     instantiate an Hubert model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Hubert `facebook/hubert-base-ls960
-    <https://huggingface.co/facebook/hubert-base-ls960>`__ architecture.
+    configuration with the defaults will yield a similar configuration to that of the Hubert
+    `facebook/hubert-base-ls960 <https://huggingface.co/facebook/hubert-base-ls960>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
