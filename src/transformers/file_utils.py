@@ -1992,6 +1992,10 @@ class PushToHubMixin:
         if use_auth_token is None and repo_url is None:
             use_auth_token = True
 
+        # Create workind_directory if it does not exist.
+        if working_directory is not None and not os.path.isdir(working_directory):
+            os.makedirs(working_directory)
+
         if isinstance(use_auth_token, str):
             token = use_auth_token
         elif use_auth_token:
