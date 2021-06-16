@@ -263,7 +263,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("Speech2TextConfig", "Speech2TextModel"),
         ("ViTConfig", "ViTModel"),
         ("Wav2Vec2Config", "Wav2Vec2Model"),
-        ("HubertConfig", "HubertModel"),
         ("M2M100Config", "M2M100Model"),
         ("ConvBertConfig", "ConvBertModel"),
         ("LEDConfig", "LEDModel"),
@@ -308,6 +307,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("MPNetConfig", "MPNetModel"),
         ("TapasConfig", "TapasModel"),
         ("IBertConfig", "IBertModel"),
+        ("HubertConfig", "HubertModel"),
     ]
 )
 

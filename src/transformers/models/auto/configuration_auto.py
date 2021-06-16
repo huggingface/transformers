@@ -195,6 +195,7 @@ CONFIG_MAPPING = OrderedDict(
         ("flaubert", FlaubertConfig),
         ("fsmt", FSMTConfig),
         ("squeezebert", SqueezeBertConfig),
+        ("hubert", HubertConfig),
         ("bert", BertConfig),
         ("openai-gpt", OpenAIGPTConfig),
         ("gpt2", GPT2Config),
@@ -212,7 +213,6 @@ CONFIG_MAPPING = OrderedDict(
         ("layoutlm", LayoutLMConfig),
         ("rag", RagConfig),
         ("tapas", TapasConfig),
-        ("hubert", HubertConfig),
     ]
 )
 
