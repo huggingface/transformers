@@ -1687,7 +1687,9 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         batch_size, seq_length = hidden_states.shape[:2]
 
         # get causal mask
-        causal_mask = hidden_states.new(seq_length, seq_length).float().fill_(-float("inf"))
+        causal_mask = torch.full(
+            (seq_length, seq_length), -float("inf"), dtype=hidden_states.dtype, device=hidden_states.device
+        )
         causal_mask = torch.triu(causal_mask, 1)
         extended_causal_mask = causal_mask[:seq_length, :seq_length][None, :, :].expand(
             (batch_size,) + causal_mask.shape
