@@ -22,6 +22,7 @@ from typing import Optional, Tuple
 import torch
 import torch.nn as nn
 from packaging import version
+from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN

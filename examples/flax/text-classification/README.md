@@ -101,7 +101,7 @@ overall training time below. For comparison we ran Pytorch's [run_glue.py](https
 *All experiments are ran on Google Cloud Platform. Prices are on-demand prices
 (not preemptible), obtained on May 12, 2021 for zone Iowa (us-central1) using
 the following tables:
-[TPU pricing table](https://cloud.google.com/tpu/pricing) ($2.40/h for v3-8),
+[TPU pricing table](https://cloud.google.com/tpu/pricing) ($8.00/h for v3-8),
 [GPU pricing table](https://cloud.google.com/compute/gpus-pricing) ($2.48/h per
 V100 GPU). GPU experiments are ran without further optimizations besides JAX
 transformations. GPU experiments are ran with full precision (fp32). "TPU v3-8"

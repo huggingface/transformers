@@ -106,6 +106,7 @@ from ..deberta_v2.modeling_deberta_v2 import (
     DebertaV2Model,
 )
 from ..deit.modeling_deit import DeiTForImageClassification, DeiTForImageClassificationWithTeacher, DeiTModel
+from ..detr.modeling_detr import DetrForObjectDetection, DetrModel
 from ..distilbert.modeling_distilbert import (
     DistilBertForMaskedLM,
     DistilBertForMultipleChoice,
@@ -268,7 +269,7 @@ from ..tapas.modeling_tapas import (
 from ..transfo_xl.modeling_transfo_xl import TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
 from ..visual_bert.modeling_visual_bert import VisualBertForPreTraining, VisualBertModel
 from ..vit.modeling_vit import ViTForImageClassification, ViTModel
-from ..wav2vec2.modeling_wav2vec2 import Wav2Vec2ForMaskedLM, Wav2Vec2Model
+from ..wav2vec2.modeling_wav2vec2 import Wav2Vec2ForMaskedLM, Wav2Vec2ForPreTraining, Wav2Vec2Model
 from ..xlm.modeling_xlm import (
     XLMForMultipleChoice,
     XLMForQuestionAnsweringSimple,
@@ -316,6 +317,7 @@ from .configuration_auto import (
     DebertaConfig,
     DebertaV2Config,
     DeiTConfig,
+    DetrConfig,
     DistilBertConfig,
     DPRConfig,
     ElectraConfig,
@@ -372,6 +374,7 @@ MODEL_MAPPING = OrderedDict(
         (BigBirdPegasusConfig, BigBirdPegasusModel),
         (DeiTConfig, DeiTModel),
         (LukeConfig, LukeModel),
+        (DetrConfig, DetrModel),
         (GPTNeoConfig, GPTNeoModel),
         (BigBirdConfig, BigBirdModel),
         (Speech2TextConfig, Speech2TextModel),
@@ -460,6 +463,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (IBertConfig, IBertForMaskedLM),
         (DebertaConfig, DebertaForMaskedLM),
         (DebertaV2Config, DebertaV2ForMaskedLM),
+        (Wav2Vec2Config, Wav2Vec2ForPreTraining),
     ]
 )
 
@@ -583,6 +587,13 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (DebertaConfig, DebertaForMaskedLM),
         (DebertaV2Config, DebertaV2ForMaskedLM),
         (IBertConfig, IBertForMaskedLM),
+    ]
+)
+
+MODEL_FOR_OBJECT_DETECTION_MAPPING = OrderedDict(
+    [
+        # Model for Object Detection mapping
+        (DetrConfig, DetrForObjectDetection),
     ]
 )
 

@@ -157,6 +157,7 @@ else:
     Speech2TextTokenizer = None
 
 if is_tokenizers_available():
+    from ...tokenization_utils_fast import PreTrainedTokenizerFast
     from ..albert.tokenization_albert_fast import AlbertTokenizerFast
     from ..bart.tokenization_bart_fast import BartTokenizerFast
     from ..barthez.tokenization_barthez_fast import BarthezTokenizerFast
@@ -223,6 +224,7 @@ else:
     T5TokenizerFast = None
     XLMRobertaTokenizerFast = None
     XLNetTokenizerFast = None
+    PreTrainedTokenizerFast = None
 
 
 logger = logging.get_logger(__name__)
@@ -297,6 +299,7 @@ NO_CONFIG_TOKENIZER = [
     BarthezTokenizerFast,
     MBart50Tokenizer,
     MBart50TokenizerFast,
+    PreTrainedTokenizerFast,
 ]
 
 
