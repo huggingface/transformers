@@ -4,9 +4,12 @@ import inspect
 from typing import Any, Dict, List, Optional, Union
 
 import torch
+from packaging import version
 from torch import nn
 from torch.fx import Graph, GraphModule, Node, Proxy, Tracer
 from torch.fx.node import Argument
+
+from transformers.file_utils import TORCH_FX_REQUIRED_VERSION, importlib_metadata, is_torch_fx_available
 
 from . import (
     MODEL_FOR_CAUSAL_LM_MAPPING,
@@ -144,6 +147,14 @@ class HFTracer(Tracer):
 
     def __init__(self, batch_size=1, sequence_length=[128, 128], num_choices=-1):
         super().__init__()
+
+        if not is_torch_fx_available():
+            torch_version = version.parse(importlib_metadata.version("torch"))
+            raise ImportError(
+                f"Found an incompatible version of torch. Found version {torch_version}, but only version "
+                f"{TORCH_FX_REQUIRED_VERSION} is supported."
+            )
+
         encoder_sequence_length = sequence_length[0] if isinstance(sequence_length, (list, tuple)) else sequence_length
         decoder_sequence_length = (
             sequence_length[1] if isinstance(sequence_length, (list, tuple)) else encoder_sequence_length

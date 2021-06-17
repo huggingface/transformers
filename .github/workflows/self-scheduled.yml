@@ -19,7 +19,7 @@ jobs:
   run_all_tests_torch_gpu:
     runs-on: [self-hosted, docker-gpu, single-gpu]
     container:
-      image: pytorch/pytorch:1.8.0-cuda11.1-cudnn8-runtime
+      image: pytorch/pytorch:1.9.0-cuda11.1-cudnn8-runtime
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Launcher docker
@@ -141,7 +141,7 @@ jobs:
   run_all_tests_torch_multi_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
     container:
-      image: pytorch/pytorch:1.8.0-cuda11.1-cudnn8-runtime
+      image: pytorch/pytorch:1.9.0-cuda11.1-cudnn8-runtime
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Launcher docker
