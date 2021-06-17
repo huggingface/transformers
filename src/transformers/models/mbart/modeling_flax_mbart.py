@@ -224,6 +224,7 @@ def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_
     return shifted_input_ids
 
 
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartAttention with Bart->MBart
 class FlaxMBartAttention(nn.Module):
     config: MBartConfig
     embed_dim: int
@@ -452,7 +453,8 @@ class FlaxMBartEncoderLayerCollection(nn.Module):
 
     def setup(self):
         self.layers = [
-            FlaxMBartEncoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.encoder_layers)
+            FlaxMBartEncoderLayer(self.config, name=str(i), dtype=self.dtype)
+            for i in range(self.config.encoder_layers)
         ]
         self.layerdrop = self.config.encoder_layerdrop
 
@@ -593,7 +595,8 @@ class FlaxMBartDecoderLayerCollection(nn.Module):
 
     def setup(self):
         self.layers = [
-            FlaxMBartDecoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.decoder_layers)
+            FlaxMBartDecoderLayer(self.config, name=str(i), dtype=self.dtype)
+            for i in range(self.config.decoder_layers)
         ]
         self.layerdrop = self.config.encoder_layerdrop
 
@@ -656,6 +659,7 @@ class FlaxMBartDecoderLayerCollection(nn.Module):
         )
 
 
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartClassificationHead with Bart->MBart
 class FlaxMBartClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
@@ -1558,6 +1562,7 @@ class FlaxMBartForSequenceClassificationModule(nn.Module):
     def _get_decoder_module(self):
         return self.model.decoder
 
+    # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForSequenceClassificationModule.__call__
     def __call__(
         self,
         input_ids,
@@ -1656,6 +1661,7 @@ class FlaxMBartForQuestionAnsweringModule(nn.Module):
     def _get_decoder_module(self):
         return self.model.decoder
 
+    # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForQuestionAnsweringModule.__call__
     def __call__(
         self,
         input_ids,
