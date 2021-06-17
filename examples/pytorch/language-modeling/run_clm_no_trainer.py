@@ -351,7 +351,7 @@ def main():
         batched=True,
         num_proc=args.preprocessing_num_workers,
         load_from_cache_file=not args.overwrite_cache,
-        desc="Running tokenizer on concatenated texts",  # not sure if it's right
+        desc=f"Grouping texts in chunks of {block_size}",
     )
 
     train_dataset = lm_datasets["train"]

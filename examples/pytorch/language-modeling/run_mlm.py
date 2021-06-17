@@ -428,7 +428,7 @@ def main():
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
             load_from_cache_file=not data_args.overwrite_cache,
-            desc="Running tokenizer on concatenated texts",  # not sure if it's right
+            desc=f"Grouping texts in chunks of {max_seq_length}",
         )
 
     if training_args.do_train:
