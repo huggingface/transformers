@@ -563,12 +563,16 @@ class GenerationMixin:
         num_beam_groups: int,
         diversity_penalty: float,
         remove_invalid_values: bool,
+        logits_processor: Optional[LogitsProcessorList],
     ) -> LogitsProcessorList:
         """
         This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
         :obj:`~transformers.LogitsProcessor` instances used to modify the scores of the language model head.
         """
-        processors = LogitsProcessorList()
+        if logits_processor is None:
+            processors = LogitsProcessorList()
+        else:
+            processors = logits_processor
 
         # init warp parameters
         repetition_penalty = repetition_penalty if repetition_penalty is not None else self.config.repetition_penalty
@@ -629,9 +633,15 @@ class GenerationMixin:
         return processors
 
     def _get_stopping_criteria(
-        self, max_length: Optional[int], max_time: Optional[float], max_new_tokens: Optional[int], start_length: int
+        self,
+        max_length: Optional[int],
+        max_time: Optional[float],
+        max_new_tokens: Optional[int],
+        start_length: int,
+        stopping_criteria: Optional[StoppingCriteriaList],
     ) -> StoppingCriteriaList:
-        stopping_criteria = StoppingCriteriaList()
+        if stopping_criteria is None:
+            stopping_criteria = StoppingCriteriaList()
         if max_length is not None:
             stopping_criteria.append(MaxLengthCriteria(max_length=max_length))
         if max_time is not None:
@@ -668,6 +678,8 @@ class GenerationMixin:
         num_beam_groups: Optional[int] = None,
         diversity_penalty: Optional[float] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
+        logits_processor: Optional[LogitsProcessorList] = None,
+        stopping_criteria: Optional[StoppingCriteriaList] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -786,6 +798,12 @@ class GenerationMixin:
                 crash. Note that using ``remove_invalid_values`` can slow down generation.
             synced_gpus (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+            logits_processor (:obj:`LogitsProcessorList`, `optional`):
+                This object is created automatically from other arguments of this function. `logits_processor` is meant
+                to be used to add another layer with custom logic.
+            stopping_criteria (:obj:`StoppingCriteriaList`, `optional`):
+                This object is created automatically from other arguments of this function. `stopping_criteria` is
+                meant to be used to add another layer with custom logic from your own code.
 
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If the
@@ -972,11 +990,16 @@ class GenerationMixin:
             num_beam_groups=num_beam_groups,
             diversity_penalty=diversity_penalty,
             remove_invalid_values=remove_invalid_values,
+            logits_processor=logits_processor,
         )
 
         cur_len = input_ids.shape[-1]
         stopping_criteria = self._get_stopping_criteria(
-            max_length=max_length, max_time=max_time, max_new_tokens=max_new_tokens, start_length=cur_len
+            max_length=max_length,
+            max_time=max_time,
+            max_new_tokens=max_new_tokens,
+            start_length=cur_len,
+            stopping_criteria=stopping_criteria,
         )
 
         if is_greedy_gen_mode:
