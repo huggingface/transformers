@@ -1398,42 +1398,40 @@ class TFGenerationMixin:
             decoded = tf.stack(best)
 
         if return_dict_in_generate:
-            if do_sample:
-                if self.config.is_encoder_decoder:
-                    return TFBeamSampleEncoderDecoderOutput(
-                        sequences=decoded,
-                        scores=scores,
-                        encoder_attentions=encoder_attentions,
-                        encoder_hidden_states=encoder_hidden_states,
-                        decoder_attentions=decoder_attentions,
-                        cross_attentions=cross_attentions,
-                        decoder_hidden_states=decoder_hidden_states,
-                    )
-                else:
-                    return TFBeamSampleDecoderOnlyOutput(
-                        sequences=decoded,
-                        scores=scores,
-                        attentions=decoder_attentions,
-                        hidden_states=decoder_hidden_states,
-                    )
+            if do_sample and self.config.is_encoder_decoder:
+                return TFBeamSampleEncoderDecoderOutput(
+                    sequences=decoded,
+                    scores=scores,
+                    encoder_attentions=encoder_attentions,
+                    encoder_hidden_states=encoder_hidden_states,
+                    decoder_attentions=decoder_attentions,
+                    cross_attentions=cross_attentions,
+                    decoder_hidden_states=decoder_hidden_states,
+                )
+            elif do_sample and not self.config.is_encoder_decoder:
+                return TFBeamSampleDecoderOnlyOutput(
+                    sequences=decoded,
+                    scores=scores,
+                    attentions=decoder_attentions,
+                    hidden_states=decoder_hidden_states,
+                )
+            elif self.config.is_encoder_decoder:
+                return TFBeamSearchEncoderDecoderOutput(
+                    sequences=decoded,
+                    scores=scores,
+                    encoder_attentions=encoder_attentions,
+                    encoder_hidden_states=encoder_hidden_states,
+                    decoder_attentions=decoder_attentions,
+                    cross_attentions=cross_attentions,
+                    decoder_hidden_states=decoder_hidden_states,
+                )
             else:
-                if self.config.is_encoder_decoder:
-                    return TFBeamSearchEncoderDecoderOutput(
-                        sequences=decoded,
-                        scores=scores,
-                        encoder_attentions=encoder_attentions,
-                        encoder_hidden_states=encoder_hidden_states,
-                        decoder_attentions=decoder_attentions,
-                        cross_attentions=cross_attentions,
-                        decoder_hidden_states=decoder_hidden_states,
-                    )
-                else:
-                    return TFBeamSearchDecoderOnlyOutput(
-                        sequences=decoded,
-                        scores=scores,
-                        attentions=decoder_attentions,
-                        hidden_states=decoder_hidden_states,
-                    )
+                return TFBeamSearchDecoderOnlyOutput(
+                    sequences=decoded,
+                    scores=scores,
+                    attentions=decoder_attentions,
+                    hidden_states=decoder_hidden_states,
+                )
         else:
             return decoded
 
