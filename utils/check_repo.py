@@ -119,6 +119,7 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "TFRagSequenceForGeneration",
     "TFRagTokenForGeneration",
     "Wav2Vec2ForCTC",
+    "HubertForCTC",
     "XLMForQuestionAnswering",
     "XLNetForQuestionAnswering",
     "SeparableConv1D",
@@ -126,6 +127,7 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "VisualBertForVisualReasoning",
     "VisualBertForQuestionAnswering",
     "VisualBertForMultipleChoice",
+    "TFWav2Vec2ForCTC",
 ]
 
 # This is to make sure the transformers module imported is the one in the repo.
