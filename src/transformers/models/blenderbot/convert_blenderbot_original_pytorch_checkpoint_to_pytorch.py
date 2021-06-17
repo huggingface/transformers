@@ -86,6 +86,10 @@ def convert_parlai_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_
     valid_keys = m.model.state_dict().keys()
     failures = []
     mapping = {}
+
+    if cfg.normalize_before:  # Blenderbot-3B checkpoints. Rename layernorm_embedding -> layer_norm
+        rename_layernorm_keys(sd)
+
     for k, v in sd.items():
         if k in IGNORE_KEYS:
             continue
@@ -95,8 +99,6 @@ def convert_parlai_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_
             failures.append([k, new_k])
         else:
             mapping[new_k] = v
-    if cfg.normalize_before:  # Blenderbot-3B checkpoints. Rename layernorm_embedding -> layer_norm
-        rename_layernorm_keys(sd)
     m.model.load_state_dict(mapping, strict=True)
     m.half()
     m.save_pretrained(pytorch_dump_folder_path)
