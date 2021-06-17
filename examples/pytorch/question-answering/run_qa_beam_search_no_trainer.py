@@ -46,11 +46,13 @@ from transformers import (
     set_seed,
 )
 from transformers.utils import check_min_version
+from transformers.utils.versions import require_version
 from utils_qa import postprocess_qa_predictions_with_beam_search
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.8.0.dev0")
+require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
 logger = logging.getLogger(__name__)
 
@@ -419,6 +421,7 @@ def main():
         num_proc=args.preprocessing_num_workers,
         remove_columns=column_names,
         load_from_cache_file=not args.overwrite_cache,
+        desc="Running tokenizer on train dataset",
     )
     if args.max_train_samples is not None:
         # Number of samples might increase during Feature Creation, We select only specified max samples
@@ -503,6 +506,7 @@ def main():
         num_proc=args.preprocessing_num_workers,
         remove_columns=column_names,
         load_from_cache_file=not args.overwrite_cache,
+        desc="Running tokenizer on validation dataset",
     )
 
     if args.max_eval_samples is not None:
@@ -523,6 +527,7 @@ def main():
             num_proc=args.preprocessing_num_workers,
             remove_columns=column_names,
             load_from_cache_file=not args.overwrite_cache,
+            desc="Running tokenizer on prediction dataset",
         )
         if args.max_predict_samples is not None:
             # During Feature creation dataset samples might increase, we will select required samples again
