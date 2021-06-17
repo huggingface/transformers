@@ -344,7 +344,7 @@ def get_tokenizer_config(
     **kwargs,
 ):
     """
-    Loads the tokenizer configuration fromfrom a pretrained model tokenizer configuration.
+    Loads the tokenizer configuration from a pretrained model tokenizer configuration.
 
     Args:
         pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
