@@ -87,7 +87,8 @@ class ImageClassificationPipeline(Pipeline):
                 Images in a batch must all be in the same format: all as http links, all as local paths, or all as PIL
                 images.
             top_k (:obj:`int`, `optional`, defaults to 5):
-                The number of top labels that will be returned by the pipeline.
+                The number of top labels that will be returned by the pipeline. If the provided number is higher than
+                the number of labels available in the model configuration, it will default to the number of labels.
 
         Return:
             A dictionary or a list of dictionaries containing result. If the input is a single image, will return a
@@ -105,6 +106,9 @@ class ImageClassificationPipeline(Pipeline):
             images = [images]
 
         images = [self.load_image(image) for image in images]
+
+        if top_k > self.model.config.num_labels:
+            top_k = self.model.config.num_labels
 
         with torch.no_grad():
             inputs = self.feature_extractor(images=images, return_tensors="pt")
