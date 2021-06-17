@@ -8,7 +8,9 @@ architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural Lang
 Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between Jax,
 PyTorch and TensorFlow.
 
-This is the documentation of our repository `transformers <https://github.com/huggingface/transformers>`_.
+This is the documentation of our repository `transformers <https://github.com/huggingface/transformers>`__. You can
+also follow our `online course <https://huggingface.co/course>`__ that teaches how to use this library, as well as the
+other libraries developed by Hugging Face and the Hub.
 
 If you are looking for custom support from the Hugging Face team
 -----------------------------------------------------------------------------------------------------------------------
