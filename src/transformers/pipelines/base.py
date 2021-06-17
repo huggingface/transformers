@@ -777,7 +777,7 @@ class Pipeline(_ScikitCompat):
                 # TODO trace model
                 predictions = self.model(inputs.data, training=False)[0]
             else:
-                with torch.no_grad():
+                with torch.inference_mode():
                     inputs = self.ensure_tensor_on_device(**inputs)
                     predictions = self.model(**inputs)[0].cpu()
 

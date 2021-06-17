@@ -228,7 +228,7 @@ class TokenClassificationPipeline(Pipeline):
                     entities = self.model(tokens.data)[0][0].numpy()
                     input_ids = tokens["input_ids"].numpy()[0]
                 else:
-                    with torch.no_grad():
+                    with torch.inference_mode():
                         tokens = self.ensure_tensor_on_device(**tokens)
                         entities = self.model(**tokens)[0][0].cpu().numpy()
                         input_ids = tokens["input_ids"].cpu().numpy()[0]

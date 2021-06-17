@@ -311,7 +311,7 @@ class QuestionAnsweringPipeline(Pipeline):
                     start, end = self.model(fw_args)[:2]
                     start, end = start.numpy(), end.numpy()
                 else:
-                    with torch.no_grad():
+                    with torch.inference_mode():
                         # Retrieve the score for the context tokens only (removing question tokens)
                         fw_args = {k: torch.tensor(v, device=self.device) for (k, v) in fw_args.items()}
                         # On Windows, the default int type in numpy is np.int32 so we get some non-long tensors.

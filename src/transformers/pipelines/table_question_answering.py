@@ -93,7 +93,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
         )
 
     def batch_inference(self, **inputs):
-        with torch.no_grad():
+        with torch.inference_mode():
             return self.model(**inputs)
 
     def sequential_inference(self, **inputs):
@@ -101,7 +101,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
         Inference used for models that need to process sequences in a sequential fashion, like the SQA models which
         handle conversational query related to a table.
         """
-        with torch.no_grad():
+        with torch.inference_mode():
             all_logits = []
             all_aggregations = []
             prev_answers = None
