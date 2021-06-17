@@ -28,8 +28,15 @@ will dig a little bit more and see how the library gives you access to those mod
 Getting started on a task with a pipeline
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The easiest way to use a pretrained model on a given task is to use :func:`~transformers.pipeline`. 🤗 Transformers
-provides the following tasks out of the box:
+The easiest way to use a pretrained model on a given task is to use :func:`~transformers.pipeline`.
+
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/tiZFewofSLM" title="YouTube video player"
+   frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
+   picture-in-picture" allowfullscreen></iframe>
+
+🤗 Transformers provides the following tasks out of the box:
 
 - Sentiment analysis: is a text positive or negative?
 - Text generation (in English): provide a prompt and the model will generate what follows.
@@ -137,8 +144,15 @@ to share your fine-tuned model on the hub with the community, using :doc:`this t
 Under the hood: pretrained models
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Let's now see what happens beneath the hood when using those pipelines. As we saw, the model and tokenizer are created
-using the :obj:`from_pretrained` method:
+Let's now see what happens beneath the hood when using those pipelines.
+
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/AhChOFRegn4" title="YouTube video player"
+   frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
+   picture-in-picture" allowfullscreen></iframe>
+
+As we saw, the model and tokenizer are created using the :obj:`from_pretrained` method:
 
 .. code-block::
 
