@@ -186,6 +186,15 @@ generation.
 .. autoclass:: transformers.FlaxTopKLogitsWarper
     :members: __call__
 
+.. autoclass:: transformers.FlaxForcedBOSTokenLogitsProcessor
+    :members: __call__
+
+.. autoclass:: transformers.FlaxForcedEOSTokenLogitsProcessor
+    :members: __call__
+
+.. autoclass:: transformers.FlaxMinLengthLogitsProcessor
+    :members: __call__
+
 
 StoppingCriteria
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

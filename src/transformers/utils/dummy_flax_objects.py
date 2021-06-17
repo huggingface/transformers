@@ -2,19 +2,54 @@
 from ..file_utils import requires_backends
 
 
+class FlaxForcedBOSTokenLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
+class FlaxForcedEOSTokenLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
 class FlaxLogitsProcessor:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
 
 
 class FlaxLogitsProcessorList:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
 
 class FlaxLogitsWarper:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
+
+
+class FlaxMinLengthLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
 
 
 class FlaxTemperatureLogitsWarper:
