@@ -314,7 +314,6 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
-        rotary_emb=None,
     ):
 
         query = self.q_proj(hidden_states)
@@ -344,9 +343,10 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
 
                 key = torch.cat([k_rot, k_pass], dim=-1)
                 query = torch.cat([q_rot, q_pass], dim=-1)
-            elif rotary_emb is not None:
-                key = apply_rotary_pos_emb(key, rotary_emb)
-                query = apply_rotary_pos_emb(query, rotary_emb)
+            elif self.rotary:
+                sincos = fixed_pos_embedding(key, 1, seq_len=seq_len)
+                key = apply_rotary_pos_emb(key, sincos, offset=offset)
+                query = apply_rotary_pos_emb(query, sincos, offset=offset)
             key = key.permute(0, 2, 1, 3)
             query = query.permute(0, 2, 1, 3)
 
@@ -402,7 +402,6 @@ class GPTNeoAttention(nn.Module):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
-        rotary_emb=None,
     ):
         outputs = self.attention(
             hidden_states,
@@ -411,7 +410,6 @@ class GPTNeoAttention(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            rotary_emb=rotary_emb,
         )
 
         return outputs
@@ -454,7 +452,6 @@ class GPTNeoBlock(nn.Module):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
-        rotary_emb=None,
     ):
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
@@ -465,7 +462,6 @@ class GPTNeoBlock(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            rotary_emb=rotary_emb,
         )
         attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attn_outputs[1:]
@@ -731,11 +727,9 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
         if self.rotary is not None:
             hidden_states = inputs_embeds
-            rotary_emb = self.rotary(seq_length, self.device)
         else:
             position_embeds = self.wpe(position_ids)
             hidden_states = inputs_embeds + position_embeds
-            rotary_emb = None
 
         if token_type_ids is not None:
             token_type_embeds = self.wte(token_type_ids)
@@ -786,7 +780,6 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
                     head_mask=head_mask[i],
                     use_cache=use_cache,
                     output_attentions=output_attentions,
-                    rotary_emb=rotary_emb,
                 )
 
             hidden_states = outputs[0]
