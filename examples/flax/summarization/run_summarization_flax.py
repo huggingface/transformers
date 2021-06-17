@@ -137,6 +137,14 @@ class DataTrainingArguments:
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
+    text_column: Optional[str] = field(
+        default=None,
+        metadata={"help": "The name of the column in the datasets containing the full texts (for summarization)."},
+    )
+    summary_column: Optional[str] = field(
+        default=None,
+        metadata={"help": "The name of the column in the datasets containing the summaries (for summarization)."},
+    )
     train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
     validation_file: Optional[str] = field(
         default=None,
@@ -170,6 +178,15 @@ class DataTrainingArguments:
             "than this will be truncated, sequences shorter will be padded."
         },
     )
+    val_max_target_length: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "The maximum total sequence length for validation target text after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
+            "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
+            "during ``evaluate`` and ``predict``."
+        },
+    )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
@@ -185,6 +202,9 @@ class DataTrainingArguments:
     preprocessing_num_workers: Optional[int] = field(
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
+    )
+    source_prefix: Optional[str] = field(
+        default=None, metadata={"help": "A prefix to add before every source text (useful for T5 models)."}
     )
 
     def __post_init__(self):
@@ -325,7 +345,9 @@ def main():
     # download the dataset.
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        dataset = load_dataset(data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir)
+        dataset = load_dataset(
+            data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir, keep_in_memory=False
+        )
     else:
         data_files = {}
         if data_args.train_file is not None:
@@ -383,11 +405,11 @@ def main():
     # Preprocessing the datasets.
     # We need to tokenize inputs and targets.
     if training_args.do_train:
-        column_names = datasets["train"].column_names
+        column_names = dataset["train"].column_names
     elif training_args.do_eval:
-        column_names = datasets["validation"].column_names
+        column_names = dataset["validation"].column_names
     elif training_args.do_predict:
-        column_names = datasets["test"].column_names
+        column_names = dataset["test"].column_names
     else:
         logger.info("There is nothing to do. Please pass `do_train`, `do_eval` and/or `do_predict`.")
         return
@@ -442,7 +464,8 @@ def main():
             )
 
         model_inputs["labels"] = labels["input_ids"]
-        model_inputs["decoder_input_ids"] = prepare_decoder_input_ids_fn(jnp.array(labels["input_ids"]))
+        decoder_input_ids = np.asarray(prepare_decoder_input_ids_fn(jnp.array(labels["input_ids"])))
+        model_inputs["decoder_input_ids"] = decoder_input_ids
 
         model_inputs["decoder_attention_mask"] = labels[
             "attention_mask"
@@ -451,9 +474,9 @@ def main():
         return model_inputs
 
     if training_args.do_train:
-        if "train" not in datasets:
+        if "train" not in dataset:
             raise ValueError("--do_train requires a train dataset")
-        train_dataset = datasets["train"]
+        train_dataset = dataset["train"]
         if data_args.max_train_samples is not None:
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
         train_dataset = train_dataset.map(
@@ -466,9 +489,9 @@ def main():
 
     if training_args.do_eval:
         max_target_length = data_args.val_max_target_length
-        if "validation" not in datasets:
+        if "validation" not in dataset:
             raise ValueError("--do_eval requires a validation dataset")
-        eval_dataset = datasets["validation"]
+        eval_dataset = dataset["validation"]
         if data_args.max_eval_samples is not None:
             eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
         eval_dataset = eval_dataset.map(
@@ -656,13 +679,8 @@ def main():
 
         eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
 
-        try:
-            eval_metrics["perplexity"] = math.exp(eval_metrics["loss"])
-        except OverflowError:
-            eval_metrics["perplexity"] = float("inf")
-
         # Print metrics and update progress bar
-        desc = f"Epoch... ({epoch + 1}/{num_epochs} | Eval Loss: {eval_metrics['loss']} | Eval Perplexity: {eval_metrics['perplexity']})"
+        desc = f"Epoch... ({epoch + 1}/{num_epochs} | Eval Loss: {eval_metrics['loss']})"
         epochs.write(desc)
         epochs.desc = desc
 
