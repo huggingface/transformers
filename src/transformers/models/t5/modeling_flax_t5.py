@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 Mesh TensorFlow authors, T5 Authors and HuggingFace Inc. team.
+# Copyright 2021 T5 Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,25 +12,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch T5 model. """
+""" Flax T5 model. """
 
 
 import copy
-import math
-import os
-import warnings
+from typing import Tuple, Optional, Callable
+import numpy as np
 
 import flax.linen as nn
+from flax.linen.attention import dot_product_attention_weights
+from flax.linen import combine_masks, make_causal_mask
+from flax.core.frozen_dict import FrozenDict
 import jax.numpy as jnp
+from jax.random import PRNGKey
 import jax
 
 from ...modeling_flax_utils import ACT2FN
 from ...file_utils import (
-    DUMMY_INPUTS,
-    DUMMY_MASK,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_torch_fx_proxy,
     replace_return_docstrings,
 )
 from ...modeling_outputs import (
@@ -68,74 +68,25 @@ T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # - torch.nn.Module for the layers and
 # - PreTrainedModel for the models (it-self a sub-class of torch.nn.Module)
 ####################################################
-PARALLELIZE_DOCSTRING = r"""
-    This is an experimental feature and is a subject to change at a moment's notice.
-
-    Uses a device map to distribute attention modules of the model across several devices. If no device map is given,
-    it will evenly distribute blocks across all devices.
-
-    Args:
-        device_map (:obj:`Dict[int, list]`, optional, defaults to None):
-            A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
-            automatically mapped to the first device (for esoteric reasons). That means that the first device should
-            have fewer attention modules mapped to it than other devices. For reference, the t5 models have the
-            following number of attention modules:
-
-                - t5-small: 6
-                - t5-base: 12
-                - t5-large: 24
-                - t5-3b: 24
-                - t5-11b: 24
-
-    Example::
-
-            # Here is an example of a device map on a machine with 4 GPUs using t5-3b, which has a total of 24 attention modules:
-            model = T5ForConditionalGeneration.from_pretrained('t5-3b')
-            device_map = {0: [0, 1, 2],
-
-                         1: [3, 4, 5, 6, 7, 8, 9],
-                         2: [10, 11, 12, 13, 14, 15, 16],
-                         3: [17, 18, 19, 20, 21, 22, 23]}
-            model.parallelize(device_map)
-"""
-DEPARALLELIZE_DOCSTRING = r"""
-    Moves the model to cpu from a model parallel state.
-
-    Example::
-
-        # On a 4 GPU machine with t5-3b:
-        model = T5ForConditionalGeneration.from_pretrained('t5-3b')
-        device_map = {0: [0, 1, 2],
-
-                     1: [3, 4, 5, 6, 7, 8, 9],
-                     2: [10, 11, 12, 13, 14, 15, 16],
-                     3: [17, 18, 19, 20, 21, 22, 23]}
-        model.parallelize(device_map) # Splits the model across several devices
-        model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
-"""
-
 # TODO: pass dtype everywhere
 
 class FlaxT5LayerNorm(nn.Module):
-
     hidden_size: int
     dtype: jnp.dtype = jnp.float32
     eps: float = 1e-6
+    weight_init: Callable[..., np.ndarray] = jax.nn.initializers.ones
 
-    @nn.compact
+    def setup(self):
+        self.weight = self.param("weight", self.weight_init, (self.hidden_size,))
+
     def __call__(self, hidden_states):
         """
         Construct a layernorm module in the T5 style; No bias and no subtraction of mean.
         """
-        self.weight = self.param("weight", jnp.ones(self.hidden_size))
-
         # layer norm should always be calculated in float32
         variance = jnp.power(hidden_states.astype("f4"), 2).mean(axis=-1, keepdims=True)
         hidden_states = hidden_states / jnp.sqrt(variance + self.eps)
 
-        # convert into float16 if necessary
-        if self.weight.dtype == jnp.float16:
-            hidden_states = hidden_states.astype("f2")
         return self.weight * hidden_states
 
 
@@ -144,25 +95,26 @@ class FlaxT5DenseReluDense(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.wi = nn.Dense(self.config.d_ff, use_bias=False)
-        self.wo = nn.Dense(self.config.d_model, use_bias=False)
+        self.wi = nn.Dense(self.config.d_ff, use_bias=False, dtype=self.dtype)
+        self.wo = nn.Dense(self.config.d_model, use_bias=False, dtype=self.dtype)
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
-    def forward(self, hidden_states):
+    def __call__(self, hidden_states, deterministic=True):
         hidden_states = self.wi(hidden_states)
         hidden_states = jax.nn.relu(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dropout(hidden_states, deterministic)
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
 
 class FlaxT5DenseGatedGeluDense(nn.Module):
     config: T5Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.wi_0 = nn.Dense(self.config.d_ff, use_bias=False)
-        self.wi_1 = nn.Dense(self.config.d_ff, use_bias=False)
-        self.wo = nn.Dense(self.config.d_model, use_bias=False)
+        self.wi_0 = nn.Dense(self.config.d_ff, use_bias=False, dtype=self.dtype)
+        self.wi_1 = nn.Dense(self.config.d_ff, use_bias=False, dtype=self.dtype)
+        self.wo = nn.Dense(self.config.d_model, use_bias=False, dtype=self.dtype)
         self.dropout = nn.Dropout(self.config.dropout_rate)
         self.gelu_act = ACT2FN["gelu_new"]
 
@@ -177,35 +129,35 @@ class FlaxT5DenseGatedGeluDense(nn.Module):
 
 class FlaxT5LayerFF(nn.Module):
     config: T5Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
         if self.config.feed_forward_proj == "relu":
-            self.DenseReluDense = FlaxT5DenseReluDense(self.config)
+            self.DenseReluDense = FlaxT5DenseReluDense(self.config, dtype=self.dtype)
         elif self.dropoutconfig.feed_forward_proj == "gated-gelu":
-            self.DenseReluDense = FlaxT5DenseGatedGeluDense(self.config)
+            self.DenseReluDense = FlaxT5DenseGatedGeluDense(self.config, dtype=self.dtype)
         else:
             raise ValueError(
                 f"{self.config.feed_forward_proj} is not supported. Choose between `relu` and `gated-gelu`"
             )
 
-        self.layer_norm = FlaxT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon)
+        self.layer_norm = FlaxT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
-    def forward(self, hidden_states):
+    def __call__(self, hidden_states, deterministic=True):
         forwarded_states = self.layer_norm(hidden_states)
-        forwarded_states = self.DenseReluDense(forwarded_states)
-        hidden_states = hidden_states + self.dropout(forwarded_states)
+        forwarded_states = self.DenseReluDense(forwarded_states, deterministic=deterministic)
+        hidden_states = hidden_states + self.dropout(forwarded_states, deterministic=deterministic)
         return hidden_states
 
 
 class FlaxT5Attention(nn.Module):
     config: T5Config
     has_relative_attention_bias: bool = False
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
         self.is_decoder = self.config.is_decoder
-        self.has_relative_attention_bias = self.has_relative_attention_bias
-
         self.relative_attention_num_buckets = self.config.relative_attention_num_buckets
         self.d_model = self.config.d_model
         self.key_value_proj_dim = self.config.d_kv
@@ -214,31 +166,13 @@ class FlaxT5Attention(nn.Module):
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
-        self.q = nn.Dense(self.inner_dim, use_bias=False)
-        self.k = nn.Dense(self.inner_dim, use_bias=False)
-        self.v = nn.Dense(self.inner_dim, use_bias=False)
-        self.o = nn.Dense(self.d_model, use_bias=False)
+        self.q = nn.Dense(self.inner_dim, use_bias=False, dtype=self.dtype)
+        self.k = nn.Dense(self.inner_dim, use_bias=False, dtype=self.dtype)
+        self.v = nn.Dense(self.inner_dim, use_bias=False, dtype=self.dtype)
+        self.o = nn.Dense(self.d_model, use_bias=False, dtype=self.dtype)
 
         if self.has_relative_attention_bias:
-            self.relative_attention_bias = nn.Embed(self.relative_attention_num_buckets, self.n_heads)
-        # self.pruned_heads = set()
-        # self.gradient_checkpointing = getattr(config, "gradient_checkpointing", False)
-
-    # def prune_heads(self, heads):
-    #     if len(heads) == 0:
-    #         return
-    #     heads, index = find_pruneable_heads_and_indices(
-    #         heads, self.n_heads, self.key_value_proj_dim, self.pruned_heads
-    #     )
-    #     # Prune linear layers
-    #     self.q = prune_linear_layer(self.q, index)
-    #     self.k = prune_linear_layer(self.k, index)
-    #     self.v = prune_linear_layer(self.v, index)
-    #     self.o = prune_linear_layer(self.o, index, dim=1)
-    #     # Update hyper params
-    #     self.n_heads = self.n_heads - len(heads)
-    #     self.inner_dim = self.key_value_proj_dim * self.n_heads
-    #     self.pruned_heads = self.pruned_heads.union(heads)
+            self.relative_attention_bias = nn.Embed(self.relative_attention_num_buckets, self.n_heads, dtype=self.dtype)
 
     @staticmethod
     def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
@@ -265,10 +199,10 @@ class FlaxT5Attention(nn.Module):
         relative_buckets = 0
         if bidirectional:
             num_buckets //= 2
-            relative_buckets += (relative_position > 0).to(torch.long) * num_buckets
-            relative_position = torch.abs(relative_position)
+            relative_buckets += (relative_position > 0) * num_buckets
+            relative_position = jnp.abs(relative_position)
         else:
-            relative_position = -torch.min(relative_position, torch.zeros_like(relative_position))
+            relative_position = -jnp.clip(relative_position, a_max=0)
         # now relative_position is in the range [0, inf)
 
         # half of the buckets are for exact increments in positions
@@ -276,44 +210,47 @@ class FlaxT5Attention(nn.Module):
         is_small = relative_position < max_exact
 
         # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
-        relative_postion_if_large = max_exact + (
-            torch.log(relative_position.float() / max_exact)
-            / math.log(max_distance / max_exact)
+        relative_position_if_large = max_exact + (
+            jnp.log(relative_position / max_exact)
+            / jnp.log(max_distance / max_exact)
             * (num_buckets - max_exact)
-        ).to(torch.long)
-        relative_postion_if_large = torch.min(
-            relative_postion_if_large, torch.full_like(relative_postion_if_large, num_buckets - 1)
         )
+        relative_position_if_large = jnp.clip(relative_position_if_large, a_max=num_buckets - 1)
 
-        relative_buckets += torch.where(is_small, relative_position, relative_postion_if_large)
-        return relative_buckets
+        relative_buckets += jnp.where(is_small, relative_position, relative_position_if_large)
+
+        return relative_buckets.astype("i4")
 
     def compute_bias(self, query_length, key_length):
         """Compute binned relative position bias"""
-        context_position = torch.arange(query_length, dtype=torch.long)[:, None]
-        memory_position = torch.arange(key_length, dtype=torch.long)[None, :]
+        context_position = jnp.arange(query_length, dtype="i4")[:, None]
+        memory_position = jnp.arange(key_length, dtype="i4")[None, :]
         relative_position = memory_position - context_position  # shape (query_length, key_length)
         relative_position_bucket = self._relative_position_bucket(
             relative_position,  # shape (query_length, key_length)
             bidirectional=(not self.is_decoder),
             num_buckets=self.relative_attention_num_buckets,
         )
-        relative_position_bucket = relative_position_bucket.to(self.relative_attention_bias.weight.device)
         values = self.relative_attention_bias(relative_position_bucket)  # shape (query_length, key_length, num_heads)
-        values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
+        values = values.transpose((2, 0, 1))[None, :, :, :]  # shape (1, num_heads, query_length, key_length)
         return values
 
-    def forward(
+    def _split_heads(self, hidden_states):
+        return hidden_states.reshape(hidden_states.shape[:2] + (self.n_heads, self.key_value_proj_dim))
+
+    def _merge_heads(self, hidden_states):
+        return hidden_states.reshape(hidden_states.shape[:2] + (self.inner_dim,))
+
+    def __call__(
         self,
         hidden_states,
         mask=None,
         key_value_states=None,
         position_bias=None,
-        past_key_value=None,
-        layer_head_mask=None,
         query_length=None,
         use_cache=False,
         output_attentions=False,
+        deterministic=True,
     ):
         """
         Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
@@ -323,98 +260,80 @@ class FlaxT5Attention(nn.Module):
         # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
         batch_size, seq_length = hidden_states.shape[:2]
 
-        int_seq_length = int(seq_length)
+#        int_seq_length = int(seq_length)
 
         real_seq_length = seq_length
 
-        if past_key_value is not None:
-            assert (
-                len(past_key_value) == 2
-            ), f"past_key_value should have 2 past states: keys and values. Got { len(past_key_value)} past states"
-            real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
+#        real_seq_length += query_length
 
         key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
 
-        def shape(states):
-            """projection"""
-            return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
-
-        def unshape(states):
-            """reshape"""
-            return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
-
-        def project(hidden_states, proj_layer, key_value_states, past_key_value):
-            """projects hidden states correctly to key/query states"""
-            if key_value_states is None:
-                # self-attn
-                # (batch_size, n_heads, seq_length, dim_per_head)
-                hidden_states = shape(proj_layer(hidden_states))
-            elif past_key_value is None:
-                # cross-attn
-                # (batch_size, n_heads, seq_length, dim_per_head)
-                hidden_states = shape(proj_layer(key_value_states))
-
-            if past_key_value is not None:
-                if key_value_states is None:
-                    # self-attn
-                    # (batch_size, n_heads, key_length, dim_per_head)
-                    hidden_states = torch.cat([past_key_value, hidden_states], dim=2)
-                else:
-                    # cross-attn
-                    hidden_states = past_key_value
-            return hidden_states
-
         # get query states
-        query_states = shape(self.q(hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
+        query_states = self.q(hidden_states)  # (batch_size, n_heads, seq_length, dim_per_head)
+        key_states = self.k(hidden_states)
+        value_states = self.v(hidden_states)
 
-        # get key/value states
-        key_states = project(
-            hidden_states, self.k, key_value_states, past_key_value[0] if past_key_value is not None else None
-        )
-        value_states = project(
-            hidden_states, self.v, key_value_states, past_key_value[1] if past_key_value is not None else None
-        )
+        query_states = self._split_heads(query_states)
+        key_states = self._split_heads(key_states)
+        value_states = self._split_heads(value_states)
 
-        # compute scores
-        scores = torch.matmul(
-            query_states, key_states.transpose(3, 2)
-        )  # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
+        if self.is_decoder:
+            causal_mask = make_causal_mask(mask, dtype="bool")
+            causal_mask = jnp.broadcast_to(causal_mask, (batch_size,) + causal_mask.shape[1:])
+
+        # combine masks if needed
+        if mask is not None and self.is_decoder:
+            mask = jnp.broadcast_to(jnp.expand_dims(mask, axis=(-3, -2)), causal_mask.shape)
+            mask = combine_masks(mask, causal_mask)
+        elif self.is_decoder:
+            mask = causal_mask
+        elif mask is not None:
+            mask = jnp.expand_dims(mask, axis=(-3, -2))
+
+        dropout_rng = None
+        if not deterministic and self.dropout > 0.0:
+            dropout_rng = self.make_rng("dropout")
 
         if position_bias is None:
             if not self.has_relative_attention_bias:
-                position_bias = torch.zeros(
-                    (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
+                position_bias = jnp.zeros(
+                    (1, self.n_heads, real_seq_length, key_length), dtype=self.dtype
                 )
-                if self.training and self.gradient_checkpointing:
-                    position_bias.requires_grad = True
             else:
                 position_bias = self.compute_bias(real_seq_length, key_length)
 
             # if key and values are already calculated
             # we want only the last query position bias
-            if past_key_value is not None:
-                position_bias = position_bias[:, :, -int_seq_length:, :]
+#            if past_key_value is not None:
+#                position_bias = position_bias[:, :, -int_seq_length:, :]
 
             if mask is not None:
                 position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
-        scores += position_bias
-        attn_weights = F.softmax(scores.float(), dim=-1).type_as(
-            scores
-        )  # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = F.dropout(
-            attn_weights, p=self.dropout, training=self.training
-        )  # (batch_size, n_heads, seq_length, key_length)
+        attn_weights = dot_product_attention_weights(
+            query_states,
+            key_states,
+            bias=position_bias,
+            dropout_rng=dropout_rng,
+            dropout_rate=self.dropout,
+            broadcast_dropout=True,
+            deterministic=deterministic,
+            dtype=self.dtype,
+        )
 
-        # Mask heads if we want to
-        if layer_head_mask is not None:
-            attn_weights = attn_weights * layer_head_mask
+#        scores += position_bias
+#        attn_weights = jax.nn.softmax(scores.float(), dim=-1).type_as(
+#            scores
+#        )  # (batch_size, n_heads, seq_length, key_length)
+#        attn_weights = flax.nn.dropout(
+#            attn_weights, p=self.dropout, training=self.training
+#        )  # (batch_size, n_heads, seq_length, key_length)
 
-        attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
+        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
+        attn_output = self._merge_heads(attn_output)
         attn_output = self.o(attn_output)
 
-        present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
-        outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
+        outputs = (attn_output, position_bias)
 
         if output_attentions:
             outputs = outputs + (attn_weights,)
@@ -424,33 +343,30 @@ class FlaxT5Attention(nn.Module):
 class FlaxT5LayerSelfAttention(nn.Module):
     config: T5Config
     has_relative_attention_bias: bool = False
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.SelfAttention = FlaxT5Attention(self.config, has_relative_attention_bias=self.has_relative_attention_bias)
-        self.layer_norm = FlaxT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon)
+        self.SelfAttention = FlaxT5Attention(self.config, has_relative_attention_bias=self.has_relative_attention_bias, dtype=self.dtype)
+        self.layer_norm = FlaxT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
-    def forward(
+    def __call__(
         self,
         hidden_states,
         attention_mask=None,
         position_bias=None,
-        layer_head_mask=None,
-        past_key_value=None,
-        use_cache=False,
         output_attentions=False,
+        deterministic=True,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.SelfAttention(
             normed_hidden_states,
             mask=attention_mask,
             position_bias=position_bias,
-            layer_head_mask=layer_head_mask,
-            past_key_value=past_key_value,
-            use_cache=use_cache,
             output_attentions=output_attentions,
+            deterministic=deterministic,
         )
-        hidden_states = hidden_states + self.dropout(attention_output[0])
+        hidden_states = hidden_states + self.dropout(attention_output[0], deterministic=deterministic)
         outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
         return outputs
 
@@ -463,17 +379,15 @@ class FlaxT5LayerCrossAttention(nn.Module):
         self.layer_norm = FlaxT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon)
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
-    def forward(
+    def __call__(
         self,
         hidden_states,
         key_value_states,
         attention_mask=None,
         position_bias=None,
-        layer_head_mask=None,
-        past_key_value=None,
-        use_cache=False,
         query_length=None,
         output_attentions=False,
+        deterministic=True,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.EncDecAttention(
@@ -481,13 +395,10 @@ class FlaxT5LayerCrossAttention(nn.Module):
             mask=attention_mask,
             key_value_states=key_value_states,
             position_bias=position_bias,
-            layer_head_mask=layer_head_mask,
-            past_key_value=past_key_value,
-            use_cache=use_cache,
             query_length=query_length,
             output_attentions=output_attentions,
         )
-        layer_output = hidden_states + self.dropout(attention_output[0])
+        layer_output = hidden_states + self.dropout(attention_output[0], deterministic=deterministic)
         outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
         return outputs
 
@@ -495,17 +406,19 @@ class FlaxT5LayerCrossAttention(nn.Module):
 class FlaxT5Block(nn.Module):
     config: T5Config
     has_relative_attention_bias: bool = False
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
         self.is_decoder = self.config.is_decoder
-        self.layer = []
-        self.layer.append(FlaxT5LayerSelfAttention(self.config, has_relative_attention_bias=self.has_relative_attention_bias))
+        self.layer = (FlaxT5LayerSelfAttention(self.config, has_relative_attention_bias=self.has_relative_attention_bias, name=str(0)),)
+        feed_forward_index = 1
         if self.is_decoder:
-            self.layer.append(FlaxT5LayerCrossAttention(self.config))
+            self.layer += (FlaxT5LayerCrossAttention(self.config, name=str(1)),)
+            feed_forward_index = 2
 
-        self.layer.append(FlaxT5LayerFF(self.config))
+        self.layer += (FlaxT5LayerFF(self.config, name=str(feed_forward_index)),)
 
-    def forward(
+    def __call__(
         self,
         hidden_states,
         attention_mask=None,
@@ -513,430 +426,117 @@ class FlaxT5Block(nn.Module):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         encoder_decoder_position_bias=None,
-        layer_head_mask=None,
         cross_attn_layer_head_mask=None,
-        past_key_value=None,
-        use_cache=False,
         output_attentions=False,
         return_dict=True,
+        deterministic=True,
     ):
-
-        if past_key_value is not None:
-            assert self.is_decoder, "Only decoder can use `past_key_values`"
-            expected_num_past_key_values = 2 if encoder_hidden_states is None else 4
-
-            if len(past_key_value) != expected_num_past_key_values:
-                raise ValueError(
-                    f"There should be {expected_num_past_key_values} past states. "
-                    f"{'2 (past / key) for cross attention' if expected_num_past_key_values == 4 else ''}."
-                    f"Got {len(past_key_value)} past key / value states"
-                )
-
-            self_attn_past_key_value = past_key_value[:2]
-            cross_attn_past_key_value = past_key_value[2:]
-        else:
-            self_attn_past_key_value, cross_attn_past_key_value = None, None
-
         self_attention_outputs = self.layer[0](
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
-            layer_head_mask=layer_head_mask,
-            past_key_value=self_attn_past_key_value,
-            use_cache=use_cache,
             output_attentions=output_attentions,
+            deterministic=deterministic,
         )
-        hidden_states, present_key_value_state = self_attention_outputs[:2]
-        attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
-
-        # clamp inf values to enable fp16 training
-        if hidden_states.dtype == jnp.float16 and jnp.isinf(hidden_states).any():
-            clamp_value = jnp.finfo(hidden_states.dtype).max - 1000
-            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+        hidden_states = self_attention_outputs[0]
+        attention_outputs = self_attention_outputs[1:]  # Keep self-attention outputs and relative position weights
 
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
         if do_cross_attention:
             # the actual query length is unknown for cross attention
             # if using past key value states. Need to inject it here
-            if present_key_value_state is not None:
-                query_length = present_key_value_state[0].shape[2]
-            else:
-                query_length = None
+            query_length = None
 
             cross_attention_outputs = self.layer[1](
                 hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
-                layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=cross_attn_past_key_value,
                 query_length=query_length,
-                use_cache=use_cache,
                 output_attentions=output_attentions,
+                deterministic=deterministic,
             )
             hidden_states = cross_attention_outputs[0]
 
-            # clamp inf values to enable fp16 training
-            if hidden_states.dtype == jnp.float16 and jnp.isinf(hidden_states).any():
-                clamp_value = jnp.finfo(hidden_states.dtype).max - 1000
-                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-
-            # Combine self attn and cross attn key value states
-            if present_key_value_state is not None:
-                present_key_value_state = present_key_value_state + cross_attention_outputs[1]
-
             # Keep cross-attention outputs and relative position weights
-            attention_outputs = attention_outputs + cross_attention_outputs[2:]
+            attention_outputs = attention_outputs + cross_attention_outputs[1:]
 
         # Apply Feed Forward layer
-        hidden_states = self.layer[-1](hidden_states)
-
-        # clamp inf values to enable fp16 training
-        if hidden_states.dtype == jnp.float16 and jnp.isinf(hidden_states).any():
-            clamp_value = jnp.finfo(hidden_states.dtype).max - 1000
-            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+        hidden_states = self.layer[-1](hidden_states, deterministic=deterministic)
 
         outputs = (hidden_states,)
 
-        if use_cache:
-            outputs = outputs + (present_key_value_state,) + attention_outputs
-        else:
-            outputs = outputs + attention_outputs
+        outputs = outputs + attention_outputs
 
         return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
 
 
-class FlaxFlaxT5PreTrainedModel(FlaxPreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = T5Config
-    base_model_prefix = "transformer"
-    # is_parallelizable = True
-
-    @property
-    def dummy_inputs(self):
-        input_ids = jnp.array(DUMMY_INPUTS)
-        input_mask = jnp.array(DUMMY_MASK)
-        dummy_inputs = {
-            "decoder_input_ids": input_ids,
-            "input_ids": input_ids,
-            "decoder_attention_mask": input_mask,
-        }
-        return dummy_inputs
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        factor = self.config.initializer_factor  # Used for testing weights initialization
-        if isinstance(module, FlaxT5LayerNorm):
-            module.weight.data.fill_(factor * 1.0)
-        elif isinstance(module, (FlaxT5Module, FlaxT5ForConditionalGenerationModule, FlaxT5EncoderModule)):
-            # Mesh TensorFlow embeddings initialization
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
-            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
-        elif isinstance(module, FlaxT5DenseReluDense):
-            # Mesh TensorFlow FF initialization
-            # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
-            # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
-            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            if hasattr(module.wi, "bias") and module.wi.bias is not None:
-                module.wi.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
-            if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
-        elif isinstance(module, FlaxT5DenseGatedGeluDense):
-            module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
-                module.wi_0.bias.data.zero_()
-            module.wi_1.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
-                module.wi_1.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
-            if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
-        elif isinstance(module, FlaxT5Attention):
-            # Mesh TensorFlow attention initialization to avoid scaling before softmax
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
-            d_model = self.config.d_model
-            key_value_proj_dim = self.config.d_kv
-            n_heads = self.config.num_heads
-            module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model ** -0.5))
-            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model ** -0.5))
-            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
-            if module.has_relative_attention_bias:
-                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
-
-    def _shift_right(self, input_ids):
-        decoder_start_token_id = self.config.decoder_start_token_id
-        pad_token_id = self.config.pad_token_id
-
-        assert (
-            decoder_start_token_id is not None
-        ), "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id. See T5 docs for more information"
-
-        # shift inputs to the right
-        if is_torch_fx_proxy(input_ids):
-            # Item assignment is not supported natively for proxies.
-            shifted_input_ids = jnp.full(input_ids.shape[:-1] + (1,), decoder_start_token_id)
-            shifted_input_ids = jnp.concatenate([shifted_input_ids, input_ids[..., :-1]], dim=-1)
-        else:
-            shifted_input_ids = jnp.zeros_like(input_ids)
-            shifted_input_ids[..., 1:] = input_ids[..., :-1].copy()
-            shifted_input_ids[..., 0] = decoder_start_token_id
-
-        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
-        # replace possible -100 values in labels by `pad_token_id`
-        shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
-
-        assert jnp.all(shifted_input_ids >= 0).item(), "Verify that `shifted_input_ids` has only positive values"
-
-        return shifted_input_ids
-
-
 class FlaxT5Stack(nn.Module):
     config: T5Config
-    embed_tokens: nn.Embed = None
+    embed_tokens: Optional[nn.Embed] = None
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
         self.is_decoder = self.config.is_decoder
 
-        self.block = [FlaxT5Block(self.config, has_relative_attention_bias=bool(i == 0)) for i in range(self.config.num_layers)]
-        self.final_layer_norm = FlaxT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon)
+        self.block = [FlaxT5Block(self.config, has_relative_attention_bias=bool(i == 0), name=str(i), dtype=self.dtype) for i in range(self.config.num_layers)]
+        self.final_layer_norm = FlaxT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
-        # self.init_weights()
-        # # Model parallel
-        # self.model_parallel = False
-        # self.device_map = None
-
-    # @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    # def parallelize(self, device_map=None):
-    #     # Check validity of device_map
-    #     self.device_map = (
-    #         get_device_map(len(self.block), range(torch.cuda.device_count())) if device_map is None else device_map
-    #     )
-    #     assert_device_map(self.device_map, len(self.block))
-    #     self.model_parallel = True
-    #     self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
-    #     self.last_device = "cuda:" + str(max(self.device_map.keys()))
-    #     # Load onto devices
-    #     for k, v in self.device_map.items():
-    #         for layer in v:
-    #             cuda_device = "cuda:" + str(k)
-    #             self.block[layer] = self.block[layer].to(cuda_device)
-
-    #     # Set embed_tokens to first layer
-    #     self.embed_tokens = self.embed_tokens.to(self.first_device)
-    #     # Set final layer norm to last device
-    #     self.final_layer_norm = self.final_layer_norm.to(self.last_device)
-
-    # @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    # def deparallelize(self):
-    #     self.model_parallel = False
-    #     self.device_map = None
-    #     self.first_device = "cpu"
-    #     self.last_device = "cpu"
-    #     for i in range(len(self.block)):
-    #         self.block[i] = self.block[i].to("cpu")
-    #     self.embed_tokens = self.embed_tokens.to("cpu")
-    #     self.final_layer_norm = self.final_layer_norm.to("cpu")
-
-    # def get_input_embeddings(self):
-    #     return self.embed_tokens
-
-    # def set_input_embeddings(self, new_embeddings):
-    #     self.embed_tokens = new_embeddings
-
-    def forward(
+    def __call__(
         self,
         input_ids=None,
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        inputs_embeds=None,
-        head_mask=None,
-        cross_attn_head_mask=None,
-        past_key_values=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+        deterministic: bool = True,
     ):
-        # Model parallel
-        # if self.model_parallel:
-        #     torch.cuda.set_device(self.first_device)
-        #     self.embed_tokens = self.embed_tokens.to(self.first_device)
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if input_ids is not None and inputs_embeds is not None:
-            err_msg_prefix = "decoder_" if self.is_decoder else ""
-            raise ValueError(
-                f"You cannot specify both {err_msg_prefix}input_ids and {err_msg_prefix}inputs_embeds at the same time"
-            )
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            err_msg_prefix = "decoder_" if self.is_decoder else ""
-            raise ValueError(f"You have to specify either {err_msg_prefix}input_ids or {err_msg_prefix}inputs_embeds")
-
-        if inputs_embeds is None:
-            assert self.embed_tokens is not None, "You have to initialize the model with valid token embeddings"
-            inputs_embeds = self.embed_tokens(input_ids)
-
-        batch_size, seq_length = input_shape
-
-        # required mask seq length can be calculated via length of past
-        mask_seq_length = past_key_values[0][0].shape[2] + seq_length if past_key_values is not None else seq_length
-
-        if use_cache is True:
-            assert self.is_decoder, f":obj:`use_cache` can only be set to `True` if {self} is used as a decoder"
-
-        if attention_mask is None:
-            attention_mask = torch.ones(batch_size, mask_seq_length).to(inputs_embeds.device)
-        if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
-            encoder_seq_length = encoder_hidden_states.shape[1]
-            encoder_attention_mask = torch.ones(
-                batch_size, encoder_seq_length, device=inputs_embeds.device, dtype=torch.long
-            )
-
-        # initialize past_key_values with `None` if past does not exist
-        if past_key_values is None:
-            past_key_values = [None] * len(self.block)
-
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, inputs_embeds.device)
-
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=inputs_embeds.device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        else:
-            encoder_extended_attention_mask = None
 
         # Prepare head mask if needed
-        head_mask = self.get_head_mask(head_mask, self.config.num_layers)
-        cross_attn_head_mask = self.get_head_mask(cross_attn_head_mask, self.config.num_layers)
-        present_key_value_states = () if use_cache else None
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         all_cross_attentions = () if (output_attentions and self.is_decoder) else None
         position_bias = None
         encoder_decoder_position_bias = None
 
-        hidden_states = self.dropout(inputs_embeds)
+        hidden_states = self.embed_tokens(input_ids)
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
 
-        for i, (layer_module, past_key_value) in enumerate(zip(self.block, past_key_values)):
-            layer_head_mask = head_mask[i]
-            cross_attn_layer_head_mask = cross_attn_head_mask[i]
-            # Model parallel
-            # if self.model_parallel:
-            #     torch.cuda.set_device(hidden_states.device)
-            #     # Ensure that attention_mask is always on the same device as hidden_states
-            #     if attention_mask is not None:
-            #         attention_mask = attention_mask.to(hidden_states.device)
-            #     if position_bias is not None:
-            #         position_bias = position_bias.to(hidden_states.device)
-            #     if encoder_hidden_states is not None:
-            #         encoder_hidden_states = encoder_hidden_states.to(hidden_states.device)
-            #     if encoder_extended_attention_mask is not None:
-            #         encoder_extended_attention_mask = encoder_extended_attention_mask.to(hidden_states.device)
-            #     if encoder_decoder_position_bias is not None:
-            #         encoder_decoder_position_bias = encoder_decoder_position_bias.to(hidden_states.device)
-            #     if layer_head_mask is not None:
-            #         layer_head_mask = layer_head_mask.to(hidden_states.device)
-            #     if cross_attn_layer_head_mask is not None:
-            #         cross_attn_layer_head_mask = cross_attn_layer_head_mask.to(hidden_states.device)
+        for i, layer_module in enumerate(self.block):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
-                pass
-                # if use_cache:
-                #     logger.warn(
-                #         "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
-                #         "`use_cache=False`..."
-                #     )
-                #     use_cache = False
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask=attention_mask,
+                position_bias=position_bias,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                encoder_decoder_position_bias=encoder_decoder_position_bias,
+                output_attentions=output_attentions,
+                deterministic=deterministic,
+            )
 
-                # def create_custom_forward(module):
-                #     def custom_forward(*inputs):
-                #         return tuple(module(*inputs, use_cache, output_attentions))
-
-                #     return custom_forward
-
-                # layer_outputs = checkpoint(
-                #     create_custom_forward(layer_module),
-                #     hidden_states,
-                #     extended_attention_mask,
-                #     position_bias,
-                #     encoder_hidden_states,
-                #     encoder_extended_attention_mask,
-                #     encoder_decoder_position_bias,
-                #     layer_head_mask,
-                #     cross_attn_layer_head_mask,
-                #     None,  # past_key_value is always None with gradient checkpointing
-                # )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask=extended_attention_mask,
-                    position_bias=position_bias,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_extended_attention_mask,
-                    encoder_decoder_position_bias=encoder_decoder_position_bias,
-                    layer_head_mask=layer_head_mask,
-                    cross_attn_layer_head_mask=cross_attn_layer_head_mask,
-                    past_key_value=past_key_value,
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                )
-
-            # layer_outputs is a tuple with:
-            # hidden-states, key-value-states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
-            if use_cache is False:
-                layer_outputs = layer_outputs[:1] + (None,) + layer_outputs[1:]
-
-            hidden_states, present_key_value_state = layer_outputs[:2]
+            hidden_states = layer_outputs[0]
 
             # We share the position biases between the layers - the first layer store them
             # layer_outputs = hidden-states, key-value-states (self-attention position bias), (self-attention weights),
             # (cross-attention position bias), (cross-attention weights)
-            position_bias = layer_outputs[2]
+            position_bias = layer_outputs[1]
+
             if self.is_decoder and encoder_hidden_states is not None:
-                encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
-            # append next layer key value states
-            if use_cache:
-                present_key_value_states = present_key_value_states + (present_key_value_state,)
+                encoder_decoder_position_bias = layer_outputs[3 if output_attentions else 2]
 
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[3],)
+                all_attentions = all_attentions + (layer_outputs[2],)
                 if self.is_decoder:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
-
-            # Model Parallel: If it's the last layer for that device, put things on the next device
-            if self.model_parallel:
-                for k, v in self.device_map.items():
-                    if i == v[-1] and "cuda:" + str(k) != self.last_device:
-                        hidden_states = hidden_states.to("cuda:" + str(k + 1))
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[4],)
 
         hidden_states = self.final_layer_norm(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
 
         # Add last layer
         if output_hidden_states:
@@ -947,7 +547,6 @@ class FlaxT5Stack(nn.Module):
                 v
                 for v in [
                     hidden_states,
-                    present_key_value_states,
                     all_hidden_states,
                     all_attentions,
                     all_cross_attentions,
@@ -956,15 +555,99 @@ class FlaxT5Stack(nn.Module):
             )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=present_key_value_states,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
             cross_attentions=all_cross_attentions,
         )
 
 
-T5_START_DOCSTRING = r"""
+class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+    config_class = T5Config
+    base_model_prefix = "transformer"
+    module_class: nn.Module = None
 
+    def __init__(
+        self,
+        config: T5Config,
+        input_shape: Tuple[int] = (1, 1),
+        seed: int = 0,
+        dtype: jnp.dtype = jnp.float32,
+        **kwargs
+    ):
+        module = self.module_class(config=config, dtype=dtype, **kwargs)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+        # init input tensors
+        input_ids = jnp.zeros(input_shape, dtype="i4")
+        # make sure initialization pass will work for FlaxBartForSequenceClassificationModule
+        input_ids = jax.ops.index_update(input_ids, (..., -1), self.config.eos_token_id)
+        attention_mask = jnp.ones_like(input_ids)
+        decoder_input_ids = input_ids
+        decoder_attention_mask = jnp.ones_like(input_ids)
+
+        batch_size, sequence_length = input_ids.shape
+
+        params_rng, dropout_rng = jax.random.split(rng)
+        rngs = {"params": params_rng, "dropout": dropout_rng}
+
+        return self.module.init(
+            rngs,
+            input_ids,
+            attention_mask,
+            decoder_input_ids,
+            decoder_attention_mask,
+        )["params"]
+
+    def __call__(
+        self,
+        input_ids: jnp.ndarray,
+        attention_mask: Optional[jnp.ndarray] = None,
+        decoder_input_ids: Optional[jnp.ndarray] = None,
+        decoder_attention_mask: Optional[jnp.ndarray] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        train: bool = False,
+        params: dict = None,
+        dropout_rng: PRNGKey = None,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        # prepare encoder inputs
+        if attention_mask is None:
+            attention_mask = jnp.ones_like(input_ids)
+
+        # prepare decoder inputs
+        if decoder_attention_mask is None:
+            decoder_attention_mask = jnp.ones_like(decoder_input_ids)
+
+        # Handle any PRNG if needed
+        rngs = {"dropout": dropout_rng} if dropout_rng is not None else {}
+
+        return self.module.apply(
+            {"params": params or self.params},
+            input_ids=jnp.array(input_ids, dtype="i4"),
+            attention_mask=jnp.array(attention_mask, dtype="i4"),
+            decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4"),
+            decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=not train,
+            rngs=rngs,
+        )
+
+
+T5_START_DOCSTRING = r"""
     The T5 model was proposed in `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer
     <https://arxiv.org/abs/1910.10683>`__ by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang,
     Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer pre-trained in a text-to-text
@@ -1122,113 +805,45 @@ T5_ENCODER_INPUTS_DOCSTRING = r"""
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
-# Warning message for FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
-__HEAD_MASK_WARNING_MSG = """
-The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. Currently,
-`decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will be removed in future versions.
-If you do not want to use any `decoder_head_mask` now, please set `decoder_head_mask = torch.ones(num_layers,
-num_heads)`.
-"""
-
 
 @add_start_docstrings(
     "The bare T5 Model transformer outputting raw hidden-states" "without any specific head on top.",
     T5_START_DOCSTRING,
 )
 class FlaxT5Module(nn.Module):
-    # _keys_to_ignore_on_load_missing = [
-    #     r"encoder\.embed_tokens\.weight",
-    #     r"decoder\.embed_tokens\.weight",
-    # ]
-    # _keys_to_ignore_on_load_unexpected = [
-    #     r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
-    # ]
     config: T5Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    def __init__(self):
-        self.shared = nn.Embedding(self.config.vocab_size, self.config.d_model)
+    def setup(self):
+        self.shared = nn.Embed(
+            self.config.vocab_size,
+            self.config.d_model,
+            embedding_init=jax.nn.initializers.normal(self.config.initializer_factor * 1.0, self.dtype),
+            dtype=self.dtype,
+        )
 
         encoder_config = copy.deepcopy(self.config)
         encoder_config.is_decoder = False
-        encoder_config.use_cache = False
-        encoder_config.is_encoder_decoder = False
-        self.encoder = FlaxT5Stack(encoder_config, self.shared)
+        self.encoder = FlaxT5Stack(encoder_config, embed_tokens=self.shared, dtype=self.dtype)
 
         decoder_config = copy.deepcopy(self.config)
         decoder_config.is_decoder = True
-        decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = self.config.num_decoder_layers
-        self.decoder = FlaxT5Stack(decoder_config, self.shared)
-
-        # self.init_weights()
-
-        # Model parallel
-        # self.model_parallel = False
-        # self.device_map = None
-
-    # @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    # def parallelize(self, device_map=None):
-    #     self.device_map = (
-    #         get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
-    #         if device_map is None
-    #         else device_map
-    #     )
-    #     assert_device_map(self.device_map, len(self.encoder.block))
-    #     self.encoder.parallelize(self.device_map)
-    #     self.decoder.parallelize(self.device_map)
-    #     self.model_parallel = True
-
-    # @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    # def deparallelize(self):
-    #     self.encoder.deparallelize()
-    #     self.decoder.deparallelize()
-    #     self.encoder = self.encoder.to("cpu")
-    #     self.decoder = self.decoder.to("cpu")
-    #     self.model_parallel = False
-    #     self.device_map = None
-    #     torch.cuda.empty_cache()
-
-    # def get_input_embeddings(self):
-    #     return self.shared
-
-    # def set_input_embeddings(self, new_embeddings):
-    #     self.shared = new_embeddings
-    #     self.encoder.set_input_embeddings(new_embeddings)
-    #     self.decoder.set_input_embeddings(new_embeddings)
-
-    # def get_encoder(self):
-    #     return self.encoder
-
-    # def get_decoder(self):
-    #     return self.decoder
-
-    # def _prune_heads(self, heads_to_prune):
-    #     """
-    #     Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-    #     class PreTrainedModel
-    #     """
-    #     for layer, heads in heads_to_prune.items():
-    #         self.encoder.layer[layer].attention.prune_heads(heads)
+        self.decoder = FlaxT5Stack(decoder_config, embed_tokens=self.shared, dtype=self.dtype)
 
     @add_start_docstrings_to_model_forward(T5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
+    def __call__(
         self,
         input_ids=None,
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
         encoder_outputs=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        deterministic: bool = True,
     ):
         r"""
         Returns:
@@ -1246,61 +861,28 @@ class FlaxT5Module(nn.Module):
 
             >>> last_hidden_states = outputs.last_hidden_state
         """
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
-        if head_mask is not None and decoder_head_mask is None:
-            if self.config.num_layers == self.config.num_decoder_layers:
-                warnings.warn(__HEAD_MASK_WARNING_MSG, FutureWarning)
-                decoder_head_mask = head_mask
-
         # Encode if needed (training, first prediction pass)
-        if encoder_outputs is None:
-            encoder_outputs = self.encoder(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                inputs_embeds=inputs_embeds,
-                head_mask=head_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-            )
-
-        hidden_states = encoder_outputs[0]
-        # if self.model_parallel:
-        #     torch.cuda.set_device(self.decoder.first_device)
-        # # Set device for model parallelism
-        # if self.model_parallel:
-        #     torch.cuda.set_device(self.decoder.first_device)
-        #     hidden_states = hidden_states.to(self.decoder.first_device)
-        #     if decoder_input_ids is not None:
-        #         decoder_input_ids = decoder_input_ids.to(self.decoder.first_device)
-        #     if attention_mask is not None:
-        #         attention_mask = attention_mask.to(self.decoder.first_device)
-        #     if decoder_attention_mask is not None:
-        #         decoder_attention_mask = decoder_attention_mask.to(self.decoder.first_device)
+        encoder_outputs = self.encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
+        )
 
         # Decode
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
-            inputs_embeds=decoder_inputs_embeds,
-            past_key_values=past_key_values,
-            encoder_hidden_states=hidden_states,
+            encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
-            head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
-            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            deterministic=deterministic,
         )
 
         if not return_dict:
@@ -1318,20 +900,12 @@ class FlaxT5Module(nn.Module):
         )
 
 
-class FlaxT5Model(FlaxFlaxT5PreTrainedModel):
+class FlaxT5Model(FlaxT5PreTrainedModel):
     module_class = FlaxT5Module
 
 
 @add_start_docstrings("""T5 Model with a `language modeling` head on top. """, T5_START_DOCSTRING)
 class FlaxT5ForConditionalGenerationModule(nn.Module):
-    # _keys_to_ignore_on_load_missing = [
-    #     r"encoder\.embed_tokens\.weight",
-    #     r"decoder\.embed_tokens\.weight",
-    #     r"lm_head\.weight",
-    # ]
-    # _keys_to_ignore_on_load_unexpected = [
-    #     r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
-    # ]
     config: T5Config
 
     def setup(self):
@@ -1352,50 +926,6 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
         self.decoder = FlaxT5Stack(decoder_config, self.shared)
 
         self.lm_head = nn.Dense(self.config.vocab_size, use_bias=False)
-
-        # self.init_weights()
-
-        # Model parallel
-        # self.model_parallel = False
-        # self.device_map = None
-
-    # @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    # def parallelize(self, device_map=None):
-    #     self.device_map = (
-    #         get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
-    #         if device_map is None
-    #         else device_map
-    #     )
-    #     assert_device_map(self.device_map, len(self.encoder.block))
-    #     self.encoder.parallelize(self.device_map)
-    #     self.decoder.parallelize(self.device_map)
-    #     self.lm_head = self.lm_head.to(self.decoder.first_device)
-    #     self.model_parallel = True
-
-    # @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    # def deparallelize(self):
-    #     self.encoder.deparallelize()
-    #     self.decoder.deparallelize()
-    #     self.encoder = self.encoder.to("cpu")
-    #     self.decoder = self.decoder.to("cpu")
-    #     self.lm_head = self.lm_head.to("cpu")
-    #     self.model_parallel = False
-    #     self.device_map = None
-    #     torch.cuda.empty_cache()
-
-    # def get_input_embeddings(self):
-    #     return self.shared
-
-    # def set_input_embeddings(self, new_embeddings):
-    #     self.shared = new_embeddings
-    #     self.encoder.set_input_embeddings(new_embeddings)
-    #     self.decoder.set_input_embeddings(new_embeddings)
-
-    # def set_output_embeddings(self, new_embeddings):
-    #     self.lm_head = new_embeddings
-
-    # def get_output_embeddings(self):
-    #     return self.lm_head
 
     def get_encoder(self):
         return self.encoder
@@ -1451,12 +981,6 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
-        if head_mask is not None and decoder_head_mask is None:
-            if self.config.num_layers == self.config.num_decoder_layers:
-                warnings.warn(__HEAD_MASK_WARNING_MSG, FutureWarning)
-                decoder_head_mask = head_mask
-
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             # Convert encoder inputs in embeddings if needed
@@ -1493,17 +1017,6 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
                 decoder_input_ids = decoder_input_ids[:, -1:]
             if decoder_inputs_embeds is not None:
                 decoder_inputs_embeds = decoder_inputs_embeds[:, -1:]
-
-        # Set device for model parallelism
-        if self.model_parallel:
-            torch.cuda.set_device(self.decoder.first_device)
-            hidden_states = hidden_states.to(self.decoder.first_device)
-            if decoder_input_ids is not None:
-                decoder_input_ids = decoder_input_ids.to(self.decoder.first_device)
-            if attention_mask is not None:
-                attention_mask = attention_mask.to(self.decoder.first_device)
-            if decoder_attention_mask is not None:
-                decoder_attention_mask = decoder_attention_mask.to(self.decoder.first_device)
 
         # Decode
         decoder_outputs = self.decoder(
@@ -1558,164 +1071,6 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
             encoder_attentions=encoder_outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past=None,
-        attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        **kwargs
-    ):
 
-        # cut decoder_input_ids if past is used
-        if past is not None:
-            input_ids = input_ids[:, -1:]
-
-        return {
-            "decoder_input_ids": input_ids,
-            "past_key_values": past,
-            "encoder_outputs": encoder_outputs,
-            "attention_mask": attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
-            "use_cache": use_cache,
-        }
-
-    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
-        return self._shift_right(labels)
-
-    def _reorder_cache(self, past, beam_idx):
-        # if decoder past is not included in output
-        # speedy decoding is disabled and no need to reorder
-        if past is None:
-            logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
-            return past
-
-        reordered_decoder_past = ()
-        for layer_past_states in past:
-            # get the correct batch idx from layer past batch dim
-            # batch dim of `past` is at 2nd position
-            reordered_layer_past_states = ()
-            for layer_past_state in layer_past_states:
-                # need to set correct `past` for each of the four key / value states
-                reordered_layer_past_states = reordered_layer_past_states + (
-                    layer_past_state.index_select(0, beam_idx.to(layer_past_state.device)),
-                )
-
-            assert reordered_layer_past_states[0].shape == layer_past_states[0].shape
-            assert len(reordered_layer_past_states) == len(layer_past_states)
-
-            reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
-        return reordered_decoder_past
-
-class FlaxT5ForConditionalGeneration(FlaxFlaxT5PreTrainedModel):
+class FlaxT5ForConditionalGeneration(FlaxT5PreTrainedModel):
     module_class = FlaxT5ForConditionalGenerationModule
-
-
-@add_start_docstrings(
-    "The bare T5 Model transformer outputting encoder's raw hidden-states" "without any specific head on top.",
-    T5_START_DOCSTRING,
-)
-class FlaxT5EncoderModule(nn.Module):
-    # authorized_missing_keys = [
-    #     r"encoder\.embed_tokens\.weight",
-    # ]
-    config: T5Config
-
-    def setup(self):
-        self.shared = nn.Embed(self.config.vocab_size, self.config.d_model)
-
-        encoder_config = copy.deepcopy(self.config)
-        encoder_config.use_cache = False
-        encoder_config.is_encoder_decoder = False
-        self.encoder = FlaxT5Stack(encoder_config, self.shared)
-
-        # self.init_weights()
-
-        # Model parallel
-        # self.model_parallel = False
-        # self.device_map = None
-
-    # @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    # def parallelize(self, device_map=None):
-    #     self.device_map = (
-    #         get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
-    #         if device_map is None
-    #         else device_map
-    #     )
-    #     assert_device_map(self.device_map, len(self.encoder.block))
-    #     self.encoder.parallelize(self.device_map)
-    #     self.model_parallel = True
-
-    # @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    # def deparallelize(self):
-    #     self.encoder.deparallelize()
-    #     self.encoder = self.encoder.to("cpu")
-    #     self.model_parallel = False
-    #     self.device_map = None
-    #     torch.cuda.empty_cache()
-
-    def get_input_embeddings(self):
-        return self.shared
-
-    def set_input_embeddings(self, new_embeddings):
-        self.shared = new_embeddings
-        self.encoder.set_input_embeddings(new_embeddings)
-
-    def get_encoder(self):
-        return self.encoder
-
-    # def _prune_heads(self, heads_to_prune):
-    #     """
-    #     Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-    #     class PreTrainedModel
-    #     """
-    #     for layer, heads in heads_to_prune.items():
-    #         self.encoder.layer[layer].attention.prune_heads(heads)
-
-    @add_start_docstrings_to_model_forward(T5_ENCODER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        Returns:
-
-        Example::
-
-            >>> from transformers import T5Tokenizer, T5EncoderModel
-            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-            >>> model = T5EncoderModel.from_pretrained('t5-small')
-            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
-            >>> outputs = model(input_ids=input_ids)
-            >>> last_hidden_states = outputs.last_hidden_state
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        encoder_outputs = self.encoder(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        return encoder_outputs
-
-
-class FlaxT5EncoderModel(FlaxFlaxT5PreTrainedModel):
-    module_class = FlaxT5EncoderModule
