@@ -156,36 +156,9 @@ def to_gpu(x, config):
     else:
         return x
 
-# from: https://github.com/lucidrains/x-transformers/blob/a11b178573d2941c98a2c6d5b3a15fd9c97d4884/x_transformers/x_transformers.py by Phil Wang (MIT license)
-class RotaryEmbedding(nn.Module):
-    def __init__(self, dim):
-        super().__init__()
-        inv_freq = 1. / (10000 ** (torch.arange(0, dim, 2).float() / dim))
-        self.register_buffer('inv_freq', inv_freq)
-
-    def forward(self, max_seq_len, device):
-        t = torch.arange(max_seq_len, device = device).type_as(self.inv_freq)
-        freqs = torch.einsum('i , j -> i j', t, self.inv_freq)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        return rearrange(emb, 'n d -> () n () d')
-
-#def rotate_half(x):
-#    x = rearrange(x, '... (j d) -> ... j d', j = 2)
-#    x1, x2 = x.unbind(dim = -2)
-#    return torch.cat((-x2, x1), dim = -1)
-
-#def apply_rotary_pos_emb(t, freqs):
-#    seq_len = t.shape[-2]
-#    freqs = freqs[:, :, -seq_len:]
-#    return (t * freqs.cos()) + (rotate_half(t) * freqs.sin())
-# end rotary
-
-def fixed_pos_embedding(x, seq_dim=1, seq_len=None):
-    dim = x.shape[-1]
-    if seq_len is None:
-        seq_len = x.shape[seq_dim]
+def fixed_pos_embedding(dim=None, seq_len=None):
     inv_freq = 1. / (10000 ** (torch.arange(0, dim, 2) / dim))
-    sinusoid_inp = torch.einsum('i , j -> i j', torch.arange(seq_len), inv_freq).to(x.device).float()
+    sinusoid_inp = torch.einsum('i , j -> i j', torch.arange(seq_len), inv_freq).float()
     return torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)
 
 def rotate_every_two(x):
@@ -302,9 +275,13 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=not config.jax)
         self.rotary = config.rotary
-        self.rotary_dim = None
+        self.rotary_dim = self.head_dim
         if config.rotary_dim is not None:
             self.rotary_dim = config.rotary_dim
+        if self.rotary:
+            sin, cos = fixed_pos_embedding(dim=self.rotary_dim, seq_len=max_positions)
+            self.register_buffer("sin", sin)
+            self.register_buffer("cos", cos)
 
     def forward(
         self,
@@ -330,23 +307,21 @@ class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
             if layer_past is not None:
                 offset = layer_past[0].shape[-2]
                 seq_len += offset
-            if self.rotary_dim is not None:
+            if self.rotary_dim < self.head_dim:
                 k_rot = key[:, :, :, :self.rotary_dim]
                 k_pass = key[:, :, :, self.rotary_dim:]
 
                 q_rot = query[:, :, :, :self.rotary_dim]
                 q_pass = query[:, :, :, self.rotary_dim:]
 
-                sincos = fixed_pos_embedding(k_rot, 1, seq_len=seq_len)
-                k_rot = apply_rotary_pos_emb(k_rot, sincos, offset=offset).half()
-                q_rot = apply_rotary_pos_emb(q_rot, sincos, offset=offset).half()
+                k_rot = apply_rotary_pos_emb(k_rot, (self.sin, self.cos), offset=offset).half()
+                q_rot = apply_rotary_pos_emb(q_rot, (self.sin, self.cos), offset=offset).half()
 
                 key = torch.cat([k_rot, k_pass], dim=-1)
                 query = torch.cat([q_rot, q_pass], dim=-1)
             elif self.rotary:
-                sincos = fixed_pos_embedding(key, 1, seq_len=seq_len)
-                key = apply_rotary_pos_emb(key, sincos, offset=offset)
-                query = apply_rotary_pos_emb(query, sincos, offset=offset)
+                key = apply_rotary_pos_emb(key, (self.sin, self.cos), offset=offset)
+                query = apply_rotary_pos_emb(query, (self.sin, self.cos), offset=offset)
             key = key.permute(0, 2, 1, 3)
             query = query.permute(0, 2, 1, 3)
 
@@ -618,12 +593,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         self.drop = nn.Dropout(config.embed_dropout)
         self.h = nn.ModuleList([to_gpu(GPTNeoBlock(config, layer_id=i).half(), config) for i in range(config.num_layers)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
-        self.rotary = None
-        if config.rotary:
-            rotary_dim = config.hidden_size // config.num_heads
-            if config.rotary_dim is not None:
-                rotary_dim = min(config.rotary_dim, rotary_dim)
-            self.rotary = RotaryEmbedding(rotary_dim)
+        self.rotary = config.rotary
 
         self.init_weights()
 
@@ -725,7 +695,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
 
-        if self.rotary is not None:
+        if self.rotary:
             hidden_states = inputs_embeds
         else:
             position_embeds = self.wpe(position_ids)
@@ -815,7 +785,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
     GPT_NEO_START_DOCSTRING,
 )
 class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.attention\.scale_attn", r"lm_head\.weight", r"h\.\d+\.attn\.attention\.bias"]
+    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.attention\.scale_attn", r"h\.\d+\.attn\.attention\.(sin|cos)", r"lm_head\.weight", r"h\.\d+\.attn\.attention\.bias"]
     _keys_to_ignore_on_save = [r"lm_head.weight"]
 
     def __init__(self, config):
