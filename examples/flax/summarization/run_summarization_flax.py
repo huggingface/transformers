@@ -25,19 +25,19 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Optional
-from filelock import FileLock
+from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 
+import datasets
 import nltk  # Here to have a nice missing dependency error message early on
 import numpy as np
-import datasets
-from datasets import load_dataset, load_metric
+from datasets import Dataset, load_dataset, load_metric
 from tqdm import tqdm
 
 import jax
 import jax.numpy as jnp
 import optax
 import transformers
+from filelock import FileLock
 from flax import jax_utils, traverse_util
 from flax.jax_utils import unreplicate
 from flax.training import train_state
@@ -47,13 +47,12 @@ from transformers import (
     FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
     AutoConfig,
     AutoTokenizer,
-    FlaxAutoModelForS,
+    FlaxBartForConditionalGeneration,
     HfArgumentParser,
     TrainingArguments,
     is_tensorboard_available,
 )
 from transformers.file_utils import is_offline_mode
-from transformers.testing_utils import CaptureLogger
 
 
 logger = logging.getLogger(__name__)
@@ -157,6 +156,20 @@ class DataTrainingArguments:
             "value if set."
         },
     )
+    max_source_length: Optional[int] = field(
+        default=1024,
+        metadata={
+            "help": "The maximum total input sequence length after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded."
+        },
+    )
+    max_target_length: Optional[int] = field(
+        default=128,
+        metadata={
+            "help": "The maximum total sequence length for target text after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded."
+        },
+    )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
@@ -164,14 +177,6 @@ class DataTrainingArguments:
         default=5,
         metadata={
             "help": "The percentage of the train set used as validation set in case there's no validation split"
-        },
-    )
-    block_size: Optional[int] = field(
-        default=None,
-        metadata={
-            "help": "Optional input sequence length after tokenization. "
-            "The training dataset will be truncated in block of this size for training. "
-            "Default to the model max input length for single sentence inputs (take into account special tokens)."
         },
     )
     overwrite_cache: bool = field(
@@ -207,10 +212,6 @@ summarization_name_mapping = {
     "xsum": ("document", "summary"),
     "wiki_summary": ("article", "highlights"),
 }
-
-@flax.struct.dataclass
-class FlaxDataCollatorForSeq2Seq:
-    model :
 
 
 class TrainState(train_state.TrainState):
@@ -270,6 +271,7 @@ def create_learning_rate_fn(
     schedule_fn = optax.join_schedules(schedules=[warmup_fn, decay_fn], boundaries=[num_warmup_steps])
     return schedule_fn
 
+
 def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
@@ -312,7 +314,7 @@ def main():
     # Set the verbosity to info of the Transformers logger (on main process only):
     logger.info(f"Training/evaluation parameters {training_args}")
 
-     # Get the datasets: you can either provide your own CSV/JSON training and evaluation files (see below)
+    # Get the datasets: you can either provide your own CSV/JSON training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
     # (the dataset will be downloaded automatically from the datasets Hub).
     #
@@ -367,13 +369,11 @@ def main():
         )
 
     if model_args.model_name_or_path:
-        model = FlaxAutoModelForCausalLM.from_pretrained(
+        model = FlaxBartForConditionalGeneration.from_pretrained(
             model_args.model_name_or_path, config=config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
         )
     else:
-        model = FlaxAutoModelForCausalLM.from_config(
-            config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
-        )
+        model = FlaxBartForConditionalGeneration(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
 
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
@@ -413,32 +413,41 @@ def main():
 
     # Temporarily set max_target_length for training.
     max_target_length = data_args.max_target_length
-    padding = "max_length" if data_args.pad_to_max_length else False
+    # padding = "max_length" if data_args.pad_to_max_length else False
+    # can we set always set padding = "max_length", since JAX expects static shapes
+    padding = "max_length"
 
     if training_args.label_smoothing_factor > 0 and not hasattr(model, "prepare_decoder_input_ids_from_labels"):
         logger.warning(
             "label_smoothing is enabled but the `prepare_decoder_input_ids_from_labels` method is not defined for"
             f"`{model.__class__.__name__}`. This will lead to loss being calculated twice and will take up more memory"
         )
-    
+
+    prepare_decoder_input_ids_fn = (
+        model.prepare_decoder_input_ids_from_labels
+    )  # in Flax every Seq2Seq model should define this
+
     def preprocess_function(examples):
         inputs = examples[text_column]
         targets = examples[summary_column]
         inputs = [prefix + inp for inp in inputs]
-        model_inputs = tokenizer(inputs, max_length=data_args.max_source_length, padding=padding, truncation=True)
+        model_inputs = tokenizer(
+            inputs, max_length=data_args.max_source_length, padding=padding, truncation=True, return_tensors="np"
+        )
 
         # Setup the tokenizer for targets
         with tokenizer.as_target_tokenizer():
-            labels = tokenizer(targets, max_length=max_target_length, padding=padding, truncation=True)
-
-        # If we are padding here, replace all tokenizer.pad_token_id in the labels by -100 when we want to ignore
-        # padding in the loss.
-        if padding == "max_length" and data_args.ignore_pad_token_for_loss:
-            labels["input_ids"] = [
-                [(l if l != tokenizer.pad_token_id else -100) for l in label] for label in labels["input_ids"]
-            ]
+            labels = tokenizer(
+                targets, max_length=max_target_length, padding=padding, truncation=True, return_tensors="np"
+            )
 
         model_inputs["labels"] = labels["input_ids"]
+        model_inputs["decoder_input_ids"] = prepare_decoder_input_ids_fn(jnp.array(labels["input_ids"]))
+
+        model_inputs["decoder_attention_mask"] = labels[
+            "attention_mask"
+        ]  # we need this so we can ignore pad tokens from loss
+
         return model_inputs
 
     if training_args.do_train:
@@ -469,8 +478,6 @@ def main():
             remove_columns=column_names,
             load_from_cache_file=not data_args.overwrite_cache,
         )
-    
-    # TODO: data collator
 
     # Metric
     metric = load_metric("rouge")
@@ -506,8 +513,8 @@ def main():
         result["gen_len"] = np.mean(prediction_lens)
         result = {k: round(v, 4) for k, v in result.items()}
         return result
-    
-     # Enable tensorboard only on the master node
+
+    # Enable tensorboard only on the master node
     if has_tensorboard and jax.process_index() == 0:
         summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir).joinpath("logs").as_posix())
 
@@ -553,8 +560,122 @@ def main():
     # Setup train state
     state = TrainState.create(apply_fn=model.__call__, params=model.params, tx=adamw, dropout_rng=dropout_rng)
 
-    def loss_fn(logits, labels):
-        shift_logits = logits[..., :-1, :]
-        shift_labels = labels[..., 1:]
-        loss = optax.softmax_cross_entropy(shift_logits, onehot(shift_labels, shift_logits.shape[-1]))
-        return loss.mean()
+    def loss_fn(logits, labels, padding_mask):
+        loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1]))
+
+        # ignore padded tokens from loss
+        loss = loss * padding_mask
+        loss = loss.sum() / padding_mask.sum()
+        return loss
+
+    # Define gradient update step fn
+    def train_step(state, batch):
+        dropout_rng, new_dropout_rng = jax.random.split(state.dropout_rng)
+
+        def compute_loss(params):
+            labels = batch.pop("labels")
+            logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
+            loss = loss_fn(logits, labels, batch["decoder_attention_mask"])
+            return loss
+
+        grad_fn = jax.value_and_grad(compute_loss)
+        loss, grad = grad_fn(state.params)
+        grad = jax.lax.pmean(grad, "batch")
+
+        new_state = state.apply_gradients(grads=grad, dropout_rng=new_dropout_rng)
+
+        metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}
+        metrics = jax.lax.pmean(metrics, axis_name="batch")
+
+        return new_state, metrics
+
+    # Define eval fn
+    def eval_step(params, batch):
+        labels = batch.pop("labels")
+        logits = model(**batch, params=params, train=False)[0]
+        loss = loss_fn(logits, labels, batch["decoder_attention_mask"])
+
+        # summarize metrics
+        metrics = {"loss": loss}
+        metrics = jax.lax.pmean(metrics, axis_name="batch")
+        return metrics
+
+    # Create parallel version of the train and eval step
+    p_train_step = jax.pmap(train_step, "batch", donate_argnums=(0,))
+    p_eval_step = jax.pmap(eval_step, "batch")
+
+    # Replicate the train state on each device
+    state = state.replicate()
+
+    logger.info("***** Running training *****")
+    logger.info(f"  Num examples = {len(train_dataset)}")
+    logger.info(f"  Num Epochs = {num_epochs}")
+    logger.info(f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}")
+    logger.info(f"  Total train batch size (w. parallel & distributed) = {train_batch_size}")
+    logger.info(f"  Total optimization steps = {total_train_steps}")
+
+    train_time = 0
+    epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
+    for epoch in epochs:
+        # ======================== Training ================================
+        train_start = time.time()
+
+        # Create sampling rng
+        rng, input_rng = jax.random.split(rng)
+        train_metrics = []
+
+        # Generate an epoch by shuffling sampling indices from the train dataset
+        train_loader = data_loader(input_rng, train_dataset, train_batch_size, shuffle=True)
+        steps_per_epoch = len(train_dataset) // train_batch_size
+        # train
+        for _ in tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False):
+            batch = next(train_loader)
+            state, train_metric = p_train_step(state, batch)
+            train_metrics.append(train_metric)
+
+        train_time += time.time() - train_start
+
+        train_metric = unreplicate(train_metric)
+
+        epochs.write(
+            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']})"
+        )
+
+        # ======================== Evaluating ==============================
+        eval_metrics = []
+        eval_loader = data_loader(input_rng, eval_dataset, eval_batch_size)
+        eval_steps = len(eval_dataset) // eval_batch_size
+        for _ in tqdm(range(eval_steps), desc="Evaluating...", position=2, leave=False):
+            # Model forward
+            batch = next(eval_loader)
+            metrics = p_eval_step(state.params, batch)
+            eval_metrics.append(metrics)
+
+        # normalize eval metrics
+        eval_metrics = get_metrics(eval_metrics)
+
+        eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
+
+        try:
+            eval_metrics["perplexity"] = math.exp(eval_metrics["loss"])
+        except OverflowError:
+            eval_metrics["perplexity"] = float("inf")
+
+        # Print metrics and update progress bar
+        desc = f"Epoch... ({epoch + 1}/{num_epochs} | Eval Loss: {eval_metrics['loss']} | Eval Perplexity: {eval_metrics['perplexity']})"
+        epochs.write(desc)
+        epochs.desc = desc
+
+        # Save metrics
+        if has_tensorboard and jax.process_index() == 0:
+            cur_step = epoch * (len(train_dataset) // train_batch_size)
+            write_metric(summary_writer, train_metrics, eval_metrics, train_time, cur_step)
+
+    # save last checkpoint
+    if jax.process_index() == 0:
+        params = jax.device_get(unreplicate(state.params))
+        model.save_pretrained(training_args.output_dir, params=params)
+
+
+if __name__ == "__main__":
+    main()
