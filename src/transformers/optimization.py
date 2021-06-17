@@ -24,6 +24,7 @@ from torch.optim.lr_scheduler import LambdaLR
 
 from .trainer_utils import SchedulerType
 from .utils import logging
+from .utils.versions import require_version
 
 
 logger = logging.get_logger(__name__)
@@ -296,6 +297,7 @@ class AdamW(Optimizer):
         weight_decay: float = 0.0,
         correct_bias: bool = True,
     ):
+        require_version("torch>=1.5.0")  # add_ with alpha
         if lr < 0.0:
             raise ValueError(f"Invalid learning rate: {lr} - should be >= 0.0")
         if not 0.0 <= betas[0] < 1.0:
@@ -458,6 +460,7 @@ class Adafactor(Optimizer):
         relative_step=True,
         warmup_init=False,
     ):
+        require_version("torch>=1.5.0")  # add_ with alpha
         if lr is not None and relative_step:
             raise ValueError("Cannot combine manual `lr` and `relative_step=True` options")
         if warmup_init and not relative_step:
