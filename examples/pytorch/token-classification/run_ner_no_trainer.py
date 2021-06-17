@@ -317,15 +317,17 @@ def main():
         config = CONFIG_MAPPING[args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
 
-    if args.tokenizer_name:
-        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name, use_fast=True)
-    elif args.model_name_or_path:
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_fast=True)
-    else:
+    tokenizer_name_or_path = args.tokenizer_name if args.tokenizer_name else args.model_name_or_path
+    if not tokenizer_name_or_path:
         raise ValueError(
             "You are instantiating a new tokenizer from scratch. This is not supported by this script."
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
+
+    if config.model_type in {"gpt2", "roberta"}:
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=True, add_prefix_space=True)
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=True)
 
     if args.model_name_or_path:
         model = AutoModelForTokenClassification.from_pretrained(

@@ -115,6 +115,7 @@ def create_dummy_object(name, backend_name):
         "ForTokenClassification",
         "Model",
         "Tokenizer",
+        "Processor",
     ]
     if name.isupper():
         return DUMMY_CONSTANT.format(name)

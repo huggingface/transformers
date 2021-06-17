@@ -168,7 +168,7 @@ class XDropout(torch.autograd.Function):
 
 
 # Copied from transformers.models.deberta.modeling_deberta.StableDropout
-class StableDropout(torch.nn.Module):
+class StableDropout(nn.Module):
     """
     Optimized dropout module for stabilizing the training
 
@@ -342,7 +342,7 @@ class ConvLayer(nn.Module):
         kernel_size = getattr(config, "conv_kernel_size", 3)
         groups = getattr(config, "conv_groups", 1)
         self.conv_act = getattr(config, "conv_act", "tanh")
-        self.conv = torch.nn.Conv1d(
+        self.conv = nn.Conv1d(
             config.hidden_size, config.hidden_size, kernel_size, padding=(kernel_size - 1) // 2, groups=groups
         )
         self.LayerNorm = LayerNorm(config.hidden_size, config.layer_norm_eps)
@@ -546,7 +546,7 @@ def pos_dynamic_expand(pos_index, p2c_att, key_layer):
     return pos_index.expand(p2c_att.size()[:2] + (pos_index.size(-2), key_layer.size(-2)))
 
 
-class DisentangledSelfAttention(torch.nn.Module):
+class DisentangledSelfAttention(nn.Module):
     """
     Disentangled self-attention module
 
@@ -1244,7 +1244,7 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
         self.pooler = ContextPooler(config)
         output_dim = self.pooler.output_dim
 
-        self.classifier = torch.nn.Linear(output_dim, num_labels)
+        self.classifier = nn.Linear(output_dim, num_labels)
         drop_out = getattr(config, "cls_dropout", None)
         drop_out = self.config.hidden_dropout_prob if drop_out is None else drop_out
         self.dropout = StableDropout(drop_out)
@@ -1304,7 +1304,7 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
         if labels is not None:
             if self.num_labels == 1:
                 # regression task
-                loss_fn = torch.nn.MSELoss()
+                loss_fn = nn.MSELoss()
                 logits = logits.view(-1).to(labels.dtype)
                 loss = loss_fn(logits, labels.view(-1))
             elif labels.dim() == 1 or labels.size(-1) == 1:
@@ -1318,7 +1318,7 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
                 else:
                     loss = torch.tensor(0).to(logits)
             else:
-                log_softmax = torch.nn.LogSoftmax(-1)
+                log_softmax = nn.LogSoftmax(-1)
                 loss = -((log_softmax(logits) * labels).sum(-1)).mean()
         if not return_dict:
             output = (logits,) + outputs[1:]
