@@ -1582,6 +1582,15 @@ if is_flax_available():
         ]
     )
     _import_structure["models.gpt2"].extend(["FlaxGPT2LMHeadModel", "FlaxGPT2Model"])
+    _import_structure["models.mbart"].extend(
+        [
+            "FlaxMBartForConditionalGeneration",
+            "FlaxMBartForQuestionAnswering",
+            "FlaxMBartForSequenceClassification",
+            "FlaxMBartModel",
+            "FlaxMBartPretrainedModel",
+        ]
+    )
     _import_structure["models.roberta"].extend(
         [
             "FlaxRobertaForMaskedLM",
@@ -2903,6 +2912,13 @@ if TYPE_CHECKING:
             FlaxElectraPreTrainedModel,
         )
         from .models.gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model
+        from .models.mbart import (
+            FlaxMBartForConditionalGeneration,
+            FlaxMBartForQuestionAnswering,
+            FlaxMBartForSequenceClassification,
+            FlaxMBartModel,
+            FlaxMBartPretrainedModel,
+        )
         from .models.roberta import (
             FlaxRobertaForMaskedLM,
             FlaxRobertaForMultipleChoice,
