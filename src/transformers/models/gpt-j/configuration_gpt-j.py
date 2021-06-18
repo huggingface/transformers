@@ -26,7 +26,7 @@ GPT-J_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class GPT-JConfig(PretrainedConfig):
+class GPTJConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.GPT-JModel`.
     It is used to instantiate an GPT-J model according to the specified arguments, defining the model
