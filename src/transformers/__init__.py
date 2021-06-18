@@ -1593,6 +1593,7 @@ if is_flax_available():
             "FlaxRobertaPreTrainedModel",
         ]
     )
+    _import_structure["models.t5"].extend(["FlaxT5Model", "FlaxT5ForConditionalGeneration"])
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel"])
 else:
     from .utils import dummy_flax_objects
@@ -2870,6 +2871,7 @@ if TYPE_CHECKING:
             FlaxBartForSequenceClassification,
             FlaxBartModel,
         )
+        from .models.t5 import FlaxT5Model, FlaxT5ForConditionalGeneration
         from .models.bert import (
             FlaxBertForMaskedLM,
             FlaxBertForMultipleChoice,
