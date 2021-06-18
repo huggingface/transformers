@@ -19,6 +19,7 @@ from collections import OrderedDict
 
 from ...configuration_utils import PretrainedConfig
 from ..albert.configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+from ..gpt-j.configuration_gpt-j import GPT-J_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT-JConfig
 from ..bart.configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig
 from ..bert.configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from ..bert_generation.configuration_bert_generation import BertGenerationConfig
@@ -86,6 +87,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     (key, value)
     for pretrained_map in [
         # Add archive maps here
+        GPT-J_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -139,6 +141,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
+        ("gpt-j", GPT-JConfig),
         ("deit", DeiTConfig),
         ("luke", LukeConfig),
         ("gpt_neo", GPTNeoConfig),
@@ -198,6 +201,7 @@ CONFIG_MAPPING = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("gpt-j", "GPT-J"),
         ("deit", "DeiT"),
         ("luke", "LUKE"),
         ("gpt_neo", "GPT Neo"),

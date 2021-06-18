@@ -130,6 +130,7 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
+    "models.gpt-j": ["GPT-J_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT-JConfig", "GPT-JTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -310,6 +311,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.gpt-j"].append("GPT-JTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
@@ -448,6 +450,22 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
+
+    _import_structure["models.gpt-j"].extend(
+        [
+            "GPT-J_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GPT-JForMaskedLM",
+            "GPT-JForCausalLM",
+            "GPT-JForMultipleChoice",
+            "GPT-JForQuestionAnswering",
+            "GPT-JForSequenceClassification",
+            "GPT-JForTokenClassification",
+            "GPT-JLayer",
+            "GPT-JModel",
+            "GPT-JPreTrainedModel",
+            "load_tf_weights_in_gpt-j",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1520,6 +1538,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.gpt-j import GPT-J_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT-JConfig, GPT-JTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1691,6 +1710,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
+        from .models.gpt-j import GPT-JTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -1751,6 +1771,20 @@ if TYPE_CHECKING:
 
     # Modeling
     if is_torch_available():
+
+        from .models.gpt-j import (
+            GPT-J_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GPT-JForMaskedLM,
+            GPT-JForCausalLM,
+            GPT-JForMultipleChoice,
+            GPT-JForQuestionAnswering,
+            GPT-JForSequenceClassification,
+            GPT-JForTokenClassification,
+            GPT-JLayer,
+            GPT-JModel,
+            GPT-JPreTrainedModel,
+            load_tf_weights_in_gpt-j,
+        )
 
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark

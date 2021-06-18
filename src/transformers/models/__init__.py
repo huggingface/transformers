@@ -17,6 +17,7 @@
 # limitations under the License.
 
 from . import (
+    gpt-j,
     albert,
     auto,
     bart,
