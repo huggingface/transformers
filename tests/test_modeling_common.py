@@ -20,12 +20,13 @@ import os.path
 import random
 import tempfile
 import unittest
-from typing import List, Tuple
+import warnings
+from typing import Dict, List, Tuple
 
 from huggingface_hub import HfApi
 from requests.exceptions import HTTPError
 from transformers import is_torch_available, logging
-from transformers.file_utils import WEIGHTS_NAME
+from transformers.file_utils import WEIGHTS_NAME, is_torch_fx_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
@@ -43,6 +44,7 @@ from transformers.testing_utils import (
 if is_torch_available():
     import numpy as np
     import torch
+    from torch import nn
 
     from transformers import (
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -64,6 +66,9 @@ if is_torch_available():
         T5ForConditionalGeneration,
     )
 
+if is_torch_fx_available():
+    from transformers.modeling_fx_utils import symbolic_trace
+
 
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
@@ -82,6 +87,7 @@ class ModelTesterMixin:
     model_tester = None
     all_model_classes = ()
     all_generative_model_classes = ()
+    fx_ready_model_classes = ()
     test_torchscript = True
     test_pruning = True
     test_resize_embeddings = True
@@ -176,6 +182,14 @@ class ModelTesterMixin:
                 state_dict_saved = torch.load(output_model_file)
                 for k in _keys_to_ignore_on_save:
                     self.assertNotIn(k, state_dict_saved)
+
+                # Test we can load the state dict in the model, necessary for the checkpointing API in Trainer.
+                load_result = model.load_state_dict(state_dict_saved, strict=False)
+                self.assertTrue(
+                    len(load_result.missing_keys) == 0
+                    or set(load_result.missing_keys) == set(model._keys_to_ignore_on_save)
+                )
+                self.assertTrue(len(load_result.unexpected_keys) == 0)
 
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
@@ -483,15 +497,18 @@ class ModelTesterMixin:
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
 
+    @slow
     def test_torchscript(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self._create_and_check_torchscript(config, inputs_dict)
 
+    @slow
     def test_torchscript_output_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_attentions = True
         self._create_and_check_torchscript(config, inputs_dict)
 
+    @slow
     def test_torchscript_output_hidden_state(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
@@ -556,6 +573,116 @@ class ModelTesterMixin:
                     models_equal = False
 
             self.assertTrue(models_equal)
+
+    def test_torch_fx(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        self._create_and_check_torch_fx_tracing(config, inputs_dict)
+
+    def test_torch_fx_output_loss(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
+
+    def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
+        if not is_torch_fx_available():
+            return
+
+        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
+        configs_no_init.return_dict = False
+
+        for model_class in self.fx_ready_model_classes:
+            model = model_class(config=configs_no_init)
+            model.to(torch_device)
+            model.eval()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=output_loss)
+
+            try:
+                if model.config.is_encoder_decoder:
+                    model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
+                    input_ids = inputs["input_ids"]
+                    decoder_attention_mask = inputs["decoder_attention_mask"]
+                    labels = inputs.get("labels", None)
+                    input_names = ["input_ids", "attention_mask", "decoder_input_ids", "decoder_attention_mask"]
+                    if labels is not None:
+                        input_names.append("labels")
+                    filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
+
+                    model_output = model(**filtered_inputs)
+
+                    batch_size = input_ids.shape[0]
+                    encoder_sequence_length = input_ids.shape[1]
+                    decoder_sequence_length = decoder_attention_mask.shape[1]
+
+                    traced_model = symbolic_trace(
+                        model,
+                        input_names,
+                        batch_size=batch_size,
+                        sequence_length=[encoder_sequence_length, decoder_sequence_length],
+                    )
+
+                    traced_output = traced_model(**filtered_inputs)
+
+                else:
+                    input_names = ["input_ids", "attention_mask", "token_type_ids"]
+                    input_ids = inputs["input_ids"]
+
+                    labels = inputs.get("labels", None)
+                    start_positions = inputs.get("start_positions", None)
+                    end_positions = inputs.get("end_positions", None)
+                    if labels is not None:
+                        input_names.append("labels")
+                    if start_positions is not None:
+                        input_names.append("start_positions")
+                    if end_positions is not None:
+                        input_names.append("end_positions")
+
+                    filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
+                    input_names = filtered_inputs.keys()
+
+                    model_output = model(**filtered_inputs)
+
+                    rank = len(input_ids.shape)
+                    if rank == 2:
+                        batch_size, sequence_length = input_ids.shape
+                        num_choices = -1
+                    elif rank == 3:
+                        batch_size, num_choices, sequence_length = input_ids.shape
+                    else:
+                        raise NotImplementedError(
+                            f"symbolic_trace automatic parameters inference not implemented for input of rank {rank}."
+                        )
+
+                    traced_model = symbolic_trace(
+                        model,
+                        input_names,
+                        batch_size=batch_size,
+                        sequence_length=sequence_length,
+                        num_choices=num_choices,
+                    )
+                    traced_output = traced_model(**filtered_inputs)
+
+            except RuntimeError:
+                self.fail("Couldn't trace module.")
+
+            def flatten_output(output):
+                flatten = []
+                for x in output:
+                    if isinstance(x, (tuple, list)):
+                        flatten += flatten_output(x)
+                    elif not isinstance(x, torch.Tensor):
+                        continue
+                    else:
+                        flatten.append(x)
+                return flatten
+
+            model_output = flatten_output(model_output)
+            traced_output = flatten_output(traced_output)
+            num_outputs = len(model_output)
+
+            for i in range(num_outputs):
+                self.assertTrue(
+                    torch.allclose(model_output[i], traced_output[i]),
+                    f"traced {i}th output doesn't match model {i}th output for {model_class}",
+                )
 
     def test_headmasking(self):
         if not self.test_head_masking:
@@ -856,7 +983,6 @@ class ModelTesterMixin:
 
         outputs = model(**inputs)
 
-        print(outputs)
         output = outputs[0]
 
         if config.is_encoder_decoder:
@@ -1025,10 +1151,10 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (torch.nn.Embedding, AdaptiveEmbedding))
-            model.set_input_embeddings(torch.nn.Embedding(10, 10))
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Embedding, AdaptiveEmbedding))
+            model.set_input_embeddings(nn.Embedding(10, 10))
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
 
     def test_correct_missing_keys(self):
         if not self.test_missing_keys:
@@ -1043,7 +1169,6 @@ class ModelTesterMixin:
                 with tempfile.TemporaryDirectory() as temp_dir_name:
                     model.base_model.save_pretrained(temp_dir_name)
                     model, loading_info = model_class.from_pretrained(temp_dir_name, output_loading_info=True)
-
                     with self.subTest(msg=f"Missing keys for {model.__class__.__name__}"):
                         self.assertGreater(len(loading_info["missing_keys"]), 0)
 
@@ -1110,6 +1235,11 @@ class ModelTesterMixin:
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, (List, Tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif isinstance(tuple_object, Dict):
+                        for tuple_iterable_value, dict_iterable_value in zip(
+                            tuple_object.values(), dict_object.values()
+                        ):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif tuple_object is None:
                         return
@@ -1208,7 +1338,7 @@ class ModelTesterMixin:
             model.eval()
 
             # Wrap model in nn.DataParallel
-            model = torch.nn.DataParallel(model)
+            model = nn.DataParallel(model)
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -1369,7 +1499,14 @@ class ModelTesterMixin:
 
                     inputs["labels"] = inputs["labels"].to(problem_type["dtype"])
 
-                    loss = model(**inputs).loss
+                    # This tests that we do not trigger the warning form PyTorch "Using a target size that is different
+                    # to the input size. This will likely lead to incorrect results due to broadcasting. Please ensure
+                    # they have the same size." which is a symptom something in wrong for the regression problem.
+                    # See https://github.com/huggingface/transformers/issues/11780
+                    with warnings.catch_warnings(record=True) as warning_list:
+                        loss = model(**inputs).loss
+                    self.assertListEqual(warning_list, [])
+
                     loss.backward()
 
 

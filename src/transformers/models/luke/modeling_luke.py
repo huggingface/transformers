@@ -19,9 +19,8 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import torch.utils.checkpoint
+from torch import nn
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -1069,6 +1068,7 @@ class LukeForEntityClassification(LukePreTrainedModel):
             >>> logits = outputs.logits
             >>> predicted_class_idx = logits.argmax(-1).item()
             >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+            Predicted class: person
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1097,9 +1097,9 @@ class LukeForEntityClassification(LukePreTrainedModel):
             # When the number of dimension of `labels` is 1, cross entropy is used as the loss function. The binary
             # cross entropy is used otherwise.
             if labels.ndim == 1:
-                loss = F.cross_entropy(logits, labels)
+                loss = nn.functional.cross_entropy(logits, labels)
             else:
-                loss = F.binary_cross_entropy_with_logits(logits.view(-1), labels.view(-1).type_as(logits))
+                loss = nn.functional.binary_cross_entropy_with_logits(logits.view(-1), labels.view(-1).type_as(logits))
 
         if not return_dict:
             output = (
@@ -1181,6 +1181,7 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
             >>> logits = outputs.logits
             >>> predicted_class_idx = logits.argmax(-1).item()
             >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+            Predicted class: per:cities_of_residence
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1211,9 +1212,9 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
             # When the number of dimension of `labels` is 1, cross entropy is used as the loss function. The binary
             # cross entropy is used otherwise.
             if labels.ndim == 1:
-                loss = F.cross_entropy(logits, labels)
+                loss = nn.functional.cross_entropy(logits, labels)
             else:
-                loss = F.binary_cross_entropy_with_logits(logits.view(-1), labels.view(-1).type_as(logits))
+                loss = nn.functional.binary_cross_entropy_with_logits(logits.view(-1), labels.view(-1).type_as(logits))
 
         if not return_dict:
             output = (
@@ -1309,8 +1310,12 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
             >>> inputs = tokenizer(text, entity_spans=entity_spans, return_tensors="pt")
             >>> outputs = model(**inputs)
             >>> logits = outputs.logits
-            >>> predicted_class_idx = logits.argmax(-1).item()
-            >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+            >>> predicted_class_indices = logits.argmax(-1).squeeze().tolist()
+            >>> for span, predicted_class_idx in zip(entity_spans, predicted_class_indices):
+            ...     if predicted_class_idx != 0:
+            ...        print(text[span[0]:span[1]], model.config.id2label[predicted_class_idx])
+            Beyoncé PER
+            Los Angeles LOC
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1345,9 +1350,9 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
             # When the number of dimension of `labels` is 2, cross entropy is used as the loss function. The binary
             # cross entropy is used otherwise.
             if labels.ndim == 2:
-                loss = F.cross_entropy(logits.view(-1, self.num_labels), labels.view(-1))
+                loss = nn.functional.cross_entropy(logits.view(-1, self.num_labels), labels.view(-1))
             else:
-                loss = F.binary_cross_entropy_with_logits(logits.view(-1), labels.view(-1).type_as(logits))
+                loss = nn.functional.binary_cross_entropy_with_logits(logits.view(-1), labels.view(-1).type_as(logits))
 
         if not return_dict:
             output = (

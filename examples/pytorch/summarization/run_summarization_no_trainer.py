@@ -48,9 +48,12 @@ from transformers import (
     set_seed,
 )
 from transformers.file_utils import is_offline_mode
+from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)
+require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/summarization/requirements.txt")
+
 # You should update this to your particular problem to have better documentation of `model_type`
 MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
@@ -183,6 +186,12 @@ def parse_args():
         type=str,
         default=None,
         help="Pretrained tokenizer name or path if not the same as model_name",
+    )
+    parser.add_argument(
+        "--text_column",
+        type=str,
+        default=None,
+        help="The name of the column in the datasets containing the full texts (for summarization).",
     )
     parser.add_argument(
         "--summary_column",
@@ -332,7 +341,7 @@ def main():
     # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
     if args.config_name:
-        config = AutoConfig.from_pretrained(args.model_name_or_path)
+        config = AutoConfig.from_pretrained(args.config_name)
     elif args.model_name_or_path:
         config = AutoConfig.from_pretrained(args.model_name_or_path)
     else:
@@ -371,9 +380,14 @@ def main():
 
     # Get the column names for input/target.
     dataset_columns = summarization_name_mapping.get(args.dataset_name, None)
-    text_column_name = dataset_columns[0] if dataset_columns is not None else column_names[0]
-
-    padding = "max_length" if args.pad_to_max_length else False
+    if args.text_column is None:
+        text_column = dataset_columns[0] if dataset_columns is not None else column_names[0]
+    else:
+        text_column = args.text_column
+        if text_column not in column_names:
+            raise ValueError(
+                f"--text_column' value '{args.text_column}' needs to be one of: {', '.join(column_names)}"
+            )
     if args.summary_column is None:
         summary_column = dataset_columns[1] if dataset_columns is not None else column_names[1]
     else:
@@ -388,7 +402,7 @@ def main():
     padding = "max_length" if args.pad_to_max_length else False
 
     def preprocess_function(examples):
-        inputs = examples[text_column_name]
+        inputs = examples[text_column]
         targets = examples[summary_column]
         inputs = [prefix + inp for inp in inputs]
         model_inputs = tokenizer(inputs, max_length=args.max_source_length, padding=padding, truncation=True)
@@ -408,7 +422,11 @@ def main():
         return model_inputs
 
     processed_datasets = raw_datasets.map(
-        preprocess_function, batched=True, remove_columns=column_names, load_from_cache_file=not args.overwrite_cache
+        preprocess_function,
+        batched=True,
+        remove_columns=column_names,
+        load_from_cache_file=not args.overwrite_cache,
+        desc="Running tokenizer on dataset",
     )
 
     train_dataset = processed_datasets["train"]

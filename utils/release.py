@@ -26,7 +26,7 @@ REPLACE_PATTERNS = {
     "examples": (re.compile(r'^check_min_version\("[^"]+"\)\s*$', re.MULTILINE), 'check_min_version("VERSION")\n'),
     "init": (re.compile(r'^__version__\s+=\s+"([^"]+)"\s*$', re.MULTILINE), '__version__ = "VERSION"\n'),
     "setup": (re.compile(r'^(\s*)version\s*=\s*"[^"]+",', re.MULTILINE), r'\1version="VERSION",'),
-    "doc": (re.compile(r"^(\s*)release\s*=\s*u'[^']+'$", re.MULTILINE), "release = u'VERSION'\n"),
+    "doc": (re.compile(r'^(\s*)release\s*=\s*"[^"]+"$', re.MULTILINE), "release = u'VERSION'\n"),
 }
 REPLACE_FILES = {
     "init": "src/transformers/__init__.py",

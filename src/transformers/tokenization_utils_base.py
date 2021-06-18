@@ -1745,6 +1745,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if tokenizer_config_file is not None:
             with open(tokenizer_config_file, encoding="utf-8") as tokenizer_config_handle:
                 init_kwargs = json.load(tokenizer_config_handle)
+            init_kwargs.pop("tokenizer_class", None)
             saved_init_inputs = init_kwargs.pop("init_inputs", ())
             if not init_inputs:
                 init_inputs = saved_init_inputs
@@ -1872,14 +1873,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             save_directory (:obj:`str` or :obj:`os.PathLike`): The path to a directory where the tokenizer will be saved.
             legacy_format (:obj:`bool`, `optional`):
                 Only applicable for a fast tokenizer. If unset (default), will save the tokenizer in the unified JSON
-                format as well as in legacy format, i.e. with tokenizer specific vocabulary and a separate added_tokens
-                files.
+                format as well as in legacy format if it exists, i.e. with tokenizer specific vocabulary and a separate
+                added_tokens files.
 
                 If :obj:`False`, will only save the tokenizer in the unified JSON format. This format is incompatible
                 with "slow" tokenizers (not powered by the `tokenizers` library), so the tokenizer will not be able to
                 be loaded in the corresponding "slow" tokenizer.
 
-                If :obj:`True`, will save the tokenizer in legacy format.
+                If :obj:`True`, will save the tokenizer in legacy format. If the "slow" tokenizer doesn't exits, a
+                value error is raised.
             filename_prefix: (:obj:`str`, `optional`):
                 A prefix to add to the names of the files saved by the tokenizer.
 
@@ -1919,6 +1921,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # add_type_field=True to allow dicts in the kwargs / differentiate from AddedToken serialization
         tokenizer_config = convert_added_tokens(tokenizer_config, add_type_field=True)
+
+        # Add tokenizer class to the tokenizer config to be able to reload it with from_pretrained
+        tokenizer_class = self.__class__.__name__
+        # Remove the Fast at the end unless we have a special `PreTrainedTokenizerFast`
+        if tokenizer_class.endswith("Fast") and tokenizer_class != "PreTrainedTokenizerFast":
+            tokenizer_class = tokenizer_class[:-4]
+        tokenizer_config["tokenizer_class"] = tokenizer_class
+
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(tokenizer_config, ensure_ascii=False))
         logger.info(f"tokenizer config file saved in {tokenizer_config_file}")

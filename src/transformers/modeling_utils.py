@@ -25,10 +25,10 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import torch
 from torch import Tensor, device, dtype, nn
 from torch.nn import CrossEntropyLoss
-from torch.nn import functional as F
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
+from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
 from .file_utils import (
     CONFIG_NAME,
     DUMMY_INPUTS,
@@ -45,7 +45,6 @@ from .file_utils import (
     replace_return_docstrings,
 )
 from .generation_utils import GenerationMixin
-from .integrations import deepspeed_config, is_deepspeed_zero3_enabled
 from .utils import logging
 
 
@@ -355,9 +354,7 @@ class ModuleUtilsMixin:
         """
 
         def parameter_filter(x):
-            return (x.requires_grad or not only_trainable) and not (
-                isinstance(x, torch.nn.Embedding) and exclude_embeddings
-            )
+            return (x.requires_grad or not only_trainable) and not (isinstance(x, nn.Embedding) and exclude_embeddings)
 
         params = filter(parameter_filter, self.parameters()) if only_trainable else self.parameters()
         return sum(p.numel() for p in params)
@@ -510,6 +507,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         return None  # Overwrite for models with output embeddings
 
+    def _init_weights(self, module):
+        """
+        Initialize the weights. This method should be overridden by derived class.
+        """
+        raise NotImplementedError(f"Make sure `_init_weigths` is implemented for {self.__class__}")
+
     def tie_weights(self):
         """
         Tie the weights between the input embeddings and the output embeddings.
@@ -543,7 +546,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         ):
             assert isinstance(decoder_pointer, nn.Module) and isinstance(
                 encoder_pointer, nn.Module
-            ), f"{decoder_pointer} and {encoder_pointer} have to be of type torch.nn.Module"
+            ), f"{decoder_pointer} and {encoder_pointer} have to be of type nn.Module"
             if hasattr(decoder_pointer, "weight"):
                 assert hasattr(encoder_pointer, "weight")
                 encoder_pointer.weight = decoder_pointer.weight
@@ -607,7 +610,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             output_embeddings.weight = input_embeddings.weight
 
         if getattr(output_embeddings, "bias", None) is not None:
-            output_embeddings.bias.data = torch.nn.functional.pad(
+            output_embeddings.bias.data = nn.functional.pad(
                 output_embeddings.bias.data,
                 (
                     0,
@@ -619,7 +622,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
             output_embeddings.out_features = input_embeddings.num_embeddings
 
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> torch.nn.Embedding:
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
         """
         Resizes input token embeddings matrix of the model if :obj:`new_num_tokens != config.vocab_size`.
 
@@ -662,8 +665,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return self.get_input_embeddings()
 
     def _get_resized_embeddings(
-        self, old_embeddings: torch.nn.Embedding, new_num_tokens: Optional[int] = None
-    ) -> torch.nn.Embedding:
+        self, old_embeddings: nn.Embedding, new_num_tokens: Optional[int] = None
+    ) -> nn.Embedding:
         """
         Build a resized Embedding Module from a provided token Embedding Module. Increasing the size will add newly
         initialized vectors at the end. Reducing the size will remove vectors from the end
@@ -726,8 +729,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return new_embeddings
 
     def _get_resized_lm_head(
-        self, old_lm_head: torch.nn.Linear, new_num_tokens: Optional[int] = None, transposed: Optional[bool] = False
-    ) -> torch.nn.Linear:
+        self, old_lm_head: nn.Linear, new_num_tokens: Optional[int] = None, transposed: Optional[bool] = False
+    ) -> nn.Linear:
         """
         Build a resized Linear Module from a provided old Linear Module. Increasing the size will add newly initialized
         vectors at the end. Reducing the size will remove vectors from the end
@@ -975,7 +978,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
                 identifier allowed by git.
-            mirror(:obj:`str`, `optional`, defaults to :obj:`None`):
+            mirror(:obj:`str`, `optional`):
                 Mirror source to accelerate downloads in China. If you are from China and have an accessibility
                 problem, you can set this option to resolve it. Note that we do not guarantee the timeliness or safety.
                 Please refer to the mirror site for more information.
@@ -1205,7 +1208,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
 
             model, missing_keys, unexpected_keys, error_msgs = cls._load_state_dict_into_model(
-                model, state_dict, pretrained_model_name_or_path
+                model, state_dict, pretrained_model_name_or_path, _fast_init=_fast_init
             )
 
         # make sure token embedding weights are still tied if needed
@@ -1225,7 +1228,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return model
 
     @classmethod
-    def _load_state_dict_into_model(cls, model, state_dict, pretrained_model_name_or_path):
+    def _load_state_dict_into_model(cls, model, state_dict, pretrained_model_name_or_path, _fast_init=True):
 
         # Convert old format to new format if needed from a PyTorch state_dict
         old_keys = []
@@ -1273,12 +1276,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for pat in cls._keys_to_ignore_on_load_unexpected:
                 unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
-        # tie unintialized modules
-        unintialized_modules = model.retrieve_modules_from_names(
-            missing_keys, add_prefix=add_prefix, remove_prefix=remove_prefix
-        )
-        for module in unintialized_modules:
-            model._init_weights(module)
+        if _fast_init:
+            # retrieve unintialized modules and initialize
+            unintialized_modules = model.retrieve_modules_from_names(
+                missing_keys, add_prefix=add_prefix, remove_prefix=remove_prefix
+            )
+            for module in unintialized_modules:
+                model._init_weights(module)
+
         # copy state_dict so _load_from_state_dict can modify it
         metadata = getattr(state_dict, "_metadata", None)
         #state_dict = state_dict.copy()
@@ -1673,7 +1678,7 @@ class SQuADHead(nn.Module):
         else:
             # during inference, compute the end logits based on beam search
             bsz, slen, hsz = hidden_states.size()
-            start_log_probs = F.softmax(start_logits, dim=-1)  # shape (bsz, slen)
+            start_log_probs = nn.functional.softmax(start_logits, dim=-1)  # shape (bsz, slen)
 
             start_top_log_probs, start_top_index = torch.topk(
                 start_log_probs, self.start_n_top, dim=-1
@@ -1687,7 +1692,7 @@ class SQuADHead(nn.Module):
             )  # shape (bsz, slen, start_n_top, hsz)
             p_mask = p_mask.unsqueeze(-1) if p_mask is not None else None
             end_logits = self.end_logits(hidden_states_expanded, start_states=start_states, p_mask=p_mask)
-            end_log_probs = F.softmax(end_logits, dim=1)  # shape (bsz, slen, start_n_top)
+            end_log_probs = nn.functional.softmax(end_logits, dim=1)  # shape (bsz, slen, start_n_top)
 
             end_top_log_probs, end_top_index = torch.topk(
                 end_log_probs, self.end_n_top, dim=1
@@ -1812,7 +1817,7 @@ class SequenceSummary(nn.Module):
         return output
 
 
-def unwrap_model(model: torch.nn.Module) -> torch.nn.Module:
+def unwrap_model(model: nn.Module) -> nn.Module:
     """
     Recursively unwraps a model from potential containers (as used in distributed training).
 
@@ -1826,7 +1831,7 @@ def unwrap_model(model: torch.nn.Module) -> torch.nn.Module:
         return model
 
 
-def prune_linear_layer(layer: torch.nn.Linear, index: torch.LongTensor, dim: int = 0) -> torch.nn.Linear:
+def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) -> nn.Linear:
     """
     Prune a linear layer to keep only entries in index.
 
@@ -1894,8 +1899,8 @@ def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, dim: int = 1) -> 
 
 
 def prune_layer(
-    layer: Union[torch.nn.Linear, Conv1D], index: torch.LongTensor, dim: Optional[int] = None
-) -> Union[torch.nn.Linear, Conv1D]:
+    layer: Union[nn.Linear, Conv1D], index: torch.LongTensor, dim: Optional[int] = None
+) -> Union[nn.Linear, Conv1D]:
     """
     Prune a Conv1D or linear layer to keep only entries in index.
 

@@ -177,7 +177,8 @@ class QuestionAnsweringPipeline(Pipeline):
                 One or several context(s) associated with the question(s) (must be used in conjunction with the
                 :obj:`question` argument).
             topk (:obj:`int`, `optional`, defaults to 1):
-                The number of answers to return (will be chosen by order of likelihood).
+                The number of answers to return (will be chosen by order of likelihood). Note that we return less than
+                topk answers if there are not enough options available within the context.
             doc_stride (:obj:`int`, `optional`, defaults to 128):
                 If the context is too long to fit with the question for the model, it will be split in several chunks
                 with some overlap. This argument controls the size of that overlap.
@@ -341,7 +342,9 @@ class QuestionAnsweringPipeline(Pipeline):
                 # Mask CLS
                 start_[0] = end_[0] = 0.0
 
-                starts, ends, scores = self.decode(start_, end_, kwargs["topk"], kwargs["max_answer_len"])
+                starts, ends, scores = self.decode(
+                    start_, end_, kwargs["topk"], kwargs["max_answer_len"], undesired_tokens
+                )
                 if not self.tokenizer.is_fast:
                     char_to_word = np.array(example.char_to_word_offset)
 
@@ -403,7 +406,9 @@ class QuestionAnsweringPipeline(Pipeline):
             return all_answers[0]
         return all_answers
 
-    def decode(self, start: np.ndarray, end: np.ndarray, topk: int, max_answer_len: int) -> Tuple:
+    def decode(
+        self, start: np.ndarray, end: np.ndarray, topk: int, max_answer_len: int, undesired_tokens: np.ndarray
+    ) -> Tuple:
         """
         Take the output of any :obj:`ModelForQuestionAnswering` and will generate probabilities for each span to be the
         actual answer.
@@ -417,6 +422,7 @@ class QuestionAnsweringPipeline(Pipeline):
             end (:obj:`np.ndarray`): Individual end probabilities for each token.
             topk (:obj:`int`): Indicates how many possible answer span(s) to extract from the model output.
             max_answer_len (:obj:`int`): Maximum size of the answer to extract from the model's output.
+            undesired_tokens (:obj:`np.ndarray`): Mask determining tokens that can be part of the answer
         """
         # Ensure we have batch axis
         if start.ndim == 1:
@@ -441,8 +447,13 @@ class QuestionAnsweringPipeline(Pipeline):
             idx = np.argpartition(-scores_flat, topk)[0:topk]
             idx_sort = idx[np.argsort(-scores_flat[idx])]
 
-        start, end = np.unravel_index(idx_sort, candidates.shape)[1:]
-        return start, end, candidates[0, start, end]
+        starts, ends = np.unravel_index(idx_sort, candidates.shape)[1:]
+        desired_spans = np.isin(starts, undesired_tokens.nonzero()) & np.isin(ends, undesired_tokens.nonzero())
+        starts = starts[desired_spans]
+        ends = ends[desired_spans]
+        scores = candidates[0, starts, ends]
+
+        return starts, ends, scores
 
     def span_to_answer(self, text: str, start: int, end: int) -> Dict[str, Union[str, int]]:
         """

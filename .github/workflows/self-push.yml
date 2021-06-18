@@ -23,7 +23,7 @@ jobs:
   run_tests_torch_gpu:
     runs-on: [self-hosted, docker-gpu, single-gpu]
     container:
-      image: pytorch/pytorch:1.8.0-cuda11.1-cudnn8-runtime
+      image: pytorch/pytorch:1.9.0-cuda11.1-cudnn8-runtime
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Launcher docker
@@ -37,7 +37,7 @@ jobs:
         run: |
           apt -y update && apt install -y libsndfile1-dev
           pip install --upgrade pip
-          pip install .[sklearn,testing,onnxruntime,sentencepiece,speech]
+          pip install .[sklearn,testing,onnxruntime,sentencepiece,speech,vision,timm]
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -63,6 +63,7 @@ jobs:
 
   run_tests_tf_gpu:
     runs-on: [self-hosted, docker-gpu, single-gpu]
+    timeout-minutes: 120
     container:
       image: tensorflow/tensorflow:2.4.1-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -89,7 +90,7 @@ jobs:
           TF_NUM_INTRAOP_THREADS: 8
           TF_NUM_INTEROP_THREADS: 1
         run: |
-          python -m pytest -n 2 --dist=loadfile --make-reports=tests_tf_gpu tests
+          python -m pytest -n 1 --dist=loadfile --make-reports=tests_tf_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -106,7 +107,7 @@ jobs:
   run_tests_torch_multi_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
     container:
-      image: pytorch/pytorch:1.8.0-cuda11.1-cudnn8-runtime
+      image: pytorch/pytorch:1.9.0-cuda11.1-cudnn8-runtime
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Launcher docker
@@ -120,7 +121,7 @@ jobs:
         run: |
           apt -y update && apt install -y libsndfile1-dev
           pip install --upgrade pip
-          pip install .[sklearn,testing,onnxruntime,sentencepiece,speech]
+          pip install .[sklearn,testing,onnxruntime,sentencepiece,speech,vision,timm]
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -148,6 +149,7 @@ jobs:
 
   run_tests_tf_multi_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
+    timeout-minutes: 120
     container:
       image: tensorflow/tensorflow:2.4.1-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -174,7 +176,7 @@ jobs:
           TF_NUM_INTRAOP_THREADS: 8
           TF_NUM_INTEROP_THREADS: 1
         run: |
-          python -m pytest -n 2 --dist=loadfile --make-reports=tests_tf_multi_gpu tests
+          python -m pytest -n 1 --dist=loadfile --make-reports=tests_tf_multi_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -202,6 +204,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          apt -y update && apt install -y libaio-dev
           pip install --upgrade pip
           pip install .[testing,deepspeed]
 
@@ -242,6 +245,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          apt -y update && apt install -y libaio-dev
           pip install --upgrade pip
           pip install .[testing,deepspeed,fairscale]
 

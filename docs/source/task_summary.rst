@@ -1,4 +1,4 @@
-.. 
+..
     Copyright 2020 The HuggingFace Team. All rights reserved.
 
     Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -69,13 +69,13 @@ This returns a label ("POSITIVE" or "NEGATIVE") alongside a score, as follows:
 
     >>> from transformers import pipeline
 
-    >>> nlp = pipeline("sentiment-analysis")
+    >>> classifier = pipeline("sentiment-analysis")
 
-    >>> result = nlp("I hate you")[0]
+    >>> result = classifier("I hate you")[0]
     >>> print(f"label: {result['label']}, with score: {round(result['score'], 4)}")
     label: NEGATIVE, with score: 0.9991
 
-    >>> result = nlp("I love you")[0]
+    >>> result = classifier("I love you")[0]
     >>> print(f"label: {result['label']}, with score: {round(result['score'], 4)}")
     label: POSITIVE, with score: 0.9999
 
@@ -182,7 +182,7 @@ leverages a fine-tuned model on SQuAD.
 
     >>> from transformers import pipeline
 
-    >>> nlp = pipeline("question-answering")
+    >>> question_answerer = pipeline("question-answering")
 
     >>> context = r"""
     ... Extractive Question Answering is the task of extracting an answer from a text given a question. An example of a
@@ -195,11 +195,11 @@ positions of the extracted answer in the text.
 
 .. code-block::
 
-    >>> result = nlp(question="What is extractive question answering?", context=context)
+    >>> result = question_answerer(question="What is extractive question answering?", context=context)
     >>> print(f"Answer: '{result['answer']}', score: {round(result['score'], 4)}, start: {result['start']}, end: {result['end']}")
     Answer: 'the task of extracting an answer from a text given a question.', score: 0.6226, start: 34, end: 96
 
-    >>> result = nlp(question="What is a good example of a question answering dataset?", context=context)
+    >>> result = question_answerer(question="What is a good example of a question answering dataset?", context=context)
     >>> print(f"Answer: '{result['answer']}', score: {round(result['score'], 4)}, start: {result['start']}, end: {result['end']}")
     Answer: 'SQuAD dataset,', score: 0.5053, start: 147, end: 161
 
@@ -336,14 +336,14 @@ Here is an example of using pipelines to replace a mask from a sequence:
 
     >>> from transformers import pipeline
 
-    >>> nlp = pipeline("fill-mask")
+    >>> unmasker = pipeline("fill-mask")
 
 This outputs the sequences with the mask filled, the confidence score, and the token id in the tokenizer vocabulary:
 
 .. code-block::
 
     >>> from pprint import pprint
-    >>> pprint(nlp(f"HuggingFace is creating a {nlp.tokenizer.mask_token} that the community uses to solve NLP tasks."))
+    >>> pprint(unmasker(f"HuggingFace is creating a {unmasker.tokenizer.mask_token} that the community uses to solve NLP tasks."))
     [{'score': 0.1792745739221573,
       'sequence': '<s>HuggingFace is creating a tool that the community uses to '
                   'solve NLP tasks.</s>',
@@ -451,7 +451,7 @@ of tokens.
     >>> ## PYTORCH CODE
     >>> from transformers import AutoModelWithLMHead, AutoTokenizer, top_k_top_p_filtering
     >>> import torch
-    >>> from torch.nn import functional as F
+    >>> from torch import nn
 
     >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
     >>> model = AutoModelWithLMHead.from_pretrained("gpt2")
@@ -467,7 +467,7 @@ of tokens.
     >>> filtered_next_token_logits = top_k_top_p_filtering(next_token_logits, top_k=50, top_p=1.0)
 
     >>> # sample
-    >>> probs = F.softmax(filtered_next_token_logits, dim=-1)
+    >>> probs = nn.functional.softmax(filtered_next_token_logits, dim=-1)
     >>> next_token = torch.multinomial(probs, num_samples=1)
 
     >>> generated = torch.cat([input_ids, next_token], dim=-1)
@@ -505,8 +505,8 @@ This outputs a (hopefully) coherent next token following the original sequence, 
     >>> print(resulting_string)
     Hugging Face is based in DUMBO, New York City, and has
 
-In the next section, we show how :func:`~transformers.PreTrainedModel.generate` can be used to generate multiple tokens
-up to a specified length instead of one token at a time.
+In the next section, we show how :func:`~transformers.generation_utils.GenerationMixin.generate` can be used to
+generate multiple tokens up to a specified length instead of one token at a time.
 
 Text Generation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -627,9 +627,9 @@ It leverages a fine-tuned model on CoNLL-2003, fine-tuned by `@stefan-it <https:
 
     >>> from transformers import pipeline
 
-    >>> nlp = pipeline("ner")
+    >>> ner_pipe = pipeline("ner")
 
-    >>> sequence = """Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO, 
+    >>> sequence = """Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO,
     ... therefore very close to the Manhattan Bridge which is visible from the window."""
 
 
@@ -638,7 +638,7 @@ Here are the expected results:
 
 .. code-block::
 
-    >>> print(nlp(sequence))
+    >>> print(ner_pipe(sequence))
     [
         {'word': 'Hu', 'score': 0.9995632767677307, 'entity': 'I-ORG'},
         {'word': '##gging', 'score': 0.9915938973426819, 'entity': 'I-ORG'},
@@ -827,18 +827,18 @@ CNN / Daily Mail), it yields very good results.
 .. code-block::
 
     >>> ## PYTORCH CODE
-    >>> from transformers import AutoModelWithLMHead, AutoTokenizer
+    >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-    >>> model = AutoModelWithLMHead.from_pretrained("t5-base")
+    >>> model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
     >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
     >>> # T5 uses a max_length of 512 so we cut the article to 512 tokens.
-    >>> inputs = tokenizer.encode("summarize: " + ARTICLE, return_tensors="pt", max_length=512)
+    >>> inputs = tokenizer.encode("summarize: " + ARTICLE, return_tensors="pt", max_length=512, truncation=True)
     >>> outputs = model.generate(inputs, max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True)
     >>> ## TENSORFLOW CODE
-    >>> from transformers import TFAutoModelWithLMHead, AutoTokenizer
+    >>> from transformers import TFAutoModelForSeq2SeqLM, AutoTokenizer
 
-    >>> model = TFAutoModelWithLMHead.from_pretrained("t5-base")
+    >>> model = TFAutoModelForSeq2SeqLM.from_pretrained("t5-base")
     >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
     >>> # T5 uses a max_length of 512 so we cut the article to 512 tokens.

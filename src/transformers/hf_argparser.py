@@ -46,7 +46,7 @@ class HfArgumentParser(ArgumentParser):
 
     The class is designed to play well with the native argparse. In particular, you can add more (non-dataclass backed)
     arguments to the parser after initialization and you'll get the output back after parsing as an additional
-    namespace.
+    namespace. Optional: To create sub argument groups use the `_argument_group_name` attribute in the dataclass.
     """
 
     dataclass_types: Iterable[DataClassType]
@@ -67,6 +67,10 @@ class HfArgumentParser(ArgumentParser):
             self._add_dataclass_arguments(dtype)
 
     def _add_dataclass_arguments(self, dtype: DataClassType):
+        if hasattr(dtype, "_argument_group_name"):
+            parser = self.add_argument_group(dtype._argument_group_name)
+        else:
+            parser = self
         for field in dataclasses.fields(dtype):
             if not field.init:
                 continue
@@ -103,7 +107,7 @@ class HfArgumentParser(ArgumentParser):
                     kwargs["required"] = True
             elif field.type is bool or field.type == Optional[bool]:
                 if field.default is True:
-                    self.add_argument(f"--no_{field.name}", action="store_false", dest=field.name, **kwargs)
+                    parser.add_argument(f"--no_{field.name}", action="store_false", dest=field.name, **kwargs)
 
                 # Hack because type=bool in argparse does not behave as we want.
                 kwargs["type"] = string_to_bool
@@ -136,7 +140,7 @@ class HfArgumentParser(ArgumentParser):
                     kwargs["default"] = field.default_factory()
                 else:
                     kwargs["required"] = True
-            self.add_argument(field_name, **kwargs)
+            parser.add_argument(field_name, **kwargs)
 
     def parse_args_into_dataclasses(
         self, args=None, return_remaining_strings=False, look_for_args_file=True, args_filename=None

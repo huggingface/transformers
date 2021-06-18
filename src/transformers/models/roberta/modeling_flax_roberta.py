@@ -20,7 +20,7 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict
-from flax.linen import dot_product_attention
+from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 from jax.random import PRNGKey
 
@@ -179,7 +179,8 @@ class FlaxRobertaSelfAttention(nn.Module):
     def setup(self):
         if self.config.hidden_size % self.config.num_attention_heads != 0:
             raise ValueError(
-                "`config.hidden_size`: {self.config.hidden_size} has to be a multiple of `config.num_attention_heads`: {self.config.num_attention_heads}"
+                "`config.hidden_size`: {self.config.hidden_size} has to be a multiple of `config.num_attention_heads`\
+                    : {self.config.num_attention_heads}"
             )
 
         self.query = nn.Dense(
@@ -227,10 +228,9 @@ class FlaxRobertaSelfAttention(nn.Module):
         if not deterministic and self.config.attention_probs_dropout_prob > 0.0:
             dropout_rng = self.make_rng("dropout")
 
-        attn_output = dot_product_attention(
+        attn_weights = dot_product_attention_weights(
             query_states,
             key_states,
-            value_states,
             bias=attention_bias,
             dropout_rng=dropout_rng,
             dropout_rate=self.config.attention_probs_dropout_prob,
@@ -240,11 +240,10 @@ class FlaxRobertaSelfAttention(nn.Module):
             precision=None,
         )
 
-        outputs = (attn_output.reshape(attn_output.shape[:2] + (-1,)),)
+        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
+        attn_output = attn_output.reshape(attn_output.shape[:2] + (-1,))
 
-        # TODO: at the moment it's not possible to retrieve attn_weights from
-        # dot_product_attention, but should be in the future -> add functionality then
-
+        outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
         return outputs
 
 
@@ -291,7 +290,7 @@ class FlaxRobertaAttention(nn.Module):
         outputs = (hidden_states,)
 
         if output_attentions:
-            outputs += attn_outputs[1]
+            outputs += (attn_outputs[1],)
 
         return outputs
 
@@ -388,7 +387,9 @@ class FlaxRobertaLayerCollection(nn.Module):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            layer_outputs = layer(hidden_states, attention_mask, deterministic=deterministic)
+            layer_outputs = layer(
+                hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -546,7 +547,9 @@ class FlaxRobertaPreTrainedModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids)["params"]
+        return self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids, return_dict=False)[
+            "params"
+        ]
 
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
@@ -568,14 +571,9 @@ class FlaxRobertaPreTrainedModel(FlaxPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        if output_attentions:
-            raise NotImplementedError(
-                "Currently attention scores cannot be returned." "Please set `output_attentions` to False for now."
-            )
-
         # init input tensors if not passed
         if token_type_ids is None:
-            token_type_ids = jnp.ones_like(input_ids)
+            token_type_ids = jnp.zeros_like(input_ids)
 
         if position_ids is None:
             position_ids = create_position_ids_from_input_ids(input_ids, self.config.pad_token_id)

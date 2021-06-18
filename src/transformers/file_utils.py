@@ -89,6 +89,7 @@ if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VA
             "tf-nightly-gpu",
             "intel-tensorflow",
             "tensorflow-rocm",
+            "tensorflow-macos",
         )
         _tf_version = None
         # For the metadata, we have to look for both tensorflow and tensorflow-cpu
@@ -173,6 +174,14 @@ except importlib_metadata.PackageNotFoundError:
     _soundfile_available = False
 
 
+_timm_available = importlib.util.find_spec("timm") is not None
+try:
+    _timm_version = importlib_metadata.version("timm")
+    logger.debug(f"Successfully imported timm version {_timm_version}")
+except importlib_metadata.PackageNotFoundError:
+    _timm_available = False
+
+
 _torchaudio_available = importlib.util.find_spec("torchaudio") is not None
 try:
     _torchaudio_version = importlib_metadata.version("torchaudio")
@@ -243,6 +252,8 @@ PRESET_MIRROR_DICT = {
     "bfsu": "https://mirrors.bfsu.edu.cn/hugging-face-models",
 }
 
+# This is the version of torch required to run torch.fx features.
+TORCH_FX_REQUIRED_VERSION = version.parse("1.8")
 
 _is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0").upper() in ENV_VARS_TRUE_VALUES else False
 
@@ -262,6 +273,19 @@ def is_torch_cuda_available():
         return torch.cuda.is_available()
     else:
         return False
+
+
+_torch_fx_available = False
+if _torch_available:
+    torch_version = version.parse(importlib_metadata.version("torch"))
+    _torch_fx_available = (torch_version.major, torch_version.minor) == (
+        TORCH_FX_REQUIRED_VERSION.major,
+        TORCH_FX_REQUIRED_VERSION.minor,
+    )
+
+
+def is_torch_fx_available():
+    return _torch_fx_available
 
 
 def is_tf_available():
@@ -307,12 +331,14 @@ def is_faiss_available():
     return _faiss_available
 
 
+def is_scipy_available():
+    return importlib.util.find_spec("scipy") is not None
+
+
 def is_sklearn_available():
     if importlib.util.find_spec("sklearn") is None:
         return False
-    if importlib.util.find_spec("scipy") is None:
-        return False
-    return importlib.util.find_spec("sklearn.metrics") and importlib.util.find_spec("scipy.stats")
+    return is_scipy_available() and importlib.util.find_spec("sklearn.metrics")
 
 
 def is_sentencepiece_available():
@@ -399,6 +425,10 @@ def is_training_run_on_sagemaker():
 
 def is_soundfile_availble():
     return _soundfile_available
+
+
+def is_timm_available():
+    return _timm_available
 
 
 def is_torchaudio_available():
@@ -527,11 +557,23 @@ explained here: https://pandas.pydata.org/pandas-docs/stable/getting_started/ins
 
 
 # docstyle-ignore
+SCIPY_IMPORT_ERROR = """
+{0} requires the scipy library but it was not found in your environment. You can install it with pip:
+`pip install scipy`
+"""
+
+
+# docstyle-ignore
 SPEECH_IMPORT_ERROR = """
 {0} requires the torchaudio library but it was not found in your environment. You can install it with pip:
 `pip install torchaudio`
 """
 
+# docstyle-ignore
+TIMM_IMPORT_ERROR = """
+{0} requires the timm library but it was not found in your environment. You can install it with pip:
+`pip install timm`
+"""
 
 # docstyle-ignore
 VISION_IMPORT_ERROR = """
@@ -552,9 +594,11 @@ BACKENDS_MAPPING = OrderedDict(
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
         ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
         ("tf", (is_tf_available, TENSORFLOW_IMPORT_ERROR)),
+        ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
+        ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
     ]
 )
 
@@ -603,18 +647,18 @@ def add_end_docstrings(*docstr):
 
 PT_RETURN_INTRODUCTION = r"""
     Returns:
-        :class:`~{full_output_type}` or :obj:`tuple(torch.FloatTensor)`: A :class:`~{full_output_type}` (if
-        ``return_dict=True`` is passed or when ``config.return_dict=True``) or a tuple of :obj:`torch.FloatTensor`
-        comprising various elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
+        :class:`~{full_output_type}` or :obj:`tuple(torch.FloatTensor)`: A :class:`~{full_output_type}` or a tuple of
+        :obj:`torch.FloatTensor` (if ``return_dict=False`` is passed or when ``config.return_dict=False``) comprising
+        various elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
 
 """
 
 
 TF_RETURN_INTRODUCTION = r"""
     Returns:
-        :class:`~{full_output_type}` or :obj:`tuple(tf.Tensor)`: A :class:`~{full_output_type}` (if
-        ``return_dict=True`` is passed or when ``config.return_dict=True``) or a tuple of :obj:`tf.Tensor` comprising
-        various elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
+        :class:`~{full_output_type}` or :obj:`tuple(tf.Tensor)`: A :class:`~{full_output_type}` or a tuple of
+        :obj:`tf.Tensor` (if ``return_dict=False`` is passed or when ``config.return_dict=False``) comprising various
+        elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
 
 """
 
@@ -1028,6 +1072,20 @@ FLAX_MULTIPLE_CHOICE_SAMPLE = r"""
         >>> logits = outputs.logits
 """
 
+FLAX_CAUSAL_LM_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {tokenizer_class}, {model_class}
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
+        >>> outputs = model(**inputs, labels=inputs["input_ids"])
+
+        >>> logits = outputs.logits
+"""
+
 FLAX_SAMPLE_DOCSTRINGS = {
     "SequenceClassification": FLAX_SEQUENCE_CLASSIFICATION_SAMPLE,
     "QuestionAnswering": FLAX_QUESTION_ANSWERING_SAMPLE,
@@ -1035,6 +1093,7 @@ FLAX_SAMPLE_DOCSTRINGS = {
     "MultipleChoice": FLAX_MULTIPLE_CHOICE_SAMPLE,
     "MaskedLM": FLAX_MASKED_LM_SAMPLE,
     "BaseModel": FLAX_BASE_MODEL_SAMPLE,
+    "LMHead": FLAX_CAUSAL_LM_SAMPLE,
 }
 
 
@@ -1535,6 +1594,11 @@ def get_from_cache(
         logger.info(f"storing {url} in cache at {cache_path}")
         os.replace(temp_file.name, cache_path)
 
+        # NamedTemporaryFile creates a file with hardwired 0600 perms (ignoring umask), so fixing it.
+        umask = os.umask(0o666)
+        os.umask(umask)
+        os.chmod(cache_path, 0o666 & ~umask)
+
         logger.info(f"creating metadata file for {cache_path}")
         meta = {"url": url, "etag": etag}
         meta_path = cache_path + ".json"
@@ -1591,11 +1655,21 @@ def tf_required(func):
     return wrapper
 
 
+def is_torch_fx_proxy(x):
+    if is_torch_fx_available():
+        import torch.fx
+
+        return isinstance(x, torch.fx.Proxy)
+    return False
+
+
 def is_tensor(x):
     """
     Tests if ``x`` is a :obj:`torch.Tensor`, :obj:`tf.Tensor`, obj:`jaxlib.xla_extension.DeviceArray` or
     :obj:`np.ndarray`.
     """
+    if is_torch_fx_proxy(x):
+        return True
     if is_torch_available():
         import torch
 

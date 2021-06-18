@@ -32,7 +32,6 @@ import random
 from typing import Any, Dict, List, Optional, Tuple
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, LayerNorm
 
@@ -430,15 +429,15 @@ class EncoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.self_attn_layer_norm(x)
 
         residual = x
         x = self.activation_fn(self.fc1(x))
-        x = F.dropout(x, p=self.activation_dropout, training=self.training)
+        x = nn.functional.dropout(x, p=self.activation_dropout, training=self.training)
         x = self.fc2(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.final_layer_norm(x)
         return x, attn_weights
@@ -504,7 +503,7 @@ class FSMTEncoder(nn.Module):
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
         embed_pos = self.embed_positions(input_ids)
         x = inputs_embeds + embed_pos
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = nn.functional.dropout(x, p=self.dropout, training=self.training)
 
         # B x T x C -> T x B x C
         x = x.transpose(0, 1)
@@ -600,7 +599,7 @@ class DecoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.self_attn_layer_norm(x)
 
@@ -615,16 +614,16 @@ class DecoderLayer(nn.Module):
             layer_head_mask=cross_attn_layer_head_mask,
             output_attentions=output_attentions,
         )
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.encoder_attn_layer_norm(x)
 
         # Fully Connected
         residual = x
         x = self.activation_fn(self.fc1(x))
-        x = F.dropout(x, p=self.activation_dropout, training=self.training)
+        x = nn.functional.dropout(x, p=self.activation_dropout, training=self.training)
         x = self.fc2(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.final_layer_norm(x)
         return (
@@ -641,7 +640,7 @@ class FSMTDecoder(nn.Module):
 
     Args:
         config: FSMTConfig
-        embed_tokens (torch.nn.Embedding): output embedding
+        embed_tokens (nn.Embedding): output embedding
     """
 
     def __init__(self, config: FSMTConfig, embed_tokens: nn.Embedding):
@@ -726,7 +725,7 @@ class FSMTDecoder(nn.Module):
 
         x = self.embed_tokens(input_ids) * self.embed_scale
         x += positions
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = nn.functional.dropout(x, p=self.dropout, training=self.training)
 
         # Convert to FSMT output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         x = x.transpose(0, 1)
@@ -913,7 +912,7 @@ class Attention(nn.Module):
             attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        attn_weights = F.softmax(attn_weights, dim=-1)
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
         if layer_head_mask is not None:
             assert layer_head_mask.size() == (
@@ -929,7 +928,7 @@ class Attention(nn.Module):
         else:
             attn_weights_reshaped = None
 
-        attn_probs = F.dropout(
+        attn_probs = nn.functional.dropout(
             attn_weights,
             p=self.dropout,
             training=self.training,
@@ -1215,7 +1214,16 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
         )
 
     def prepare_inputs_for_generation(
-        self, decoder_input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
+        self,
+        decoder_input_ids,
+        past=None,
+        attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
+        use_cache=None,
+        encoder_outputs=None,
+        **kwargs
     ):
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -1223,6 +1231,9 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
             "past_key_values": past,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
+            "head_mask": head_mask,
+            "decoder_head_mask": decoder_head_mask,
+            "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
