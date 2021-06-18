@@ -25,7 +25,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-import numpy as np
 import tensorflow as tf
 from datasets import load_dataset, load_metric
 
@@ -49,6 +48,7 @@ from utils_qa import postprocess_qa_predictions
 check_min_version("4.7.0.dev0")
 
 logger = logging.getLogger(__name__)
+
 
 # region Arguments
 @dataclass
