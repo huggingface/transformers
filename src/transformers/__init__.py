@@ -22,7 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.7.0.dev0"
+__version__ = "4.8.0.dev0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -1514,6 +1514,7 @@ if is_flax_available():
             "FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
             "FLAX_MODEL_FOR_PRETRAINING_MAPPING",
             "FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING",
+            "FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
             "FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
             "FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "FLAX_MODEL_MAPPING",
@@ -1524,6 +1525,7 @@ if is_flax_available():
             "FlaxAutoModelForNextSentencePrediction",
             "FlaxAutoModelForPreTraining",
             "FlaxAutoModelForQuestionAnswering",
+            "FlaxAutoModelForSeq2SeqLM",
             "FlaxAutoModelForSequenceClassification",
             "FlaxAutoModelForTokenClassification",
         ]
@@ -2851,6 +2853,7 @@ if TYPE_CHECKING:
             FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
             FLAX_MODEL_FOR_PRETRAINING_MAPPING,
             FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+            FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
             FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             FLAX_MODEL_MAPPING,
@@ -2861,6 +2864,7 @@ if TYPE_CHECKING:
             FlaxAutoModelForNextSentencePrediction,
             FlaxAutoModelForPreTraining,
             FlaxAutoModelForQuestionAnswering,
+            FlaxAutoModelForSeq2SeqLM,
             FlaxAutoModelForSequenceClassification,
             FlaxAutoModelForTokenClassification,
         )
