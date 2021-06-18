@@ -28,6 +28,7 @@ from typing import Dict, Iterator, List, Optional, Union
 import numpy as np
 import torch
 from packaging import version
+from torch import nn
 from torch.utils.data.dataset import Dataset, IterableDataset
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler
@@ -112,7 +113,7 @@ def find_batch_size(tensors):
             result = find_batch_size(t)
             if result is not None:
                 return result
-    elif isinstance(tensors, dict):
+    elif isinstance(tensors, (dict, BatchEncoding)):
         for key, value in tensors.items():
             result = find_batch_size(value)
             if result is not None:
@@ -441,7 +442,7 @@ class LabelSmoother:
 
     def __call__(self, model_output, labels):
         logits = model_output["logits"] if isinstance(model_output, dict) else model_output[0]
-        log_probs = -torch.nn.functional.log_softmax(logits, dim=-1)
+        log_probs = -nn.functional.log_softmax(logits, dim=-1)
         if labels.dim() == log_probs.dim() - 1:
             labels = labels.unsqueeze(-1)
 
@@ -495,7 +496,7 @@ def get_length_grouped_indices(lengths, batch_size, mega_batch_mult=None, genera
     # Switch to put the longest element in first position
     megabatches[0][0], megabatches[max_idx][0] = megabatches[max_idx][0], megabatches[0][0]
 
-    return sum(megabatches, [])
+    return [i for megabatch in megabatches for i in megabatch]
 
 
 class LengthGroupedSampler(Sampler):

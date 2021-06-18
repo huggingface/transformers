@@ -518,7 +518,7 @@ PyTorch, called ``SimpleModel`` as follows:
 
 .. code:: python
 
-   import torch.nn as nn
+   from torch import nn
 
    class SimpleModel(nn.Module):
        def __init__(self):

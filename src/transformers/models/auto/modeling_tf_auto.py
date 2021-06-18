@@ -163,6 +163,7 @@ from ..transfo_xl.modeling_tf_transfo_xl import (
     TFTransfoXLLMHeadModel,
     TFTransfoXLModel,
 )
+from ..wav2vec2.modeling_tf_wav2vec2 import TFWav2Vec2Model
 from ..xlm.modeling_tf_xlm import (
     TFXLMForMultipleChoice,
     TFXLMForQuestionAnsweringSimple,
@@ -218,6 +219,7 @@ from .configuration_auto import (
     RoFormerConfig,
     T5Config,
     TransfoXLConfig,
+    Wav2Vec2Config,
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
@@ -263,6 +265,7 @@ TF_MODEL_MAPPING = OrderedDict(
         (PegasusConfig, TFPegasusModel),
         (BlenderbotConfig, TFBlenderbotModel),
         (BlenderbotSmallConfig, TFBlenderbotSmallModel),
+        (Wav2Vec2Config, TFWav2Vec2Model),
     ]
 )
 
