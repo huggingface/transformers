@@ -595,7 +595,7 @@ class FlaxBartDecoderLayerCollection(nn.Module):
         self.layers = [
             FlaxBartDecoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.decoder_layers)
         ]
-        self.layerdrop = self.config.encoder_layerdrop
+        self.layerdrop = self.config.decoder_layerdrop
 
     def __call__(
         self,
@@ -692,7 +692,6 @@ class FlaxBartEncoder(nn.Module):
 
     def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
-        self.layerdrop = self.config.encoder_layerdrop
 
         embed_dim = self.config.d_model
         self.padding_idx = self.config.pad_token_id
@@ -766,7 +765,6 @@ class FlaxBartDecoder(nn.Module):
 
     def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
-        self.layerdrop = self.config.decoder_layerdrop
 
         embed_dim = self.config.d_model
         self.padding_idx = self.config.pad_token_id
