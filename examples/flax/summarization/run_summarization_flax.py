@@ -446,9 +446,6 @@ def main():
 
     # Temporarily set max_target_length for training.
     max_target_length = data_args.max_target_length
-    # padding = "max_length" if data_args.pad_to_max_length else False
-    # can we set always set padding = "max_length", since JAX expects static shapes
-    padding = "max_length"
 
     if training_args.label_smoothing_factor > 0 and not hasattr(model, "prepare_decoder_input_ids_from_labels"):
         logger.warning(
@@ -456,31 +453,31 @@ def main():
             f"`{model.__class__.__name__}`. This will lead to loss being calculated twice and will take up more memory"
         )
 
-    prepare_decoder_input_ids_fn = (
-        model.prepare_decoder_input_ids_from_labels
-    )  # in Flax every Seq2Seq model should define this
+    # In Flax every Seq2Seq model should define this, as the models don't accept labels
+    # we need to prepare the decoder_input_ids here
+    prepare_decoder_input_ids_fn = model.prepare_decoder_input_ids_from_labels
 
+    # Setting padding="max_length" as we need fixed length inputs for jitted functions
     def preprocess_function(examples):
         inputs = examples[text_column]
         targets = examples[summary_column]
         inputs = [prefix + inp for inp in inputs]
         model_inputs = tokenizer(
-            inputs, max_length=data_args.max_source_length, padding=padding, truncation=True, return_tensors="np"
+            inputs, max_length=data_args.max_source_length, padding="max_length", truncation=True, return_tensors="np"
         )
 
         # Setup the tokenizer for targets
         with tokenizer.as_target_tokenizer():
             labels = tokenizer(
-                targets, max_length=max_target_length, padding=padding, truncation=True, return_tensors="np"
+                targets, max_length=max_target_length, padding="max_length", truncation=True, return_tensors="np"
             )
 
         model_inputs["labels"] = labels["input_ids"]
         decoder_input_ids = np.asarray(prepare_decoder_input_ids_fn(jnp.array(labels["input_ids"])))
         model_inputs["decoder_input_ids"] = decoder_input_ids
 
-        model_inputs["decoder_attention_mask"] = labels[
-            "attention_mask"
-        ]  # we need this so we can ignore pad tokens from loss
+        # We need decoder_attention_mask so we can ignore pad tokens from loss
+        model_inputs["decoder_attention_mask"] = labels["attention_mask"]
 
         return model_inputs
 
@@ -517,7 +514,7 @@ def main():
 
     if training_args.do_predict:
         max_target_length = data_args.val_max_target_length
-        if "test" not in datasets:
+        if "test" not in dataset:
             raise ValueError("--do_predict requires a test dataset")
         predict_dataset = dataset["test"]
         if data_args.max_predict_samples is not None:
@@ -767,7 +764,7 @@ def main():
                 pred_generations.extend(jax.device_get(generated_ids.reshape(-1, gen_kwargs["max_length"])))
                 pred_labels.extend(jax.device_get(labels.reshape(-1, labels.shape[-1])))
 
-        # normalize eval metrics
+        # normalize prediction metrics
         pred_metrics = get_metrics(pred_metrics)
         pred_metrics = jax.tree_map(jnp.mean, pred_metrics)
 
