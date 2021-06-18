@@ -23,6 +23,7 @@ import os
 import sys
 import time
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -447,12 +448,6 @@ def main():
     # Temporarily set max_target_length for training.
     max_target_length = data_args.max_target_length
 
-    if training_args.label_smoothing_factor > 0 and not hasattr(model, "prepare_decoder_input_ids_from_labels"):
-        logger.warning(
-            "label_smoothing is enabled but the `prepare_decoder_input_ids_from_labels` method is not defined for"
-            f"`{model.__class__.__name__}`. This will lead to loss being calculated twice and will take up more memory"
-        )
-
     # In Flax every Seq2Seq model should define this, as the models don't accept labels
     # we need to prepare the decoder_input_ids here
     prepare_decoder_input_ids_fn = model.prepare_decoder_input_ids_from_labels
@@ -603,8 +598,22 @@ def main():
     # Setup train state
     state = TrainState.create(apply_fn=model.__call__, params=model.params, tx=adamw, dropout_rng=dropout_rng)
 
-    def loss_fn(logits, labels, padding_mask):
-        loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1]))
+    # label smoothed cross entropy
+    def loss_fn(logits, labels, padding_mask, label_smoothing_factor=0.0):
+        """
+        The label smoothing implementation is adapted from Flax's official example:
+        https://github.com/google/flax/blob/87a211135c6a377c8f29048a1cac3840e38b9da4/examples/wmt/train.py#L104
+        """
+        vocab_size = logits.shape[-1]
+        confidence = 1.0 - label_smoothing_factor
+        low_confidence = (1.0 - confidence) / (vocab_size - 1)
+        normalizing_constant = -(
+            confidence * jnp.log(confidence) + (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20)
+        )
+        soft_labels = onehot(labels, vocab_size, on_value=confidence, off_value=low_confidence)
+
+        loss = optax.softmax_cross_entropy(logits, soft_labels)
+        loss = loss - normalizing_constant
 
         # ignore padded tokens from loss
         loss = loss * padding_mask
@@ -612,13 +621,13 @@ def main():
         return loss
 
     # Define gradient update step fn
-    def train_step(state, batch):
+    def train_step(state, batch, label_smoothing_factor=0.0):
         dropout_rng, new_dropout_rng = jax.random.split(state.dropout_rng)
 
         def compute_loss(params):
             labels = batch.pop("labels")
             logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
-            loss = loss_fn(logits, labels, batch["decoder_attention_mask"])
+            loss = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
             return loss
 
         grad_fn = jax.value_and_grad(compute_loss)
@@ -633,10 +642,10 @@ def main():
         return new_state, metrics
 
     # Define eval fn
-    def eval_step(params, batch):
+    def eval_step(params, batch, label_smoothing_factor=0.0):
         labels = batch.pop("labels")
         logits = model(**batch, params=params, train=False)[0]
-        loss = loss_fn(logits, labels, batch["decoder_attention_mask"])
+        loss = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
 
         # summarize metrics
         metrics = {"loss": loss}
@@ -657,8 +666,10 @@ def main():
         return output_ids.sequences
 
     # Create parallel version of the train and eval step
-    p_train_step = jax.pmap(train_step, "batch", donate_argnums=(0,))
-    p_eval_step = jax.pmap(eval_step, "batch")
+    p_train_step = jax.pmap(
+        partial(train_step, label_smoothing_factor=training_args.label_smoothing_factor), "batch", donate_argnums=(0,)
+    )
+    p_eval_step = jax.pmap(partial(eval_step, label_smoothing_factor=training_args.label_smoothing_factor), "batch")
     p_generate_step = jax.pmap(generate_step, "batch")
 
     # Replicate the train state on each device
