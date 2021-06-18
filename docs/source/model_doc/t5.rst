@@ -74,6 +74,10 @@ token. T5 can be trained / fine-tuned both in a supervised and unsupervised fash
 
 .. code-block::
 
+    from transformers import T5ForConditionalGeneration, T5Tokenizer
+    model = T5ForConditionalGeneration.from_pretrained("t5-small")
+    tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
     input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt').input_ids
     labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2>', return_tensors='pt').input_ids
     # the forward function automatically creates the correct decoder_input_ids
@@ -86,6 +90,10 @@ token. T5 can be trained / fine-tuned both in a supervised and unsupervised fash
   wunderbar.", the sentences should be processed as follows:
 
 .. code-block::
+
+    from transformers import T5ForConditionalGeneration, T5Tokenizer
+    model = T5ForConditionalGeneration.from_pretrained("t5-small")
+    tokenizer = T5Tokenizer.from_pretrained("t5-small")
 
     input_ids = tokenizer('translate English to German: The house is wonderful.', return_tensors='pt').input_ids
     labels = tokenizer('Das Haus ist wunderbar.', return_tensors='pt').input_ids
