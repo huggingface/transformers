@@ -613,7 +613,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 if not is_torch_available():
                     raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
 
-                encoded_inputs["target"] = [
+                encoded_inputs["labels"] = [
                     {k: torch.from_numpy(v) for k, v in target.items()} for target in annotations
                 ]
 
