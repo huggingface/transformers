@@ -129,6 +129,13 @@ FLAX_MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     ]
 )
 
+FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
+    [
+        # Model for Seq2Seq Causal LM mapping
+        (BartConfig, FlaxBartForConditionalGeneration)
+    ]
+)
+
 FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
@@ -195,6 +202,13 @@ FlaxAutoModelForPreTraining = auto_class_factory(
 
 FlaxAutoModelForMaskedLM = auto_class_factory(
     "FlaxAutoModelForMaskedLM", FLAX_MODEL_FOR_MASKED_LM_MAPPING, head_doc="masked language modeling"
+)
+
+
+FlaxAutoModelForSeq2SeqLM = auto_class_factory(
+    "FlaxAutoModelForSeq2SeqLM",
+    FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    head_doc="sequence-to-sequence language modeling",
 )
 
 FlaxAutoModelForSequenceClassification = auto_class_factory(

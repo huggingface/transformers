@@ -94,6 +94,9 @@ FLAX_MODEL_FOR_PRETRAINING_MAPPING = None
 FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING = None
 
 
+FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = None
+
+
 FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = None
 
 
@@ -158,6 +161,15 @@ class FlaxAutoModelForPreTraining:
 
 
 class FlaxAutoModelForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
+class FlaxAutoModelForSeq2SeqLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
