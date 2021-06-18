@@ -19,13 +19,12 @@ Fine-tuning the library models for sequence to sequence.
 # You can also adapt this script on your own causal language modeling task. Pointers for this are left as comments.
 
 import logging
-import math
 import os
 import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
+from typing import Callable, Optional
 
 import datasets
 import nltk  # Here to have a nice missing dependency error message early on
@@ -205,6 +204,16 @@ class DataTrainingArguments:
     )
     source_prefix: Optional[str] = field(
         default=None, metadata={"help": "A prefix to add before every source text (useful for T5 models)."}
+    )
+    predict_with_generate: bool = field(
+        default=False, metadata={"help": "Whether to use generate to calculate generative metrics (ROUGE, BLEU)."}
+    )
+    num_beams: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Number of beams to use for evaluation. This argument will be passed to ``model.generate``, "
+            "which is used during ``evaluate`` and ``predict``."
+        },
     )
 
     def __post_init__(self):
@@ -515,14 +524,8 @@ def main():
 
         return preds, labels
 
-    def compute_metrics(eval_preds):
-        preds, labels = eval_preds
-        if isinstance(preds, tuple):
-            preds = preds[0]
+    def compute_metrics(preds, labels):
         decoded_preds = tokenizer.batch_decode(preds, skip_special_tokens=True)
-        if data_args.ignore_pad_token_for_loss:
-            # Replace -100 in the labels as we can't decode them.
-            labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
         decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
         # Some simple post-processing
@@ -623,9 +626,23 @@ def main():
         metrics = jax.lax.pmean(metrics, axis_name="batch")
         return metrics
 
+    # Define generation function
+    gen_kwargs = {
+        "max_length": data_args.val_max_target_length
+        if data_args.val_max_target_length is not None
+        else model.config.max_length,
+        "num_beams": data_args.num_beams if data_args.num_beams is not None else model.config.num_beams,
+    }
+
+    def generate_step(params, batch):
+        model.params = params
+        output_ids = model.generate(batch["input_ids"], attention_mask=batch["attention_mask"], **gen_kwargs)
+        return output_ids.sequences
+
     # Create parallel version of the train and eval step
     p_train_step = jax.pmap(train_step, "batch", donate_argnums=(0,))
     p_eval_step = jax.pmap(eval_step, "batch")
+    p_generate_step = jax.pmap(generate_step, "batch")
 
     # Replicate the train state on each device
     state = state.replicate()
@@ -666,21 +683,35 @@ def main():
 
         # ======================== Evaluating ==============================
         eval_metrics = []
+        eval_preds = []
+        eval_labels = []
+
         eval_loader = data_loader(input_rng, eval_dataset, eval_batch_size)
         eval_steps = len(eval_dataset) // eval_batch_size
         for _ in tqdm(range(eval_steps), desc="Evaluating...", position=2, leave=False):
             # Model forward
             batch = next(eval_loader)
+            labels = batch["labels"]
+
             metrics = p_eval_step(state.params, batch)
             eval_metrics.append(metrics)
 
+            # generation
+            generated_ids = p_generate_step(state.params, batch)
+            eval_preds.extend(jax.device_get(generated_ids.reshape(-1, gen_kwargs["max_length"])))
+            eval_labels.extend(jax.device_get(labels.reshape(-1, labels.shape[-1])))
+
         # normalize eval metrics
         eval_metrics = get_metrics(eval_metrics)
-
         eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
 
+        # Get ROUGE metrics
+        rouge_metrics = compute_metrics(eval_preds, eval_labels)
+        eval_metrics.update(rouge_metrics)
+
         # Print metrics and update progress bar
-        desc = f"Epoch... ({epoch + 1}/{num_epochs} | Eval Loss: {eval_metrics['loss']})"
+        rouge_desc = " ".join([f"Eval {key}: {value} |" for key, value in rouge_metrics.items()])
+        desc = f"Epoch... ({epoch + 1}/{num_epochs} | Eval Loss: {eval_metrics['loss']} | {rouge_desc})"
         epochs.write(desc)
         epochs.desc = desc
 
