@@ -16,7 +16,7 @@
 """
 Fine-tuning the library models for sequence to sequence.
 """
-# You can also adapt this script on your own causal language modeling task. Pointers for this are left as comments.
+# You can also adapt this script on your own sequence to sequence task. Pointers for this are left as comments.
 
 import logging
 import os
@@ -43,10 +43,10 @@ from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
 from transformers import (
     CONFIG_MAPPING,
-    FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
+    FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     AutoConfig,
     AutoTokenizer,
-    FlaxBartForConditionalGeneration,
+    FlaxAutoModelForSeq2SeqLM,
     HfArgumentParser,
     TrainingArguments,
     is_tensorboard_available,
@@ -82,7 +82,7 @@ else:
     )
 
 
-MODEL_CONFIG_CLASSES = list(FLAX_MODEL_FOR_CAUSAL_LM_MAPPING.keys())
+MODEL_CONFIG_CLASSES = list(FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
@@ -149,20 +149,6 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
     )
-    max_train_samples: Optional[int] = field(
-        default=None,
-        metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
-        },
-    )
-    max_eval_samples: Optional[int] = field(
-        default=None,
-        metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
-        },
-    )
     max_source_length: Optional[int] = field(
         default=1024,
         metadata={
@@ -186,17 +172,26 @@ class DataTrainingArguments:
             "during ``evaluate`` and ``predict``."
         },
     )
-    overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
-    )
-    validation_split_percentage: Optional[int] = field(
-        default=5,
+    max_train_samples: Optional[int] = field(
+        default=None,
         metadata={
-            "help": "The percentage of the train set used as validation set in case there's no validation split"
+            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
+            "value if set."
         },
     )
-    overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+    max_eval_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+            "value if set."
+        },
+    )
+    max_predict_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of prediction examples to this "
+            "value if set."
+        },
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
@@ -215,6 +210,9 @@ class DataTrainingArguments:
             "which is used during ``evaluate`` and ``predict``."
         },
     )
+    overwrite_cache: bool = field(
+        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+    )
 
     def __post_init__(self):
         if self.dataset_name is None and self.train_file is None and self.validation_file is None:
@@ -222,10 +220,12 @@ class DataTrainingArguments:
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json", "txt"], "`train_file` should be a csv, a json or a txt file."
+                assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
+                assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+        if self.val_max_target_length is None:
+            self.val_max_target_length = self.max_target_length
 
 
 summarization_name_mapping = {
@@ -400,11 +400,13 @@ def main():
         )
 
     if model_args.model_name_or_path:
-        model = FlaxBartForConditionalGeneration.from_pretrained(
+        model = FlaxAutoModelForSeq2SeqLM.from_pretrained(
             model_args.model_name_or_path, config=config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
         )
     else:
-        model = FlaxBartForConditionalGeneration(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
+        model = FlaxAutoModelForSeq2SeqLM.from_config(
+            config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+        )
 
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
@@ -494,6 +496,7 @@ def main():
             num_proc=data_args.preprocessing_num_workers,
             remove_columns=column_names,
             load_from_cache_file=not data_args.overwrite_cache,
+            desc="Running tokenizer on train dataset",
         )
 
     if training_args.do_eval:
@@ -509,6 +512,23 @@ def main():
             num_proc=data_args.preprocessing_num_workers,
             remove_columns=column_names,
             load_from_cache_file=not data_args.overwrite_cache,
+            desc="Running tokenizer on validation dataset",
+        )
+
+    if training_args.do_predict:
+        max_target_length = data_args.val_max_target_length
+        if "test" not in datasets:
+            raise ValueError("--do_predict requires a test dataset")
+        predict_dataset = dataset["test"]
+        if data_args.max_predict_samples is not None:
+            predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
+        predict_dataset = predict_dataset.map(
+            preprocess_function,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file=not data_args.overwrite_cache,
+            desc="Running tokenizer on prediction dataset",
         )
 
     # Metric
@@ -697,20 +717,23 @@ def main():
             eval_metrics.append(metrics)
 
             # generation
-            generated_ids = p_generate_step(state.params, batch)
-            eval_preds.extend(jax.device_get(generated_ids.reshape(-1, gen_kwargs["max_length"])))
-            eval_labels.extend(jax.device_get(labels.reshape(-1, labels.shape[-1])))
+            if data_args.predict_with_generate:
+                generated_ids = p_generate_step(state.params, batch)
+                eval_preds.extend(jax.device_get(generated_ids.reshape(-1, gen_kwargs["max_length"])))
+                eval_labels.extend(jax.device_get(labels.reshape(-1, labels.shape[-1])))
 
         # normalize eval metrics
         eval_metrics = get_metrics(eval_metrics)
         eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
 
-        # Get ROUGE metrics
-        rouge_metrics = compute_metrics(eval_preds, eval_labels)
-        eval_metrics.update(rouge_metrics)
+        # compute ROUGE metrics
+        rouge_desc = ""
+        if data_args.predict_with_generate:
+            rouge_metrics = compute_metrics(eval_preds, eval_labels)
+            eval_metrics.update(rouge_metrics)
+            rouge_desc = " ".join([f"Eval {key}: {value} |" for key, value in rouge_metrics.items()])
 
         # Print metrics and update progress bar
-        rouge_desc = " ".join([f"Eval {key}: {value} |" for key, value in rouge_metrics.items()])
         desc = f"Epoch... ({epoch + 1}/{num_epochs} | Eval Loss: {eval_metrics['loss']} | {rouge_desc})"
         epochs.write(desc)
         epochs.desc = desc
@@ -719,6 +742,45 @@ def main():
         if has_tensorboard and jax.process_index() == 0:
             cur_step = epoch * (len(train_dataset) // train_batch_size)
             write_metric(summary_writer, train_metrics, eval_metrics, train_time, cur_step)
+
+    # ======================== Prediction loop ==============================
+    if training_args.do_predict:
+        logger.info("*** Predict ***")
+
+        pred_metrics = []
+        pred_generations = []
+        pred_labels = []
+
+        pred_loader = data_loader(input_rng, predict_dataset, eval_batch_size)
+        pred_steps = len(predict_dataset) // eval_batch_size
+        for _ in tqdm(range(pred_steps), desc="Predicting...", position=2, leave=False):
+            # Model forward
+            batch = next(pred_loader)
+            labels = batch["labels"]
+
+            metrics = p_eval_step(state.params, batch)
+            pred_metrics.append(metrics)
+
+            # generation
+            if data_args.predict_with_generate:
+                generated_ids = p_generate_step(state.params, batch)
+                pred_generations.extend(jax.device_get(generated_ids.reshape(-1, gen_kwargs["max_length"])))
+                pred_labels.extend(jax.device_get(labels.reshape(-1, labels.shape[-1])))
+
+        # normalize eval metrics
+        pred_metrics = get_metrics(pred_metrics)
+        pred_metrics = jax.tree_map(jnp.mean, pred_metrics)
+
+        # compute ROUGE metrics
+        rouge_desc = ""
+        if data_args.predict_with_generate:
+            rouge_metrics = compute_metrics(pred_generations, pred_labels)
+            pred_metrics.update(rouge_metrics)
+            rouge_desc = " ".join([f"Predict {key}: {value} |" for key, value in rouge_metrics.items()])
+
+        # Print metrics
+        desc = f"Predict Loss: {pred_metrics['loss']} | {rouge_desc})"
+        logger.info(desc)
 
     # save last checkpoint
     if jax.process_index() == 0:
