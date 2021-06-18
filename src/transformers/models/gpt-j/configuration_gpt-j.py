@@ -106,6 +106,8 @@ class GPT-JConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        rotary=False,
+        rotary_dim=None,
         **kwargs
     ):
         super().__init__(
@@ -128,4 +130,6 @@ class GPT-JConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
+        self.rotary = rotary
+        self.rotary_dim = rotary_dim
         
