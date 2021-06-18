@@ -22,26 +22,27 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Optional
 from pathlib import Path
-import tensorflow as tf
+from typing import Optional
+
 import numpy as np
+import tensorflow as tf
 from datasets import load_dataset, load_metric
 
 import transformers
 from transformers import (
     AutoConfig,
-    TFAutoModelForQuestionAnswering,
     AutoTokenizer,
     EvalPrediction,
     HfArgumentParser,
     PreTrainedTokenizerFast,
+    TFAutoModelForQuestionAnswering,
     TFTrainingArguments,
     set_seed,
 )
+from transformers.file_utils import CONFIG_NAME, TF2_WEIGHTS_NAME
 from transformers.utils import check_min_version
 from utils_qa import postprocess_qa_predictions
-from transformers.file_utils import CONFIG_NAME, TF2_WEIGHTS_NAME
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -191,6 +192,8 @@ class DataTrainingArguments:
             if self.test_file is not None:
                 extension = self.test_file.split(".")[-1]
                 assert extension in ["csv", "json"], "`test_file` should be a csv or a json file."
+
+
 # endregion
 
 # region Helper classes
@@ -216,9 +219,7 @@ def convert_dataset_for_tensorflow(
 
     def densify_ragged_batch(features, label=None):
         features = {
-            feature: ragged_tensor.to_tensor(shape=batch_shape[feature])
-            if feature in tensor_keys
-            else ragged_tensor
+            feature: ragged_tensor.to_tensor(shape=batch_shape[feature]) if feature in tensor_keys else ragged_tensor
             for feature, ragged_tensor in features.items()
         }
         if label is None:
@@ -226,8 +227,8 @@ def convert_dataset_for_tensorflow(
         else:
             return features, label
 
-    tensor_keys = ['attention_mask', 'input_ids']
-    label_keys = ['start_positions', 'end_positions']
+    tensor_keys = ["attention_mask", "input_ids"]
+    label_keys = ["start_positions", "end_positions"]
     if dataset_mode == "variable_batch":
         batch_shape = {key: None for key in tensor_keys}
         data = {key: tf.ragged.constant(dataset[key]) for key in tensor_keys}
@@ -252,7 +253,9 @@ def convert_dataset_for_tensorflow(
     tf_dataset = tf_dataset.batch(batch_size=batch_size, drop_remainder=drop_remainder).map(densify_ragged_batch)
     return tf_dataset
 
+
 # endregion
+
 
 def main():
     # region Argument parsing
@@ -480,7 +483,7 @@ def main():
         if data_args.max_train_samples is not None:
             # Number of samples might increase during Feature Creation, We select only specified max samples
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
-        processed_datasets['train'] = train_dataset
+        processed_datasets["train"] = train_dataset
 
     # Validation preprocessing
     def prepare_validation_features(examples):
@@ -542,7 +545,7 @@ def main():
         if data_args.max_eval_samples is not None:
             # During Feature creation dataset samples might increase, we will select required samples again
             eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
-        processed_datasets['validation'] = eval_dataset
+        processed_datasets["validation"] = eval_dataset
 
     if training_args.do_predict:
         if "test" not in datasets:
@@ -562,7 +565,7 @@ def main():
         if data_args.max_predict_samples is not None:
             # During Feature creation dataset samples might increase, we will select required samples again
             predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
-        processed_datasets['test'] = predict_dataset
+        processed_datasets["test"] = predict_dataset
     # endregion
 
     # region Metrics and Post-processing:
@@ -594,6 +597,7 @@ def main():
 
     def compute_metrics(p: EvalPrediction):
         return metric.compute(predictions=p.predictions, references=p.label_ids)
+
     # endregion
 
     with training_args.strategy.scope():
@@ -616,8 +620,10 @@ def main():
             epsilon=training_args.adam_epsilon,
             clipnorm=training_args.max_grad_norm,
         )
+
         def dummy_loss(y_true, y_pred):
             return tf.reduce_mean(y_pred)
+
         losses = {"loss": dummy_loss}
         model.compile(optimizer=optimizer, loss=losses)
         # endregion
@@ -643,13 +649,17 @@ def main():
         # region Evaluation
         if training_args.do_eval:
             logger.info("*** Evaluation ***")
-            eval_inputs = {'input_ids': tf.ragged.constant(processed_datasets["validation"]['input_ids']).to_tensor(),
-                           'attention_mask': tf.ragged.constant(processed_datasets["validation"]['attention_mask']).to_tensor()}
+            eval_inputs = {
+                "input_ids": tf.ragged.constant(processed_datasets["validation"]["input_ids"]).to_tensor(),
+                "attention_mask": tf.ragged.constant(processed_datasets["validation"]["attention_mask"]).to_tensor(),
+            }
             eval_predictions = model.predict(eval_inputs)
 
-            post_processed_eval = post_processing_function(datasets["validation"],
-                                                           processed_datasets["validation"],
-                                                           (eval_predictions.start_logits, eval_predictions.end_logits))
+            post_processed_eval = post_processing_function(
+                datasets["validation"],
+                processed_datasets["validation"],
+                (eval_predictions.start_logits, eval_predictions.end_logits),
+            )
             metrics = compute_metrics(post_processed_eval)
             logging.info("Evaluation metrics:")
             for metric, value in metrics.items():
@@ -659,12 +669,16 @@ def main():
         # region Prediction
         if training_args.do_predict:
             logger.info("*** Predict ***")
-            predict_inputs = {'input_ids': tf.ragged.constant(processed_datasets["test"]['input_ids']).to_tensor(),
-                           'attention_mask': tf.ragged.constant(processed_datasets["test"]['attention_mask']).to_tensor()}
+            predict_inputs = {
+                "input_ids": tf.ragged.constant(processed_datasets["test"]["input_ids"]).to_tensor(),
+                "attention_mask": tf.ragged.constant(processed_datasets["test"]["attention_mask"]).to_tensor(),
+            }
             test_predictions = model.predict(predict_inputs)
-            post_processed_test = post_processing_function(datasets["test"],
-                                                           processed_datasets["test"],
-                                                           (test_predictions.start_logits, test_predictions.end_logits))
+            post_processed_test = post_processing_function(
+                datasets["test"],
+                processed_datasets["test"],
+                (test_predictions.start_logits, test_predictions.end_logits),
+            )
             metrics = compute_metrics(post_processed_test)
 
             logging.info("Test metrics:")
