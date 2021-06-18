@@ -19,7 +19,6 @@ import logging
 import os
 import random
 import time
-from itertools import chain
 from typing import Any, Callable, Dict, Tuple
 
 import datasets
@@ -35,25 +34,19 @@ from flax.jax_utils import replicate, unreplicate
 from flax.metrics import tensorboard
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
-from transformers import AutoConfig, AutoTokenizer, FlaxAutoModelForQuestionAnswering
-from transformers import FlaxBigBirdForQuestionAnswering
+from transformers import FlaxAutoModelForQuestionAnswering, AutoTokenizer
 
-from dataclasses import dataclass
+from transformers import BigBirdConfig
+from transformers.models.big_bird.modeling_flax_big_bird import (
+    FlaxBigBirdForQuestionAnsweringModule,
+    FlaxBigBirdForQuestionAnswering,
+)
 
 logger = logging.getLogger(__name__)
 
 Array = Any
 Dataset = datasets.arrow_dataset.Dataset
 PRNGKey = Any
-
-
-from transformers import (
-    BigBirdConfig,
-    BigBirdTokenizerFast,
-    FlaxBigBirdForQuestionAnswering
-)
-from transformers.models.big_bird.modeling_flax_big_bird import \
-    FlaxBigBirdForQuestionAnsweringModule
 
 
 class FlaxBigBirdForNaturalQuestionsModule(FlaxBigBirdForQuestionAnsweringModule):
@@ -130,29 +123,13 @@ def create_train_state(
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Finetune a transformers model on a text classification task")
+    parser = argparse.ArgumentParser(description="Finetune a transformers model on a question answering task")
 
-    # TODO: what all dataset to support
     parser.add_argument(
-        "--task_name",
-        type=str,
-        default=None,
-        help="The name of the glue task to train on.",
+        "--train_file", type=str, default=None, help="A json file containing the tokenized training data."
     )
     parser.add_argument(
-        "--train_file", type=str, default=None, help="A csv or a json file containing the training data."
-    )
-    parser.add_argument(
-        "--validation_file", type=str, default=None, help="A csv or a json file containing the validation data."
-    )
-    parser.add_argument(
-        "--max_length",
-        type=int,
-        default=128,
-        help=(
-            "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
-            " sequences shorter will be padded."
-        ),
+        "--validation_file", type=str, default=None, help="A json file containing the tokenized validation data."
     )
     parser.add_argument(
         "--model_name_or_path",
@@ -199,15 +176,15 @@ def parse_args():
     args = parser.parse_args()
 
     # Sanity checks
-    if args.task_name is None and args.train_file is None and args.validation_file is None:
+    if args.train_file is None and args.validation_file is None:
         raise ValueError("Need either a task name or a training/validation file.")
     else:
         if args.train_file is not None:
             extension = args.train_file.split(".")[-1]
-            assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+            assert extension in ["json"], "`train_file` should be a json file."
         if args.validation_file is not None:
             extension = args.validation_file.split(".")[-1]
-            assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+            assert extension in ["json"], "`validation_file` should be a json file."
 
     if args.output_dir is not None:
         os.makedirs(args.output_dir, exist_ok=True)
@@ -215,41 +192,28 @@ def parse_args():
     return args
 
 
-@dataclass
-class DataCollator:
-
-    pad_id: int
-    max_length: int = 4096  # no dynamic padding on TPUs
-
-    def __call__(self, batch):
-        batch = self.collate_fn(batch)
-        batch = jax.tree_map(shard, batch)
-        return batch
-
-    def collate_fn(self, features):
-        input_ids, attention_mask = self.fetch_inputs(features["input_ids"])
-        batch = {
-            "input_ids": jnp.array(input_ids, dtype=jnp.int32),
-            "attention_mask": jnp.array(attention_mask, dtype=jnp.int32),
-            "start_labels": jnp.array(features["start_token"], dtype=jnp.int32),
-            "end_labels": jnp.array(features["end_token"], dtype=jnp.int32),
-            "pooled_labels": jnp.array(features["category"], dtype=jnp.int32),
-        }
-        return batch
-
-    def fetch_inputs(self, input_ids: list):
-        inputs = [self._fetch_inputs(ids) for ids in input_ids]
-        return zip(*inputs)
-
-    def _fetch_inputs(self, input_ids: list):
+def format_inputs(features, pad_id, max_length=4096):
+    def _format_inputs(input_ids: list):
         attention_mask = [1 for _ in range(len(input_ids))]
-        while len(input_ids) < self.max_length:
-            input_ids.append(self.pad_id)
+        while len(input_ids) < max_length:
+            input_ids.append(pad_id)
             attention_mask.append(0)
         return input_ids, attention_mask
 
+    inputs = [_format_inputs(ids) for ids in features["input_ids"]]
+    input_ids, attention_mask = zip(*inputs)
 
-def train_data_collator(rng: PRNGKey, dataset: Dataset, batch_size: int):
+    batch = {
+        "input_ids": input_ids,
+        "attention_mask": attention_mask,
+        "start_labels": features["start_token"],
+        "end_labels": features["end_token"],
+        "pooled_labels": features["category"],
+    }
+    return batch
+
+
+def train_data_collator(rng: PRNGKey, dataset: Dataset, batch_size: int, pad_id: int, max_length=4096):
     """Returns shuffled batches of size `batch_size` from truncated `train dataset`, sharded over all local devices."""
     steps_per_epoch = len(dataset) // batch_size
     perms = jax.random.permutation(rng, len(dataset))
@@ -258,17 +222,19 @@ def train_data_collator(rng: PRNGKey, dataset: Dataset, batch_size: int):
 
     for perm in perms:
         batch = dataset[perm]
-        batch = {k: jnp.array(v) for k, v in batch.items()}
+        batch = format_inputs(dict(batch), pad_id, max_length=max_length)
+        batch = {k: jnp.array(v, dtype=jnp.int32) for k, v in batch.items()}
         batch = shard(batch)
 
         yield batch
 
 
-def eval_data_collator(dataset: Dataset, batch_size: int):
+def eval_data_collator(dataset: Dataset, batch_size: int, pad_id: int, max_length=4096):
     """Returns batches of size `batch_size` from `eval dataset`, sharded over all local devices."""
     for i in range(len(dataset) // batch_size):
         batch = dataset[i * batch_size : (i + 1) * batch_size]
-        batch = {k: jnp.array(v) for k, v in batch.items()}
+        batch = format_inputs(dict(batch), pad_id, max_length=max_length)
+        batch = {k: jnp.array(v, dtype=jnp.int32) for k, v in batch.items()}
         batch = shard(batch)
 
         yield batch
@@ -306,16 +272,32 @@ def main():
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
 
-    ################## TODO fix below
-
     model = FlaxBigBirdForNaturalQuestions.from_pretrained(args.model_id)
-    tokenizer = BigBirdTokenizerFast.from_pretrained(args.model_id)
-    data_collator = DataCollator(pad_id=tokenizer.pad_token_id, max_length=4096)
+    tokenizer = AutoTokenizer.from_pretrained(args.model_id)
 
-    train_dataset = load_dataset("json", data_files=args.tr_data_path)["train"]
-    eval_dataset = load_dataset("json", data_files=args.val_data_path)["train"]
+    # load dataset from files created using `prepare_natural_questions.py` script
+    train_dataset = load_dataset("json", data_files=args.train_file)["train"]
+    eval_dataset = load_dataset("json", data_files=args.validation_file)["train"]
 
-    ##################### TODO fix above
+    # Log a few random samples from the training set:
+    for index in random.sample(range(len(train_dataset)), 3):
+        logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
+
+    # Define a summary writer
+    summary_writer = tensorboard.SummaryWriter(args.output_dir)
+    summary_writer.hparams(vars(args))
+
+    def write_metric(train_metrics, eval_metrics, train_time, step):
+        summary_writer.scalar("train_time", train_time, step)
+
+        train_metrics = get_metrics(train_metrics)
+        for key, vals in train_metrics.items():
+            tag = f"train_{key}"
+            for i, val in enumerate(vals):
+                summary_writer.scalar(tag, val, step - len(vals) + i + 1)
+
+        for metric_name, value in eval_metrics.items():
+            summary_writer.scalar(f"eval_{metric_name}", value, step)
 
     num_epochs = int(args.num_train_epochs)
     rng = jax.random.PRNGKey(args.seed)
@@ -406,7 +388,7 @@ def main():
         rng, input_rng = jax.random.split(rng)
 
         # train
-        for batch in train_data_collator(input_rng, train_dataset, train_batch_size):
+        for batch in train_data_collator(input_rng, train_dataset, train_batch_size, tokenizer.pad_token_id, max_length=4096):
             # batch = self.data_collator(batch)
             state, metrics, dropout_rng = p_train_step(state, batch, dropout_rng)
             train_metrics.append(metrics)
@@ -416,7 +398,7 @@ def main():
         logger.info("  Evaluating...")
 
         # evaluate
-        for batch in eval_data_collator(eval_dataset, eval_batch_size):
+        for batch in eval_data_collator(eval_dataset, eval_batch_size, tokenizer.pad_token_id, max_length=4096):
             # batch = self.data_collator(batch)
             metrics = p_eval_step(state, batch)
             # TODO: collect metric
