@@ -100,6 +100,9 @@ def is_neptune_available():
     return importlib.util.find_spec("neptune") is not None
 
 
+def is_codecarbon_available():
+    return importlib.util.find_spec("codecarbon") is not None
+
 def hp_params(trial):
     if is_optuna_available():
         import optuna
@@ -259,6 +262,8 @@ def get_available_reporting_integrations():
         integrations.append("tensorboard")
     if is_wandb_available():
         integrations.append("wandb")
+    if is_codecarbon_available():
+        integrations.append("codecarbon")
     return integrations
 
 
@@ -718,6 +723,31 @@ class NeptuneCallback(TrainerCallback):
             pass
 
 
+class CodeCarbonCallback(TrainerCallback):
+    """
+    A :class:`~transformers.TrainerCallback` that tracks the CO2 emission of training.
+    """
+
+    def __init__(self):
+        assert (
+            is_codecarbon_available()
+        ), "CodeCarbonCallback requires `codecarbon` to be installed. Run `pip install codecarbon`."
+        import codecarbon
+        self._codecarbon = codecarbon
+        self.tracker = None
+
+    def on_init_end(self, args, state, control, **kwargs):
+        if self.tracker is None and state.is_world_process_zero:
+            # CodeCarbon will automatically handle environmental variables for configuration
+            self.tracker = self._codecarbon.EmissionsTracker()
+
+    def on_train_begin(self, args, state, control, model=None, **kwargs):
+        self.tracker.start()
+
+    def on_train_end(self, args, state, control, **kwargs):
+        self.tracker.end()
+
+
 INTEGRATION_TO_CALLBACK = {
     "azure_ml": AzureMLCallback,
     "comet_ml": CometCallback,
@@ -725,6 +755,7 @@ INTEGRATION_TO_CALLBACK = {
     "neptune": NeptuneCallback,
     "tensorboard": TensorBoardCallback,
     "wandb": WandbCallback,
+    "codecarbon": CodeCarbonCallback,
 }
 
 
