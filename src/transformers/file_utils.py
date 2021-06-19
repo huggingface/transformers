@@ -440,6 +440,10 @@ def is_speech_available():
     return _torchaudio_available
 
 
+def is_codecarbon_available():
+    return importlib.util.find_spec("codecarbon") is not None
+
+
 def torch_only_method(fn):
     def wrapper(*args, **kwargs):
         if not _torch_available:
