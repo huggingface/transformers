@@ -21,7 +21,7 @@ import random
 import tempfile
 import unittest
 import warnings
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 from huggingface_hub import HfApi
 from requests.exceptions import HTTPError
@@ -44,6 +44,7 @@ from transformers.testing_utils import (
 if is_torch_available():
     import numpy as np
     import torch
+    from torch import nn
 
     from transformers import (
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -496,15 +497,18 @@ class ModelTesterMixin:
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
 
+    @slow
     def test_torchscript(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self._create_and_check_torchscript(config, inputs_dict)
 
+    @slow
     def test_torchscript_output_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_attentions = True
         self._create_and_check_torchscript(config, inputs_dict)
 
+    @slow
     def test_torchscript_output_hidden_state(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
@@ -979,7 +983,6 @@ class ModelTesterMixin:
 
         outputs = model(**inputs)
 
-        print(outputs)
         output = outputs[0]
 
         if config.is_encoder_decoder:
@@ -1148,10 +1151,10 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (torch.nn.Embedding, AdaptiveEmbedding))
-            model.set_input_embeddings(torch.nn.Embedding(10, 10))
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Embedding, AdaptiveEmbedding))
+            model.set_input_embeddings(nn.Embedding(10, 10))
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
 
     def test_correct_missing_keys(self):
         if not self.test_missing_keys:
@@ -1232,6 +1235,11 @@ class ModelTesterMixin:
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, (List, Tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif isinstance(tuple_object, Dict):
+                        for tuple_iterable_value, dict_iterable_value in zip(
+                            tuple_object.values(), dict_object.values()
+                        ):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif tuple_object is None:
                         return
@@ -1330,7 +1338,7 @@ class ModelTesterMixin:
             model.eval()
 
             # Wrap model in nn.DataParallel
-            model = torch.nn.DataParallel(model)
+            model = nn.DataParallel(model)
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 

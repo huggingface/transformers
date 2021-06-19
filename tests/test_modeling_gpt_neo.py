@@ -34,6 +34,7 @@ if is_torch_available():
         GPT2Tokenizer,
         GPTNeoConfig,
         GPTNeoForCausalLM,
+        GPTNeoForSequenceClassification,
         GPTNeoModel,
     )
     from transformers.models.gpt_neo.modeling_gpt_neo import GPTNeoAttentionMixin
@@ -238,6 +239,16 @@ class GPTNeoModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    def create_and_check_gpt_neo_for_sequence_classification(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+    ):
+        config.num_labels = self.num_labels
+        model = GPTNeoForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
     def create_and_check_forward_and_backwards(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = GPTNeoForCausalLM(config)
         model.to(torch_device)
@@ -274,7 +285,9 @@ class GPTNeoModelTester:
 @require_torch
 class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
-    all_model_classes = (GPTNeoModel, GPTNeoForCausalLM) if is_torch_available() else ()
+    all_model_classes = (
+        (GPTNeoModel, GPTNeoForCausalLM, GPTNeoForSequenceClassification) if is_torch_available() else ()
+    )
     all_generative_model_classes = (GPTNeoForCausalLM,) if is_torch_available() else ()
     fx_ready_model_classes = all_model_classes
     test_missing_keys = False
@@ -304,6 +317,10 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     def test_gpt_neo_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
+
+    def test_gpt_neo_sequence_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt_neo_for_sequence_classification(*config_and_inputs)
 
     def test_gpt_neo_gradient_checkpointing(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(gradient_checkpointing=True)
