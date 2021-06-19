@@ -436,19 +436,18 @@ class FlaxMBartEncoderLayer(nn.Module):
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
         residual = hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, attn_weights = self.self_attn(hidden_states=hidden_states, attention_mask=attention_mask)
-
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = self.acticvation_dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
 
@@ -458,6 +457,7 @@ class FlaxMBartEncoderLayer(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartEncoderLayerCollection with Bart->MBart
 class FlaxMBartEncoderLayerCollection(nn.Module):
     config: MBartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -560,6 +560,7 @@ class FlaxMBartDecoderLayer(nn.Module):
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
         residual = hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
@@ -567,7 +568,6 @@ class FlaxMBartDecoderLayer(nn.Module):
         )
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
         cross_attn_weights = None
@@ -585,12 +585,12 @@ class FlaxMBartDecoderLayer(nn.Module):
 
         # Fully Connected
         residual = hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = self.acticvation_dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
 
@@ -600,6 +600,7 @@ class FlaxMBartDecoderLayer(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderLayerCollection with Bart->MBart
 class FlaxMBartDecoderLayerCollection(nn.Module):
     config: MBartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -609,7 +610,7 @@ class FlaxMBartDecoderLayerCollection(nn.Module):
             FlaxMBartDecoderLayer(self.config, name=str(i), dtype=self.dtype)
             for i in range(self.config.decoder_layers)
         ]
-        self.layerdrop = self.config.encoder_layerdrop
+        self.layerdrop = self.config.decoder_layerdrop
 
     def __call__(
         self,
@@ -700,6 +701,7 @@ class FlaxMBartClassificationHead(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartEncoder with Bart->MBart
 class FlaxMBartEncoder(nn.Module):
     config: MBartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -707,7 +709,6 @@ class FlaxMBartEncoder(nn.Module):
 
     def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
-        self.layerdrop = self.config.encoder_layerdrop
 
         embed_dim = self.config.d_model
         self.padding_idx = self.config.pad_token_id
@@ -774,6 +775,7 @@ class FlaxMBartEncoder(nn.Module):
         )
 
 
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoder with Bart->MBart
 class FlaxMBartDecoder(nn.Module):
     config: MBartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -781,7 +783,6 @@ class FlaxMBartDecoder(nn.Module):
 
     def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
-        self.layerdrop = self.config.decoder_layerdrop
 
         embed_dim = self.config.d_model
         self.padding_idx = self.config.pad_token_id
@@ -858,6 +859,7 @@ class FlaxMBartDecoder(nn.Module):
         )
 
 
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartModule with Bart->MBart
 class FlaxMBartModule(nn.Module):
     config: MBartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -1258,6 +1260,7 @@ append_call_sample_docstring(
 )
 
 
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForConditionalGenerationModule with Bart->MBart
 class FlaxMBartForConditionalGenerationModule(nn.Module):
     config: MBartConfig
     dtype: jnp.dtype = jnp.float32
@@ -1551,6 +1554,7 @@ append_replace_return_docstrings(
 )
 
 
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForSequenceClassificationModule with Bart->MBart
 class FlaxMBartForSequenceClassificationModule(nn.Module):
     config: MBartConfig
     dtype: jnp.dtype = jnp.float32
@@ -1571,7 +1575,6 @@ class FlaxMBartForSequenceClassificationModule(nn.Module):
     def _get_decoder_module(self):
         return self.model.decoder
 
-    # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForSequenceClassificationModule.__call__
     def __call__(
         self,
         input_ids,
@@ -1653,6 +1656,7 @@ append_call_sample_docstring(
 )
 
 
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForQuestionAnsweringModule with Bart->MBart
 class FlaxMBartForQuestionAnsweringModule(nn.Module):
     config: MBartConfig
     dtype: jnp.dtype = jnp.float32
@@ -1670,7 +1674,6 @@ class FlaxMBartForQuestionAnsweringModule(nn.Module):
     def _get_decoder_module(self):
         return self.model.decoder
 
-    # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForQuestionAnsweringModule.__call__
     def __call__(
         self,
         input_ids,
