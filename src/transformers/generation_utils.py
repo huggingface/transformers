@@ -20,7 +20,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
-from torch.nn import functional as F
+from torch import nn
 
 from .file_utils import ModelOutput
 from .generation_beam_search import BeamScorer, BeamSearchScorer
@@ -1564,7 +1564,7 @@ class GenerationMixin:
                     )
 
             # sample
-            probs = F.softmax(next_token_scores, dim=-1)
+            probs = nn.functional.softmax(next_token_scores, dim=-1)
             next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
 
             # finished sentences should have their next token be a padding token
@@ -1801,9 +1801,11 @@ class GenerationMixin:
             next_token_logits = outputs.logits[:, -1, :]
 
             # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
-            # cannot be generated both before and after the `F.log_softmax` operation.
+            # cannot be generated both before and after the `nn.functional.log_softmax` operation.
             next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
-            next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
+            next_token_scores = nn.functional.log_softmax(
+                next_token_logits, dim=-1
+            )  # (batch_size * num_beams, vocab_size)
 
             next_token_scores = logits_processor(input_ids, next_token_scores)
             next_token_scores = next_token_scores + beam_scores[:, None].expand_as(next_token_scores)
@@ -2098,9 +2100,11 @@ class GenerationMixin:
             next_token_logits = outputs.logits[:, -1, :]
 
             # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
-            # cannot be generated both before and after the `F.log_softmax` operation.
+            # cannot be generated both before and after the `nn.functional.log_softmax` operation.
             next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
-            next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
+            next_token_scores = nn.functional.log_softmax(
+                next_token_logits, dim=-1
+            )  # (batch_size * num_beams, vocab_size)
 
             next_token_scores = logits_processor(input_ids, next_token_scores)
             next_token_scores = next_token_scores + beam_scores[:, None].expand_as(next_token_scores)
@@ -2128,7 +2132,7 @@ class GenerationMixin:
             vocab_size = next_token_scores.shape[-1]
             next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
 
-            probs = F.softmax(next_token_scores, dim=-1)
+            probs = nn.functional.softmax(next_token_scores, dim=-1)
 
             next_tokens = torch.multinomial(probs, num_samples=2 * num_beams)
             next_token_scores = torch.gather(next_token_scores, -1, next_tokens)
@@ -2426,9 +2430,11 @@ class GenerationMixin:
                 next_token_logits = outputs.logits[batch_group_indices, -1, :]
 
                 # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
-                # cannot be generated both before and after the `F.log_softmax` operation.
+                # cannot be generated both before and after the `nn.functional.log_softmax` operation.
                 next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
-                next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * group_size, vocab_size)
+                next_token_scores = nn.functional.log_softmax(
+                    next_token_logits, dim=-1
+                )  # (batch_size * group_size, vocab_size)
                 vocab_size = next_token_scores.shape[-1]
 
                 next_token_scores = logits_processor(

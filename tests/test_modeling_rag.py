@@ -1132,11 +1132,16 @@ class RagModelSaveLoadTests(unittest.TestCase):
                 "facebook/bart-large-cnn",
                 retriever=rag_retriever,
                 config=rag_config,
+                question_encoder_max_length=200,
+                generator_max_length=200,
             ).to(torch_device)
             # check that the from pretrained methods work
             rag_token.save_pretrained(tmp_dirname)
             rag_token.from_pretrained(tmp_dirname, retriever=rag_retriever)
             rag_token.to(torch_device)
+
+            self.assertTrue(rag_token.question_encoder.config.max_length == 200)
+            self.assertTrue(rag_token.generator.config.max_length == 200)
 
             with torch.no_grad():
                 output = rag_token(
