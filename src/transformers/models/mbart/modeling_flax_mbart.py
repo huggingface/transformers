@@ -212,16 +212,27 @@ MBART_DECODE_INPUTS_DOCSTRING = r"""
 """
 
 
-def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_token_id: int) -> jnp.ndarray:
+def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int) -> jnp.ndarray:
     """
-    Shift input ids one token to the right.
+    Shift input ids one token to the right, and wrap the last non pad token (the <LID> token) Note that MBart does not
+    have a single `decoder_start_token_id` in contrast to other Bart-like models.
     """
-    shifted_input_ids = jnp.roll(input_ids, 1, axis=-1)
-    shifted_input_ids = jax.ops.index_update(shifted_input_ids, (..., 0), decoder_start_token_id)
-    # replace possible -100 values in labels by `pad_token_id`
-    shifted_input_ids = jnp.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
+    prev_output_tokens = jnp.array(input_ids).clone()
 
-    return shifted_input_ids
+    assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+
+    # replace possible -100 values in labels by `pad_token_id`
+    prev_output_tokens = jnp.where(prev_output_tokens == -100, pad_token_id, input_ids)
+    index_of_eos = (jnp.where(prev_output_tokens != pad_token_id, 1, 0).sum(axis=-1) - 1).reshape(-1, 1)
+    decoder_start_tokens = jnp.array(
+        [prev_output_tokens[i, eos_idx] for i, eos_idx in enumerate(index_of_eos)]
+    ).squeeze()
+    # for loop basically does jax-compatible version of prev_output_tokens[:, 1:] = prev_output_tokens[:, :-1].clone()
+    for i in range(prev_output_tokens.shape[1], 0, -1):
+        prev_output_tokens = jax.ops.index_update(prev_output_tokens, (..., i), prev_output_tokens[:, i - 1])
+    prev_output_tokens = jax.ops.index_update(prev_output_tokens, (..., 0), decoder_start_tokens)
+
+    return prev_output_tokens
 
 
 # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartAttention with Bart->MBart
@@ -1204,9 +1215,7 @@ class FlaxMBartPretrainedModel(FlaxPreTrainedModel):
 
         # prepare decoder inputs
         if decoder_input_ids is None:
-            decoder_input_ids = shift_tokens_right(
-                input_ids, self.config.pad_token_id, decoder_start_token_id=self.config.decoder_start_token_id
-            )
+            decoder_input_ids = shift_tokens_right(input_ids, self.config.pad_token_id)
         if decoder_attention_mask is None:
             decoder_attention_mask = jnp.ones_like(decoder_input_ids)
         if decoder_position_ids is None:

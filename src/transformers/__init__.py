@@ -1588,7 +1588,6 @@ if is_flax_available():
             "FlaxMBartForQuestionAnswering",
             "FlaxMBartForSequenceClassification",
             "FlaxMBartModel",
-            "FlaxMBartPretrainedModel",
         ]
     )
     _import_structure["models.roberta"].extend(
@@ -2917,7 +2916,6 @@ if TYPE_CHECKING:
             FlaxMBartForQuestionAnswering,
             FlaxMBartForSequenceClassification,
             FlaxMBartModel,
-            FlaxMBartPretrainedModel,
         )
         from .models.roberta import (
             FlaxRobertaForMaskedLM,

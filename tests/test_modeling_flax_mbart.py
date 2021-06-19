@@ -17,7 +17,7 @@ import unittest
 import numpy as np
 import timeout_decorator  # noqa
 
-from transformers import BartConfig, is_flax_available
+from transformers import MBartConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
 from .test_generation_flax_utils import FlaxGenerationTesterMixin
@@ -116,9 +116,9 @@ class FlaxMBartModelTester(unittest.TestCase):
         input_ids = np.clip(ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size), 3, self.vocab_size)
         input_ids = np.concatenate((input_ids, 2 * np.ones((self.batch_size, 1), dtype=np.int64)), -1)
 
-        decoder_input_ids = shift_tokens_right(input_ids, 1, 2)
+        decoder_input_ids = shift_tokens_right(input_ids, 1)
 
-        config = BartConfig(
+        config = MBartConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -231,7 +231,7 @@ class FlaxMBartModelTester(unittest.TestCase):
 
 
 @require_flax
-class BartHeadTests(unittest.TestCase):
+class MBartHeadTests(unittest.TestCase):
     vocab_size = 99
 
     def _get_config_and_data(self):
@@ -255,7 +255,7 @@ class BartHeadTests(unittest.TestCase):
         )
 
         batch_size = input_ids.shape[0]
-        config = BartConfig(
+        config = MBartConfig(
             vocab_size=self.vocab_size,
             d_model=24,
             encoder_layers=2,
@@ -295,7 +295,7 @@ class BartHeadTests(unittest.TestCase):
         self.assertEqual(outputs["logits"].shape, expected_shape)
 
     def test_lm_uneven_forward(self):
-        config = BartConfig(
+        config = MBartConfig(
             vocab_size=self.vocab_size,
             d_model=14,
             encoder_layers=2,
@@ -315,7 +315,7 @@ class BartHeadTests(unittest.TestCase):
 
     def test_shift_tokens_right(self):
         input_ids = np.array([[71, 82, 18, 33, 2, 1, 1], [68, 34, 26, 58, 30, 82, 2]], dtype=np.int64)
-        shifted = shift_tokens_right(input_ids, 1, 2)
+        shifted = shift_tokens_right(input_ids, 1)
         n_pad_before = np.equal(input_ids, 1).astype(np.float32).sum()
         n_pad_after = np.equal(shifted, 1).astype(np.float32).sum()
         self.assertEqual(shifted.shape, input_ids.shape)

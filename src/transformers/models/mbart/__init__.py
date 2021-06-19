@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 
 from ...file_utils import (
     _BaseLazyModule,
+    is_flax_available,
     is_sentencepiece_available,
     is_tf_available,
     is_tokenizers_available,
@@ -52,6 +53,14 @@ if is_torch_available():
 if is_tf_available():
     _import_structure["modeling_tf_mbart"] = ["TFMBartForConditionalGeneration", "TFMBartModel"]
 
+if is_flax_available():
+    _import_structure["modeling_flax_mbart"] = [
+        "FlaxMBartForConditionalGeneration",
+        "FlaxMBartForQuestionAnswering",
+        "FlaxMBartForSequenceClassification",
+        "FlaxMBartModel",
+    ]
+
 
 if TYPE_CHECKING:
     from .configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfig
@@ -77,6 +86,14 @@ if TYPE_CHECKING:
 
     if is_tf_available():
         from .modeling_tf_mbart import TFMBartForConditionalGeneration, TFMBartModel
+
+    if is_flax_available():
+        from .modeling_flax_mbart import (
+            FlaxMBartForConditionalGeneration,
+            FlaxMBartForQuestionAnswering,
+            FlaxMBartForSequenceClassification,
+            FlaxMBartModel,
+        )
 
 else:
     import importlib
