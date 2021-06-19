@@ -133,6 +133,7 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
+    "models.smith": ["SMITH_PRETRAINED_CONFIG_ARCHIVE_MAP", "SmithConfig", "SmithTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -330,6 +331,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.smith"].append("SmithTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
@@ -490,6 +492,22 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
+
+    _import_structure["models.smith"].extend(
+        [
+            "SMITH_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SmithForMaskedLM",
+            "SmithForCausalLM",
+            "SmithForMultipleChoice",
+            "SmithForQuestionAnswering",
+            "SmithForSequenceClassification",
+            "SmithForTokenClassification",
+            "SmithLayer",
+            "SmithModel",
+            "SmithPreTrainedModel",
+            "load_tf_weights_in_smith",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1691,6 +1709,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.smith import SMITH_PRETRAINED_CONFIG_ARCHIVE_MAP, SmithConfig, SmithTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1876,6 +1895,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
+        from .models.smith import SmithTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -1951,6 +1971,20 @@ if TYPE_CHECKING:
         from .utils.dummy_timm_objects import *
 
     if is_torch_available():
+
+        from .models.smith import (
+            SMITH_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SmithForMaskedLM,
+            SmithForCausalLM,
+            SmithForMultipleChoice,
+            SmithForQuestionAnswering,
+            SmithForSequenceClassification,
+            SmithForTokenClassification,
+            SmithLayer,
+            SmithModel,
+            SmithPreTrainedModel,
+            load_tf_weights_in_smith,
+        )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
