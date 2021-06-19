@@ -103,6 +103,7 @@ def is_neptune_available():
 def is_codecarbon_available():
     return importlib.util.find_spec("codecarbon") is not None
 
+
 def hp_params(trial):
     if is_optuna_available():
         import optuna
@@ -733,6 +734,7 @@ class CodeCarbonCallback(TrainerCallback):
             is_codecarbon_available()
         ), "CodeCarbonCallback requires `codecarbon` to be installed. Run `pip install codecarbon`."
         import codecarbon
+
         self._codecarbon = codecarbon
         self.tracker = None
 
