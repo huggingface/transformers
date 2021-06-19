@@ -737,15 +737,17 @@ class CodeCarbonCallback(TrainerCallback):
         self.tracker = None
 
     def on_init_end(self, args, state, control, **kwargs):
-        if self.tracker is None and state.is_world_process_zero:
+        if self.tracker is None and state.is_local_process_zero:
             # CodeCarbon will automatically handle environmental variables for configuration
-            self.tracker = self._codecarbon.EmissionsTracker()
+            self.tracker = self._codecarbon.EmissionsTracker(output_dir=args.output_dir)
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
-        self.tracker.start()
+        if self.tracker and state.is_local_process_zero:
+            self.tracker.start()
 
     def on_train_end(self, args, state, control, **kwargs):
-        self.tracker.end()
+        if self.tracker and state.is_local_process_zero:
+            self.tracker.stop()
 
 
 INTEGRATION_TO_CALLBACK = {
