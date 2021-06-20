@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 import unittest
 
 import numpy as np
-import math
 
 from transformers import Wav2Vec2Config, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
-from .test_modeling_flax_common import FlaxModelTesterMixin, random_attention_mask, floats_tensor
+from .test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, random_attention_mask
 
 
 if is_flax_available():

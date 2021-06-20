@@ -14,18 +14,18 @@
 # limitations under the License.
 """ Flax Wav2Vec2 model. """
 
+from functools import partial
 from typing import Optional, Tuple, Union
 
 import flax
 import flax.linen as nn
-from functools import partial
 import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict
 from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, ModelOutput
+from ...file_utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_outputs import FlaxBaseModelOutput
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel
 from ...utils import logging
@@ -140,33 +140,84 @@ class FlaxWav2Vec2LayerNormConvLayer(nn.Module):
         return hidden_states
 
 
-class FlaxWav2Vec2PositionalConvEmbedding(nn.Module):
+class FlaxConvWithWeightNorm(nn.Module):
     config: Wav2Vec2Config
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.padding = self.config.num_conv_pos_embeddings // 2
         self.conv = nn.Conv(
             features=self.config.hidden_size,
             kernel_size=self.config.num_conv_pos_embeddings,
             kernel_init=jax.nn.initializers.he_normal(dtype=self.dtype),
             padding="VALID",
-            feature_group_count=self.config.num_conv_pos_embeddings,
+            feature_group_count=self.config.num_conv_pos_embedding_groups,
             dtype=self.dtype,
-        )  # TODO (PS): weigh_norm ?
+        )
+        weight_shape = (
+            self.conv.features,
+            self.conv.kernel_size // self.conv.feature_group_count,
+            self.conv.kernel_size,
+        )
+        self.weight_v = self.param("weight_v", jax.nn.initializers.he_normal(dtype=self.dtype), weight_shape)
+        self.weight_g = self.param("weight_g", lambda _: jnp.linalg.norm(self.weight_v, axis=(0, 1))[None, None, :])
+        self.bias = self.param("bias", jax.nn.initializers.zeros, (self.conv.features,))
+        self.prev_padding = self.conv.kernel_size // 2
+
+    def _get_normed_weights(self):
+        weight_v_norm = jnp.linalg.norm(self.weight_v, axis=(0, 1))[None, None, :]
+        normed_weight_v = jnp.divide(self.weight_v, weight_v_norm)
+        normed_kernel = jnp.multiply(normed_weight_v, self.weight_g)
+        return normed_kernel
+
+    def __call__(self, hidden_states):
+        kernel = self._get_normed_weights()
+        hidden_states = jnp.pad(hidden_states, ((0, 0), (self.prev_padding, self.prev_padding), (0, 0)))
+        hidden_states = self.conv.apply({"params": {"kernel": kernel, "bias": self.bias}}, hidden_states)
+        return hidden_states
+
+
+class FlaxWav2Vec2PositionalConvEmbedding(nn.Module):
+    config: Wav2Vec2Config
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.conv = FlaxConvWithWeightNorm(self.config, dtype=self.dtype)
         self.activation = ACT2FN[self.config.feat_extract_activation]
         self.num_pad_remove = 1 if self.config.num_conv_pos_embeddings % 2 == 0 else 0
 
     def __call__(self, hidden_states):
         hidden_states = hidden_states.transpose((0, 1, 2))
-        hidden_states = jnp.pad(hidden_states, ((0, 0), (self.padding, self.padding), (0, 0)))
 
         hidden_states = self.conv(hidden_states)
+
         if self.num_pad_remove > 0:
-            hidden_states = hidden_states[:, :-self.num_pad_remove, :]
+            hidden_states = hidden_states[:, : -self.num_pad_remove, :]
         hidden_states = self.activation(hidden_states)
 
         hidden_states = hidden_states.transpose((0, 1, 2))
+        return hidden_states
+
+
+class FlaxConvLayersCollection(nn.Module):
+    config: Wav2Vec2Config
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        if self.config.feat_extract_norm == "layer":
+            self.layers = [
+                FlaxWav2Vec2LayerNormConvLayer(self.config, layer_id=i, name=str(i), dtype=self.dtype)
+                for i in range(self.config.num_feat_extract_layers)
+            ]
+        elif self.config.feat_extract_norm == "group":
+            raise NotImplementedError("At the moment only ``config.feat_extact_norm == 'layer'`` is supported")
+        else:
+            raise ValueError(
+                f"`config.feat_extract_norm` is {self.config.feat_extract_norm}, but has to be one of ['group', 'layer']"
+            )
+
+    def __call__(self, hidden_states):
+        for conv_layer in self.layers:
+            hidden_states = conv_layer(hidden_states)
         return hidden_states
 
 
@@ -177,25 +228,11 @@ class FlaxWav2Vec2FeatureExtractor(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        config = self.config
-        if config.feat_extract_norm == "layer":
-            self.conv_layers = [
-                FlaxWav2Vec2LayerNormConvLayer(config, layer_id=i, dtype=self.dtype)
-                for i in range(config.num_feat_extract_layers)
-            ]
-        elif config.feat_extract_norm == "group":
-            raise NotImplementedError(
-                "At the moment only ``config.feat_extact_norm == 'layer'`` is supported"
-            )
-        else:
-            raise ValueError(
-                f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
-            )
+        self.conv_layers = FlaxConvLayersCollection(self.config, dtype=self.dtype)
 
     def __call__(self, input_values):
         hidden_states = input_values[:, :, None]
-        for conv_layer in self.conv_layers:
-            hidden_states = conv_layer(hidden_states)
+        hidden_states = self.conv_layers(hidden_states)
         return hidden_states
 
 
@@ -362,10 +399,14 @@ class FlaxWav2Vec2EncoderLayerStableLayerNorm(nn.Module):
     def __call__(self, hidden_states, attention_mask=None, deterministic=True, output_attentions=False):
         attn_residual = hidden_states
         hidden_states = self.layer_norm(hidden_states)
-        hidden_states, attn_weights = self.attention(hidden_states, attention_mask=attention_mask, deterministic=deterministic)
+        hidden_states, attn_weights = self.attention(
+            hidden_states, attention_mask=attention_mask, deterministic=deterministic
+        )
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         hidden_states = attn_residual + hidden_states
-        hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states), deterministic=deterministic)
+        hidden_states = hidden_states + self.feed_forward(
+            self.final_layer_norm(hidden_states), deterministic=deterministic
+        )
 
         outputs = (hidden_states,)
 
@@ -401,7 +442,9 @@ class FlaxWav2Vec2EncoderLayerStableLayerNormCollection(nn.Module):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            layer_outputs = layer(hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions)
+            layer_outputs = layer(
+                hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -444,12 +487,21 @@ class FlaxWav2Vec2StableLayerNormEncoder(nn.Module):
         hidden_states = hidden_states + position_embeddings
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
 
-        return self.layers(
+        outputs = self.layers(
             hidden_states,
             attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+        )
+
+        hidden_states = self.layer_norm(outputs[0])
+
+        if not return_dict:
+            return (hidden_states,) + outputs[1:]
+
+        return FlaxBaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
 
 
@@ -458,6 +510,7 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
+
     config: Wav2Vec2Config
     dtype: jnp.dtype = jnp.float32
     module_class = None
@@ -497,6 +550,7 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
         self,
         input_values,
         attention_mask=None,
+        mask_time_indices=None,
         params: dict = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
@@ -526,6 +580,7 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
             inputs,
             jnp.array(input_values, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),
+            mask_time_indices,
             not train,
             output_attentions,
             output_hidden_states,
@@ -541,18 +596,20 @@ class FlaxWav2Vec2Module(nn.Module):
     def setup(self):
         self.feature_extractor = FlaxWav2Vec2FeatureExtractor(self.config, dtype=self.dtype)
         self.feature_projection = FlaxWav2Vec2FeatureProjection(self.config, dtype=self.dtype)
+        self.masked_spec_embed = self.param(
+            "masked_spec_embed", jax.nn.initializers.uniform(), (self.config.hidden_size,)
+        )
 
         if self.config.do_stable_layer_norm:
             self.encoder = FlaxWav2Vec2StableLayerNormEncoder(self.config, dtype=self.dtype)
         else:
             raise NotImplementedError("``config.do_stable_layer_norm is False`` is currently not supported.")
 
-#        self.masked_spec_embed = None
-
     def __call__(
         self,
         input_values,
         attention_mask=None,
+        mask_time_indices=None,
         deterministic=True,
         output_attentions=None,
         output_hidden_states=None,
@@ -592,10 +649,18 @@ class FlaxWav2Vec2Module(nn.Module):
 
             # these two operations makes sure that all values
             # before the output lengths indices are attended to
-            attention_mask = jax.ops.index_update(attention_mask, jax.ops.index[:, output_lengths - 1], 1)
+            attention_mask = jax.ops.index_update(
+                attention_mask, jax.ops.index[jnp.arange(attention_mask.shape[0]), output_lengths - 1], 1
+            )
             attention_mask = jnp.flip(jnp.flip(attention_mask, -1).cumsum(-1), -1).astype("bool")
 
         hidden_states = self.feature_projection(extract_features, deterministic=deterministic)
+
+        if mask_time_indices is not None:  # apply SpecAugment along time axis with given indices
+            # Patrick(doesn't work yet)
+            hidden_states = jax.ops.index_update(
+                hidden_states, jax.ops.index[:, mask_time_indices], self.masked_spec_embed.astype(self.dtype)
+            )
 
         encoder_outputs = self.encoder(
             hidden_states,
