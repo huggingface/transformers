@@ -133,7 +133,6 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.cog_view": ["COG_VIEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "CogViewConfig", "CogViewTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -178,6 +177,7 @@ _import_structure = {
         "CLIPTokenizer",
         "CLIPVisionConfig",
     ],
+    "models.cog_view": ["COG_VIEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "CogViewConfig", "CogViewTokenizer"],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.cpm": ["CpmTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
@@ -493,21 +493,6 @@ if is_torch_available():
 
     # PyTorch models structure
 
-    _import_structure["models.cog_view"].extend(
-        [
-            "COG_VIEW_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "CogViewForMaskedLM",
-            "CogViewForCausalLM",
-            "CogViewForMultipleChoice",
-            "CogViewForQuestionAnswering",
-            "CogViewForSequenceClassification",
-            "CogViewForTokenClassification",
-            "CogViewLayer",
-            "CogViewModel",
-            "CogViewPreTrainedModel",
-            "load_tf_weights_in_cog_view",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -522,7 +507,6 @@ if is_torch_available():
             "load_tf_weights_in_albert",
         ]
     )
-
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_CAUSAL_LM_MAPPING",
@@ -567,6 +551,7 @@ if is_torch_available():
             "PretrainedBartModel",
         ]
     )
+
     _import_structure["models.bert"].extend(
         [
             "BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -652,6 +637,15 @@ if is_torch_available():
             "CLIPPreTrainedModel",
             "CLIPTextModel",
             "CLIPVisionModel",
+        ]
+    )
+    _import_structure["models.cog_view"].extend(
+        [
+            "COG_VIEW_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CogViewForCausalLM",
+            "CogViewModel",
+            "CogViewPreTrainedModel",
+            "CogViewVQVAE",
         ]
     )
     _import_structure["models.convbert"].extend(
@@ -2148,15 +2142,9 @@ if TYPE_CHECKING:
         from .models.cog_view import (
             COG_VIEW_PRETRAINED_MODEL_ARCHIVE_LIST,
             CogViewForCausalLM,
-            CogViewForMaskedLM,
-            CogViewForMultipleChoice,
-            CogViewForQuestionAnswering,
-            CogViewForSequenceClassification,
-            CogViewForTokenClassification,
-            CogViewLayer,
             CogViewModel,
             CogViewPreTrainedModel,
-            load_tf_weights_in_cog_view,
+            CogViewVQVAE,
         )
         from .models.convbert import (
             CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -31,16 +31,10 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_cog_view"] = [
         "COG_VIEW_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "CogViewForMaskedLM",
         "CogViewForCausalLM",
-        "CogViewForMultipleChoice",
-        "CogViewForQuestionAnswering",
-        "CogViewForSequenceClassification",
-        "CogViewForTokenClassification",
-        "CogViewLayer",
         "CogViewModel",
         "CogViewPreTrainedModel",
-        "load_tf_weights_in_cog_view",
+        "CogViewVQVAE",
     ]
 
 
@@ -55,15 +49,9 @@ if TYPE_CHECKING:
         from .modeling_cog_view import (
             COG_VIEW_PRETRAINED_MODEL_ARCHIVE_LIST,
             CogViewForCausalLM,
-            CogViewForMaskedLM,
-            CogViewForMultipleChoice,
-            CogViewForQuestionAnswering,
-            CogViewForSequenceClassification,
-            CogViewForTokenClassification,
-            CogViewLayer,
             CogViewModel,
             CogViewPreTrainedModel,
-            load_tf_weights_in_cog_view,
+            CogViewVQVAE,
         )
 
 

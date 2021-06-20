@@ -32,25 +32,9 @@ except ImportError as e:
     from torch._overrides import has_torch_function, handle_torch_function
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
-from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
-    SequenceClassifierOutputWithPast,
-)
-from ...modeling_utils import (
-    Conv1D,
-    PreTrainedModel,
-    SequenceSummary,
-    find_pruneable_heads_and_indices,
-    prune_conv1d_layer,
-)
+from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
+from ...modeling_utils import Conv1D, PreTrainedModel, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import logging
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_cog_view import CogViewConfig
@@ -62,7 +46,7 @@ _CHECKPOINT_FOR_DOC = "gpt2"
 _CONFIG_FOR_DOC = "CogViewConfig"
 _TOKENIZER_FOR_DOC = "CogViewTokenizer"
 
-CogView_PRETRAINED_MODEL_ARCHIVE_LIST = [
+COG_VIEW_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "gpt2",
     "gpt2-medium",
     "gpt2-large",
@@ -206,7 +190,7 @@ Tensor = torch.Tensor
 def gumbel_softmax(logits, tau=1, hard=False, eps=1e-10, dim=-1):
     # type: (Tensor, float, bool, float, int) -> Tensor
     r"""
-    Samples from the Gumbel-Softmax distribution (`Link 1`_  `Link 2`_) and optionally discretizes.
+    Samples from the Gumbel-Softmax distribution (`Link 1`_ `Link 2`_) and optionally discretizes.
 
     Args:
       logits: `[..., num_features]` unnormalized log probabilities
@@ -216,21 +200,20 @@ def gumbel_softmax(logits, tau=1, hard=False, eps=1e-10, dim=-1):
       dim (int): A dimension along which softmax will be computed. Default: -1.
 
     Returns:
-      Sampled tensor of same shape as `logits` from the Gumbel-Softmax distribution.
-      If ``hard=True``, the returned samples will be one-hot, otherwise they will
-      be probability distributions that sum to 1 across `dim`.
+      Sampled tensor of same shape as `logits` from the Gumbel-Softmax distribution. If ``hard=True``, the returned
+      samples will be one-hot, otherwise they will be probability distributions that sum to 1 across `dim`.
 
     .. note::
       This function is here for legacy reasons, may be removed from nn.Functional in the future.
 
     .. note::
-      The main trick for `hard` is to do  `y_hard - y_soft.detach() + y_soft`
+      The main trick for `hard` is to do `y_hard - y_soft.detach() + y_soft`
 
       It achieves two things:
+
       - makes the output value exactly one-hot
-      (since we add then subtract y_soft value)
-      - makes the gradient equal to y_soft gradient
-      (since we strip all other gradients)
+      (since we add then subtract y_soft value) - makes the gradient equal to y_soft gradient (since we strip all other
+      gradients)
 
     Examples::
         >>> logits = torch.randn(20, 32)
@@ -239,10 +222,7 @@ def gumbel_softmax(logits, tau=1, hard=False, eps=1e-10, dim=-1):
         >>> # Sample hard categorical using "Straight-through" trick:
         >>> F.gumbel_softmax(logits, tau=1, hard=True)
 
-    .. _Link 1:
-        https://arxiv.org/abs/1611.00712
-    .. _Link 2:
-        https://arxiv.org/abs/1611.01144
+    .. _Link 1: https://arxiv.org/abs/1611.00712 .. _Link 2: https://arxiv.org/abs/1611.01144
     """
     if not torch.jit.is_scripting():
         if type(logits) is not Tensor and has_torch_function((logits,)):
@@ -463,12 +443,16 @@ class Quantize(nn.Module):
         return F.embedding(embed_id, self.embed.transpose(0, 1))
 
 
-class VQVAE(nn.Module):
+class CogViewVQVAE(PreTrainedModel):
     def __init__(self, config):
         super().__init__()
         self.encoder = VQVAEEncoder(config)
         self.quantizer = Quantize(config.vq_vae_embed_dim, config.vq_vae_n_embed)
         self.decoder = VQVAEDecoder(config)
+
+    # TODO
+    def _init_weights(self, module):
+        pass
 
     def forward(self, pixel_values, continuous_relax=False, temperature=1.0, hard=False, KL=False):
         (
