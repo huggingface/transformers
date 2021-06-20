@@ -504,8 +504,10 @@ class VQVAE(nn.Module):
 class LayerNorm(nn.LayerNorm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
     def forward(self, x):
-        return super().forward(x / (x.abs().max().detach()/8))
+        return super().forward(x / (x.abs().max().detach() / 8))
+
 
 class CogViewAttention(nn.Module):
     def __init__(self, config):
@@ -529,8 +531,8 @@ class CogViewAttention(nn.Module):
                 f"`embed_dim` must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
             )
 
-        self.c_attn = nn.Linear(self.embed_dim, 3 * self.embed_dim)
-        self.c_proj = Conv1D(self.embed_dim, self.embed_dim)
+        self.qkv_proj = nn.Linear(self.embed_dim, 3 * self.embed_dim)
+        self.out_proj = Conv1D(self.embed_dim, self.embed_dim)
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
@@ -596,7 +598,7 @@ class CogViewAttention(nn.Module):
         use_cache=False,
         output_attentions=False,
     ):
-        query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
+        query, key, value = self.qkv_proj(hidden_states).split(self.split_size, dim=2)
 
         query = self._split_heads(hidden_states, self.num_heads, self.head_dim)
         key = self._split_heads(hidden_states, self.num_heads, self.head_dim)
@@ -615,7 +617,7 @@ class CogViewAttention(nn.Module):
         attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
 
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
-        attn_output = self.c_proj(attn_output)
+        attn_output = self.out_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 
         outputs = (attn_output, present)
@@ -649,7 +651,7 @@ class CogViewBlock(nn.Module):
         inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
 
         self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        self.attn = CogViewAttention(config)
+        self.attention = CogViewAttention(config)
         self.post_attn_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         self.scale_normalization = config.scale_normalization
@@ -670,7 +672,7 @@ class CogViewBlock(nn.Module):
     ):
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-        attn_outputs = self.attn(
+        attn_outputs = self.attention(
             hidden_states,
             layer_past=layer_past,
             attention_mask=attention_mask,
@@ -747,12 +749,12 @@ class CogViewModel(CogViewPreTrainedModel):
 
         self.embed_dim = config.hidden_size
 
-        self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
-        self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
+        self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, self.embed_dim)
 
         self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([CogViewBlock(config) for _ in range(config.num_hidden_layers)])
-        self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.blocks = nn.ModuleList([CogViewBlock(config) for _ in range(config.num_hidden_layers)])
+        self.final_layernorm = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         self.init_weights()
 
@@ -885,8 +887,8 @@ class CogViewModel(CogViewPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.n_layer)
 
         if inputs_embeds is None:
-            inputs_embeds = self.wte(input_ids)
-        position_embeds = self.wpe(position_ids)
+            inputs_embeds = self.word_embeddings(input_ids)
+        position_embeds = self.position_embeddings(position_ids)
         hidden_states = inputs_embeds + position_embeds
 
         hidden_states = self.drop(hidden_states)
@@ -895,9 +897,8 @@ class CogViewModel(CogViewPreTrainedModel):
 
         presents = () if use_cache else None
         all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
         all_hidden_states = () if output_hidden_states else None
-        for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
+        for i, (block, layer_past) in enumerate(zip(self.blocks, past_key_values)):
 
             # Model parallel
             if self.model_parallel:
@@ -959,7 +960,7 @@ class CogViewModel(CogViewPreTrainedModel):
                     if i == v[-1] and "cuda:" + str(k) != self.last_device:
                         hidden_states = hidden_states.to("cuda:" + str(k + 1))
 
-        hidden_states = self.ln_f(hidden_states)
+        hidden_states = self.final_layernorm(hidden_states)
 
         hidden_states = hidden_states.view(*output_shape)
         # Add last hidden state
