@@ -105,7 +105,8 @@ class CogViewConfig(PretrainedConfig):
         res_channels=32,
         stride=6,
         simple=True,
-        activation_function="gelu_new",
+        scale_normalization=True,
+        activation_function="gelu_fast",
         resid_pdrop=0.1,
         embd_pdrop=0.1,
         attn_pdrop=0.1,
@@ -136,6 +137,7 @@ class CogViewConfig(PretrainedConfig):
         self.resid_pdrop = resid_pdrop
         self.embd_pdrop = embd_pdrop
         self.attn_pdrop = attn_pdrop
+        self.scale_normalization = scale_normalization
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
         self.summary_type = summary_type
@@ -148,14 +150,14 @@ class CogViewConfig(PretrainedConfig):
         self.use_cache = use_cache
 
         # VQ-VAE args
-        self.vq_vae_embed_dim=vq_vae_embed_dim
-        self.vq_vae_n_embed=vq_vae_n_embed
-        self.n_res_block=n_res_block
-        self.in_channels=in_channels
-        self.conv_channels=conv_channels
-        self.res_channels=res_channels
-        self.stride=stride
-        self.simple=simple
+        self.vq_vae_embed_dim = vq_vae_embed_dim
+        self.vq_vae_n_embed = vq_vae_n_embed
+        self.n_res_block = n_res_block
+        self.in_channels = in_channels
+        self.conv_channels = conv_channels
+        self.res_channels = res_channels
+        self.stride = stride
+        self.simple = simple
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id

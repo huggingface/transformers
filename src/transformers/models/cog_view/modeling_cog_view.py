@@ -15,6 +15,7 @@
 # limitations under the License.
 """PyTorch OpenAI GPT-2 model."""
 
+import math
 import warnings
 from typing import Tuple
 
@@ -469,22 +470,26 @@ class VQVAE(nn.Module):
         self.quantizer = Quantize(config.vq_vae_embed_dim, config.vq_vae_n_embed)
         self.decoder = VQVAEDecoder(config)
 
-    def forward(self, pixel_values, continuous_relax=False, temperature=1., hard=False, KL=False):
-        quant_t, diff, _, = self.encode(pixel_values, continuous_relax, temperature, hard, KL)
+    def forward(self, pixel_values, continuous_relax=False, temperature=1.0, hard=False, KL=False):
+        (
+            quant_t,
+            diff,
+            _,
+        ) = self.encode(pixel_values, continuous_relax, temperature, hard, KL)
         dec = self.decoder(quant_t)
 
         return dec, diff
-    
-    def encode(self, pixel_values, continuous_relax=False, temperature=1., hard=False, KL=False):
+
+    def encode(self, pixel_values, continuous_relax=False, temperature=1.0, hard=False, KL=False):
         logits = self.encoder(pixel_values)
         quant_t, diff_t, id_t = self.quantizer.forward_(logits, continuous_relax, temperature, hard)
         quant_t = quant_t.permute(0, 3, 1, 2)
         if not continuous_relax or KL:
             diff_t = diff_t.unsqueeze(0)
         else:
-            diff_t = torch.zeros_like(diff_t).unsqueeze(0) # placeholder to return right shape 
-        return quant_t, diff_t , id_t
-    
+            diff_t = torch.zeros_like(diff_t).unsqueeze(0)  # placeholder to return right shape
+        return quant_t, diff_t, id_t
+
     def decode(self, code):
         return self.decoder(code)
 
@@ -496,8 +501,14 @@ class VQVAE(nn.Module):
         return dec
 
 
+class LayerNorm(nn.LayerNorm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+    def forward(self, x):
+        return super().forward(x / (x.abs().max().detach()/8))
+
 class CogViewAttention(nn.Module):
-    def __init__(self, config, is_cross_attention=False):
+    def __init__(self, config):
         super().__init__()
 
         max_positions = config.max_position_embeddings
@@ -518,14 +529,7 @@ class CogViewAttention(nn.Module):
                 f"`embed_dim` must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
             )
 
-        self.scale_attn_weights = config.scale_attn_weights
-        self.is_cross_attention = is_cross_attention
-
-        if self.is_cross_attention:
-            self.c_attn = Conv1D(2 * self.embed_dim, self.embed_dim)
-            self.q_attn = Conv1D(self.embed_dim, self.embed_dim)
-        else:
-            self.c_attn = Conv1D(3 * self.embed_dim, self.embed_dim)
+        self.c_attn = nn.Linear(self.embed_dim, 3 * self.embed_dim)
         self.c_proj = Conv1D(self.embed_dim, self.embed_dim)
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
@@ -549,16 +553,8 @@ class CogViewAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
+        query = query / math.sqrt(query.shape[-1])
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
-
-        if self.scale_attn_weights:
-            attn_weights = attn_weights / (float(value.size(-1)) ** 0.5)
-
-        if not self.is_cross_attention:
-            # if only "normal" attention layer implements causal mask
-            query_length, key_length = query.size(-2), key.size(-2)
-            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
-            attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
 
         if attention_mask is not None:
             # Apply the attention mask
@@ -597,27 +593,14 @@ class CogViewAttention(nn.Module):
         layer_past=None,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         use_cache=False,
         output_attentions=False,
     ):
-        if encoder_hidden_states is not None:
-            if not hasattr(self, "q_attn"):
-                raise ValueError(
-                    "If class is used as cross attention, the weights `q_attn` have to be defined. "
-                    "Please make sure to instantiate class with `CogViewAttention(..., is_cross_attention=True)`."
-                )
+        query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
 
-            query = self.q_attn(hidden_states)
-            key, value = self.c_attn(encoder_hidden_states).split(self.split_size, dim=2)
-            attention_mask = encoder_attention_mask
-        else:
-            query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
-
-        query = self._split_heads(query, self.num_heads, self.head_dim)
-        key = self._split_heads(key, self.num_heads, self.head_dim)
-        value = self._split_heads(value, self.num_heads, self.head_dim)
+        query = self._split_heads(hidden_states, self.num_heads, self.head_dim)
+        key = self._split_heads(hidden_states, self.num_heads, self.head_dim)
+        value = self._split_heads(hidden_states, self.num_heads, self.head_dim)
 
         if layer_past is not None:
             past_key, past_value = layer_past
@@ -646,8 +629,8 @@ class CogViewMLP(nn.Module):
     def __init__(self, intermediate_size, config):
         super().__init__()
         embed_dim = config.hidden_size
-        self.c_fc = Conv1D(intermediate_size, embed_dim)
-        self.c_proj = Conv1D(embed_dim, intermediate_size)
+        self.c_fc = nn.Linear(embed_dim, intermediate_size)
+        self.c_proj = nn.Linear(intermediate_size, embed_dim)
         self.act = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
@@ -665,13 +648,14 @@ class CogViewBlock(nn.Module):
         hidden_size = config.hidden_size
         inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
 
-        self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.attn = CogViewAttention(config)
-        self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.post_attn_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
-        if config.add_cross_attention:
-            self.crossattention = CogViewAttention(config, is_cross_attention=True)
-            self.ln_cross_attn = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.scale_normalization = config.scale_normalization
+        if self.scale_normalization:
+            self.scale_layernorm_1 = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+            self.scale_layernorm_2 = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         self.mlp = CogViewMLP(inner_dim, config)
 
@@ -681,13 +665,11 @@ class CogViewBlock(nn.Module):
         layer_past=None,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         use_cache=False,
         output_attentions=False,
     ):
         residual = hidden_states
-        hidden_states = self.ln_1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         attn_outputs = self.attn(
             hidden_states,
             layer_past=layer_past,
@@ -698,34 +680,20 @@ class CogViewBlock(nn.Module):
         )
         attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attn_outputs[1:]
+
+        if self.scale_normalization:
+            attn_output = self.scale_layernorm_1(attn_output)
+
         # residual connection
         hidden_states = attn_output + residual
 
-        if encoder_hidden_states is not None:
-            # add one self-attention block for cross-attention
-            if not hasattr(self, "crossattention"):
-                raise ValueError(
-                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with "
-                    "cross-attention layers by setting `config.add_cross_attention=True`"
-                )
-            residual = hidden_states
-            hidden_states = self.ln_cross_attn(hidden_states)
-            cross_attn_outputs = self.crossattention(
-                hidden_states,
-                attention_mask=attention_mask,
-                head_mask=head_mask,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask,
-                output_attentions=output_attentions,
-            )
-            attn_output = cross_attn_outputs[0]
-            # residual connection
-            hidden_states = residual + attn_output
-            outputs = outputs + cross_attn_outputs[2:]  # add cross attentions if we output attention weights
-
         residual = hidden_states
-        hidden_states = self.ln_2(hidden_states)
+        hidden_states = self.post_attn_layernorm(hidden_states)
         feed_forward_hidden_states = self.mlp(hidden_states)
+
+        if self.scale_normalization:
+            feed_forward_hidden_states = self.scale_layernorm_2(feed_forward_hidden_states)
+
         # residual connection
         hidden_states = residual + feed_forward_hidden_states
 
@@ -784,7 +752,7 @@ class CogViewModel(CogViewPreTrainedModel):
 
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([CogViewBlock(config) for _ in range(config.num_hidden_layers)])
-        self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         self.init_weights()
 
@@ -850,12 +818,9 @@ class CogViewModel(CogViewPreTrainedModel):
         input_ids=None,
         past_key_values=None,
         attention_mask=None,
-        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -882,8 +847,6 @@ class CogViewModel(CogViewPreTrainedModel):
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        if token_type_ids is not None:
-            token_type_ids = token_type_ids.view(-1, input_shape[-1])
         if position_ids is not None:
             position_ids = position_ids.view(-1, input_shape[-1])
 
@@ -915,17 +878,6 @@ class CogViewModel(CogViewPreTrainedModel):
             attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
             attention_mask = (1.0 - attention_mask) * -10000.0
 
-        # If a 2D ou 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.config.add_cross_attention and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        else:
-            encoder_attention_mask = None
-
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
@@ -936,10 +888,6 @@ class CogViewModel(CogViewPreTrainedModel):
             inputs_embeds = self.wte(input_ids)
         position_embeds = self.wpe(position_ids)
         hidden_states = inputs_embeds + position_embeds
-
-        if token_type_ids is not None:
-            token_type_embeds = self.wte(token_type_ids)
-            hidden_states = hidden_states + token_type_embeds
 
         hidden_states = self.drop(hidden_states)
 
@@ -987,8 +935,6 @@ class CogViewModel(CogViewPreTrainedModel):
                     None,
                     attention_mask,
                     head_mask[i],
-                    encoder_hidden_states,
-                    encoder_attention_mask,
                 )
             else:
                 outputs = block(
@@ -996,8 +942,6 @@ class CogViewModel(CogViewPreTrainedModel):
                     layer_past=layer_past,
                     attention_mask=attention_mask,
                     head_mask=head_mask[i],
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
                     use_cache=use_cache,
                     output_attentions=output_attentions,
                 )
@@ -1008,8 +952,6 @@ class CogViewModel(CogViewPreTrainedModel):
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
-                if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (outputs[3 if use_cache else 2],)
 
             # Model Parallel: If it's the last layer for that device, put things on the next device
             if self.model_parallel:
@@ -1032,7 +974,6 @@ class CogViewModel(CogViewPreTrainedModel):
             past_key_values=presents,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
-            cross_attentions=all_cross_attentions,
         )
 
 
@@ -1123,12 +1064,9 @@ class CogViewForCausalLM(CogViewPreTrainedModel):
         input_ids=None,
         past_key_values=None,
         attention_mask=None,
-        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         labels=None,
         use_cache=None,
         output_attentions=None,
@@ -1147,12 +1085,9 @@ class CogViewForCausalLM(CogViewPreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1186,7 +1121,6 @@ class CogViewForCausalLM(CogViewPreTrainedModel):
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
-            cross_attentions=transformer_outputs.cross_attentions,
         )
 
     @staticmethod
