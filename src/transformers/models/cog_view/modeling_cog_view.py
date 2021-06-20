@@ -604,9 +604,9 @@ class CogViewAttention(nn.Module):
     ):
         query, key, value = self.qkv_proj(hidden_states).split(self.split_size, dim=2)
 
-        query = self._split_heads(hidden_states, self.num_heads, self.head_dim)
-        key = self._split_heads(hidden_states, self.num_heads, self.head_dim)
-        value = self._split_heads(hidden_states, self.num_heads, self.head_dim)
+        query = self._split_heads(query, self.num_heads, self.head_dim)
+        key = self._split_heads(key, self.num_heads, self.head_dim)
+        value = self._split_heads(value, self.num_heads, self.head_dim)
 
         if layer_past is not None:
             past_key, past_value = layer_past
