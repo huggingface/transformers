@@ -14,8 +14,9 @@
 # limitations under the License.
 """ Flax Wav2Vec2 model. """
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
+import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
@@ -24,7 +25,7 @@ from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, ModelOutput
 from ...modeling_flax_outputs import FlaxBaseModelOutput
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel
 from ...utils import logging
@@ -32,6 +33,36 @@ from .configuration_wav2vec2 import Wav2Vec2Config
 
 
 logger = logging.get_logger(__name__)
+
+
+@flax.struct.dataclass
+class FlaxWav2Vec2BaseModelOutput(ModelOutput):
+    """
+    Output type of :class:`~transformers.FlaxWav2Vec2BaseModelOutput`, with potential hidden states and attentions.
+
+    Args:
+        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        extract_features (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, conv_dim[-1])`):
+            Sequence of extracted feature vectors of the last convolutional layer of the model.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    last_hidden_state: jnp.ndarray = None
+    extract_features: jnp.ndarray = None
+    hidden_states: Optional[Tuple[jnp.ndarray]] = None
+    attentions: Optional[Tuple[jnp.ndarray]] = None
+
 
 WAV_2_VEC_2_START_DOCSTRING = r"""
     Wav2Vec2 was proposed in `wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations
@@ -91,10 +122,12 @@ class FlaxWav2Vec2LayerNormConvLayer(nn.Module):
         self.out_conv_dim = self.config.conv_dim[self.layer_id]
 
         self.conv = nn.Conv(
-            features=self.out_conv_dim,
+            features=self.config.conv_dim[self.layer_id],
             kernel_size=self.config.conv_kernel[self.layer_id],
+            strides=(self.config.conv_stride[self.layer_id],),
             use_bias=self.config.conv_bias,
-            kernel_init=jax.nn.initializers(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.he_normal(dtype=self.dtype),
+            padding="VALID",
             dtype=self.dtype,
         )
         self.layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
@@ -102,11 +135,7 @@ class FlaxWav2Vec2LayerNormConvLayer(nn.Module):
 
     def __call__(self, hidden_states):
         hidden_states = self.conv(hidden_states)
-
-        hidden_states = hidden_states.transpose(-2, -1)
         hidden_states = self.layer_norm(hidden_states)
-        hidden_states = hidden_states.transpose(-2, -1)
-
         hidden_states = self.activation(hidden_states)
         return hidden_states
 
@@ -116,11 +145,12 @@ class FlaxWav2Vec2PositionalConvEmbedding(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
+        self.padding = self.config.num_conv_pos_embeddings // 2
         self.conv = nn.Conv(
             features=self.config.hidden_size,
             kernel_size=self.config.num_conv_pos_embeddings,
-            kernel_init=jax.nn.initializers(self.config.initializer_range, self.dtype),
-            padding=(self.config.num_conv_pos_embeddings // 2,),
+            kernel_init=jax.nn.initializers.he_normal(dtype=self.dtype),
+            padding="VALID",
             feature_group_count=self.config.num_conv_pos_embeddings,
             dtype=self.dtype,
         )  # TODO (PS): weigh_norm ?
@@ -128,14 +158,15 @@ class FlaxWav2Vec2PositionalConvEmbedding(nn.Module):
         self.num_pad_remove = 1 if self.config.num_conv_pos_embeddings % 2 == 0 else 0
 
     def __call__(self, hidden_states):
-        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = hidden_states.transpose((0, 1, 2))
+        hidden_states = jnp.pad(hidden_states, ((0, 0), (self.padding, self.padding), (0, 0)))
 
         hidden_states = self.conv(hidden_states)
         if self.num_pad_remove > 0:
-            hidden_states = hidden_states[:, :, : -self.num_pad_remove]
+            hidden_states = hidden_states[:, :-self.num_pad_remove, :]
         hidden_states = self.activation(hidden_states)
 
-        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = hidden_states.transpose((0, 1, 2))
         return hidden_states
 
 
@@ -147,22 +178,22 @@ class FlaxWav2Vec2FeatureExtractor(nn.Module):
 
     def setup(self):
         config = self.config
-        if config.feat_extract_norm == "group":
-            raise NotImplementedError(
-                "At the moment flax wav2vec2 only supports ``config.feat_extact_norm == 'layer'``"
-            )
-        elif config.feat_extract_norm == "layer":
+        if config.feat_extract_norm == "layer":
             self.conv_layers = [
                 FlaxWav2Vec2LayerNormConvLayer(config, layer_id=i, dtype=self.dtype)
                 for i in range(config.num_feat_extract_layers)
             ]
+        elif config.feat_extract_norm == "group":
+            raise NotImplementedError(
+                "At the moment only ``config.feat_extact_norm == 'layer'`` is supported"
+            )
         else:
             raise ValueError(
                 f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
             )
 
     def __call__(self, input_values):
-        hidden_states = input_values[:, None]
+        hidden_states = input_values[:, :, None]
         for conv_layer in self.conv_layers:
             hidden_states = conv_layer(hidden_states)
         return hidden_states
@@ -181,10 +212,10 @@ class FlaxWav2Vec2FeatureProjection(nn.Module):
         )
         self.dropout = nn.Dropout(rate=self.config.feat_proj_dropout)
 
-    def __call__(self, hidden_states):
+    def __call__(self, hidden_states, deterministic=True):
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.projection(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         return hidden_states
 
 
@@ -205,30 +236,16 @@ class FlaxWav2Vec2Attention(nn.Module):
             self.head_dim * self.num_heads == self.embed_dim
         ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
 
-        self.k_proj = nn.Dense(
+        dense = partial(
+            nn.Dense,
             self.embed_dim,
             use_bias=self.bias,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
         )
-        self.v_proj = nn.Dense(
-            self.embed_dim,
-            use_bias=self.bias,
-            dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-        )
-        self.q_proj = nn.Dense(
-            self.embed_dim,
-            use_bias=self.bias,
-            dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-        )
-        self.out_proj = nn.Dense(
-            self.embed_dim,
-            use_bias=self.bias,
-            dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-        )
+
+        self.q_proj, self.k_proj, self.v_proj = dense(), dense(), dense()
+        self.out_proj = dense()
 
         self.dropout_layer = nn.Dropout(rate=self.dropout)
 
@@ -243,13 +260,44 @@ class FlaxWav2Vec2Attention(nn.Module):
     def _merge_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.embed_dim,))
 
+    @nn.compact
+    def _concatenate_to_cache(self, key, value, query, attention_mask):
+        """
+        This function takes projected key, value states from a single input token and concatenates the states to cached
+        states from previous steps. This function is slighly adapted from the official Flax repository:
+        https://github.com/google/flax/blob/491ce18759622506588784b4fca0e4bf05f8c8cd/flax/linen/attention.py#L252
+        """
+        # detect if we're initializing by absence of existing cache data.
+        is_initialized = self.has_variable("cache", "cached_key")
+        cached_key = self.variable("cache", "cached_key", jnp.zeros, key.shape, key.dtype)
+        cached_value = self.variable("cache", "cached_value", jnp.zeros, value.shape, value.dtype)
+        cache_index = self.variable("cache", "cache_index", lambda: jnp.array(0, dtype=jnp.int32))
+
+        if is_initialized:
+            *batch_dims, max_length, num_heads, depth_per_head = cached_key.value.shape
+            # update key, value caches with our new 1d spatial slices
+            cur_index = cache_index.value
+            indices = (0,) * len(batch_dims) + (cur_index, 0, 0)
+            key = lax.dynamic_update_slice(cached_key.value, key, indices)
+            value = lax.dynamic_update_slice(cached_value.value, value, indices)
+            cached_key.value = key
+            cached_value.value = value
+            num_updated_cache_vectors = query.shape[1]
+            cache_index.value = cache_index.value + num_updated_cache_vectors
+            # causal mask for cached decoder self-attention: our single query position should only attend to those key positions that have already been generated and cached, not the remaining zero elements.
+            pad_mask = jnp.broadcast_to(
+                jnp.arange(max_length) < cur_index + num_updated_cache_vectors,
+                tuple(batch_dims) + (1, num_updated_cache_vectors, max_length),
+            )
+            attention_mask = combine_masks(pad_mask, attention_mask)
+        return key, value, attention_mask
+
     def __call__(
         self,
         hidden_states: jnp.ndarray,
         key_value_states: Optional[jnp.ndarray] = None,
         attention_mask: Optional[jnp.ndarray] = None,
-        layer_head_mask: Optional[jnp.ndarray] = None,
-        output_attentions: bool = False,
+        init_cache: bool = False,
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
         """Input shape: Batch x Time x Channel"""
@@ -257,7 +305,7 @@ class FlaxWav2Vec2Attention(nn.Module):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        batch_size, tgt_len, embed_dim = hidden_states.shape
+        batch_size = hidden_states.shape[0]
 
         # get query proj
         query_states = self.q_proj(hidden_states)
@@ -275,10 +323,17 @@ class FlaxWav2Vec2Attention(nn.Module):
         key_states = self._split_heads(key_states)
         value_states = self._split_heads(value_states)
 
-        # prepare causal attention mask
+        # handle cache prepare causal attention mask
         if self.causal:
             query_length, key_length = query_states.shape[1], key_states.shape[1]
-            causal_mask = self.causal_mask[:, :, :query_length, :key_length]
+            if self.has_variable("cache", "cached_key"):
+                mask_shift = self.variables["cache"]["cache_index"]
+                max_decoder_length = self.variables["cache"]["cached_key"].shape[1]
+                causal_mask = lax.dynamic_slice(
+                    self.causal_mask, (0, 0, mask_shift, 0), (1, 1, query_length, max_decoder_length)
+                )
+            else:
+                causal_mask = self.causal_mask[:, :, :query_length, :key_length]
             causal_mask = jnp.broadcast_to(causal_mask, (batch_size,) + causal_mask.shape[1:])
 
         # combine masks if needed
@@ -289,6 +344,13 @@ class FlaxWav2Vec2Attention(nn.Module):
             attention_mask = causal_mask
         elif attention_mask is not None:
             attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
+
+        # During fast autoregressive decoding, we feed one position at a time,
+        # and cache the keys and values step by step.
+        if self.causal and (self.has_variable("cache", "cached_key") or init_cache):
+            key_states, value_states, attention_mask = self._concatenate_to_cache(
+                key_states, value_states, query_states, attention_mask
+            )
 
         # Convert the boolean attention mask to an attention bias.
         if attention_mask is not None:
@@ -364,6 +426,7 @@ class FlaxWav2Vec2EncoderLayerStableLayerNorm(nn.Module):
 
     def setup(self):
         self.attention = FlaxWav2Vec2Attention(
+            config=self.config,
             embed_dim=self.config.hidden_size,
             num_heads=self.config.num_attention_heads,
             dropout=self.config.attention_dropout,
@@ -374,13 +437,13 @@ class FlaxWav2Vec2EncoderLayerStableLayerNorm(nn.Module):
         self.feed_forward = FlaxWav2Vec2FeedForward(self.config)
         self.final_layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps)
 
-    def __call__(self, hidden_states, attention_mask=None, output_attentions=False):
+    def __call__(self, hidden_states, attention_mask=None, deterministic=True, output_attentions=False):
         attn_residual = hidden_states
         hidden_states = self.layer_norm(hidden_states)
         hidden_states, attn_weights, _ = self.attention(
-            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+            hidden_states, attention_mask=attention_mask, deterministic=deterministic, output_attentions=output_attentions
         )
-        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         hidden_states = attn_residual + hidden_states
         hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
 
@@ -406,6 +469,7 @@ class FlaxWav2Vec2EncoderLayerStableLayerNormCollection(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
+        deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -417,7 +481,7 @@ class FlaxWav2Vec2EncoderLayerStableLayerNormCollection(nn.Module):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            layer_outputs = layer(hidden_states, attention_mask, output_attentions=output_attentions)
+            layer_outputs = layer(hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -451,13 +515,14 @@ class FlaxWav2Vec2StableLayerNormEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
+        deterministic=True,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
     ):
         position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
-        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
 
         return self.layers(
             hidden_states,
@@ -473,14 +538,14 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
-
     config: Wav2Vec2Config
     dtype: jnp.dtype = jnp.float32
+    module_class = None
 
     def __init__(
         self,
         config: Wav2Vec2Config,
-        input_shape: Tuple = (1, 1),
+        input_shape: Tuple = (1, 1024),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         **kwargs,
@@ -510,7 +575,7 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     def __call__(
         self,
-        input_ids,
+        input_values,
         attention_mask=None,
         params: dict = None,
         dropout_rng: jax.random.PRNGKey = None,
@@ -525,7 +590,7 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        batch_size, sequence_length = input_ids.shape
+        batch_size, sequence_length = input_values.shape
 
         if attention_mask is None:
             attention_mask = jnp.ones((batch_size, sequence_length))
@@ -539,7 +604,7 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
 
         return self.module.apply(
             inputs,
-            jnp.array(input_ids, dtype="i4"),
+            jnp.array(input_values, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),
             not train,
             False,
@@ -550,26 +615,112 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
         )
 
 
+class FlaxWav2Vec2Module(nn.Module):
+    config: Wav2Vec2Config
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.feature_extractor = FlaxWav2Vec2FeatureExtractor(self.config, dtype=self.dtype)
+        self.feature_projection = FlaxWav2Vec2FeatureProjection(self.config, dtype=self.dtype)
+
+        if self.config.do_stable_layer_norm:
+            self.encoder = FlaxWav2Vec2StableLayerNormEncoder(self.config, dtype=self.dtype)
+        else:
+            raise NotImplementedError("``config.do_stable_layer_norm is False`` is currently not supported.")
+
+#        self.masked_spec_embed = None
+
+    def __call__(
+        self,
+        input_values,
+        attention_mask=None,
+        deterministic=True,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        """
+
+        Returns:
+
+        Example::
+
+            >>> from transformers import Wav2Vec2Processor, Wav2Vec2Model
+            >>> from datasets import load_dataset
+            >>> import soundfile as sf
+
+            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
+            >>> model = FlaxWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
+
+            >>> def map_to_array(batch):
+            >>>     speech, _ = sf.read(batch["file"])
+            >>>     batch["speech"] = speech
+            >>>     return batch
+
+            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+            >>> ds = ds.map(map_to_array)
+
+            >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
+            >>> hidden_states = model(input_values).last_hidden_state
+        """
+        extract_features = self.feature_extractor(input_values)
+
+        if attention_mask is not None:
+            # compute real output lengths according to convolution formula
+            output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1).astype("i4"))
+
+            attention_mask = jnp.zeros(extract_features.shape[:2], dtype=self.dtype)
+
+            # these two operations makes sure that all values
+            # before the output lengths indices are attended to
+            attention_mask = jax.ops.index_update(attention_mask, jax.ops.index[:, output_lengths - 1], 1)
+            attention_mask = jnp.flip(jnp.flip(attention_mask, -1).cumsum(-1), -1).astype("bool")
+
+        hidden_states = self.feature_projection(extract_features, deterministic=deterministic)
+
+        encoder_outputs = self.encoder(
+            hidden_states,
+            attention_mask=attention_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = encoder_outputs[0]
+
+        if not return_dict:
+            return (hidden_states, extract_features) + encoder_outputs[1:]
+
+        return FlaxWav2Vec2BaseModelOutput(
+            last_hidden_state=hidden_states,
+            extract_features=extract_features,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+
+    def _get_feat_extract_output_lengths(self, input_lengths: Union[jnp.ndarray, int]):
+        """
+        Computes the output length of the convolutional layers
+        """
+
+        def _conv_out_length(input_length, kernel_size, stride):
+            # 1D convolutional layer output length formula taken
+            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+            return (input_length - kernel_size) // stride + 1
+
+        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
+            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
+
+        return input_lengths
+
+
 @add_start_docstrings(
     "The bare Wav2Vec2 Model transformer outputting raw hidden-states without any specific head on top.",
     WAV_2_VEC_2_START_DOCSTRING,
 )
 class FlaxWav2Vec2Model(FlaxWav2Vec2PreTrainedModel):
-    config: Wav2Vec2Config
-    dtype: jnp.dtype = jnp.float32
-
-    def setup(self):
-        self.feature_extractor = FlaxWav2Vec2FeatureExtractor(self.config)
-        self.feature_projection = FlaxWav2Vec2FeatureProjection(self.config)
-
-        #        self.masked_spec_embed = # To Do
-
-        self.encoder = FlaxWav2Vec2StableLayerNormEncoder(self.config)
-
-        self.init_weights()
-
-    def __call__(self):
-        pass
+    module_class = FlaxWav2Vec2Module
 
 
 class FlaxWav2Vec2ForCTC(FlaxWav2Vec2PreTrainedModel):
