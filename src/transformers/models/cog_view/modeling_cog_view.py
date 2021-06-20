@@ -854,7 +854,7 @@ class CogViewModel(CogViewPreTrainedModel):
 
         if past_key_values is None:
             past_length = 0
-            past_key_values = tuple([None] * len(self.h))
+            past_key_values = tuple([None] * len(self.blocks))
         else:
             past_length = past_key_values[0][0].size(-2)
         if position_ids is None:
