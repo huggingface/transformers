@@ -133,6 +133,7 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
+    "models.cog_view": ["COG_VIEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "CogViewConfig", "CogViewTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -330,6 +331,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.cog_view"].append("CogViewTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
@@ -490,6 +492,22 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
+
+    _import_structure["models.cog_view"].extend(
+        [
+            "COG_VIEW_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CogViewForMaskedLM",
+            "CogViewForCausalLM",
+            "CogViewForMultipleChoice",
+            "CogViewForQuestionAnswering",
+            "CogViewForSequenceClassification",
+            "CogViewForTokenClassification",
+            "CogViewLayer",
+            "CogViewModel",
+            "CogViewPreTrainedModel",
+            "load_tf_weights_in_cog_view",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1729,6 +1747,7 @@ if TYPE_CHECKING:
         CLIPTokenizer,
         CLIPVisionConfig,
     )
+    from .models.cog_view import COG_VIEW_PRETRAINED_CONFIG_ARCHIVE_MAP, CogViewConfig, CogViewTokenizer
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.cpm import CpmTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
@@ -1883,6 +1902,7 @@ if TYPE_CHECKING:
         from .models.big_bird import BigBirdTokenizerFast
         from .models.camembert import CamembertTokenizerFast
         from .models.clip import CLIPTokenizerFast
+        from .models.cog_view import CogViewTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.deberta import DebertaTokenizerFast
         from .models.distilbert import DistilBertTokenizerFast
@@ -1951,6 +1971,7 @@ if TYPE_CHECKING:
         from .utils.dummy_timm_objects import *
 
     if is_torch_available():
+
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -2123,6 +2144,19 @@ if TYPE_CHECKING:
             CLIPPreTrainedModel,
             CLIPTextModel,
             CLIPVisionModel,
+        )
+        from .models.cog_view import (
+            COG_VIEW_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CogViewForCausalLM,
+            CogViewForMaskedLM,
+            CogViewForMultipleChoice,
+            CogViewForQuestionAnswering,
+            CogViewForSequenceClassification,
+            CogViewForTokenClassification,
+            CogViewLayer,
+            CogViewModel,
+            CogViewPreTrainedModel,
+            load_tf_weights_in_cog_view,
         )
         from .models.convbert import (
             CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

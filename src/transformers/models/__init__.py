@@ -31,6 +31,7 @@ from . import (
     blenderbot_small,
     camembert,
     clip,
+    cog_view,
     convbert,
     cpm,
     ctrl,
