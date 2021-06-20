@@ -532,7 +532,7 @@ class CogViewAttention(nn.Module):
             )
 
         self.qkv_proj = nn.Linear(self.embed_dim, 3 * self.embed_dim)
-        self.out_proj = Conv1D(self.embed_dim, self.embed_dim)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
@@ -555,8 +555,12 @@ class CogViewAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
-        query = query / math.sqrt(query.shape[-1])
+        query = query / math.sqrt(self.head_dim)
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
+
+        query_length, key_length = query.size(-2), key.size(-2)
+        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
+        attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
 
         if attention_mask is not None:
             # Apply the attention mask
