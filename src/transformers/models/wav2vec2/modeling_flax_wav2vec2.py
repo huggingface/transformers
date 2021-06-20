@@ -18,10 +18,10 @@ from typing import Optional, Tuple, Union
 
 import flax
 import flax.linen as nn
+from functools import partial
 import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict
-from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 
@@ -219,14 +219,11 @@ class FlaxWav2Vec2FeatureProjection(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartAttention with Bart->Wav2Vec2
 class FlaxWav2Vec2Attention(nn.Module):
     config: Wav2Vec2Config
     embed_dim: int
     num_heads: int
     dropout: float = 0.0
-    is_decoder: bool = False
-    causal: bool = False
     bias: bool = True
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -241,7 +238,7 @@ class FlaxWav2Vec2Attention(nn.Module):
             self.embed_dim,
             use_bias=self.bias,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
         )
 
         self.q_proj, self.k_proj, self.v_proj = dense(), dense(), dense()
@@ -249,48 +246,11 @@ class FlaxWav2Vec2Attention(nn.Module):
 
         self.dropout_layer = nn.Dropout(rate=self.dropout)
 
-        if self.causal:
-            self.causal_mask = make_causal_mask(
-                jnp.ones((1, self.config.max_position_embeddings), dtype="bool"), dtype="bool"
-            )
-
     def _split_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.num_heads, self.head_dim))
 
     def _merge_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.embed_dim,))
-
-    @nn.compact
-    def _concatenate_to_cache(self, key, value, query, attention_mask):
-        """
-        This function takes projected key, value states from a single input token and concatenates the states to cached
-        states from previous steps. This function is slighly adapted from the official Flax repository:
-        https://github.com/google/flax/blob/491ce18759622506588784b4fca0e4bf05f8c8cd/flax/linen/attention.py#L252
-        """
-        # detect if we're initializing by absence of existing cache data.
-        is_initialized = self.has_variable("cache", "cached_key")
-        cached_key = self.variable("cache", "cached_key", jnp.zeros, key.shape, key.dtype)
-        cached_value = self.variable("cache", "cached_value", jnp.zeros, value.shape, value.dtype)
-        cache_index = self.variable("cache", "cache_index", lambda: jnp.array(0, dtype=jnp.int32))
-
-        if is_initialized:
-            *batch_dims, max_length, num_heads, depth_per_head = cached_key.value.shape
-            # update key, value caches with our new 1d spatial slices
-            cur_index = cache_index.value
-            indices = (0,) * len(batch_dims) + (cur_index, 0, 0)
-            key = lax.dynamic_update_slice(cached_key.value, key, indices)
-            value = lax.dynamic_update_slice(cached_value.value, value, indices)
-            cached_key.value = key
-            cached_value.value = value
-            num_updated_cache_vectors = query.shape[1]
-            cache_index.value = cache_index.value + num_updated_cache_vectors
-            # causal mask for cached decoder self-attention: our single query position should only attend to those key positions that have already been generated and cached, not the remaining zero elements.
-            pad_mask = jnp.broadcast_to(
-                jnp.arange(max_length) < cur_index + num_updated_cache_vectors,
-                tuple(batch_dims) + (1, num_updated_cache_vectors, max_length),
-            )
-            attention_mask = combine_masks(pad_mask, attention_mask)
-        return key, value, attention_mask
 
     def __call__(
         self,
@@ -302,55 +262,18 @@ class FlaxWav2Vec2Attention(nn.Module):
     ) -> Tuple[jnp.ndarray]:
         """Input shape: Batch x Time x Channel"""
 
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
-        batch_size = hidden_states.shape[0]
-
         # get query proj
         query_states = self.q_proj(hidden_states)
-        # get key, value proj
-        if is_cross_attention:
-            # cross_attentions
-            key_states = self.k_proj(key_value_states)
-            value_states = self.v_proj(key_value_states)
-        else:
-            # self_attention
-            key_states = self.k_proj(hidden_states)
-            value_states = self.v_proj(hidden_states)
+        # self_attention
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
 
         query_states = self._split_heads(query_states)
         key_states = self._split_heads(key_states)
         value_states = self._split_heads(value_states)
 
-        # handle cache prepare causal attention mask
-        if self.causal:
-            query_length, key_length = query_states.shape[1], key_states.shape[1]
-            if self.has_variable("cache", "cached_key"):
-                mask_shift = self.variables["cache"]["cache_index"]
-                max_decoder_length = self.variables["cache"]["cached_key"].shape[1]
-                causal_mask = lax.dynamic_slice(
-                    self.causal_mask, (0, 0, mask_shift, 0), (1, 1, query_length, max_decoder_length)
-                )
-            else:
-                causal_mask = self.causal_mask[:, :, :query_length, :key_length]
-            causal_mask = jnp.broadcast_to(causal_mask, (batch_size,) + causal_mask.shape[1:])
-
-        # combine masks if needed
-        if attention_mask is not None and self.causal:
-            attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape)
-            attention_mask = combine_masks(attention_mask, causal_mask)
-        elif self.causal:
-            attention_mask = causal_mask
-        elif attention_mask is not None:
+        if attention_mask is not None:
             attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
-
-        # During fast autoregressive decoding, we feed one position at a time,
-        # and cache the keys and values step by step.
-        if self.causal and (self.has_variable("cache", "cached_key") or init_cache):
-            key_states, value_states, attention_mask = self._concatenate_to_cache(
-                key_states, value_states, query_states, attention_mask
-            )
 
         # Convert the boolean attention mask to an attention bias.
         if attention_mask is not None:
@@ -410,13 +333,13 @@ class FlaxWav2Vec2FeedForward(nn.Module):
         )
         self.output_dropout = nn.Dropout(rate=self.config.hidden_dropout)
 
-    def __call__(self, hidden_states):
+    def __call__(self, hidden_states, deterministic=True):
         hidden_states = self.intermediate_dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
-        hidden_states = self.intermediate_dropout(hidden_states)
+        hidden_states = self.intermediate_dropout(hidden_states, deterministic=deterministic)
 
         hidden_states = self.output_dense(hidden_states)
-        hidden_states = self.output_dropout(hidden_states)
+        hidden_states = self.output_dropout(hidden_states, deterministic=deterministic)
         return hidden_states
 
 
@@ -430,7 +353,6 @@ class FlaxWav2Vec2EncoderLayerStableLayerNorm(nn.Module):
             embed_dim=self.config.hidden_size,
             num_heads=self.config.num_attention_heads,
             dropout=self.config.attention_dropout,
-            is_decoder=False,
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps)
@@ -440,12 +362,10 @@ class FlaxWav2Vec2EncoderLayerStableLayerNorm(nn.Module):
     def __call__(self, hidden_states, attention_mask=None, deterministic=True, output_attentions=False):
         attn_residual = hidden_states
         hidden_states = self.layer_norm(hidden_states)
-        hidden_states, attn_weights, _ = self.attention(
-            hidden_states, attention_mask=attention_mask, deterministic=deterministic, output_attentions=output_attentions
-        )
+        hidden_states, attn_weights = self.attention(hidden_states, attention_mask=attention_mask, deterministic=deterministic)
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         hidden_states = attn_residual + hidden_states
-        hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
+        hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states), deterministic=deterministic)
 
         outputs = (hidden_states,)
 
@@ -607,7 +527,6 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
             jnp.array(input_values, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),
             not train,
-            False,
             output_attentions,
             output_hidden_states,
             return_dict,
