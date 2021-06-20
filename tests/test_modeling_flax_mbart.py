@@ -18,7 +18,8 @@ import numpy as np
 import timeout_decorator  # noqa
 
 from transformers import MBartConfig, is_flax_available
-from transformers.testing_utils import require_flax, slow
+from transformers.file_utils import cached_property
+from transformers.testing_utils import require_flax, require_sentencepiece, require_tokenizers, slow
 
 from .test_generation_flax_utils import FlaxGenerationTesterMixin
 from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
@@ -34,6 +35,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
+    from transformers import AutoTokenizer
     from transformers.models.mbart.modeling_flax_mbart import (
         FlaxMBartForConditionalGeneration,
         FlaxMBartForQuestionAnswering,
@@ -415,3 +417,41 @@ class FlaxMBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGeneration
             input_ids = np.ones((1, 1)) * model.config.eos_token_id
             outputs = model(input_ids)
             self.assertIsNotNone(outputs)
+
+
+@require_flax
+@require_sentencepiece
+@require_tokenizers
+class FlaxMBartModelIntegrationTest(unittest.TestCase):
+    src_text = [
+        " UN Chief Says There Is No Military Solution in Syria",
+    ]
+    expected_text = [
+        "Şeful ONU declară că nu există o soluţie militară în Siria",
+    ]
+    model_name = "facebook/mbart-large-en-ro"
+
+    @cached_property
+    def tokenizer(self):
+        return AutoTokenizer.from_pretrained(self.model_name)
+
+    @cached_property
+    def model(self):
+        model = FlaxMBartForConditionalGeneration.from_pretrained(self.model_name, from_pt=True)
+        return model
+
+    def _assert_generated_batch_equal_expected(self, **tokenizer_kwargs):
+        generated_words = self.translate_src_text(**tokenizer_kwargs)
+        self.assertListEqual(self.expected_text, generated_words)
+
+    def translate_src_text(self, **tokenizer_kwargs):
+        model_inputs = self.tokenizer(self.src_text, **tokenizer_kwargs, return_tensors="np")
+        generated_ids = self.model.generate(
+            model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2
+        )
+        generated_words = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        return generated_words
+
+    @slow
+    def test_batch_generation_en_ro(self):
+        self._assert_generated_batch_equal_expected()
