@@ -796,10 +796,10 @@ class CogViewModel(CogViewPreTrainedModel):
         torch.cuda.empty_cache()
 
     def get_input_embeddings(self):
-        return self.wte
+        return self.word_embeddings
 
     def set_input_embeddings(self, new_embeddings):
-        self.wte = new_embeddings
+        self.word_embeddings = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
         """
