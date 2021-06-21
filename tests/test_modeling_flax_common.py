@@ -21,8 +21,11 @@ from typing import List, Tuple
 import numpy as np
 
 import transformers
+from flax.core.frozen_dict import unfreeze
+from flax.traverse_util import flatten_dict
 from transformers import is_flax_available, is_torch_available
 from transformers.models.auto import get_values
+from transformers.pipelines import base
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 
 
@@ -32,7 +35,7 @@ if is_flax_available():
     import jax
     import jax.numpy as jnp
     import jaxlib.xla_extension as jax_xla
-    from transformers import FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING
+    from transformers import FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING, FLAX_MODEL_MAPPING
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
@@ -272,6 +275,28 @@ class FlaxModelTesterMixin:
                 outputs_loaded = model_loaded(**prepared_inputs_dict).to_tuple()
                 for output_loaded, output in zip(outputs_loaded, outputs):
                     self.assert_almost_equals(output_loaded, output, 1e-3)
+
+    def test_save_load_from_base(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        base_class = FLAX_MODEL_MAPPING[config.__class__]
+
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+            print(model_class)
+            model = base_class(config)
+            base_params = flatten_dict(unfreeze(model.params))
+
+            # check that all base model weights are loaded correctly
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                head_model = model_class.from_pretrained(tmpdirname)
+
+                base_param_from_head = flatten_dict(unfreeze(head_model.params[head_model.base_model_prefix]))
+
+                for key in base_param_from_head.keys():
+                    max_diff = (base_params[key] - base_param_from_head[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     @slow
     def test_jit_compilation(self):
