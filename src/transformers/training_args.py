@@ -149,7 +149,7 @@ class TrainingArguments:
         log_level (:obj:`str`, `optional`, defaults to ``passive``):
             Logger log level to use on the main node. Possible choices are the log levels as strings: 'debug', 'info',
             'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and lets the
-            application set the level. Defaults to 'passive'.
+            application set the level.
         log_level_replica (:obj:`str`, `optional`, defaults to ``passive``):
             Logger log level to use on replica nodes. Same choices as ``log_level``"
         log_on_each_node (:obj:`bool`, `optional`, defaults to :obj:`True`):
