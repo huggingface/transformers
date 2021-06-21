@@ -126,7 +126,10 @@ class FillMaskPipeline(Pipeline):
             if isinstance(targets, str):
                 targets = [targets]
 
-            vocab = self.tokenizer.vocab
+            try:
+                vocab = self.tokenizer.get_vocab()
+            except Exception:
+                vocab = {}
             target_ids = []
             for target in targets:
                 id_ = vocab.get(target, None)
