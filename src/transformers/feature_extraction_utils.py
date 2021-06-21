@@ -295,7 +295,7 @@ class FeatureExtractionMixin:
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
         os.makedirs(save_directory, exist_ok=True)
         # If we save using the predefined names, we can load using `from_pretrained`
-        output_feature_extractor_file = os.path.join(save_directory, FEATURE_EXTRACTOR_NAME)
+        output_feature_extractor_file = os.path.join(save_directory, "config.json")
 
         self.to_json_file(output_feature_extractor_file)
         logger.info(f"Configuration saved in {output_feature_extractor_file}")
