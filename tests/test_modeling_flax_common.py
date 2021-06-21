@@ -247,9 +247,6 @@ class FlaxModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            if model_class.__name__ != "FlaxBertModel":
-                continue
-
             with self.subTest(model_class.__name__):
                 model = model_class(config)
 
