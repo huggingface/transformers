@@ -21,8 +21,6 @@ from typing import List, Tuple
 import numpy as np
 
 import transformers
-from flax.core.frozen_dict import unfreeze
-from flax.traverse_util import flatten_dict
 from transformers import is_flax_available, is_torch_available
 from transformers.models.auto import get_values
 from transformers.pipelines import base
@@ -35,6 +33,8 @@ if is_flax_available():
     import jax
     import jax.numpy as jnp
     import jaxlib.xla_extension as jax_xla
+    from flax.core.frozen_dict import unfreeze
+    from flax.traverse_util import flatten_dict
     from transformers import FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING, FLAX_MODEL_MAPPING
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
