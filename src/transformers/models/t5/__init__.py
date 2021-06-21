@@ -20,11 +20,11 @@ from typing import TYPE_CHECKING
 
 from ...file_utils import (
     _BaseLazyModule,
+    is_flax_available,
     is_sentencepiece_available,
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
-    is_flax_available,
 )
 
 
@@ -94,11 +94,7 @@ if TYPE_CHECKING:
         )
 
     if is_flax_available():
-        from .modeling_flax_t5 import (
-            FlaxT5ForConditionalGeneration,
-            FlaxT5Model,
-            FlaxT5PreTrainedModel,
-        )
+        from .modeling_flax_t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
 
 
 else:

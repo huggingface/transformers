@@ -12,18 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
-import copy
-import tempfile
 import unittest
 
+import numpy as np
+
 from transformers import is_flax_available
-from transformers.file_utils import cached_property
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_flax, slow
+from transformers.testing_utils import require_flax, require_sentencepiece, require_tokenizers, slow
 
 from .test_configuration_common import ConfigTester
-
 from .test_generation_flax_utils import FlaxGenerationTesterMixin
 from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
@@ -38,8 +34,10 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
-    from transformers import T5Tokenizer, T5Config
-    from transformers.models.t5.modeling_flax_t5 import FlaxT5ForConditionalGeneration, FlaxT5Model
+    import optax
+    from flax.training.common_utils import onehot
+    from transformers import ByT5Tokenizer, T5Config, T5Tokenizer
+    from transformers.models.t5.modeling_flax_t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, shift_tokens_right
 
 
 class FlaxT5ModelTester:
@@ -148,6 +146,45 @@ class FlaxT5ModelTester:
         self.parent.assertEqual(encoder_output.shape, (self.batch_size, self.encoder_seq_length, self.hidden_size))
         self.parent.assertEqual(decoder_output.shape, (self.batch_size, self.decoder_seq_length, self.hidden_size))
 
+    def check_use_cache_forward_with_attn_mask(self, model_class_name, config, inputs_dict):
+        max_decoder_length = 20
+        model = model_class_name(config)
+
+        encoder_outputs = model.encode(inputs_dict["input_ids"])
+
+        decoder_input_ids, decoder_attention_mask = (
+            inputs_dict["decoder_input_ids"],
+            inputs_dict["decoder_attention_mask"],
+        )
+
+        decoder_attention_mask_cache = jnp.concatenate(
+            [
+                decoder_attention_mask,
+                jnp.zeros((decoder_attention_mask.shape[0], max_decoder_length - decoder_attention_mask.shape[1])),
+            ],
+            axis=-1,
+        )
+
+        past_key_values = model.init_cache(decoder_input_ids.shape[0], max_decoder_length, encoder_outputs)
+
+        outputs_cache = model.decode(
+            decoder_input_ids[:, :-1],
+            encoder_outputs,
+            decoder_attention_mask=decoder_attention_mask_cache,
+            past_key_values=past_key_values,
+        )
+        outputs_cache_next = model.decode(
+            decoder_input_ids[:, -1:],
+            encoder_outputs,
+            past_key_values=outputs_cache.past_key_values,
+            decoder_attention_mask=decoder_attention_mask_cache,
+        )
+
+        outputs = model.decode(decoder_input_ids, encoder_outputs, decoder_attention_mask=decoder_attention_mask)
+
+        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -193,11 +230,182 @@ class FlaxT5ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.
         config.feed_forward_proj = "gated-gelu"
         self.model_tester.create_and_check_model(config, *config_and_inputs[1:])
 
+    def test_use_cache_forward_with_attn_mask(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        for model_class in self.all_model_classes:
+            self.model_tester.check_use_cache_forward_with_attn_mask(model_class, config, inputs_dict)
+
+    def test_encode(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                model = model_class(config)
+
+                @jax.jit
+                def encode_jitted(input_ids, attention_mask=None, **kwargs):
+                    return model.encode(input_ids=input_ids, attention_mask=attention_mask)
+
+                with self.subTest("JIT Enabled"):
+                    jitted_outputs = encode_jitted(**prepared_inputs_dict).to_tuple()
+
+                with self.subTest("JIT Disabled"):
+                    with jax.disable_jit():
+                        outputs = encode_jitted(**prepared_inputs_dict).to_tuple()
+
+                self.assertEqual(len(outputs), len(jitted_outputs))
+                for jitted_output, output in zip(jitted_outputs, outputs):
+                    self.assertEqual(jitted_output.shape, output.shape)
+
+    def test_decode(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                model = model_class(config)
+                encoder_outputs = model.encode(inputs_dict["input_ids"], inputs_dict["attention_mask"])
+
+                prepared_inputs_dict = {
+                    "decoder_input_ids": inputs_dict["decoder_input_ids"],
+                    "decoder_attention_mask": inputs_dict["decoder_attention_mask"],
+                    "encoder_outputs": encoder_outputs,
+                }
+
+                @jax.jit
+                def decode_jitted(decoder_input_ids, decoder_attention_mask, encoder_outputs):
+                    return model.decode(
+                        decoder_input_ids=decoder_input_ids,
+                        decoder_attention_mask=decoder_attention_mask,
+                        encoder_outputs=encoder_outputs,
+                    )
+
+                with self.subTest("JIT Enabled"):
+                    jitted_outputs = decode_jitted(**prepared_inputs_dict).to_tuple()
+
+                with self.subTest("JIT Disabled"):
+                    with jax.disable_jit():
+                        outputs = decode_jitted(**prepared_inputs_dict).to_tuple()
+
+                self.assertEqual(len(outputs), len(jitted_outputs))
+                for jitted_output, output in zip(jitted_outputs, outputs):
+                    self.assertEqual(jitted_output.shape, output.shape)
+
+    def test_shift_right(self):
+        decoder_start_token_id = 0
+        pad_token_id = 1
+        labels = np.arange(2, 102).reshape(5, 20)
+        labels[:2, 15:] = -100
+
+        decoder_input_ids = shift_tokens_right(labels, pad_token_id, decoder_start_token_id)
+        np_decoder_input_ids = np.array(decoder_input_ids)
+
+        self.assertTrue((np_decoder_input_ids[:2, (15 + 1) :] == 1).all())
+        self.assertTrue(
+            (
+                np_decoder_input_ids[2:, 1:]
+                == np.roll(
+                    labels[
+                        2:,
+                    ],
+                    1,
+                )[:, 1:]
+            ).all()
+        )
+        self.assertTrue((np_decoder_input_ids[:, 0] == 0).all())
+
 
 @require_sentencepiece
 @require_tokenizers
 @require_flax
 class FlaxT5ModelIntegrationTests(unittest.TestCase):
+    @slow
+    def test_small_integration_test(self):
+        """
+        For comparision run:
+        >>> import t5  # pip install t5==0.7.1
+        >>> from t5.data.sentencepiece_vocabulary import SentencePieceVocabulary
+
+        >>> path_to_mtf_small_t5_checkpoint = '<fill_in>'
+        >>> path_to_mtf_small_spm_model_path = '<fill_in>'
+        >>> t5_model = t5.models.MtfModel(model_dir=path_to_mtf_small_t5_checkpoint, batch_size=1, tpu=None)
+        >>> vocab = SentencePieceVocabulary(path_to_mtf_small_spm_model_path, extra_ids=100)
+        >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
+        """
+
+        model = FlaxT5ForConditionalGeneration.from_pretrained("t5-small", from_pt=True)
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+        input_ids = tokenizer("Hello there", return_tensors="np").input_ids
+        labels = tokenizer("Hi I am", return_tensors="np").input_ids
+
+        decoder_input_ids = shift_tokens_right(labels, model.config.pad_token_id, model.config.decoder_start_token_id)
+
+        logits = model(input_ids, decoder_input_ids=decoder_input_ids).logits
+
+        loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1])).mean()
+        mtf_score = -(labels.shape[-1] * loss.item())
+
+        EXPECTED_SCORE = -19.0845
+        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
+
+    @slow
+    def test_small_v1_1_integration_test(self):
+        """
+        For comparision run:
+        >>> import t5  # pip install t5==0.7.1
+        >>> from t5.data.sentencepiece_vocabulary import SentencePieceVocabulary
+
+        >>> path_to_mtf_small_t5_v1_1_checkpoint = '<fill_in>'
+        >>> path_to_mtf_small_spm_model_path = '<fill_in>'
+        >>> t5_model = t5.models.MtfModel(model_dir=path_to_mtf_small_t5_v1_1_checkpoint, batch_size=1, tpu=None)
+        >>> vocab = SentencePieceVocabulary(path_to_mtf_small_spm_model_path, extra_ids=100)
+        >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
+        """
+
+        model = FlaxT5ForConditionalGeneration.from_pretrained("google/t5-v1_1-small", from_pt=True)
+        tokenizer = T5Tokenizer.from_pretrained("google/t5-v1_1-small")
+
+        input_ids = tokenizer("Hello there", return_tensors="np").input_ids
+        labels = tokenizer("Hi I am", return_tensors="np").input_ids
+
+        decoder_input_ids = shift_tokens_right(labels, model.config.pad_token_id, model.config.decoder_start_token_id)
+
+        logits = model(input_ids, decoder_input_ids=decoder_input_ids).logits
+        loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1])).mean()
+
+        mtf_score = -(labels.shape[-1] * loss.item())
+
+        EXPECTED_SCORE = -59.0293
+        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
+
+    @slow
+    def test_small_byt5_integration_test(self):
+        """
+        For comparision run:
+        >>> import t5  # pip install t5==0.9.1
+
+        >>> path_to_byt5_small_checkpoint = '<fill_in>'
+        >>> t5_model = t5.models.MtfModel(model_dir=path_to_tf_checkpoint, batch_size=1, tpu=None)
+        >>> vocab = t5.data.ByteVocabulary()
+        >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
+        """
+
+        model = FlaxT5ForConditionalGeneration.from_pretrained("google/byt5-small", from_pt=True)
+        tokenizer = ByT5Tokenizer.from_pretrained("google/byt5-small")
+
+        input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
+        labels = tokenizer("Hi I am", return_tensors="pt").input_ids
+
+        decoder_input_ids = shift_tokens_right(labels, model.config.pad_token_id, model.config.decoder_start_token_id)
+
+        logits = model(input_ids, decoder_input_ids=decoder_input_ids).logits
+        loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1])).mean()
+
+        mtf_score = -(labels.shape[-1] * loss.item())
+
+        EXPECTED_SCORE = -60.7397
+        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
     def test_small_generation(self):
@@ -216,6 +424,7 @@ class FlaxT5ModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_summarization(self):
+        return
         model = FlaxT5ForConditionalGeneration.from_pretrained("t5-base", from_pt=True)
         tok = T5Tokenizer.from_pretrained("t5-base")
 
@@ -250,7 +459,6 @@ class FlaxT5ModelIntegrationTests(unittest.TestCase):
         ).sequences
 
         decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        import ipdb; ipdb.set_trace()
         self.assertListEqual(
             expected_summaries,
             decoded,
