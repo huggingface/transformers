@@ -887,6 +887,6 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
             with io.BytesIO() as out:
                 seg_img.save(out, format="PNG")
-                predictions = {"png_string": out.getvalue(), "segments_info": segments_info}
+                predictions = {"png_string": out.getvalue(), "segments_info": segments_info, "seg_img": seg_img}
             preds.append(predictions)
         return preds

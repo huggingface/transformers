@@ -43,6 +43,7 @@ from .conversational import Conversation, ConversationalPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
+from .image_segmentation import ImageSegmentationPipeline
 from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
 from .text2text_generation import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
@@ -206,6 +207,12 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForSeq2SeqLM, TFAutoModelForCausalLM) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM, AutoModelForCausalLM) if is_torch_available() else (),
         "default": {"model": {"pt": "microsoft/DialoGPT-medium", "tf": "microsoft/DialoGPT-medium"}},
+    },
+    "image-segmentation": {
+        "impl": ImageSegmentationPipeline,
+        "tf": (),
+        "pt": () if is_torch_available() else (),
+        "default": {"model": {"pt": "facebook/detr-resnet-50-panoptic"}},
     },
     "image-classification": {
         "impl": ImageClassificationPipeline,
