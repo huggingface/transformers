@@ -290,6 +290,9 @@ class Trainer:
         self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
         self._memory_tracker.start()
 
+        if args.log_level != -1:
+            logging.set_verbosity(args.log_level)
+
         # force device and distributed setup init explicitly
         args._setup_devices
 

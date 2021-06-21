@@ -48,6 +48,8 @@ if is_sagemaker_mp_enabled():
 
 
 logger = logging.get_logger(__name__)
+log_levels = logging.get_log_levels_dict().copy()
+trainer_log_levels = dict(**log_levels, passive=-1)
 
 
 def default_logdir() -> str:
@@ -144,6 +146,8 @@ class TrainingArguments:
         warmup_steps (:obj:`int`, `optional`, defaults to 0):
             Number of steps used for a linear warmup from 0 to :obj:`learning_rate`. Overrides any effect of
             :obj:`warmup_ratio`.
+        log_level (:obj:`str`, `optional`):
+            Logging level - same as logging log levels.
         logging_dir (:obj:`str`, `optional`):
             `TensorBoard <https://www.tensorflow.org/tensorboard>`__ log directory. Will default to
             `runs/**CURRENT_DATETIME_HOSTNAME**`.
@@ -397,6 +401,13 @@ class TrainingArguments:
     )
     warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
+    log_level: Optional[str] = field(
+        default="passive",
+        metadata={
+            "help": "logger log level to use. Possible choices are the usual 5 log levels plus a 'passive' level which doesn't set anything and lets the application set the level. Defaults to 'passive'.",
+            "choices": trainer_log_levels.keys(),
+        },
+    )
     logging_dir: Optional[str] = field(default_factory=default_logdir, metadata={"help": "Tensorboard log dir."})
     logging_strategy: IntervalStrategy = field(
         default="steps",
@@ -579,6 +590,8 @@ class TrainingArguments:
         env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
         if env_local_rank != -1 and env_local_rank != self.local_rank:
             self.local_rank = env_local_rank
+
+        self.log_level = trainer_log_levels[self.log_level]
 
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
