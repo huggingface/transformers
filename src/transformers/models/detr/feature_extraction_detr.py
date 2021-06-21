@@ -440,7 +440,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 annotations.
 
             return_segmentation_masks (:obj:`Dict`, :obj:`List[Dict]`, `optional`, defaults to :obj:`False`):
-                Whether to also include instance segmentation masks as part of the labels in case :obj:`format = "coco_detection"`.
+                Whether to also include instance segmentation masks as part of the labels in case :obj:`format =
+                "coco_detection"`.
 
             masks_path (:obj:`pathlib.Path`, `optional`):
                 Path to the directory containing the PNG files that store the class-agnostic image segmentations. Only
