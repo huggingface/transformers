@@ -245,20 +245,16 @@ def main():
         handlers=[logging.StreamHandler(sys.stdout)],
     )
 
-    if training_args.log_level == -1:
-        logger.setLevel(logging.INFO if training_args.should_log else logging.WARN)
-    else:
-        logger.setLevel(training_args.log_level)
-        datasets_module.utils.logging.set_verbosity(training_args.log_level)
+    log_level = training_args.get_node_log_level()
+    logger.setLevel(log_level)
+    datasets_module.utils.logging.set_verbosity(log_level)
+    transformers.utils.logging.set_verbosity(log_level)
 
     # Log on each process the small summary:
     logger.warning(
         f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
         + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
-    # Set the verbosity to info of the Transformers logger (on main process only):
-    if training_args.should_log and training_args.log_level == -1:
-        transformers.utils.logging.set_verbosity_info()
     logger.info(f"Training/evaluation parameters {training_args}")
 
     if data_args.source_prefix is None and model_args.model_name_or_path in [

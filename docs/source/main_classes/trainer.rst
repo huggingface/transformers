@@ -119,6 +119,60 @@ TFTrainingArguments
     :members:
 
 
+Logging
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+By default :class:`~transformers.Trainer` will use ``logging.INFO`` for the main node and ``logging.WARNING`` for the
+replica nodes if any.
+
+These defaults can be overridden to use any of the 5 ``logging`` levels with :class:`~transformers.TrainingArguments`'s
+arguments:
+
+- ``log_level`` - for the main node
+- ``log_level_replica`` - for the replica nodes
+
+Further, if :class:`~transformers.TrainingArguments`'s ``log_on_each_node`` is set to ``True`` all nodes will use the
+log level settings for the main node.
+
+Note that :class:`~transformers.Trainer` is going to set ``transformers``'s log level separately for each node in its
+:meth:`~transformers.Trainer.__init__`. So you may want to set this sooner (see the next example) if you tap into other
+``transformers`` functionality before creating the :class:`~transformers.Trainer` object.
+
+Here is an example of how this can be used in an application:
+
+.. code-block:: python
+
+    [...]
+    logger = logging.getLogger(__name__)
+
+    # Setup logging
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
+
+    # set the main code and the modules it uses to the same log-level according to the node
+    log_level = training_args.get_node_log_level()
+    logger.setLevel(log_level)
+    datasets.utils.logging.set_verbosity(log_level)
+    transformers.utils.logging.set_verbosity(log_level)
+
+And then if you only want to see warnings on the main node and all other nodes to not print any most likely duplicated
+warnings you could run it as:
+
+.. code-block:: bash
+
+    my_app.py ... --log_level warn --log_level_replica error
+
+or if you need your application to be as quiet as possible you could do:
+
+.. code-block:: bash
+
+    my_app.py ... --log_level error --log_level_replica error
+
+
+
 Randomness
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
