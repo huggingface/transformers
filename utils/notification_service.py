@@ -97,7 +97,6 @@ def format_for_slack(total_results, results, scheduled: bool):
     }
 
     blocks.append(footer)
-
     blocks = {"blocks": blocks}
 
     return blocks
