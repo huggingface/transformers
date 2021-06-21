@@ -22,7 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.7.0.dev0"
+__version__ = "4.8.0.dev0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -201,6 +201,7 @@ _import_structure = {
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
     "models.herbert": ["HerbertTokenizer"],
+    "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
@@ -775,6 +776,14 @@ if is_torch_available():
             "GPTNeoModel",
             "GPTNeoPreTrainedModel",
             "load_tf_weights_in_gpt_neo",
+        ]
+    )
+    _import_structure["models.hubert"].extend(
+        [
+            "HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "HubertForCTC",
+            "HubertModel",
+            "HubertPreTrainedModel",
         ]
     )
     _import_structure["models.ibert"].extend(
@@ -1430,6 +1439,14 @@ if is_tf_available():
             "TFTransfoXLPreTrainedModel",
         ]
     )
+    _import_structure["models.wav2vec2"].extend(
+        [
+            "TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFWav2Vec2ForCTC",
+            "TFWav2Vec2Model",
+            "TFWav2Vec2PreTrainedModel",
+        ]
+    )
     _import_structure["models.xlm"].extend(
         [
             "TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1478,9 +1495,12 @@ else:
 # FLAX-backed objects
 if is_flax_available():
     _import_structure["generation_flax_logits_process"] = [
+        "FlaxForcedBOSTokenLogitsProcessor",
+        "FlaxForcedEOSTokenLogitsProcessor",
         "FlaxLogitsProcessor",
         "FlaxLogitsProcessorList",
         "FlaxLogitsWarper",
+        "FlaxMinLengthLogitsProcessor",
         "FlaxTemperatureLogitsWarper",
         "FlaxTopKLogitsWarper",
         "FlaxTopPLogitsWarper",
@@ -1494,6 +1514,7 @@ if is_flax_available():
             "FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
             "FLAX_MODEL_FOR_PRETRAINING_MAPPING",
             "FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING",
+            "FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
             "FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
             "FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "FLAX_MODEL_MAPPING",
@@ -1504,8 +1525,17 @@ if is_flax_available():
             "FlaxAutoModelForNextSentencePrediction",
             "FlaxAutoModelForPreTraining",
             "FlaxAutoModelForQuestionAnswering",
+            "FlaxAutoModelForSeq2SeqLM",
             "FlaxAutoModelForSequenceClassification",
             "FlaxAutoModelForTokenClassification",
+        ]
+    )
+    _import_structure["models.bart"].extend(
+        [
+            "FlaxBartForConditionalGeneration",
+            "FlaxBartForQuestionAnswering",
+            "FlaxBartForSequenceClassification",
+            "FlaxBartModel",
         ]
     )
     _import_structure["models.bert"].extend(
@@ -1519,6 +1549,18 @@ if is_flax_available():
             "FlaxBertForTokenClassification",
             "FlaxBertModel",
             "FlaxBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.big_bird"].extend(
+        [
+            "FlaxBigBirdForMaskedLM",
+            "FlaxBigBirdForMultipleChoice",
+            "FlaxBigBirdForPreTraining",
+            "FlaxBigBirdForQuestionAnswering",
+            "FlaxBigBirdForSequenceClassification",
+            "FlaxBigBirdForTokenClassification",
+            "FlaxBigBirdModel",
+            "FlaxBigBirdPreTrainedModel",
         ]
     )
     _import_structure["models.clip"].extend(
@@ -1711,6 +1753,7 @@ if TYPE_CHECKING:
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
     from .models.herbert import HerbertTokenizer
+    from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
     from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
@@ -2198,6 +2241,12 @@ if TYPE_CHECKING:
             GPTNeoModel,
             GPTNeoPreTrainedModel,
             load_tf_weights_in_gpt_neo,
+        )
+        from .models.hubert import (
+            HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            HubertForCTC,
+            HubertModel,
+            HubertPreTrainedModel,
         )
         from .models.ibert import (
             IBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -2735,6 +2784,12 @@ if TYPE_CHECKING:
             TFTransfoXLModel,
             TFTransfoXLPreTrainedModel,
         )
+        from .models.wav2vec2 import (
+            TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFWav2Vec2ForCTC,
+            TFWav2Vec2Model,
+            TFWav2Vec2PreTrainedModel,
+        )
         from .models.xlm import (
             TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFXLMForMultipleChoice,
@@ -2780,9 +2835,12 @@ if TYPE_CHECKING:
 
     if is_flax_available():
         from .generation_flax_logits_process import (
+            FlaxForcedBOSTokenLogitsProcessor,
+            FlaxForcedEOSTokenLogitsProcessor,
             FlaxLogitsProcessor,
             FlaxLogitsProcessorList,
             FlaxLogitsWarper,
+            FlaxMinLengthLogitsProcessor,
             FlaxTemperatureLogitsWarper,
             FlaxTopKLogitsWarper,
             FlaxTopPLogitsWarper,
@@ -2795,6 +2853,7 @@ if TYPE_CHECKING:
             FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
             FLAX_MODEL_FOR_PRETRAINING_MAPPING,
             FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+            FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
             FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             FLAX_MODEL_MAPPING,
@@ -2805,8 +2864,15 @@ if TYPE_CHECKING:
             FlaxAutoModelForNextSentencePrediction,
             FlaxAutoModelForPreTraining,
             FlaxAutoModelForQuestionAnswering,
+            FlaxAutoModelForSeq2SeqLM,
             FlaxAutoModelForSequenceClassification,
             FlaxAutoModelForTokenClassification,
+        )
+        from .models.bart import (
+            FlaxBartForConditionalGeneration,
+            FlaxBartForQuestionAnswering,
+            FlaxBartForSequenceClassification,
+            FlaxBartModel,
         )
         from .models.bert import (
             FlaxBertForMaskedLM,
@@ -2818,6 +2884,16 @@ if TYPE_CHECKING:
             FlaxBertForTokenClassification,
             FlaxBertModel,
             FlaxBertPreTrainedModel,
+        )
+        from .models.big_bird import (
+            FlaxBigBirdForMaskedLM,
+            FlaxBigBirdForMultipleChoice,
+            FlaxBigBirdForPreTraining,
+            FlaxBigBirdForQuestionAnswering,
+            FlaxBigBirdForSequenceClassification,
+            FlaxBigBirdForTokenClassification,
+            FlaxBigBirdModel,
+            FlaxBigBirdPreTrainedModel,
         )
         from .models.clip import FlaxCLIPModel, FlaxCLIPPreTrainedModel, FlaxCLIPTextModel, FlaxCLIPVisionModel
         from .models.electra import (

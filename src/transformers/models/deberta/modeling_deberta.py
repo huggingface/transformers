@@ -163,7 +163,7 @@ class XDropout(torch.autograd.Function):
             return grad_output, None
 
 
-class StableDropout(torch.nn.Module):
+class StableDropout(nn.Module):
     """
     Optimized dropout module for stabilizing the training
 
@@ -477,7 +477,7 @@ def pos_dynamic_expand(pos_index, p2c_att, key_layer):
     return pos_index.expand(p2c_att.size()[:2] + (pos_index.size(-2), key_layer.size(-2)))
 
 
-class DisentangledSelfAttention(torch.nn.Module):
+class DisentangledSelfAttention(nn.Module):
     """
     Disentangled self-attention module
 
@@ -498,19 +498,17 @@ class DisentangledSelfAttention(torch.nn.Module):
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.in_proj = torch.nn.Linear(config.hidden_size, self.all_head_size * 3, bias=False)
-        self.q_bias = torch.nn.Parameter(torch.zeros((self.all_head_size), dtype=torch.float))
-        self.v_bias = torch.nn.Parameter(torch.zeros((self.all_head_size), dtype=torch.float))
+        self.in_proj = nn.Linear(config.hidden_size, self.all_head_size * 3, bias=False)
+        self.q_bias = nn.Parameter(torch.zeros((self.all_head_size), dtype=torch.float))
+        self.v_bias = nn.Parameter(torch.zeros((self.all_head_size), dtype=torch.float))
         self.pos_att_type = config.pos_att_type if config.pos_att_type is not None else []
 
         self.relative_attention = getattr(config, "relative_attention", False)
         self.talking_head = getattr(config, "talking_head", False)
 
         if self.talking_head:
-            self.head_logits_proj = torch.nn.Linear(config.num_attention_heads, config.num_attention_heads, bias=False)
-            self.head_weights_proj = torch.nn.Linear(
-                config.num_attention_heads, config.num_attention_heads, bias=False
-            )
+            self.head_logits_proj = nn.Linear(config.num_attention_heads, config.num_attention_heads, bias=False)
+            self.head_weights_proj = nn.Linear(config.num_attention_heads, config.num_attention_heads, bias=False)
 
         if self.relative_attention:
             self.max_relative_positions = getattr(config, "max_relative_positions", -1)
@@ -519,9 +517,9 @@ class DisentangledSelfAttention(torch.nn.Module):
             self.pos_dropout = StableDropout(config.hidden_dropout_prob)
 
             if "c2p" in self.pos_att_type or "p2p" in self.pos_att_type:
-                self.pos_proj = torch.nn.Linear(config.hidden_size, self.all_head_size, bias=False)
+                self.pos_proj = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
             if "p2c" in self.pos_att_type or "p2p" in self.pos_att_type:
-                self.pos_q_proj = torch.nn.Linear(config.hidden_size, self.all_head_size)
+                self.pos_q_proj = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = StableDropout(config.attention_probs_dropout_prob)
 
@@ -1122,7 +1120,7 @@ class DebertaForSequenceClassification(DebertaPreTrainedModel):
         self.pooler = ContextPooler(config)
         output_dim = self.pooler.output_dim
 
-        self.classifier = torch.nn.Linear(output_dim, num_labels)
+        self.classifier = nn.Linear(output_dim, num_labels)
         drop_out = getattr(config, "cls_dropout", None)
         drop_out = self.config.hidden_dropout_prob if drop_out is None else drop_out
         self.dropout = StableDropout(drop_out)
@@ -1182,7 +1180,7 @@ class DebertaForSequenceClassification(DebertaPreTrainedModel):
         if labels is not None:
             if self.num_labels == 1:
                 # regression task
-                loss_fn = torch.nn.MSELoss()
+                loss_fn = nn.MSELoss()
                 logits = logits.view(-1).to(labels.dtype)
                 loss = loss_fn(logits, labels.view(-1))
             elif labels.dim() == 1 or labels.size(-1) == 1:
@@ -1196,7 +1194,7 @@ class DebertaForSequenceClassification(DebertaPreTrainedModel):
                 else:
                     loss = torch.tensor(0).to(logits)
             else:
-                log_softmax = torch.nn.LogSoftmax(-1)
+                log_softmax = nn.LogSoftmax(-1)
                 loss = -((log_softmax(logits) * labels).sum(-1)).mean()
         if not return_dict:
             output = (logits,) + outputs[1:]

@@ -40,6 +40,10 @@ baselines.*
 This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code can be found `here
 <https://github.com/facebookresearch/detr>`__.
 
+The quickest way to get started with DETR is by checking the `example notebooks
+<https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DETR>`__ (which showcase both inference and
+fine-tuning on custom data).
+
 Here's a TLDR explaining how :class:`~transformers.DetrForObjectDetection` works:
 
 First, an image is sent through a pre-trained convolutional backbone (in the paper, the authors use
@@ -130,7 +134,7 @@ As a summary, consider the following table:
 +---------------------------------------------+---------------------------------------------------------+----------------------------------------------------------------------+------------------------------------------------------------------------+
 | **Format of annotations to provide to**     | {‘image_id’: int,                                       | {‘image_id’: int,                                                    | {‘file_name: str,                                                      |
 | :class:`~transformers.DetrFeatureExtractor` | ‘annotations’: List[Dict]}, each Dict being a COCO      | ‘annotations’: [List[Dict]] } (in case of COCO detection)            | ‘image_id: int,                                                        |
-|                                             | object annotation (containing keys "image_id",          |                                                                      | ‘segments_info’: List[Dict] }                                          |
+|                                             | object annotation                                       |                                                                      | ‘segments_info’: List[Dict] }                                          |
 |                                             |                                                         | or                                                                   |                                                                        |
 |                                             |                                                         |                                                                      | and masks_path (path to directory containing PNG files of the masks)   |
 |                                             |                                                         | {‘file_name’: str,                                                   |                                                                        |
@@ -151,7 +155,8 @@ In short, one should prepare the data either in COCO detection or COCO panoptic 
 outputs of the model using one of the postprocessing methods of :class:`~transformers.DetrFeatureExtractor`. These can
 be be provided to either :obj:`CocoEvaluator` or :obj:`PanopticEvaluator`, which allow you to calculate metrics like
 mean Average Precision (mAP) and Panoptic Quality (PQ). The latter objects are implemented in the `original repository
-<https://github.com/facebookresearch/detr>`__. See the example notebooks for more info regarding evaluation.
+<https://github.com/facebookresearch/detr>`__. See the `example notebooks
+<https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DETR>`__ for more info regarding evaluation.
 
 
 DETR specific outputs

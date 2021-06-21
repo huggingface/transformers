@@ -18,6 +18,12 @@
 from collections import OrderedDict
 
 from ...utils import logging
+from ..bart.modeling_flax_bart import (
+    FlaxBartForConditionalGeneration,
+    FlaxBartForQuestionAnswering,
+    FlaxBartForSequenceClassification,
+    FlaxBartModel,
+)
 from ..bert.modeling_flax_bert import (
     FlaxBertForMaskedLM,
     FlaxBertForMultipleChoice,
@@ -27,6 +33,15 @@ from ..bert.modeling_flax_bert import (
     FlaxBertForSequenceClassification,
     FlaxBertForTokenClassification,
     FlaxBertModel,
+)
+from ..big_bird.modeling_flax_big_bird import (
+    FlaxBigBirdForMaskedLM,
+    FlaxBigBirdForMultipleChoice,
+    FlaxBigBirdForPreTraining,
+    FlaxBigBirdForQuestionAnswering,
+    FlaxBigBirdForSequenceClassification,
+    FlaxBigBirdForTokenClassification,
+    FlaxBigBirdModel,
 )
 from ..clip.modeling_flax_clip import FlaxCLIPModel
 from ..electra.modeling_flax_electra import (
@@ -49,7 +64,16 @@ from ..roberta.modeling_flax_roberta import (
 )
 from ..vit.modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel
 from .auto_factory import auto_class_factory
-from .configuration_auto import BertConfig, CLIPConfig, ElectraConfig, GPT2Config, RobertaConfig, ViTConfig
+from .configuration_auto import (
+    BartConfig,
+    BertConfig,
+    BigBirdConfig,
+    CLIPConfig,
+    ElectraConfig,
+    GPT2Config,
+    RobertaConfig,
+    ViTConfig,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -60,6 +84,8 @@ FLAX_MODEL_MAPPING = OrderedDict(
         # Base model mapping
         (RobertaConfig, FlaxRobertaModel),
         (BertConfig, FlaxBertModel),
+        (BigBirdConfig, FlaxBigBirdModel),
+        (BartConfig, FlaxBartModel),
         (GPT2Config, FlaxGPT2Model),
         (ElectraConfig, FlaxElectraModel),
         (CLIPConfig, FlaxCLIPModel),
@@ -72,6 +98,8 @@ FLAX_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         # Model for pre-training mapping
         (RobertaConfig, FlaxRobertaForMaskedLM),
         (BertConfig, FlaxBertForPreTraining),
+        (BigBirdConfig, FlaxBigBirdForPreTraining),
+        (BartConfig, FlaxBartForConditionalGeneration),
         (ElectraConfig, FlaxElectraForPreTraining),
     ]
 )
@@ -81,6 +109,8 @@ FLAX_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         # Model for Masked LM mapping
         (RobertaConfig, FlaxRobertaForMaskedLM),
         (BertConfig, FlaxBertForMaskedLM),
+        (BigBirdConfig, FlaxBigBirdForMaskedLM),
+        (BartConfig, FlaxBartForConditionalGeneration),
         (ElectraConfig, FlaxElectraForMaskedLM),
     ]
 )
@@ -99,11 +129,20 @@ FLAX_MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     ]
 )
 
+FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
+    [
+        # Model for Seq2Seq Causal LM mapping
+        (BartConfig, FlaxBartForConditionalGeneration)
+    ]
+)
+
 FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
         (RobertaConfig, FlaxRobertaForSequenceClassification),
         (BertConfig, FlaxBertForSequenceClassification),
+        (BigBirdConfig, FlaxBigBirdForSequenceClassification),
+        (BartConfig, FlaxBartForSequenceClassification),
         (ElectraConfig, FlaxElectraForSequenceClassification),
     ]
 )
@@ -113,6 +152,8 @@ FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         # Model for Question Answering mapping
         (RobertaConfig, FlaxRobertaForQuestionAnswering),
         (BertConfig, FlaxBertForQuestionAnswering),
+        (BigBirdConfig, FlaxBigBirdForQuestionAnswering),
+        (BartConfig, FlaxBartForQuestionAnswering),
         (ElectraConfig, FlaxElectraForQuestionAnswering),
     ]
 )
@@ -122,6 +163,7 @@ FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         # Model for Token Classification mapping
         (RobertaConfig, FlaxRobertaForTokenClassification),
         (BertConfig, FlaxBertForTokenClassification),
+        (BigBirdConfig, FlaxBigBirdForTokenClassification),
         (ElectraConfig, FlaxElectraForTokenClassification),
     ]
 )
@@ -131,6 +173,7 @@ FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         # Model for Multiple Choice mapping
         (RobertaConfig, FlaxRobertaForMultipleChoice),
         (BertConfig, FlaxBertForMultipleChoice),
+        (BigBirdConfig, FlaxBigBirdForMultipleChoice),
         (ElectraConfig, FlaxElectraForMultipleChoice),
     ]
 )
@@ -159,6 +202,13 @@ FlaxAutoModelForPreTraining = auto_class_factory(
 
 FlaxAutoModelForMaskedLM = auto_class_factory(
     "FlaxAutoModelForMaskedLM", FLAX_MODEL_FOR_MASKED_LM_MAPPING, head_doc="masked language modeling"
+)
+
+
+FlaxAutoModelForSeq2SeqLM = auto_class_factory(
+    "FlaxAutoModelForSeq2SeqLM",
+    FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    head_doc="sequence-to-sequence language modeling",
 )
 
 FlaxAutoModelForSequenceClassification = auto_class_factory(

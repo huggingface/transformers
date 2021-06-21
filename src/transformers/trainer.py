@@ -264,7 +264,7 @@ class Trainer:
 
     def __init__(
         self,
-        model: Union[PreTrainedModel, torch.nn.Module] = None,
+        model: Union[PreTrainedModel, nn.Module] = None,
         args: TrainingArguments = None,
         data_collator: Optional[DataCollator] = None,
         train_dataset: Optional[Dataset] = None,
@@ -772,7 +772,7 @@ class Trainer:
         Trainer's init through :obj:`optimizers`, or subclass and override this method in a subclass.
         """
         if self.optimizer is None:
-            decay_parameters = get_parameter_names(self.model, [torch.nn.LayerNorm])
+            decay_parameters = get_parameter_names(self.model, [nn.LayerNorm])
             decay_parameters = [name for name in decay_parameters if "bias" not in name]
             optimizer_grouped_parameters = [
                 {
@@ -933,7 +933,7 @@ class Trainer:
 
         # Multi-gpu training (should be after apex fp16 initialization)
         if self.args.n_gpu > 1:
-            model = torch.nn.DataParallel(model)
+            model = nn.DataParallel(model)
 
         # Note: in torch.distributed mode, there's no point in wrapping the model
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
@@ -970,7 +970,7 @@ class Trainer:
                 find_unused_parameters = not getattr(model.config, "gradient_checkpointing", False)
             else:
                 find_unused_parameters = True
-            model = torch.nn.parallel.DistributedDataParallel(
+            model = nn.parallel.DistributedDataParallel(
                 model,
                 device_ids=[self.args.local_rank],
                 output_device=self.args.local_rank,
@@ -1288,7 +1288,7 @@ class Trainer:
                             model.clip_grad_norm_(args.max_grad_norm)
                         else:
                             # Revert to normal clipping otherwise, handling Apex or full precision
-                            torch.nn.utils.clip_grad_norm_(
+                            nn.utils.clip_grad_norm_(
                                 amp.master_params(self.optimizer) if self.use_apex else model.parameters(),
                                 args.max_grad_norm,
                             )
@@ -2433,6 +2433,7 @@ class Trainer:
         tags: Optional[str] = None,
         model_name: Optional[str] = None,
         finetuned_from: Optional[str] = None,
+        tasks: Optional[str] = None,
         dataset_tags: Optional[Union[str, List[str]]] = None,
         dataset: Optional[Union[str, List[str]]] = None,
         dataset_args: Optional[Union[str, List[str]]] = None,
@@ -2444,6 +2445,7 @@ class Trainer:
             tags=tags,
             model_name=model_name,
             finetuned_from=finetuned_from,
+            tasks=tasks,
             dataset_tags=dataset_tags,
             dataset=dataset,
             dataset_args=dataset_args,
