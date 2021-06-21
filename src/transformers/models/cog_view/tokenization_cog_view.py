@@ -15,7 +15,7 @@
 """Tokenization classes for CogView."""
 from typing import List, Optional
 
-from tokenizers import ByteLevelBPETokenizer
+import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -24,7 +24,7 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
+VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
