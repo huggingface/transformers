@@ -443,16 +443,45 @@ class Quantize(nn.Module):
         return F.embedding(embed_id, self.embed.transpose(0, 1))
 
 
-class CogViewVQVAE(PreTrainedModel):
-    def __init__(self, config):
-        super().__init__()
-        self.encoder = VQVAEEncoder(config)
-        self.quantizer = Quantize(config.vq_vae_embed_dim, config.vq_vae_n_embed)
-        self.decoder = VQVAEDecoder(config)
+# TODO: Do we need a different pre-trained classes for VQVAE and GPT ?
+class CogViewVQVAEPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = CogViewConfig
+    base_model_prefix = "model"
+
+    def __init__(self, *inputs, **kwargs):
+        super().__init__(*inputs, **kwargs)
 
     # TODO
     def _init_weights(self, module):
-        pass
+        """Initialize the weights."""
+        if isinstance(module, (nn.Linear, nn.Conv2D)):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        else:
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+
+
+class CogViewVQVAE(CogViewVQVAEPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.encoder = VQVAEEncoder(config)
+        self.quantizer = Quantize(config.vq_vae_embed_dim, config.vq_vae_n_embed)
+        self.decoder = VQVAEDecoder(config)
 
     def forward(self, pixel_values, continuous_relax=False, temperature=1.0, hard=False, KL=False):
         (
