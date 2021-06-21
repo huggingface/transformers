@@ -208,9 +208,12 @@ class FlaxCLIPVisionModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, seq_length, seq_length],
             )
-    
+
     # FlaxCLIPVisionModel does not have any base model
     def test_save_load_from_base(self):
+        pass
+
+    def test_save_load_to_base(self):
         pass
 
     @slow
@@ -302,6 +305,9 @@ class FlaxCLIPTextModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     # FlaxCLIPTextModel does not have any base model
     def test_save_load_from_base(self):
+        pass
+
+    def test_save_load_to_base(self):
         pass
 
     @slow

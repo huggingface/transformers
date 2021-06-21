@@ -23,7 +23,6 @@ import numpy as np
 import transformers
 from transformers import is_flax_available, is_torch_available
 from transformers.models.auto import get_values
-from transformers.pipelines import base
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 
 
@@ -283,7 +282,7 @@ class FlaxModelTesterMixin:
         for model_class in self.all_model_classes:
             if model_class == base_class:
                 continue
-            print(model_class)
+
             model = base_class(config)
             base_params = flatten_dict(unfreeze(model.params))
 
@@ -296,6 +295,28 @@ class FlaxModelTesterMixin:
 
                 for key in base_param_from_head.keys():
                     max_diff = (base_params[key] - base_param_from_head[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+    def test_save_load_to_base(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        base_class = FLAX_MODEL_MAPPING[config.__class__]
+
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+
+            model = model_class(config)
+            base_params_from_head = flatten_dict(unfreeze(model.params[model.base_model_prefix]))
+
+            # check that all base model weights are loaded correctly
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                base_model = base_class.from_pretrained(tmpdirname)
+
+                base_params = flatten_dict(unfreeze(base_model.params))
+
+                for key in base_params_from_head.keys():
+                    max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     @slow
