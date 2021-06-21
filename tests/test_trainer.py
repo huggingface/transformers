@@ -97,6 +97,11 @@ class RegressionTrainingArguments(TrainingArguments):
     a: float = 0.0
     b: float = 0.0
 
+    def __post_init__(self):
+        super().__post_init__()
+        # save resources not dealing with reporting (also avoids the warning when it's not set)
+        self.report_to = []
+
 
 class RepeatDataset:
     def __init__(self, x, length=64):
@@ -374,7 +379,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_training_arguments_are_left_untouched(self):
         trainer = get_regression_trainer()
         trainer.train()
-        args = TrainingArguments("./regression")
+        args = TrainingArguments("./regression", report_to=[])
         dict1, dict2 = args.to_dict(), trainer.args.to_dict()
         for key in dict1.keys():
             # Logging dir can be slightly different as they default to something with the time.
