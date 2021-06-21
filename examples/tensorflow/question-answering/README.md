@@ -24,7 +24,7 @@ included comments in the code to indicate areas that you may need to adapt to yo
 Note that when contexts are long they may be split into multiple training cases, not all of which may contain
 the answer span. 
 
-As-is, the example script will train on SQuAD or any other question-answering dataset, and can handle user
+As-is, the example script will train on SQuAD or any other question-answering dataset formatted the same way, and can handle user
 inputs as well.
 
 ### Multi-GPU and TPU usage
@@ -53,4 +53,3 @@ python run_qa.py \
 --do_train \
 --do_eval \
 ```
-
