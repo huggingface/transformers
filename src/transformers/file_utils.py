@@ -1982,6 +1982,8 @@ class PushToHubMixin:
         if temp_dir:
             # Make sure we use the right `repo_name` for the `repo_url` before replacing it.
             if repo_url is None:
+                if use_auth_token is None:
+                    use_auth_token = True
                 repo_name = Path(repo_path_or_name).name
                 repo_url = self._get_repo_url_from_name(
                     repo_name, organization=organization, private=private, use_auth_token=use_auth_token
@@ -2007,8 +2009,8 @@ class PushToHubMixin:
 
         return url
 
+    @staticmethod
     def _get_repo_url_from_name(
-        self,
         repo_name: str,
         organization: Optional[str] = None,
         private: bool = None,
@@ -2037,8 +2039,9 @@ class PushToHubMixin:
             exist_ok=True,
         )
 
+    @classmethod
     def _create_or_get_repo(
-        self,
+        cls,
         repo_path_or_name: Optional[str] = None,
         repo_url: Optional[str] = None,
         organization: Optional[str] = None,
@@ -2057,7 +2060,7 @@ class PushToHubMixin:
         if repo_url is None:
             repo_name = Path(repo_path_or_name).name
             # Special provision for the test endpoint (CI)
-            repo_url = self._get_repo_url_from_name(
+            repo_url = cls._get_repo_url_from_name(
                 repo_name, organization=organization, private=private, use_auth_token=use_auth_token
             )
 
