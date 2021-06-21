@@ -855,7 +855,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 .. warning::
 
                     Using :obj:`push_to_hub=True` will synchronize the repository you are pushing to with
-                    :obj:`save_directory`, which may add files in it.
+                    :obj:`save_directory`, which requires :obj:`save_directory` to be a local clone of the repo you are
+                    pushing to if it's an existing folder. Pass along :obj:`temp_dir=True` to use a temporary directory
+                    instead.
 
             kwargs:
                 Additional key word arguments passed along to the
@@ -864,11 +866,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
-        os.makedirs(save_directory, exist_ok=True)
 
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo = self._create_or_get_repo(save_directory, **kwargs)
+
+        os.makedirs(save_directory, exist_ok=True)
 
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)

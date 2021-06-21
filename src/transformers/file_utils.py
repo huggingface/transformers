@@ -24,6 +24,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -1906,6 +1907,30 @@ def copy_func(f):
     return g
 
 
+def is_local_clone(repo_path, repo_url):
+    """
+    Checks if the folder in `repo_path` is a local clone of `repo_url`.
+    """
+    # First double-check that `repo_path` is a git repo
+    if not os.path.exists(os.path.join(repo_path, ".git")):
+        return False
+    test_git = subprocess.run("git branch".split(), cwd=repo_path)
+    if test_git.returncode != 0:
+        return False
+
+    # Then look at its remotes
+    remotes = subprocess.run(
+        "git remote -v".split(),
+        stderr=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        check=True,
+        encoding="utf-8",
+        cwd=repo_path,
+    ).stdout
+
+    return repo_url in remotes.split()
+
+
 class PushToHubMixin:
     """
     A Mixin containing the functionality to push a model or tokenizer to the hub.
@@ -1915,9 +1940,10 @@ class PushToHubMixin:
         self,
         repo_path_or_name: Optional[str] = None,
         repo_url: Optional[str] = None,
+        temp_dir: bool = False,
         commit_message: Optional[str] = None,
         organization: Optional[str] = None,
-        private: bool = None,
+        private: Optional[bool] = None,
         use_auth_token: Optional[Union[bool, str]] = None,
     ) -> str:
         """
@@ -1933,6 +1959,9 @@ class PushToHubMixin:
                 Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
                 repository will be created in your namespace (unless you specify an :obj:`organization`) with
                 :obj:`repo_name`.
+            temp_dir (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to clone the distant repo in a temporary directory or in :obj:`repo_path_or_name` inside
+                the current working directory.
             commit_message (:obj:`str`, `optional`):
                 Message to commit while pushing. Will default to :obj:`"add config"`, :obj:`"add tokenizer"` or
                 :obj:`"add model"` depending on the type of the class.
@@ -1950,6 +1979,15 @@ class PushToHubMixin:
         Returns:
             The url of the commit of your model in the given repository.
         """
+        if temp_dir:
+            # Make sure we use the right `repo_name` for the `repo_url` before replacing it.
+            if repo_url is None:
+                repo_name = Path(repo_path_or_name).name
+                repo_url = self._get_repo_url_from_name(
+                    repo_name, organization=organization, private=private, use_auth_token=use_auth_token
+                )
+            repo_path_or_name = tempfile.mkdtemp()
+
         # Create or clone the repo
         repo = self._create_or_get_repo(
             repo_path_or_name=repo_path_or_name,
@@ -1962,66 +2000,42 @@ class PushToHubMixin:
         self.save_pretrained(repo_path_or_name)
         # Commit and push!
         url = self._push_to_hub(repo, commit_message=commit_message)
+
+        # Clean up! Clean up! Everybody everywhere!
+        if temp_dir:
+            shutil.rmtree(repo_path_or_name)
+
         return url
 
-    def save_to_hub(
+    def _get_repo_url_from_name(
         self,
-        repo_name: Optional[str] = None,
-        repo_url: Optional[str] = None,
-        commit_message: Optional[str] = None,
+        repo_name: str,
         organization: Optional[str] = None,
         private: bool = None,
         use_auth_token: Optional[Union[bool, str]] = None,
-    ) -> str:
-        """
-        Upload model checkpoint or tokenizer files to the 🤗 Model Hub with no local save.
+    ):
+        if isinstance(use_auth_token, str):
+            token = use_auth_token
+        elif use_auth_token:
+            token = HfFolder.get_token()
+            if token is None:
+                raise ValueError(
+                    "You must login to the Hugging Face hub on this computer by typing `transformers-cli login` and "
+                    "entering your credentials to use `use_auth_token=True`. Alternatively, you can pass your own "
+                    "token as the `use_auth_token` argument."
+                )
+        else:
+            token = None
 
-        Parameters:
-            repo_name (:obj:`str`, `optional`):
-                The repository name for your model or tokenizer in the Hub.
-            repo_url (:obj:`str`, `optional`):
-                Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
-                repository will be created in your namespace (unless you specify an :obj:`organization`) with
-                :obj:`repo_name`.
-            commit_message (:obj:`str`, `optional`):
-                Message to commit while pushing. Will default to :obj:`"add config"`, :obj:`"add tokenizer"` or
-                :obj:`"add model"` depending on the type of the class.
-            organization (:obj:`str`, `optional`):
-                Organization in which you want to push your model or tokenizer (you must be a member of this
-                organization).
-            private (:obj:`bool`, `optional`):
-                Whether or not the repository created should be private (requires a paying subscription).
-            use_auth_token (:obj:`bool` or :obj:`str`, `optional`):
-                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
-                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`). Will default to
-                :obj:`True` if :obj:`repo_url` is not specified.
-
-
-        Returns:
-            The url of the commit of your model in the given repository.
-        """
-        if repo_name is None and repo_url is None:
-            raise ValueError("You need to specify a `repo_name` or a `repo_url`.")
-        if repo_name is None:
-            repo_name = repo_url.split("/")[-1]
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            # Make sure the temp folder has the right name!
-            repo_path_or_name = os.path.join(tmp_dir, repo_name)
-            # Clone the repo
-            repo = self._create_or_get_repo(
-                # Make sure the temp folder has the right name!
-                repo_path_or_name=repo_path_or_name,
-                repo_url=repo_url,
-                organization=organization,
-                private=private,
-                use_auth_token=use_auth_token,
-            )
-            # Save the files in the cloned repo
-            self.save_pretrained(repo_path_or_name)
-            # Commit and push!
-            url = self._push_to_hub(repo, commit_message=commit_message)
-        return url
+        # Special provision for the test endpoint (CI)
+        return HfApi(endpoint=HUGGINGFACE_CO_RESOLVE_ENDPOINT).create_repo(
+            token,
+            repo_name,
+            organization=organization,
+            private=private,
+            repo_type=None,
+            exist_ok=True,
+        )
 
     def _create_or_get_repo(
         self,
@@ -2040,32 +2054,21 @@ class PushToHubMixin:
         if repo_path_or_name is None:
             repo_path_or_name = repo_url.split("/")[-1]
 
-        # Create a working directory if it does not exist.
-        os.makedirs(repo_path_or_name, exist_ok=True)
-
-        if isinstance(use_auth_token, str):
-            token = use_auth_token
-        elif use_auth_token:
-            token = HfFolder.get_token()
-            if token is None:
-                raise ValueError(
-                    "You must login to the Hugging Face hub on this computer by typing `transformers-cli login` and "
-                    "entering your credentials to use `use_auth_token=True`. Alternatively, you can pass your own "
-                    "token as the `use_auth_token` argument."
-                )
-        else:
-            token = None
-
         if repo_url is None:
             repo_name = Path(repo_path_or_name).name
             # Special provision for the test endpoint (CI)
-            repo_url = HfApi(endpoint=HUGGINGFACE_CO_RESOLVE_ENDPOINT).create_repo(
-                token,
-                repo_name,
-                organization=organization,
-                private=private,
-                repo_type=None,
-                exist_ok=True,
+            repo_url = self._get_repo_url_from_name(
+                repo_name, organization=organization, private=private, use_auth_token=use_auth_token
+            )
+
+        # Create a working directory if it does not exist.
+        if not os.path.exists(repo_path_or_name):
+            os.makedirs(repo_path_or_name)
+        # If it does exist, check it's a local clone of the repo we want
+        elif not is_local_clone(repo_path_or_name, repo_url):
+            raise ValueError(
+                f"The folder {repo_path_or_name} exists but is not a local clone of {repo_url}. Either add a remote "
+                "for this url in this folder or pick another folder to work in."
             )
 
         return Repository(repo_path_or_name, clone_from=repo_url, use_auth_token=use_auth_token)
