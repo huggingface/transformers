@@ -146,16 +146,19 @@ class FlaxT5ModelTester:
         self.parent.assertEqual(encoder_output.shape, (self.batch_size, self.encoder_seq_length, self.hidden_size))
         self.parent.assertEqual(decoder_output.shape, (self.batch_size, self.decoder_seq_length, self.hidden_size))
 
-    def check_use_cache_forward_with_attn_mask(self, model_class_name, config, inputs_dict):
+    def check_use_cache_forward_with_attn_mask(
+        self,
+        model_class_name,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+    ):
         max_decoder_length = 20
         model = model_class_name(config)
 
-        encoder_outputs = model.encode(inputs_dict["input_ids"])
-
-        decoder_input_ids, decoder_attention_mask = (
-            inputs_dict["decoder_input_ids"],
-            inputs_dict["decoder_attention_mask"],
-        )
+        encoder_outputs = model.encode(input_ids)
 
         decoder_attention_mask_cache = jnp.concatenate(
             [
@@ -231,9 +234,9 @@ class FlaxT5ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.
         self.model_tester.create_and_check_model(config, *config_and_inputs[1:])
 
     def test_use_cache_forward_with_attn_mask(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
-            self.model_tester.check_use_cache_forward_with_attn_mask(model_class, config, inputs_dict)
+            self.model_tester.check_use_cache_forward_with_attn_mask(model_class, *config_and_inputs)
 
     def test_encode(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -424,7 +427,6 @@ class FlaxT5ModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_summarization(self):
-        return
         model = FlaxT5ForConditionalGeneration.from_pretrained("t5-base", from_pt=True)
         tok = T5Tokenizer.from_pretrained("t5-base")
 
