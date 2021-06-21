@@ -209,6 +209,13 @@ class FlaxCLIPVisionModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 [self.model_tester.num_attention_heads, seq_length, seq_length],
             )
 
+    # FlaxCLIPVisionModel does not have any base model
+    def test_save_load_from_base(self):
+        pass
+
+    def test_save_load_to_base(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
@@ -295,6 +302,13 @@ class FlaxCLIPTextModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = FlaxCLIPTextModelTester(self)
+
+    # FlaxCLIPTextModel does not have any base model
+    def test_save_load_from_base(self):
+        pass
+
+    def test_save_load_to_base(self):
+        pass
 
     @slow
     def test_model_from_pretrained(self):
