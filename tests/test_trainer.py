@@ -665,23 +665,23 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
 
     def test_log_level(self):
-        # testing only --log_level (--log_level_replica requires multiple nodes)
+        # testing only --log_level (--log_level_replica requires multiple gpus and DDP and is tested elsewhere)
         logger = logging.get_logger()
         log_info_string = "Running training"
 
-        # test with the default log level - should be info and thus log
+        # test with the default log_level - should be info and thus log on the main process
         with CaptureLogger(logger) as cl:
             trainer = get_regression_trainer()
             trainer.train()
         self.assertIn(log_info_string, cl.out)
 
-        # test with low log level - lower than info
+        # test with low log_level - lower than info
         with CaptureLogger(logger) as cl:
             trainer = get_regression_trainer(log_level="debug")
             trainer.train()
         self.assertIn(log_info_string, cl.out)
 
-        # test with high log level - should be quiet
+        # test with high log_level - should be quiet
         with CaptureLogger(logger) as cl:
             trainer = get_regression_trainer(log_level="error")
             trainer.train()
