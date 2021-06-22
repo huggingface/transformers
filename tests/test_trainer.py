@@ -664,7 +664,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertTrue(np.array_equal(2 * expected + 1, seen[: expected.shape[0]]))
             self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
 
-   def test_log_level(self):
+    def test_log_level(self):
         # testing only --log_level (--log_level_replica requires multiple nodes)
         logger = logging.get_logger()
         log_info_string = "Running training"
