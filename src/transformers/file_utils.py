@@ -2080,9 +2080,8 @@ class PushToHubMixin:
         if repo_path_or_name is None:
             repo_path_or_name = repo_url.split("/")[-1]
 
-        if repo_url is None:
+        if repo_url is None and not os.path.exists(repo_path_or_name):
             repo_name = Path(repo_path_or_name).name
-            # Special provision for the test endpoint (CI)
             repo_url = cls._get_repo_url_from_name(
                 repo_name, organization=organization, private=private, use_auth_token=use_auth_token
             )
@@ -2090,14 +2089,10 @@ class PushToHubMixin:
         # Create a working directory if it does not exist.
         if not os.path.exists(repo_path_or_name):
             os.makedirs(repo_path_or_name)
-        # If it does exist, check it's a local clone of the repo we want
-        elif not is_local_clone(repo_path_or_name, repo_url):
-            raise ValueError(
-                f"The folder {repo_path_or_name} exists but is not a local clone of {repo_url}. Either add a remote "
-                "for this url in this folder or pick another folder to work in."
-            )
 
-        return Repository(repo_path_or_name, clone_from=repo_url, use_auth_token=use_auth_token)
+        repo = Repository(repo_path_or_name, clone_from=repo_url, use_auth_token=use_auth_token)
+        repo.git_pull()
+        return repo
 
     @classmethod
     def _push_to_hub(cls, repo: Repository, commit_message: Optional[str] = None) -> str:
