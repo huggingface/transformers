@@ -30,18 +30,17 @@ Don't forget to sign up [here](https://forms.gle/tVGPhjKXyEsSgUcs8)!
 
 ## Organization
 
-Participants can propose ideas for an interesting NLP and/or CV project. Teams of 3 to 5 will then be formed around the most promising and interesting projects. 
-Make sure to read through the []() section on how to propose projects, comment on other participants’ project ideas, and create a team.
+Participants can propose ideas for an interesting NLP and/or CV project. Teams of 3 to 5 will then be formed around the most promising and interesting projects. Make sure to read through the [Projects](#projects) section on how to propose projects, comment on other participants' project ideas, and create a team.
 
-To help each team to successfully finish their project, we have organized talks by leading scientists and engineers from Google, Hugging Face, and the open-source NLP & CV community. The talks will take place before the community week from *June 30th to July 2nd*. Make sure to attend the talks to get the most out of your participation! Check out the [(TODO) talks timetable]() to get an overview of all talks, their speakers and time.
+To help each team successfully finish their project, we have organized talks by leading scientists and engineers from Google, Hugging Face, and the open-source NLP & CV community. The talks will take place before the community week from June 30th to July 2nd. Make sure to attend the talks to get the most out of your participation! Check out the [Talks](#talks) section to get an overview of the talks, including the speaker and the time of the talk.
 
-Each team is then given free access to a TPUv3-8 VM from *July 7th to July 14th*. In addition, we will provide training examples in JAX/Flax for a variety of NLP and Vision models to kick-start your project. During the week, we make sure to answer any question you might have about JAX/Flax and Transformers. We will try to help each team as much as possible to successfully complete their project!
+Each team is then given free access to a TPUv3-8 VM from July 7th to July 14th. In addition, we will provide training examples in JAX/Flax for a variety of NLP and Vision models to kick-start your project. During the week, we make sure to answer any questions you might have about JAX/Flax and Transformers. We will try to help each team as much as possible to complete their project!
 
-At the end of the community week, each team can submit a demo of their project. All demonstrations will be evaluated by a jury and the top-3 demos will be awarded a prize. Check out the [(TODO) HOW_TO_SUBMIT.md]( ) document for more information and suggestions on how to submit your project.
+At the end of the community week, each team can submit a demo of their project. All demonstrations will be evaluated by a jury and the top-3 demos will be awarded a prize. Check out the [How to submit a demo](#how-to-submit-a-demo) section for more information and suggestions on how to submit your project.
 
 ## Important dates
 
-**23.06.** Official announcement of the community week. Make sure to sign-up in this Google form. 
+**23.06.** Official announcement of the community week. Make sure to sign-up in [this google form](https://forms.gle/tVGPhjKXyEsSgUcs8).
 **23.06. - 30.06.** Participants will be added to an internal Slack channel. Project ideas can be proposed here and groups of 3-5 are formed. Read this document for more information. 
 **30.06.** Release of all relevant training scripts in JAX/Flax as well as other documents on how to set up a TPU, how to use the training scripts, how to submit a demo, tips & tricks for JAX/Flax, tips & tricks for efficient use of the   hub. 
 **30.06. - 2.07.** Talks about JAX/Flax, TPU, Transformers, Computer Vision & NLP will be held. 
@@ -56,51 +55,53 @@ All important communication will take place in an internal Slack channel, called
 Important announcements of the Hugging Face, Flax/JAX, and Google Cloud team will be posted there. Such announcements include general information about the community week (Dates, Rules, ...), release of relevant training scripts (Flax/JAX example scripts for NLP and Vision), release of other important documents (How to access the TPU), ... 
 The Slack channel will also be the central place for participants to post about their results, share their learning experiences, ask questions, etc...
 
+All important communication will take place in an internal Slack channel, called `#flax-jax-community-week`. 
+Important announcements of the Hugging Face, Flax/JAX, and Google Cloud team will be posted there. 
+Such announcements include general information about the community week (Dates, Rules, ...), release of relevant training scripts (Flax/JAX example scripts for NLP and Vision), release of other important documents (How to access the TPU), etc. 
+The Slack channel will also be the central place for participants to post about their results, share their learning experiences, ask questions, etc.
+
 To be invited to the Slack channel, please make sure you have signed up [on the Google form](https://forms.gle/tVGPhjKXyEsSgUcs8). 
 
-**Note**: If you have signed up on the Google form, but you are not in the Slack channel, please leave a message on [the official forum announcement]( ) and ping `@Suzana` and `@patrickvonplaten`.
+**Note**: If you have signed up on the google form, but you are not in the Slack channel, please leave a message on [(TODO) the official forum announcement]( ) and ping `@Suzana` and `@patrickvonplaten`.
 
 ## Projects
 
-During the first week after the community week announcement, **23.06. - 30.06.**, teams will be formed around the most promising and interesting project ideas. Each team can consist of 2 to 5 participants.
+During the first week after the community week announcement, **23.06. - 30.06.**, teams will be formed around the most promising and interesting project ideas. Each team can consist of 2 to 5 participants. Projects can be accessed [here](https://discuss.huggingface.co/c/flax-jax-projects/22).
 
 ### How to propose a project
 
 Some default project ideas are given by the organizers. **However, we strongly encourage participants to submit their own project ideas!**
-Check out the [HOW_TO_PROPOSE_PROJECT.md]( ) for more information on how to propose a project.
+Check out the [(TODO) HOW_TO_PROPOSE_PROJECT.md]( ) for more information on how to propose a new project.
 
 ### How to form a team around a project
 
-You can check out all existing projects ideas on the forum under [Flax/JAX projects category]().
+You can check out all existing projects ideas on the forum under [Flax/JAX projects category](https://discuss.huggingface.co/c/flax-jax-projects/22).
 Make sure to quickly check out each project idea and leave a ❤️  if you like an idea. 
-Feel free to leave comments, suggestions for improvement, or questions about more details directly on the discussion thread.
+Feel free to leave comments, suggestions for improvement, or questions about more details directly on the discussion thread. 
 If you have found the project that you ❤️  the most, leave a message "I would like to join this project" on the discussion thread. 
-We strongly advise you to also shortly state who you are, which time zone you are in and why you would like to work on this project, how you can contribute to the project and what your vision is for the project. 
-
-For projects that see a lot of interest and for which enough participants have expressed interest in joining, an official **team** will be created by the organizers. 
-One of the organizers (`@Suzana`, `@valhalla`, `@osanseviero`, `@patrickvonplaten`) will leave a message "For this project the team: <Team name>, <member names> is officially created" on the thread and note down the teams on this [(TODO) Google Sheet]( ).
+We strongly advise you to also shortly state who you are, which time zone you are in and why you would like to work on this project, how you can contribute to the project and what your vision is for the project.
+For projects that see a lot of interest and for which enough participants have expressed interest in joining, an official team will be created by the organizers. 
+One of the organizers (`@Suzana`, `@valhalla`, `@osanseviero`, `@patrickvonplaten`) will leave a message "For this project the team: `<team_name>`, `<team_members>` , is officially created" on the thread and note down the teams on [(TODO) this google sheet]().
 
 Once created, the team can start refining their project:
 
-- What is the goal of the project? *E.g.*, Present a language model that writes poetry in Russion.
+- What is the goal of the project? *E.g.*, Present a language model that writes poetry in Russian.
 - What model will we use? *E.g.*, FlaxGPT2
-- What data will we use? *E.g.* Russian dataset of OSCAR & publicly availble book on poetry
-- Should we use a pretrained model or train a model from scratch? *E.g.* Train a model from scratch
+- What data will we use? *E.g.* Russian dataset of OSCAR & publicly available book on poetry
+- Should we use a pre-trained model or train a model from scratch? E.g. Train a model from scratch
 - What training scripts do we need? *E.g.* `transformers/examples/flax/run_clm_flax.py` can be used
-- What kind of demo would we like to present? *E.g.* Text-generation API of the 🤗 Hub in combination with a Streamlit demo that let's the user generate a poem of a given length
+- What kind of demo would we like to present? E.g. Text-generation API of the 🤗 Hub in combination with a Streamlit demo that lets the user generate a poem of a given length
 - How will the work be divided? *E.g.* Team member 1 works on data preprocessing, Team member 2 works on adapting the Flax script, ...
 
-We highly recommend the team to discuss all relevant ideas for their project
-directly on the forum thread. This way valuable learning experiences are shared 
-and accessible by the whole community in the future. 
-Additionally, the organizers, other participants or anybody in the community really can read through your discussions and leave comments/tips for improvement.
-Obviously, you can also create private chats, ... to discuss more sensitive topics etc...
+We highly recommend that each team discusses all relevant ideas for their project directly on the forum thread. 
+This way valuable learning experiences are shared and accessible by the whole community in the future. 
+Additionally, the organizers, other participants, or anybody in the community really can read through your discussions and leave comments/tips for improvement. Obviously, you can also create private chats, ... to discuss more sensitive topics, etc.
 
-**Important**: 
+**Important**:
 
- - For project ideas that see a lot of interest, we are more than happy to create more than one team.
- - Participants are welcome to join multiple teams, even thought we encourage to only work on a single project.
- - Under special circumstances, participants can change/create new teams. Please note that we would like to keep this the exception. If however you would like to change/leave existing teams, please leave a post on the project's thread where you ping the corresponding organizer that created the group.
+- For project ideas that see a lot of interest, we are more than happy to create more than one team.
+- Participants are welcome to join multiple teams, even though we encourage them to only work on a single project.
+- Under special circumstances, participants can change/create new teams. Please note that we would like to keep this the exception. If however, you would like to change/leave existing teams, please leave a post on the project's thread where you ping the corresponding organizer that created the group.
  - It is often easy to propose/join a project that is done in your native language. Feel free to reach out to existing [language-specific groups](https://discuss.huggingface.co/c/languages-at-hugging-face/15) to look for community members that might be interested in joining your project.
 
 ## Tips on how to organize the project
@@ -141,8 +142,8 @@ TODO (should be filled by 5.07.)...
 
 ## General tips and tricks
 
-TODO (will be filled on a continous basis)...
+TODO (will be filled continuously)...
 
 ## FAQ
 
-TODO (will be filled on a continous basis)...
+TODO (will be filled continuously)...
