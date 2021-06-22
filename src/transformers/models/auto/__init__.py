@@ -87,6 +87,7 @@ if is_tf_available():
 if is_flax_available():
     _import_structure["modeling_flax_auto"] = [
         "FLAX_MODEL_FOR_CAUSAL_LM_MAPPING",
+        "FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
         "FLAX_MODEL_FOR_MASKED_LM_MAPPING",
         "FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
         "FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
@@ -175,6 +176,7 @@ if TYPE_CHECKING:
     if is_flax_available():
         from .modeling_flax_auto import (
             FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
+            FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             FLAX_MODEL_FOR_MASKED_LM_MAPPING,
             FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,

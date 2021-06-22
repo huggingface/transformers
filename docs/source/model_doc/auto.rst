@@ -266,3 +266,10 @@ FlaxAutoModelForNextSentencePrediction
 
 .. autoclass:: transformers.FlaxAutoModelForNextSentencePrediction
     :members:
+
+
+FlaxAutoModelForImageClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxAutoModelForImageClassification
+    :members:
