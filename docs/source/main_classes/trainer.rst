@@ -165,14 +165,17 @@ warnings you could run it as:
 
 .. code-block:: bash
 
-    my_app.py ... --log_level warn --log_level_replica error
+    my_app.py ... --log_level warning --log_level_replica error
 
 In the multi-node environment if you also don't want the logs to repeat for each node's main process, you will want to
 change the above to:
 
 .. code-block:: bash
 
-    my_app.py ... --log_level warn --log_level_replica error --log_on_each_node 0
+    my_app.py ... --log_level warning --log_level_replica error --log_on_each_node 0
+
+and then only the main process of the first node will log at the "warning" level, and all other processes on the main
+node and all processes on other nodes will log at the "error" level.
 
 If you need your application to be as quiet as possible you could do:
 
@@ -180,6 +183,7 @@ If you need your application to be as quiet as possible you could do:
 
     my_app.py ... --log_level error --log_level_replica error --log_on_each_node 0
 
+(add ``--log_on_each_node 0`` if on multi-node environment)
 
 
 
