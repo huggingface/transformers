@@ -13,24 +13,26 @@
 # limitations under the License.
 
 import argparse
+import datetime
+import json
 import os
+import re
 from pathlib import Path
 from typing import List, Tuple
-import datetime
+
 import yaml
-import json
-import re
 from tqdm import tqdm
 
 from transformers.models.marian.convert_marian_to_pytorch import (
     FRONT_MATTER_TEMPLATE,
+    convert,
     convert_opus_name_to_hf_name,
+    download_and_unzip,
     get_system_metadata,
     remove_prefix,
     remove_suffix,
-    download_and_unzip,
-    convert,
 )
+
 
 DEFAULT_REPO = "Tatoeba-Challenge"
 DEFAULT_MODEL_DIR = os.path.join(DEFAULT_REPO, "models")
