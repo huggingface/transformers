@@ -791,9 +791,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertAlmostEqual(a, a1, delta=1e-8)
         self.assertAlmostEqual(b, b1, delta=1e-8)
 
-        self.assertTrue(math.isclose(a, a1, rel_tol=1e-8))
-        self.assertTrue(math.isclose(b, b1, rel_tol=1e-8))
-
     @require_torch_up_to_2_gpus
     def test_resume_training_with_gradient_accumulation(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
