@@ -21,6 +21,15 @@ from collections import OrderedDict
 from ...utils import logging
 
 # Add modeling imports here
+from ..fnet.modeling_fnet import (
+    FNetForMaskedLM,
+    FNetForCausalLM,
+    FNetForMultipleChoice,
+    FNetForQuestionAnswering,
+    FNetForSequenceClassification,
+    FNetForTokenClassification,
+    FNetModel,
+)
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -303,6 +312,7 @@ from ..xlnet.modeling_xlnet import (
 )
 from .auto_factory import auto_class_factory
 from .configuration_auto import (
+    FNetConfig,
     AlbertConfig,
     BartConfig,
     BertConfig,
@@ -370,6 +380,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
+        (FNetConfig, FNetModel),
         (VisualBertConfig, VisualBertModel),
         (RoFormerConfig, RoFormerModel),
         (CLIPConfig, CLIPModel),
@@ -473,6 +484,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
+(FNetConfig, FNetForMaskedLM),
         (RoFormerConfig, RoFormerForMaskedLM),
         (BigBirdPegasusConfig, BigBirdPegasusForConditionalGeneration),
         (GPTNeoConfig, GPTNeoForCausalLM),
@@ -521,6 +533,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Causal LM mapping
+        (FNetConfig, FNetForCausalLM),
         (RoFormerConfig, RoFormerForCausalLM),
         (BigBirdPegasusConfig, BigBirdPegasusForCausalLM),
         (GPTNeoConfig, GPTNeoForCausalLM),
@@ -563,6 +576,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
+(FNetConfig, FNetForMaskedLM),
         (RoFormerConfig, RoFormerForMaskedLM),
         (BigBirdConfig, BigBirdForMaskedLM),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
@@ -624,6 +638,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        (FNetConfig, FNetForSequenceClassification),
         (RoFormerConfig, RoFormerForSequenceClassification),
         (BigBirdPegasusConfig, BigBirdPegasusForSequenceClassification),
         (BigBirdConfig, BigBirdForSequenceClassification),
@@ -664,6 +679,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
+        (FNetConfig, FNetForQuestionAnswering),
         (RoFormerConfig, RoFormerForQuestionAnswering),
         (BigBirdPegasusConfig, BigBirdPegasusForQuestionAnswering),
         (BigBirdConfig, BigBirdForQuestionAnswering),
@@ -705,6 +721,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
+(FNetConfig, FNetForTokenClassification),
         (RoFormerConfig, RoFormerForTokenClassification),
         (BigBirdConfig, BigBirdForTokenClassification),
         (ConvBertConfig, ConvBertForTokenClassification),
@@ -735,6 +752,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
+(FNetConfig, FNetForMultipleChoice),
         (RoFormerConfig, RoFormerForMultipleChoice),
         (BigBirdConfig, BigBirdForMultipleChoice),
         (ConvBertConfig, ConvBertForMultipleChoice),
