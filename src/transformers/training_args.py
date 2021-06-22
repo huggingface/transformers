@@ -147,13 +147,14 @@ class TrainingArguments:
             Number of steps used for a linear warmup from 0 to :obj:`learning_rate`. Overrides any effect of
             :obj:`warmup_ratio`.
         log_level (:obj:`str`, `optional`, defaults to ``passive``):
-            Logger log level to use on the main process. Possible choices are the log levels as strings: 'debug', 'info',
-            'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and lets the
+            Logger log level to use on the main process. Possible choices are the log levels as strings: 'debug',
+            'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and lets the
             application set the level.
         log_level_replica (:obj:`str`, `optional`, defaults to ``passive``):
             Logger log level to use on replicas. Same choices as ``log_level``"
         log_on_each_node (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            In multinode distributed training, whether to log using :obj:`log_level` once per node, or only on the main node.
+            In multinode distributed training, whether to log using :obj:`log_level` once per node, or only on the main
+            node.
         logging_dir (:obj:`str`, `optional`):
             `TensorBoard <https://www.tensorflow.org/tensorboard>`__ log directory. Will default to
             `runs/**CURRENT_DATETIME_HOSTNAME**`.
