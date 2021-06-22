@@ -4,7 +4,9 @@ Welcome to the Flax/JAX community week! The goal of this week is to make compute
 practicable for a wider audience of engineers and researchers. 
 To do so, we will try to teach **you** how to effectively use JAX/Flax on TPU and help you to complete a fun NLP and/or CV project in JAX/Flax during the community week. 
 
-Here we list all the important information and documents that you will need during the Flax/JAX community week.
+Free access to a TPUv3-8 will kindly be provided by the Google Cloud team!
+
+In this document, we list all the important information that you will need during the Flax/JAX community week.
 
 Don't forget to sign up [here](https://forms.gle/tVGPhjKXyEsSgUcs8)! 
 
@@ -34,26 +36,22 @@ Participants can propose ideas for an interesting NLP and/or CV project. Teams o
 
 To help each team successfully finish their project, we have organized talks by leading scientists and engineers from Google, Hugging Face, and the open-source NLP & CV community. The talks will take place before the community week from June 30th to July 2nd. Make sure to attend the talks to get the most out of your participation! Check out the [Talks](#talks) section to get an overview of the talks, including the speaker and the time of the talk.
 
-Each team is then given free access to a TPUv3-8 VM from July 7th to July 14th. In addition, we will provide training examples in JAX/Flax for a variety of NLP and Vision models to kick-start your project. During the week, we make sure to answer any questions you might have about JAX/Flax and Transformers. We will try to help each team as much as possible to complete their project!
+Each team is then given **free access to a TPUv3-8 VM** from July 7th to July 14th. In addition, we will provide training examples in JAX/Flax for a variety of NLP and Vision models to kick-start your project. During the week, we'll make sure to answer any questions you might have about JAX/Flax and Transformers and help each team as much as possible to complete their project!
 
-At the end of the community week, each team can submit a demo of their project. All demonstrations will be evaluated by a jury and the top-3 demos will be awarded a prize. Check out the [How to submit a demo](#how-to-submit-a-demo) section for more information and suggestions on how to submit your project.
+At the end of the community week, each team should submit a demo of their project. All demonstrations will be evaluated by a jury and the top-3 demos will be awarded a prize. Check out the [How to submit a demo](#how-to-submit-a-demo) section for more information and suggestions on how to submit your project.
 
 ## Important dates
 
-**23.06.** Official announcement of the community week. Make sure to sign-up in [this google form](https://forms.gle/tVGPhjKXyEsSgUcs8).
-**23.06. - 30.06.** Participants will be added to an internal Slack channel. Project ideas can be proposed here and groups of 3-5 are formed. Read this document for more information. 
-**30.06.** Release of all relevant training scripts in JAX/Flax as well as other documents on how to set up a TPU, how to use the training scripts, how to submit a demo, tips & tricks for JAX/Flax, tips & tricks for efficient use of the   hub. 
-**30.06. - 2.07.** Talks about JAX/Flax, TPU, Transformers, Computer Vision & NLP will be held. 
-**7.07.** Start of the community week! Access to TPUv3-8 will be given to each team.
-**7.07. - 14.07.** The Hugging Face & JAX/Flax & Cloud team will be available for any questions, problems the teams might run into.
-**15.07.** Access to TPU is deactivated and community week officially ends.
-**16.07.** Deadline for each team to submit a demo. 
+- **23.06.** Official announcement of the community week. Make sure to sign-up in [this google form](https://forms.gle/tVGPhjKXyEsSgUcs8).
+- **23.06. - 30.06.** Participants will be added to an internal Slack channel. Project ideas can be proposed here and groups of 3-5 are formed. Read this document for more information. 
+- **30.06.** Release of all relevant training scripts in JAX/Flax as well as other documents on how to set up a TPU, how to use the training scripts, how to submit a demo, tips & tricks for JAX/Flax, tips & tricks for efficient use of the   hub. 
+- **30.06. - 2.07.** Talks about JAX/Flax, TPU, Transformers, Computer Vision & NLP will be held. 
+- **7.07.** Start of the community week! Access to TPUv3-8 will be given to each team.
+- **7.07. - 14.07.** The Hugging Face & JAX/Flax & Cloud team will be available for any questions, problems the teams might run into.
+- **15.07.** Access to TPU is deactivated and community week officially ends.
+- **16.07.** Deadline for each team to submit a demo. 
 
 ## Communication
-
-All important communication will take place in an internal Slack channel, called `#flax-jax-community-week`.
-Important announcements of the Hugging Face, Flax/JAX, and Google Cloud team will be posted there. Such announcements include general information about the community week (Dates, Rules, ...), release of relevant training scripts (Flax/JAX example scripts for NLP and Vision), release of other important documents (How to access the TPU), ... 
-The Slack channel will also be the central place for participants to post about their results, share their learning experiences, ask questions, etc...
 
 All important communication will take place in an internal Slack channel, called `#flax-jax-community-week`. 
 Important announcements of the Hugging Face, Flax/JAX, and Google Cloud team will be posted there. 
@@ -126,7 +124,35 @@ TODO (should be filled by 25.06.)...
 
 ## Quickstart flax and jax in transformers
 
-TODO (should be filled by 25.06.)...
+Currently, we support the following models in Flax. 
+Note that some models are about to be merged to `master` and will 
+be available in a couple of days.
+
+- [BART](https://github.com/huggingface/transformers/blob/master/src/transformers/models/bart/modeling_flax_bart.py)
+- [BERT](https://github.com/huggingface/transformers/blob/master/src/transformers/models/bert/modeling_flax_bert.py)
+- [BigBird](https://github.com/huggingface/transformers/blob/master/src/transformers/models/big_bird/modeling_flax_big_bird.py)
+- [CLIP](https://github.com/huggingface/transformers/blob/master/src/transformers/models/clip/modeling_flax_clip.py)
+- [ELECTRA](https://github.com/huggingface/transformers/blob/master/src/transformers/models/electra/modeling_flax_electra.py)
+- [GPT2](https://github.com/huggingface/transformers/blob/master/src/transformers/models/gpt2/modeling_flax_gpt2.py)
+- [(TODO) MBART](https://github.com/huggingface/transformers/blob/master/src/transformers/models/mbart/modeling_flax_mbart.py)
+- [RoBERTa](https://github.com/huggingface/transformers/blob/master/src/transformers/models/roberta/modeling_flax_roberta.py)
+- [(TODO) T5](https://github.com/huggingface/transformers/blob/master/src/transformers/models/t5/modeling_flax_t5.py)
+- [ViT](https://github.com/huggingface/transformers/blob/master/src/transformers/models/vit/modeling_flax_vit.py)
+- [(TODO) Wav2Vec2](https://github.com/huggingface/transformers/blob/master/src/transformers/models/wav2vec2/modeling_flax_wav2vec2.py)
+
+You can find all available training scripts for JAX/Flax under the 
+official [flax example folder](https://github.com/huggingface/transformers/tree/master/examples/flax). Note that a couple of training scripts will be released in the following week.
+
+- [Causal language modeling (GPT2)](https://github.com/huggingface/transformers/blob/master/examples/flax/language-modeling/run_clm_flax.py)
+- [Masked language modeling (BERT, RoBERTa, ELECTRA, BigBird)](https://github.com/huggingface/transformers/blob/master/examples/flax/language-modeling/run_mlm_flax.py)
+- [Text classification (BERT, RoBERTa, ELECTRA, BigBird)](https://github.com/huggingface/transformers/blob/master/examples/flax/text-classification/run_flax_glue.py)
+- [(TODO) Summarization / Seq2Seq (BART, MBART, T5)]( )
+- [(TODO) Masked Seq2Seq pret-training (T5)]( )
+- [(TODO) Image classification (ViT)]( )
+- [(TODO) CLIP pretraining, fine-tuning (CLIP)]( )
+
+For more in-detail information on how to use/adapt Transformers Flax models and 
+example scripts, please have a look at [(TODO by 25.06.) HOW_TO_USE_FLAX_IN_TRANSFORMERS]( ).
 
 ## How to install relevant libraries
 
