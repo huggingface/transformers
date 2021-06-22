@@ -766,6 +766,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     @require_torch_non_multi_gpu
     def test_resume_training_with_randomness(self):
         # This test will fail flakily for more than 1 GPUs since the result will be slightly more different
+        # TODO: investigate why it fails for 2 GPUs?
 
         if torch.cuda.is_available():
             torch.backends.cudnn.deterministic = True
