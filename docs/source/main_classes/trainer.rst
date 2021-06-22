@@ -122,8 +122,8 @@ TFTrainingArguments
 Logging
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-By default :class:`~transformers.Trainer` will use ``logging.INFO`` for the main process and ``logging.WARNING`` for the
-replicas if any.
+By default :class:`~transformers.Trainer` will use ``logging.INFO`` for the main process and ``logging.WARNING`` for
+the replicas if any.
 
 These defaults can be overridden to use any of the 5 ``logging`` levels with :class:`~transformers.TrainingArguments`'s
 arguments:
@@ -131,8 +131,8 @@ arguments:
 - ``log_level`` - for the main process
 - ``log_level_replica`` - for the replicas
 
-Further, if :class:`~transformers.TrainingArguments`'s ``log_on_each_node`` is set to ``True`` all nodes will use the
-log level settings for the main process.
+Further, if :class:`~transformers.TrainingArguments`'s ``log_on_each_node`` is set to ``False`` only the main node will
+use the log level settings for its main process, all other nodes will use the log level settings for replicas.
 
 Note that :class:`~transformers.Trainer` is going to set ``transformers``'s log level separately for each node in its
 :meth:`~transformers.Trainer.__init__`. So you may want to set this sooner (see the next example) if you tap into other
@@ -158,6 +158,8 @@ Here is an example of how this can be used in an application:
     datasets.utils.logging.set_verbosity(log_level)
     transformers.utils.logging.set_verbosity(log_level)
 
+    trainer = Trainer(...)
+
 And then if you only want to see warnings on the main node and all other nodes to not print any most likely duplicated
 warnings you could run it as:
 
@@ -165,11 +167,19 @@ warnings you could run it as:
 
     my_app.py ... --log_level warn --log_level_replica error
 
-or if you need your application to be as quiet as possible you could do:
+In the multi-node environment if you also don't want the logs to repeat for each node's main process, you will want to
+change the above to:
 
 .. code-block:: bash
 
-    my_app.py ... --log_level error --log_level_replica error
+    my_app.py ... --log_level warn --log_level_replica error --log_on_each_node 0
+
+If you need your application to be as quiet as possible you could do:
+
+.. code-block:: bash
+
+    my_app.py ... --log_level error --log_level_replica error --log_on_each_node 0
+
 
 
 
