@@ -112,6 +112,13 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> Dict:
         raise NotImplementedError(f"init method has to be implemented for {self}")
 
+    @classmethod
+    def _from_config(cls, config, **kwargs):
+        """
+        All context managers that the model should be init'ed under go here
+        """
+        return cls(config, **kwargs)
+
     @property
     def config(self) -> PretrainedConfig:
         return self._config

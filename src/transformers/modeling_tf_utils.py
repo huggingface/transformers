@@ -644,6 +644,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         self.config = config
         self.name_or_path = config.name_or_path
 
+    @classmethod
+    def _from_config(cls, config, **kwargs):
+        """
+        All context managers that the model should be init'ed under go here
+        """
+        return cls(config, **kwargs)
+
     @tf.function(
         input_signature=[
             {

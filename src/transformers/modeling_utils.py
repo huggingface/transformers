@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import torch
-from torch import Tensor, device, dtype, nn
+from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
 
 from .activations import get_activation
@@ -82,6 +82,18 @@ except ImportError:
 
         def forward(self, input):
             return input
+
+
+def _dtype_from_str(dtype_str) -> torch.dtype:
+    """
+    Returns the converted from string :obj:`torch.dtype`, e.g. from ``float32`` to :obj:`torch.float32`. Return
+    :obj:`None` if ``dtype_str`` is :obj:`None`.
+    """
+    if dtype_str is None:
+        return None
+    if isinstance(dtype_str, str):
+        return getattr(torch, dtype_str)
+    raise ValueError(f"dtype is expected to be the string attribute name of ``torch``, got {dtype_str}")
 
 
 def find_pruneable_heads_and_indices(
@@ -202,7 +214,7 @@ class ModuleUtilsMixin:
         return get_parameter_device(self)
 
     @property
-    def dtype(self) -> dtype:
+    def dtype(self) -> torch.dtype:
         """
         :obj:`torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
         """
@@ -464,6 +476,37 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
+
+    @classmethod
+    def _from_config(cls, config, **kwargs):
+        """
+        All context managers that the model should be init'ed under go here
+        """
+
+        # override default dtype if needed
+        dtype_orig = None
+        dtype = _dtype_from_str(config.torch_dtype)
+        if dtype is not None:
+            logger.info(f"instantiating {cls.__name__} model under default dtype {dtype}")
+            dtype_orig = torch.get_default_dtype()
+            torch.set_default_dtype(dtype)
+
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
+            # this immediately partitions the model across all gpus, to avoid the overhead in time
+            # and memory copying it on CPU or each GPU first
+            with deepspeed.zero.Init(config=deepspeed_config()):
+                model = cls(config, **kwargs)
+        else:
+            model = cls(config, **kwargs)
+
+        # restore default dtype if it was modified
+        if dtype_orig is not None:
+            torch.set_default_dtype(dtype_orig)
+
+        return model
 
     @property
     def base_model(self) -> nn.Module:
@@ -864,6 +907,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
 
+        # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
+        # so in from_config and from_pretrained we reverse this with getattr(torch, "float32")
+        dtype = get_parameter_dtype(model_to_save)
+        model_to_save.config.torch_dtype = str(dtype).split(".")[1]
+
         # Attach architecture to the config
         model_to_save.config.architectures = [model_to_save.__class__.__name__]
 
@@ -1050,6 +1098,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         from_auto_class = kwargs.pop("_from_auto", False)
         _fast_init = kwargs.pop("_fast_init", True)
 
+        from_pt = False if (from_tf or from_flax) else True
+
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
             user_agent["using_pipeline"] = from_pipeline
@@ -1153,6 +1203,33 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             resolved_archive_file = None
 
+        # load pt weights early so that we know which dtype to init the model under
+        if from_pt:
+            if state_dict is None:
+                try:
+                    state_dict = torch.load(resolved_archive_file, map_location="cpu")
+                except Exception:
+                    raise OSError(
+                        f"Unable to load weights from pytorch checkpoint file for '{pretrained_model_name_or_path}' "
+                        f"at '{resolved_archive_file}'"
+                        "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "
+                    )
+
+            # set dtype to instantiate the model with according to the dtype of the weights
+            # 1. we look under config.torch_dtype first and if it's not None, using that that dtype
+            # 2. if it's None, we try to detect it from the loaded state_dict, by checking the first
+            #    entry - we assume all weights are of the same dtype
+            dtype_orig = None
+            dtype = _dtype_from_str(config.torch_dtype)
+            if dtype is None:
+                dtype = next(iter(state_dict.values())).dtype
+
+            if dtype is not None:
+                print(f"instantiating {cls.__name__} model under default dtype {dtype}")
+                logger.info(f"instantiating {cls.__name__} model under default dtype {dtype}")
+                dtype_orig = torch.get_default_dtype()
+                torch.set_default_dtype(dtype)
+
         config.name_or_path = pretrained_model_name_or_path
 
         # Instantiate model.
@@ -1168,6 +1245,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             with no_init_weights(_enable=_fast_init):
                 model = cls(config, *model_args, **model_kwargs)
+
+        if from_pt:
+            # restore default_dtype
+            if dtype_orig is not None:
+                torch.set_default_dtype(dtype_orig)
 
         if from_tf:
             if resolved_archive_file.endswith(".index"):
@@ -1196,17 +1278,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation instructions."
                 )
                 raise
-        else:
-            if state_dict is None:
-                try:
-                    state_dict = torch.load(resolved_archive_file, map_location="cpu")
-                except Exception:
-                    raise OSError(
-                        f"Unable to load weights from pytorch checkpoint file for '{pretrained_model_name_or_path}' "
-                        f"at '{resolved_archive_file}'"
-                        "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "
-                    )
-
+        elif from_pt:
             model, missing_keys, unexpected_keys, error_msgs = cls._load_state_dict_into_model(
                 model, state_dict, pretrained_model_name_or_path, _fast_init=_fast_init
             )
