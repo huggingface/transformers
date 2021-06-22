@@ -86,7 +86,7 @@ except ImportError:
 
 def _dtype_from_str(dtype_str) -> torch.dtype:
     """
-    Returns the converted from string :obj:`torch.dtype`, e.g. from ``float32`` to :obj:`torch.float32`. Return
+    Returns the converted from string :obj:`torch.dtype`, e.g. from ``float32`` to :obj:`torch.float32`. Returns
     :obj:`None` if ``dtype_str`` is :obj:`None`.
     """
     if dtype_str is None:
@@ -1098,7 +1098,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         from_auto_class = kwargs.pop("_from_auto", False)
         _fast_init = kwargs.pop("_fast_init", True)
 
-        from_pt = False if (from_tf or from_flax) else True
+        from_pt = not (from_tf | from_flax)
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -1215,17 +1215,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "
                     )
 
-            # set dtype to instantiate the model with according to the dtype of the weights
-            # 1. we look under config.torch_dtype first and if it's not None, using that that dtype
-            # 2. if it's None, we try to detect it from the loaded state_dict, by checking the first
+            # set dtype to instantiate the model according to the weights' dtype
+            # 1. If config.torch_dtype is not None, we use that dtype
+            # 2. Otherwise, we try to detect it from the loaded state_dict, by checking the first
             #    entry - we assume all weights are of the same dtype
             dtype_orig = None
             dtype = _dtype_from_str(config.torch_dtype)
             if dtype is None:
                 dtype = next(iter(state_dict.values())).dtype
-
             if dtype is not None:
-                print(f"instantiating {cls.__name__} model under default dtype {dtype}")
                 logger.info(f"instantiating {cls.__name__} model under default dtype {dtype}")
                 dtype_orig = torch.get_default_dtype()
                 torch.set_default_dtype(dtype)
@@ -1247,7 +1245,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 model = cls(config, *model_args, **model_kwargs)
 
         if from_pt:
-            # restore default_dtype
+            # restore default dtype
             if dtype_orig is not None:
                 torch.set_default_dtype(dtype_orig)
 
