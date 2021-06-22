@@ -48,6 +48,8 @@ if is_sagemaker_mp_enabled():
 
 
 logger = logging.get_logger(__name__)
+log_levels = logging.get_log_levels_dict().copy()
+trainer_log_levels = dict(**log_levels, passive=-1)
 
 
 def default_logdir() -> str:
@@ -144,6 +146,15 @@ class TrainingArguments:
         warmup_steps (:obj:`int`, `optional`, defaults to 0):
             Number of steps used for a linear warmup from 0 to :obj:`learning_rate`. Overrides any effect of
             :obj:`warmup_ratio`.
+        log_level (:obj:`str`, `optional`, defaults to ``passive``):
+            Logger log level to use on the main process. Possible choices are the log levels as strings: 'debug',
+            'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and lets the
+            application set the level.
+        log_level_replica (:obj:`str`, `optional`, defaults to ``passive``):
+            Logger log level to use on replicas. Same choices as ``log_level``"
+        log_on_each_node (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            In multinode distributed training, whether to log using :obj:`log_level` once per node, or only on the main
+            node.
         logging_dir (:obj:`str`, `optional`):
             `TensorBoard <https://www.tensorflow.org/tensorboard>`__ log directory. Will default to
             `runs/**CURRENT_DATETIME_HOSTNAME**`.
@@ -316,8 +327,6 @@ class TrainingArguments:
             :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
             the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
             details.
-        log_on_each_node (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            In multinode distributed training, whether to log once per node, or only on the main node.
     """
 
     output_dir: str = field(
@@ -397,6 +406,26 @@ class TrainingArguments:
     )
     warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
+    log_level: Optional[str] = field(
+        default="passive",
+        metadata={
+            "help": "Logger log level to use on the main node. Possible choices are the log levels as strings: 'debug', 'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and lets the application set the level. Defaults to 'passive'.",
+            "choices": trainer_log_levels.keys(),
+        },
+    )
+    log_level_replica: Optional[str] = field(
+        default="passive",
+        metadata={
+            "help": "Logger log level to use on replica nodes. Same choices and defaults as ``log_level``",
+            "choices": trainer_log_levels.keys(),
+        },
+    )
+    log_on_each_node: bool = field(
+        default=True,
+        metadata={
+            "help": "When doing a multinode distributed training, whether to log once per node or just once on the main node."
+        },
+    )
     logging_dir: Optional[str] = field(default_factory=default_logdir, metadata={"help": "Tensorboard log dir."})
     logging_strategy: IntervalStrategy = field(
         default="steps",
@@ -561,12 +590,6 @@ class TrainingArguments:
         default=None,
         metadata={"help": "The path to a folder with a valid checkpoint for your model."},
     )
-    log_on_each_node: bool = field(
-        default=True,
-        metadata={
-            "help": "When doing a multinode distributed training, whether to log once per node or just once on the main node."
-        },
-    )
     _n_gpu: int = field(init=False, repr=False, default=-1)
     mp_parameters: str = field(
         default="",
@@ -579,6 +602,8 @@ class TrainingArguments:
         env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
         if env_local_rank != -1 and env_local_rank != self.local_rank:
             self.local_rank = env_local_rank
+
+        self.log_level = trainer_log_levels[self.log_level]
 
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
@@ -888,6 +913,11 @@ class TrainingArguments:
                 return smp.rank() == 0
             else:
                 return self.process_index == 0
+
+    def get_node_log_level(self):
+        log_level_main_node = logging.INFO if self.log_level == -1 else self.log_level
+        log_level_replica_node = logging.WARNING if self.log_level_replica == -1 else self.log_level_replica
+        return log_level_main_node if self.should_log else log_level_replica_node
 
     @property
     def place_model_on_device(self):

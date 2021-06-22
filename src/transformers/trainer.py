@@ -290,6 +290,10 @@ class Trainer:
         self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
         self._memory_tracker.start()
 
+        # set the correct log level depending on the node
+        log_level = args.get_node_log_level()
+        logging.set_verbosity(log_level)
+
         # force device and distributed setup init explicitly
         args._setup_devices
 

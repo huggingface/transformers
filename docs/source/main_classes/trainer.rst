@@ -119,6 +119,74 @@ TFTrainingArguments
     :members:
 
 
+Logging
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+By default :class:`~transformers.Trainer` will use ``logging.INFO`` for the main process and ``logging.WARNING`` for
+the replicas if any.
+
+These defaults can be overridden to use any of the 5 ``logging`` levels with :class:`~transformers.TrainingArguments`'s
+arguments:
+
+- ``log_level`` - for the main process
+- ``log_level_replica`` - for the replicas
+
+Further, if :class:`~transformers.TrainingArguments`'s ``log_on_each_node`` is set to ``False`` only the main node will
+use the log level settings for its main process, all other nodes will use the log level settings for replicas.
+
+Note that :class:`~transformers.Trainer` is going to set ``transformers``'s log level separately for each node in its
+:meth:`~transformers.Trainer.__init__`. So you may want to set this sooner (see the next example) if you tap into other
+``transformers`` functionality before creating the :class:`~transformers.Trainer` object.
+
+Here is an example of how this can be used in an application:
+
+.. code-block:: python
+
+    [...]
+    logger = logging.getLogger(__name__)
+
+    # Setup logging
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
+
+    # set the main code and the modules it uses to the same log-level according to the node
+    log_level = training_args.get_node_log_level()
+    logger.setLevel(log_level)
+    datasets.utils.logging.set_verbosity(log_level)
+    transformers.utils.logging.set_verbosity(log_level)
+
+    trainer = Trainer(...)
+
+And then if you only want to see warnings on the main node and all other nodes to not print any most likely duplicated
+warnings you could run it as:
+
+.. code-block:: bash
+
+    my_app.py ... --log_level warning --log_level_replica error
+
+In the multi-node environment if you also don't want the logs to repeat for each node's main process, you will want to
+change the above to:
+
+.. code-block:: bash
+
+    my_app.py ... --log_level warning --log_level_replica error --log_on_each_node 0
+
+and then only the main process of the first node will log at the "warning" level, and all other processes on the main
+node and all processes on other nodes will log at the "error" level.
+
+If you need your application to be as quiet as possible you could do:
+
+.. code-block:: bash
+
+    my_app.py ... --log_level error --log_level_replica error --log_on_each_node 0
+
+(add ``--log_on_each_node 0`` if on multi-node environment)
+
+
+
 Randomness
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
