@@ -1947,7 +1947,7 @@ class PushToHubMixin:
         use_auth_token: Optional[Union[bool, str]] = None,
     ) -> str:
         """
-        Upload model checkpoint or tokenizer files to the 🤗 Model Hub while synchronize a local clone of the repo in
+        Upload model checkpoint or tokenizer files to the 🤗 Model Hub while synchronizing a local clone of the repo in
         :obj:`repo_path_or_name`.
 
         Parameters:
