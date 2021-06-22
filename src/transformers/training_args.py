@@ -603,7 +603,9 @@ class TrainingArguments:
         if env_local_rank != -1 and env_local_rank != self.local_rank:
             self.local_rank = env_local_rank
 
+        # convert to int
         self.log_level = trainer_log_levels[self.log_level]
+        self.log_level_replica = trainer_log_levels[self.log_level_replica]
 
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
@@ -914,7 +916,20 @@ class TrainingArguments:
             else:
                 return self.process_index == 0
 
-    def get_node_log_level(self):
+    def get_process_log_level(self):
+        """
+        Returns the log level to be used depending on whether this process is the main process of node 0, main process
+        of node non-0, or a non-main process.
+
+        For the main process the log level defaults to ``logging.INFO`` unless overridden by ``log_level`` argument.
+
+        For the replica processes the log level defaults to ``logging.WARNING`` unless overridden by
+        ``log_level_replica`` argument.
+
+        The choice between the main and replica process settings is made according to the return value of
+        ``should_log``.
+        """
+
         log_level_main_node = logging.INFO if self.log_level == -1 else self.log_level
         log_level_replica_node = logging.WARNING if self.log_level_replica == -1 else self.log_level_replica
         return log_level_main_node if self.should_log else log_level_replica_node
