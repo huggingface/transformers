@@ -16,19 +16,21 @@ limitations under the License.
 
 # Performance and Scalability: How To Fit a Bigger Model and Train It Faster
 
+For now the software sections of this document are mainly Pytorch-specific, but the guide can be extended to other frameworks in the future.
+
 ## Quick notes
 
 This section gives brief ideas on how to make training faster and support bigger models. Later sections will expand, demonstrate and elucidate each of these.
 
 ### Faster Training
 
-HW:
+Hardware:
 
 - fast connectivity between GPUs
     * intra-node: NVLink
     * inter-node: Infiniband / Intel OPA
 
-SW:
+Software:
 
 - Data Parallel / Distributed Data Parallel
 - fp16 (autocast caching)
@@ -36,13 +38,13 @@ SW:
 
 ### Bigger Models
 
-HW:
+Hardware:
 
 - bigger GPUs
 - more GPUs
 - more CPU and NVMe (offloaded to by DeepSpeed)
 
-SW:
+Software:
 
 - Deepspeed ZeRO
 - Deepspeed ZeRO-Offload
@@ -175,12 +177,12 @@ For convolutions and linear layers there are 2x flops in the backward compared t
 AMP = Automatic Mixed Precision
 
 If we look at what's happening with FP16 training (mixed precision) we have:
-- the model in full precision so no memory saved there
-- the forward activations saved for gradient computation are in half precision
-- the gradients are computed in mixed precision *but* converted to full precision for the update, so no saving there
-- the optimizer state is in full precision as all the updates are done in full precision
+- the model has two copies in memory: one in half-precision for the forward/backward computations and one in full precision - no memory saved here
+- the forward activations saved for gradient computation are in half-precision - memory is saved here
+- the gradients are computed in half-precision *but* converted to full-precision for the update, no saving there
+- the optimizer states are in full precision as all the updates are done in full-precision
 
-So the savings only happen for the forward activations saved for the backward computation, and there is a slight overhead because the gradients are properly stored both in half and full precision. (This is probably over-simplified but I think it's enough to explain what follows.)
+So the savings only happen for the forward activations saved for the backward computation, and there is a slight overhead because the model weights are stored both in half- and full-precision.
 
 Now let's look at a simple text-classification fine-tuning on 2 GPUs (I'm giving the command for reference):
 ```
@@ -208,9 +210,9 @@ Since the only savings we get are in the model activations saved for the backwar
 |         32 |       6827 |      6207 |     620 |
 |         64 |      10037 |      8061 |    1976 |
 
-So there is only a real memory saving if we train at a high batch size (and it's not half) and at batch sizes lower than 8, you actually get a bigger memory footprint (because of the overhead mentioned above). The gain for FP16 training is that in each of those cases, the training with the flag `--fp16` is twice as fast, which does require every tensor to have every dimension be a multiple of 8 (so if your batch size is not a multiple of 8, you won't get that speed-up, and the script `finetune_trainer.py` does not pad the tensors to a sequence length that is a multiple of 8).
+So there is only a real memory saving if we train at a high batch size (and it's not half) and at batch sizes lower than 8, you actually get a bigger memory footprint (because of the overhead mentioned above). The gain for FP16 training is that in each of those cases, the training with the flag `--fp16` is twice as fast, which does require every tensor to have every dimension be a multiple of 8 (examples pad the tensors to a sequence length that is a multiple of 8).
 
-TL;DR: FP16 with apex or AMP will only give you some memory savings with a reasonably high batch size.
+Summary: FP16 with apex or AMP will only give you some memory savings with a reasonably high batch size.
 
 Some amazing tutorials to read on mixed precision:
 - @sgugger wrote a great explanation of mixed precision [here](https://docs.fast.ai/callback.fp16.html#A-little-bit-of-theory)
@@ -312,8 +314,8 @@ Software: `pytorch-1.8-to-be` + `cuda-11.0` / `transformers==4.3.0.dev0`
 The best performance is achieved when the tensor's batch size dimension is a multiple of 8. It's the final batch size of the tensor that gets passed to the GPU to calculate something that's important.
 
 Examples:
-- if you use a DP or DDP on 2 GPUs you want to have a total batch size of at least 16 (2x8), or a higher multiple. If your total batch size is 8, then each GPU will get a mini-batch of 4.
-- if you use a Pipeline you want to make sure that after chunking you end up with micro-batches that are multiples of 8. For example if `chunks=3` is used, you want the batch size to be 24 (or a higher multiple of 8). Because if you use a batch size of 16, you will end up with 3 micro-batches of size 6,5,5.
+- if you use DP or DDP on 2 GPUs you want to have a total batch size of at least 16 (2x8), or a higher multiple. If your total batch size is 8, then each GPU will get a mini-batch of 4.
+- if you use Pipeline parallelism you want to make sure that after chunking you end up with micro-batches that are multiples of 8. For example if `chunks=3` is used, you want the batch size to be 24 (or a higher multiple of 8). Because if you use a batch size of 16, you will end up with 3 micro-batches of size 6,5,5.
 
 There is no harm in using smaller batch sizes and at times one can hardly squeeze a batch size of 1 before getting OOM, it just won't be as fast as it can be.
 
