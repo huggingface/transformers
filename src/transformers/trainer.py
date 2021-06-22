@@ -2479,7 +2479,7 @@ class Trainer:
         with open(os.path.join(self.args.output_dir, "README.md"), "w") as f:
             f.write(model_card)
 
-    def push_to_hub(self, commit_message: Optional[str] = "add model", **kwargs):
+    def push_to_hub(self, commit_message: Optional[str] = "add model", **kwargs) -> str:
         """
         Upload `self.model` and `self.tokenizer` to the 🤗 model hub on the repo `self.args.push_to_hub_model_id`.
 

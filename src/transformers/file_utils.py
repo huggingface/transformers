@@ -2038,7 +2038,7 @@ class PushToHubMixin:
         organization: Optional[str] = None,
         private: bool = None,
         use_auth_token: Optional[Union[bool, str]] = None,
-    ):
+    ) -> str:
         if isinstance(use_auth_token, str):
             token = use_auth_token
         elif use_auth_token:
@@ -2070,7 +2070,7 @@ class PushToHubMixin:
         organization: Optional[str] = None,
         private: bool = None,
         use_auth_token: Optional[Union[bool, str]] = None,
-    ):
+    ) -> Repository:
         if repo_path_or_name is None and repo_url is None:
             raise ValueError("You need to specify a `repo_path_or_name` or a `repo_url`.")
 
