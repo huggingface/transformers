@@ -1215,9 +1215,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "
                     )
 
-            # set dtype to instantiate the model according to the weights' dtype
+            # set dtype to instantiate the model under:
             # 1. If config.torch_dtype is not None, we use that dtype
-            # 2. Otherwise, we try to detect it from the loaded state_dict, by checking the first
+            # 2. Otherwise, we try to auto-detect it from the loaded state_dict, by checking the first
             #    entry - we assume all weights are of the same dtype
             dtype_orig = None
             dtype = _dtype_from_str(config.torch_dtype)
