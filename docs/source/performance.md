@@ -214,6 +214,8 @@ So there is only a real memory saving if we train at a high batch size (and it's
 
 Summary: FP16 with apex or AMP will only give you some memory savings with a reasonably high batch size.
 
+Additionally, under mixed precision when possible, it's important that the batch size is a multiple of 8 to efficiently use tensor cores.
+
 Some amazing tutorials to read on mixed precision:
 - @sgugger wrote a great explanation of mixed precision [here](https://docs.fast.ai/callback.fp16.html#A-little-bit-of-theory)
 - Aleksey Bilogur's [A developer-friendly guide to mixed precision training with PyTorch](https://spell.ml/blog/mixed-precision-training-with-pytorch-Xuk7YBEAACAASJam)
@@ -309,15 +311,6 @@ python -m torch.distributed.launch --nproc_per_node 2 examples/pytorch/language-
 Hardware: 2x TITAN RTX 24GB each + NVlink with 2 NVLinks (`NV2` in `nvidia-smi topo -m`)
 Software: `pytorch-1.8-to-be` + `cuda-11.0` / `transformers==4.3.0.dev0`
 
-### Batch Sizes
-
-The best performance is achieved when the tensor's batch size dimension is a multiple of 8. It's the final batch size of the tensor that gets passed to the GPU to calculate something that's important.
-
-Examples:
-- if you use DP or DDP on 2 GPUs you want to have a total batch size of at least 16 (2x8), or a higher multiple. If your total batch size is 8, then each GPU will get a mini-batch of 4.
-- if you use Pipeline parallelism you want to make sure that after chunking you end up with micro-batches that are multiples of 8. For example if `chunks=3` is used, you want the batch size to be 24 (or a higher multiple of 8). Because if you use a batch size of 16, you will end up with 3 micro-batches of size 6,5,5.
-
-There is no harm in using smaller batch sizes and at times one can hardly squeeze a batch size of 1 before getting OOM, it just won't be as fast as it can be.
 
 ### DataLoader
 
