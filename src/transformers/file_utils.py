@@ -1940,7 +1940,7 @@ class PushToHubMixin:
         self,
         repo_path_or_name: Optional[str] = None,
         repo_url: Optional[str] = None,
-        temp_dir: bool = False,
+        use_temp_dir: bool = False,
         commit_message: Optional[str] = None,
         organization: Optional[str] = None,
         private: Optional[bool] = None,
@@ -1959,9 +1959,10 @@ class PushToHubMixin:
                 Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
                 repository will be created in your namespace (unless you specify an :obj:`organization`) with
                 :obj:`repo_name`.
-            temp_dir (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            use_temp_dir (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to clone the distant repo in a temporary directory or in :obj:`repo_path_or_name` inside
-                the current working directory.
+                the current working directory. This will slow things down if you are making changes in an existing repo
+                since you will need to clone the repo before every push.
             commit_message (:obj:`str`, `optional`):
                 Message to commit while pushing. Will default to :obj:`"add config"`, :obj:`"add tokenizer"` or
                 :obj:`"add model"` depending on the type of the class.
@@ -1978,8 +1979,30 @@ class PushToHubMixin:
 
         Returns:
             The url of the commit of your model in the given repository.
+
+        Examples::
+
+            # Upload a model to the Hub:
+            from transformers import AutoModel
+
+            model = BertModel.from_pretrained("bert-base-cased")
+            # Fine-tuning code
+
+            # Push the model to your namespace with the name "my-finetuned-bert" and have a local clone in the
+            # `my-finetuned-bert` folder.
+            model.push_to_hub("my-finetuned-bert")
+
+            # Push the model to your namespace with the name "my-finetuned-bert" with no local clone.
+            model.push_to_hub("my-finetuned-bert", use_temp_dir=True)
+
+            # Push the model to an organization with the name "my-finetuned-bert" and have a local clone in the
+            # `my-finetuned-bert` folder.
+            model.push_to_hub("my-finetuned-bert", organization="huggingface")
+
+            # Make a change to an existing repo that has been cloned locally in `my-finetuned-bert`.
+            model.push_to_hub("my-finetuned-bert", repo_url="https://huggingface.co/sgugger/my-finetuned-bert")
         """
-        if temp_dir:
+        if use_temp_dir:
             # Make sure we use the right `repo_name` for the `repo_url` before replacing it.
             if repo_url is None:
                 if use_auth_token is None:
@@ -1990,7 +2013,7 @@ class PushToHubMixin:
                 )
             repo_path_or_name = tempfile.mkdtemp()
 
-        # Create or clone the repo
+        # Create or clone the repo. If the repo is already cloned, this just retrieves the path to the repo.
         repo = self._create_or_get_repo(
             repo_path_or_name=repo_path_or_name,
             repo_url=repo_url,
@@ -2004,7 +2027,7 @@ class PushToHubMixin:
         url = self._push_to_hub(repo, commit_message=commit_message)
 
         # Clean up! Clean up! Everybody everywhere!
-        if temp_dir:
+        if use_temp_dir:
             shutil.rmtree(repo_path_or_name)
 
         return url
