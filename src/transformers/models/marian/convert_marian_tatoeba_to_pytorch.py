@@ -92,11 +92,14 @@ class TatoebaConverter:
     def expand_group_to_two_letter_codes(self, grp_name):
         return [self.alpha3_to_alpha2.get(x, x) for x in GROUP_MEMBERS[grp_name][1]]
 
+    def is_group(self, code, name):
+        return "languages" in name or len(GROUP_MEMBERS.get(code, [])) > 1
+
     def get_tags(self, code, name):
         if len(code) == 2:
             assert "languages" not in name, f"{code}: {name}"
             return [code]
-        elif "languages" in name or len(GROUP_MEMBERS.get(code, [])) > 1:
+        elif self.is_group(code, name):
             group = self.expand_group_to_two_letter_codes(code)
             group.append(code)
             return group
@@ -131,7 +134,7 @@ class TatoebaConverter:
         """
         model_dir_url = f"{TATOEBA_MODELS_URL}/{model_dict['release']}"
         long_pair = model_dict["_name"].split("-")
-        assert len(long_pair) == 2
+        assert len(long_pair) == 2, f"got a translation pair {model_dict['_name']} that doesn't appear to be a pair"
         short_src = self.alpha3_to_alpha2.get(long_pair[0], long_pair[0])
         short_tgt = self.alpha3_to_alpha2.get(long_pair[1], long_pair[1])
         model_dict["_hf_model_id"] = f"opus-mt-{short_src}-{short_tgt}"
@@ -182,37 +185,70 @@ class TatoebaConverter:
         if "_tuned" in model_dict:
             tuned = f"* multilingual model tuned for: {model_dict['_tuned']}\n"
 
-        download = f"* download original weights: {model_dir_url}/{model_dict['release']}\n"
+        model_base_filename = model_dict["release"].split("/")[-1]
+        download = f"* download original weights: [{model_base_filename}]({model_dir_url}/{model_dict['release']})\n"
 
         langtoken = ""
         if tgt_multilingual:
-            langtoken = f"* a sentence-initial language token is required in the form of >>id<< (id = valid, usually three-letter target language ID)\n"
+            langtoken = (
+                f"* a sentence-initial language token is required in the form of >>id<<"
+                "(id = valid, usually three-letter target language ID)\n"
+            )
+
+        metadata.update(get_system_metadata(DEFAULT_REPO))
+
+        scorestable = ""
+        for k, v in model_dict.items():
+            if "scores" in k:
+                this_score_table = f"* {k}\n|Test set|score|\n|---|---|\n"
+                pairs = sorted(v.items(), key=lambda x: x[1], reverse=True)
+                for pair in pairs:
+                    this_score_table += f"|{pair[0]}|{pair[1]}|\n"
+                scorestable += this_score_table
+
+        datainfo = ""
+        if "training-data" in model_dict:
+            datainfo += f"* Training data: \n"
+            for k, v in model_dict["training-data"].items():
+                datainfo += f"  * {str(k)}: {str(v)}\n"
+        if "validation-data" in model_dict:
+            datainfo += f"* Validation data: \n"
+            for k, v in model_dict["validation-data"].items():
+                datainfo += f"  * {str(k)}: {str(v)}\n"
+        if "test-data" in model_dict:
+            datainfo += f"* Test data: \n"
+            for k, v in model_dict["test-data"].items():
+                datainfo += f"  * {str(k)}: {str(v)}\n"
 
         testsetfilename = model_dict["release"].replace(".zip", ".test.txt")
         testscoresfilename = model_dict["release"].replace(".zip", ".eval.txt")
-        testset = f"* test set translations: {model_dir_url}/{testsetfilename}\n"
-        testscores = f"* test set scores: {model_dir_url}/{testscoresfilename}\n"
-
-        metadata.update([(k, v) for k, v in model_dict.items() if not k.startswith("_")])
-        metadata.update(get_system_metadata(DEFAULT_REPO))
+        testset = f"* test set translations file: [test.txt]({model_dir_url}/{testsetfilename})\n"
+        testscores = f"* test set scores file: [eval.txt]({model_dir_url}/{testscoresfilename})\n"
 
         # combine with Tatoeba markdown
         readme_url = f"{TATOEBA_MODELS_URL}/{model_dict['_name']}/README.md"
-        extra_markdown = f"### {model_dict['_name']}\n\n* source name: {self.tag2name[a3_src]} \n* target name: {self.tag2name[a3_tgt]} \n* OPUS readme: [{model_dict['_name']}]({readme_url})\n"
+        extra_markdown = f"""### {model_dict['_name']}
+* source language name: {self.tag2name[a3_src]}
+* target language name: {self.tag2name[a3_tgt]}
+* OPUS readme: [README.md]({readme_url})
+"""
 
         content = (
             f"""* model: {model_dict['modeltype']}
-* source language{src_multilingual*'s'}: {', '.join(opus_src_tags)}
-* target language{tgt_multilingual*'s'}: {', '.join(opus_tgt_tags)}
+* source language code{src_multilingual*'s'}: {', '.join(a2_src_tags)}
+* target language code{tgt_multilingual*'s'}: {', '.join(a2_tgt_tags)}
 * dataset: opus {backtranslated_data}
+* release date: {model_dict['release-date']}
 * pre-processing: {model_dict['pre-processing']}
 """
             + multilingual_data
             + tuned
             + download
             + langtoken
+            + datainfo
             + testset
             + testscores
+            + scorestable
         )
 
         content = FRONT_MATTER_TEMPLATE.format(lang_tags) + extra_markdown + content
