@@ -1068,16 +1068,16 @@ class FlaxElectraClassificationHead(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.dense = nn.Dense(self.config.hidden_size, dtype=self.dtype)
+        # self.dense = nn.Dense(self.config.hidden_size, dtype=self.dtype)
         self.dropout = nn.Dropout(self.config.hidden_dropout_prob)
         self.out_proj = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
     def __call__(self, hidden_states, deterministic: bool = True):
         x = hidden_states[:, 0, :]  # take <s> token (equiv. to [CLS])
         x = self.dropout(x, deterministic=deterministic)
-        x = self.dense(x)
-        x = ACT2FN["gelu"](x)  # although BERT uses tanh here, it seems Electra authors used gelu
-        x = self.dropout(x, deterministic=deterministic)
+        # x = self.dense(x)
+        # x = ACT2FN["gelu"](x)  # although BERT uses tanh here, it seems Electra authors used gelu
+        # x = self.dropout(x, deterministic=deterministic)
         x = self.out_proj(x)
         return x
 

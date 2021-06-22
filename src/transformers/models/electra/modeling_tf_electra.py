@@ -1036,9 +1036,9 @@ class TFElectraClassificationHead(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
-            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
-        )
+        # self.dense = tf.keras.layers.Dense(
+            # config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        # )
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.out_proj = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
@@ -1047,9 +1047,9 @@ class TFElectraClassificationHead(tf.keras.layers.Layer):
     def call(self, inputs, **kwargs):
         x = inputs[:, 0, :]  # take <s> token (equiv. to [CLS])
         x = self.dropout(x)
-        x = self.dense(x)
-        x = get_tf_activation("gelu")(x)  # although BERT uses tanh here, it seems Electra authors used gelu here
-        x = self.dropout(x)
+        # x = self.dense(x)
+        # x = get_tf_activation("gelu")(x)  # although BERT uses tanh here, it seems Electra authors used gelu here
+        # x = self.dropout(x)
         x = self.out_proj(x)
 
         return x
