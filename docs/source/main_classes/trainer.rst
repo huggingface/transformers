@@ -122,17 +122,17 @@ TFTrainingArguments
 Logging
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-By default :class:`~transformers.Trainer` will use ``logging.INFO`` for the main node and ``logging.WARNING`` for the
-replica nodes if any.
+By default :class:`~transformers.Trainer` will use ``logging.INFO`` for the main process and ``logging.WARNING`` for the
+replicas if any.
 
 These defaults can be overridden to use any of the 5 ``logging`` levels with :class:`~transformers.TrainingArguments`'s
 arguments:
 
-- ``log_level`` - for the main node
-- ``log_level_replica`` - for the replica nodes
+- ``log_level`` - for the main process
+- ``log_level_replica`` - for the replicas
 
 Further, if :class:`~transformers.TrainingArguments`'s ``log_on_each_node`` is set to ``True`` all nodes will use the
-log level settings for the main node.
+log level settings for the main process.
 
 Note that :class:`~transformers.Trainer` is going to set ``transformers``'s log level separately for each node in its
 :meth:`~transformers.Trainer.__init__`. So you may want to set this sooner (see the next example) if you tap into other
