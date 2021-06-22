@@ -91,7 +91,7 @@ Feel free to leave comments, suggestions for improvement, or questions about mor
 If you have found the project that you ❤️  the most, leave a message "I would like to join this project" on the discussion thread. 
 We strongly advise you to also shortly state who you are, which time zone you are in and why you would like to work on this project, how you can contribute to the project and what your vision is for the project.
 For projects that see a lot of interest and for which enough participants have expressed interest in joining, an official team will be created by the organizers. 
-One of the organizers (`@Suzana`, `@valhalla`, `@osanseviero`, `@patrickvonplaten`) will leave a message "For this project the team: `<team_name>`, `<team_members>` , is officially created" on the thread and note down the teams on [(TODO) this google sheet]().
+One of the organizers (`@Suzana`, `@valhalla`, `@osanseviero`, `@patrickvonplaten`) will leave a message "For this project the team: `<team_name>`, `<team_members>` , is officially created" on the thread and note down the teams on [this google sheet](https://docs.google.com/spreadsheets/d/1GpHebL7qrwJOc9olTpIPgjf8vOS0jNb6zR_B8x_Jtik/edit?usp=sharing).
 
 Once created, the team can start refining their project:
 
