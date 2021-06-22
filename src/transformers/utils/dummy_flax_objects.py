@@ -244,6 +244,15 @@ class FlaxBartModel:
         requires_backends(cls, ["flax"])
 
 
+class FlaxBartPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
 class FlaxBertForMaskedLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
@@ -412,7 +421,25 @@ class FlaxCLIPTextModel:
         requires_backends(cls, ["flax"])
 
 
+class FlaxCLIPTextPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
 class FlaxCLIPVisionModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
+class FlaxCLIPVisionPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
@@ -499,6 +526,15 @@ class FlaxGPT2LMHeadModel:
 
 
 class FlaxGPT2Model:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
+class FlaxGPT2PreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
@@ -594,6 +630,15 @@ class FlaxViTForImageClassification:
 
 
 class FlaxViTModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
+class FlaxViTPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
