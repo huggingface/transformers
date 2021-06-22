@@ -2497,7 +2497,7 @@ class Trainer:
 
         self.create_model_card(model_name=self.args.push_to_hub_model_id, **kwargs)
         self.save_model()
-        return PushToHubMixin._push_to_hub(repo=self.repo, commit_message=commit_message)
+        return self.repo.push_to_hub(commit_message=commit_message)
 
     #
     # Deprecated code
