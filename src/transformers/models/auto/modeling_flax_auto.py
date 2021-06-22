@@ -115,7 +115,7 @@ FLAX_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     ]
 )
 
-FLAX_MODEL_FOR_IMAGECLASSIFICATION_MAPPING = OrderedDict(
+FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Image-classsification
         (ViTConfig, FlaxViTForImageClassification),
@@ -188,7 +188,7 @@ FlaxAutoModel = auto_class_factory("FlaxAutoModel", FLAX_MODEL_MAPPING)
 
 FlaxAutoModelForImageClassification = auto_class_factory(
     "FlaxAutoModelForImageClassification",
-    FLAX_MODEL_FOR_IMAGECLASSIFICATION_MAPPING,
+    FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     head_doc="image classification modeling",
 )
 
