@@ -2305,13 +2305,9 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
 
             >>> model = LEDForConditionalGeneration.from_pretrained('allenai/led-base-16384')
             >>> input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
-            >>> logits = model(input_ids).logits
 
-            >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-            >>> probs = logits[0, masked_index].softmax(dim=0)
-            >>> values, predictions = probs.topk(5)
-
-            >>> tokenizer.decode(predictions).split()
+            >>> prediction = model.generate(input_ids)[0]
+            >>> print(tokenizer.decode(prediction, skip_special_tokens=True))
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
