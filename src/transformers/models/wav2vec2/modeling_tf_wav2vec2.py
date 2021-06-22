@@ -1152,7 +1152,8 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
 
         if mask_time_indices is not None:
             # apply SpecAugment along time axis with given mask_time_indices
-            hidden_states = hidden_states * tf.expand_dims(mask_time_indices, -1)
+            mask = tf.cast(tf.logical_not(tf.cast(mask_time_indices, tf.bool)), tf.float32)
+            hidden_states = hidden_states * tf.expand_dims(mask, -1)
         elif self.config.mask_time_prob > 0:
 
             # generate indices & apply SpecAugment along time axis
@@ -1162,7 +1163,8 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
                 mask_length=self.config.mask_time_length,
                 min_masks=2,
             )
-            hidden_states = hidden_states * tf.expand_dims(mask_time_indices, -1)
+            mask = tf.cast(tf.logical_not(tf.cast(mask_time_indices, tf.bool)), tf.float32)
+            hidden_states = hidden_states * tf.expand_dims(mask, -1)
 
         # apply SpecAugment along feature axis
         if self.config.mask_feature_prob > 0:
@@ -1171,7 +1173,8 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
             )
-            hidden_states = hidden_states * tf.expand_dims(mask_feature_indices, 1)
+            mask = tf.cast(tf.logical_not(tf.cast(mask_feature_indices, tf.bool)), tf.float32)
+            hidden_states = hidden_states * tf.expand_dims(mask, -1)
 
         return hidden_states
 
@@ -1218,7 +1221,8 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
 
         mask_time_indices = kwargs.get("mask_time_indices", None)
         if mask_time_indices is not None:  # apply SpecAugment along time axis with given indices
-            hidden_states = hidden_states * tf.expand_dims(mask_time_indices, -1)
+            mask = tf.cast(tf.logical_not(tf.cast(mask_time_indices, tf.bool)), tf.float32)
+            hidden_states = hidden_states * tf.expand_dims(mask, -1)
 
         if inputs["training"]:
             hidden_states = self._mask_hidden_states(hidden_states, mask_time_indices=mask_time_indices)
