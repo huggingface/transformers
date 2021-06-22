@@ -11,7 +11,7 @@ Don't forget to sign up [here](https://forms.gle/tVGPhjKXyEsSgUcs8)!
 ## Table of Contents
 
 - [Organization](#organization)
-- [Important dates](#how-to-fine-tune-xlsr-wav2vec2)
+- [Important dates](#important-dates)
 - [Communication](#communication)
 - [Projects](#projects)
 	- [How to propose](#how-to-propose-a-project)
@@ -24,7 +24,7 @@ Don't forget to sign up [here](https://forms.gle/tVGPhjKXyEsSgUcs8)!
 - [Talks](#talks)
 - [How to setup TPU VM](#how-to-setup-tpu-vm)
 - [How to use the 🤗 Hub for training and demo](#how-to-use-the-hub-for-training-and-demo)
-- [Project evaluation](#how-projects-are-evaluated)
+- [Project evaluation](#project-evaluation)
 - [General Tips & Tricks](#general-tips-and-tricks)
 - [FAQ](#faq)
 
