@@ -115,7 +115,7 @@ class TFTrainer:
         elif os.getenv("WANDB_DISABLED", "").upper() not in ENV_VARS_TRUE_VALUES:
             logger.info(
                 "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
-                "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
+                "run `pip install wandb && wandb login` see https://docs.wandb.com/huggingface."
             )
 
         if is_comet_available():
