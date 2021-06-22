@@ -83,7 +83,7 @@ GPU0     X      PHB     0-11            N/A
 GPU1    PHB      X      0-11            N/A
 ```
 
-The report includes this Legend:
+The report includes this legend:
 
 ```
   X    = Self
@@ -176,11 +176,11 @@ AMP = Automatic Mixed Precision
 
 If we look at what's happening with FP16 training (mixed precision) we have:
 - the model in full precision so no memory saved there
-- the forward activations saved for gradient computation are in mixed precision
+- the forward activations saved for gradient computation are in half precision
 - the gradients are computed in mixed precision *but* converted to full precision for the update, so no saving there
 - the optimizer state is in full precision as all the updates are done in full precision
 
-So the saving only happen for the forward activations saved for the backward computation, and there is a slight overhead because the gradients are properly stored both in half and full precision. (This is probably over-simplified but I think it's enough to explain what follows.)
+So the savings only happen for the forward activations saved for the backward computation, and there is a slight overhead because the gradients are properly stored both in half and full precision. (This is probably over-simplified but I think it's enough to explain what follows.)
 
 Now let's look at a simple text-classification fine-tuning on 2 GPUs (I'm giving the command for reference):
 ```
