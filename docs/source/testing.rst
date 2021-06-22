@@ -431,6 +431,7 @@ decorators are used to set the requirements of tests CPU/GPU/TPU-wise:
 * ``require_torch_gpu`` - as ``require_torch`` plus requires at least 1 GPU
 * ``require_torch_multi_gpu`` - as ``require_torch`` plus requires at least 2 GPUs
 * ``require_torch_non_multi_gpu`` - as ``require_torch`` plus requires 0 or 1 GPUs
+* ``require_torch_up_to_2_gpus`` - as ``require_torch`` plus requires 0 or 1 or 2 GPUs
 * ``require_torch_tpu`` - as ``require_torch`` plus requires at least 1 TPU
 
 Let's depict the GPU requirements in the following table:
@@ -446,6 +447,8 @@ Let's depict the GPU requirements in the following table:
 | ``>= 2`` | ``@require_torch_multi_gpu``     |
 +----------+----------------------------------+
 | ``< 2``  | ``@require_torch_non_multi_gpu`` |
++----------+----------------------------------+
+| ``< 3``  | ``@require_torch_up_to_2_gpus``  |
 +----------+----------------------------------+
 
 
