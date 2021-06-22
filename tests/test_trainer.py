@@ -26,12 +26,20 @@ import numpy as np
 
 from huggingface_hub import HfApi
 from requests.exceptions import HTTPError
-from transformers import AutoTokenizer, IntervalStrategy, PretrainedConfig, TrainingArguments, is_torch_available
+from transformers import (
+    AutoTokenizer,
+    IntervalStrategy,
+    PretrainedConfig,
+    TrainingArguments,
+    is_torch_available,
+    logging,
+)
 from transformers.file_utils import WEIGHTS_NAME
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
     PASS,
     USER,
+    CaptureLogger,
     TestCasePlus,
     get_gpu_count,
     get_tests_dir,
@@ -97,6 +105,11 @@ class RegressionDataset:
 class RegressionTrainingArguments(TrainingArguments):
     a: float = 0.0
     b: float = 0.0
+
+    def __post_init__(self):
+        super().__post_init__()
+        # save resources not dealing with reporting (also avoids the warning when it's not set)
+        self.report_to = []
 
 
 class RepeatDataset:
@@ -491,7 +504,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_training_arguments_are_left_untouched(self):
         trainer = get_regression_trainer()
         trainer.train()
-        args = TrainingArguments("./regression")
+        args = TrainingArguments("./regression", report_to=[])
         dict1, dict2 = args.to_dict(), trainer.args.to_dict()
         for key in dict1.keys():
             # Logging dir can be slightly different as they default to something with the time.
@@ -650,6 +663,29 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         for expected, seen in zip(eval_dataset.xs, preds.predictions):
             self.assertTrue(np.array_equal(2 * expected + 1, seen[: expected.shape[0]]))
             self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
+
+   def test_log_level(self):
+        # testing only --log_level (--log_level_replica requires multiple nodes)
+        logger = logging.get_logger()
+        log_info_string = "Running training"
+
+        # test with the default log level - should be info and thus log
+        with CaptureLogger(logger) as cl:
+            trainer = get_regression_trainer()
+            trainer.train()
+        self.assertIn(log_info_string, cl.out)
+
+        # test with low log level - lower than info
+        with CaptureLogger(logger) as cl:
+            trainer = get_regression_trainer(log_level="debug")
+            trainer.train()
+        self.assertIn(log_info_string, cl.out)
+
+        # test with high log level - should be quiet
+        with CaptureLogger(logger) as cl:
+            trainer = get_regression_trainer(log_level="error")
+            trainer.train()
+        self.assertNotIn(log_info_string, cl.out)
 
     def test_save_checkpoints(self):
         with tempfile.TemporaryDirectory() as tmpdir:
