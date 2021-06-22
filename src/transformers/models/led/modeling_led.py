@@ -1462,7 +1462,7 @@ LED_GENERATION_EXAMPLE = r"""
             address such interactions. On the other hand, our proposed Longformer is able to
             build contextual representations of the entire context using multiple layers of
             attention, reducing the need for task-specific architectures.\"\"\"
-        >>> inputs = tokenizer.encode(TXT, return_tensors='pt')
+        >>> inputs = tokenizer.encode(ARTICLE_TO_SUMMARIZE, return_tensors='pt')
         
         >>> # Global attention on the first token (cf. Beltagy et al. 2020)
         >>> global_attention_mask = torch.zeros_like(inputs)
