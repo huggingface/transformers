@@ -1457,9 +1457,6 @@ class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
 
         return outputs
 
-    def prepare_decoder_input_ids_from_labels(self, labels: jnp.ndarray):
-        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
-
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,

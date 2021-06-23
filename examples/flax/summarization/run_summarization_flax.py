@@ -428,9 +428,11 @@ def main():
     # Temporarily set max_target_length for training.
     max_target_length = data_args.max_target_length
 
-    # In Flax every Seq2Seq model should define this, as the models don't accept labels
-    # we need to prepare the decoder_input_ids here
-    prepare_decoder_input_ids_fn = model.prepare_decoder_input_ids_from_labels
+    # In Flax, for seq2seq models we need to pass `decoder_input_ids`
+    # as the Flax models don't accept `labels`, we need to prepare the decoder_input_ids here
+    # for that dynamically import the `shift_tokens_right` function from the model file
+    model_module = __import__(model.__module__, fromlist=["shift_tokens_tight"])
+    shift_tokens_right_fn = getattr(model_module, "shift_tokens_right")
 
     # Setting padding="max_length" as we need fixed length inputs for jitted functions
     def preprocess_function(examples):
@@ -448,7 +450,7 @@ def main():
             )
 
         model_inputs["labels"] = labels["input_ids"]
-        decoder_input_ids = np.asarray(prepare_decoder_input_ids_fn(jnp.array(labels["input_ids"])))
+        decoder_input_ids = np.asarray(shift_tokens_right_fn(jnp.array(labels["input_ids"])))
         model_inputs["decoder_input_ids"] = decoder_input_ids
 
         # We need decoder_attention_mask so we can ignore pad tokens from loss
