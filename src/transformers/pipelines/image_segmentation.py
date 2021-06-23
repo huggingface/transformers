@@ -1,5 +1,5 @@
 import os
-from typing import TYPE_CHECKING, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 import requests
 
@@ -20,6 +20,10 @@ if is_torch_available():
     import torch
 
 logger = logging.get_logger(__name__)
+
+
+Prediction = Dict[str, Any]
+Predictions = List[Prediction]
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
@@ -67,7 +71,12 @@ class ImageSegmentationPipeline(Pipeline):
             "Incorrect format used for image. Should be an url linking to an image, a local path, or a PIL image."
         )
 
-    def __call__(self, images: Union[str, List[str], "Image", List["Image"]], threshold: Optional[float] = 0.9):
+    def __call__(
+        self,
+        images: Union[str, List[str], "Image", List["Image"]],
+        threshold: Optional[float] = 0.9,
+        mask_threshold: Optional[float] = 0.9,
+    ) -> Union[Predictions, List[Prediction]]:
         """
         Assign labels to the image(s) passed as inputs.
 
@@ -84,16 +93,19 @@ class ImageSegmentationPipeline(Pipeline):
                 images.
             threshold (:obj:`float`, `optional`, defaults to 0.9):
                 The probability necessary to make a prediction.
+            mask_threshold (:obj:`float`, `optional`, defaults to 0.9):
+                The probability necessary to keep the pixel within the mask of said prediction.
 
         Return:
-            A dictionary or a list of dictionaries containing result. If the input is a single image, will return a
-            dictionary, if the input is a list of several images, will return a list of dictionaries corresponding to
-            the images.
+            A list of dictionaries or a list of of list of dictionaries containing result. If the input is a single image, will return a
+            list of dictionaries, if the input is a list of several images, will return a list of list of dictionaries corresponding to
+            each image.
 
             The dictionaries contain the following keys:
 
-            - **label** (:obj:`str`) -- The label identified by the model.
-            - **score** (:obj:`int`) -- The score attributed by the model for that label.
+            - **label** (:obj:`str`) -- The label identified by the model. There could be duplicates within the list (corresponding to instances within a panoptic segmentation.
+            - **score** (:obj:`int`) -- The score attributed by the model for that label as a probability.
+            - **mask** (:obj:`np.array`) -- The bitmask of shape (H, W) of the input image, 0 means the class is not affected to the label, 1 means it is.
         """
         is_batched = isinstance(images, list)
 
@@ -107,14 +119,30 @@ class ImageSegmentationPipeline(Pipeline):
             outputs = self.model(**inputs)
 
             processed_sizes = [(im.height, im.width) for im in images]
-            labels = self.feature_extractor.post_process_panoptic(outputs, processed_sizes)
 
-            import ipdb
+            annotations = []
+            for logits, masks, target_size in zip(outputs.logits, outputs.pred_masks, processed_sizes):
+                scores, labels = logits.softmax(-1).max(-1)
+                keep = labels.ne(outputs.logits.shape[-1] - 1) & (scores > threshold)
+                scores = scores[keep]
+                labels = labels[keep]
+                masks = masks[keep]
+                masks = torch.nn.functional.interpolate(masks[:, None], target_size, mode="bilinear").squeeze(1)
+                masks = masks.exp() > mask_threshold
 
-            ipdb.set_trace()
-            print("Test")
+                annotation = []
+                for mask, score, label in zip(masks, scores, labels):
+                    annotation.append(
+                        {
+                            "mask": mask.cpu().numpy(),
+                            "score": score.item(),
+                            "label": self.model.config.id2label[label.item()],
+                        }
+                    )
+
+                annotations.append(annotation)
 
         if not is_batched:
-            return labels[0]
+            return annotations[0]
 
-        return labels
+        return annotations
