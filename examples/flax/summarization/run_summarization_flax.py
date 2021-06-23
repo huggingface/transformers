@@ -450,8 +450,10 @@ def main():
             )
 
         model_inputs["labels"] = labels["input_ids"]
-        decoder_input_ids = np.asarray(shift_tokens_right_fn(jnp.array(labels["input_ids"])))
-        model_inputs["decoder_input_ids"] = decoder_input_ids
+        decoder_input_ids = shift_tokens_right_fn(
+            jnp.array(labels["input_ids"]), config.pad_token_id, config.decoder_start_token_id
+        )
+        model_inputs["decoder_input_ids"] = np.asarray(decoder_input_ids)
 
         # We need decoder_attention_mask so we can ignore pad tokens from loss
         model_inputs["decoder_attention_mask"] = labels["attention_mask"]
