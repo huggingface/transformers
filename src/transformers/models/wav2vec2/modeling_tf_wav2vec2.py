@@ -267,7 +267,7 @@ def _compute_mask_indices(
         tf.ones_like(spec_aug_mask_idxs), spec_aug_mask_idxs, spec_aug_mask.shape
     )
 
-    return tf.cast(spec_aug_mask, tf.float32)
+    return spec_aug_mask
 
 
 def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
@@ -1152,10 +1152,13 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
 
         if mask_time_indices is not None:
             # apply SpecAugment along time axis with given mask_time_indices
-            mask = tf.cast(tf.logical_not(tf.cast(mask_time_indices, tf.bool)), tf.float32)
-            hidden_states = hidden_states * tf.expand_dims(mask, -1)
-        elif self.config.mask_time_prob > 0:
+            hidden_states = tf.where(
+                tf.cast(mask_time_indices[:, :, tf.newaxis], tf.bool),
+                self.masked_spec_embed[tf.newaxis, tf.newaxis, :],
+                hidden_states,
+            )
 
+        elif self.config.mask_time_prob > 0:
             # generate indices & apply SpecAugment along time axis
             mask_time_indices = _compute_mask_indices(
                 (batch_size, sequence_length),
@@ -1163,8 +1166,11 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
                 mask_length=self.config.mask_time_length,
                 min_masks=2,
             )
-            mask = tf.cast(tf.logical_not(tf.cast(mask_time_indices, tf.bool)), tf.float32)
-            hidden_states = hidden_states * tf.expand_dims(mask, -1)
+            hidden_states = tf.where(
+                tf.cast(mask_time_indices[:, :, tf.newaxis], tf.bool),
+                self.masked_spec_embed[tf.newaxis, tf.newaxis, :],
+                hidden_states,
+            )
 
         # apply SpecAugment along feature axis
         if self.config.mask_feature_prob > 0:
@@ -1173,8 +1179,7 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
             )
-            mask = tf.cast(tf.logical_not(tf.cast(mask_feature_indices, tf.bool)), tf.float32)
-            hidden_states = hidden_states * tf.expand_dims(mask, -1)
+            hidden_states = tf.where(mask_feature_indices[:, tf.newaxis, :], hidden_states, 0)
 
         return hidden_states
 
@@ -1221,8 +1226,11 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
 
         mask_time_indices = kwargs.get("mask_time_indices", None)
         if mask_time_indices is not None:  # apply SpecAugment along time axis with given indices
-            mask = tf.cast(tf.logical_not(tf.cast(mask_time_indices, tf.bool)), tf.float32)
-            hidden_states = hidden_states * tf.expand_dims(mask, -1)
+            hidden_states = tf.where(
+                tf.cast(mask_time_indices[:, :, tf.newaxis], tf.bool),
+                self.masked_spec_embed[tf.newaxis, tf.newaxis, :],
+                hidden_states,
+            )
 
         if inputs["training"]:
             hidden_states = self._mask_hidden_states(hidden_states, mask_time_indices=mask_time_indices)
