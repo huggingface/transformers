@@ -4,6 +4,7 @@
 deps = {
     "Pillow": "Pillow",
     "black": "black==21.4b0",
+    "codecarbon": "codecarbon==1.2.0",
     "cookiecutter": "cookiecutter==1.7.2",
     "dataclasses": "dataclasses",
     "datasets": "datasets",
