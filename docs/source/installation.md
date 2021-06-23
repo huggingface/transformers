@@ -172,7 +172,19 @@ python examples/pytorch/translation/run_translation.py --model_name_or_path t5-s
 ```
 and it should succeed without any hanging waiting to timeout.
 
+#### Fetching models and tokenizers to use offline
 
+When running a script the first time like mentioned above, the downloaded files will be cached for future reuse. 
+However, it is also possible to download files and point to their local path instead.
+
+Downloading files can be done through the Web Interface by clicking on the "Download" button, but it can also be handled
+programmatically using the `huggingface_hub` library that is a dependency to `transformers`:
+
+- Using `snapshot_download` to download an entire repository
+- Using `hf_hub_download` to download a specific file
+
+See the reference for these methods in the huggingface_hub
+[documentation](https://github.com/huggingface/huggingface_hub/tree/main/src/huggingface_hub).
 
 ## Do you want to run a Transformer model on a mobile device?
 
