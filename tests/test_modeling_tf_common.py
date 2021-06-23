@@ -61,6 +61,16 @@ if is_tf_available():
         TFSharedEmbeddings,
         tf_top_k_top_p_filtering,
     )
+    from transformers.generation_tf_utils import (
+        TFBeamSampleDecoderOnlyOutput,
+        TFBeamSampleEncoderDecoderOutput,
+        TFBeamSearchDecoderOnlyOutput,
+        TFBeamSearchEncoderDecoderOutput,
+        TFGreedySearchDecoderOnlyOutput,
+        TFGreedySearchEncoderDecoderOutput,
+        TFSampleDecoderOnlyOutput,
+        TFSampleEncoderDecoderOutput,
+    )
 
     if _tf_gpu_memory_limit is not None:
         gpus = tf.config.list_physical_devices("GPU")
@@ -1100,6 +1110,37 @@ class TFModelTesterMixin:
             generated_ids = output_tokens[:, input_ids.shape[-1] :]
             self.assertFalse(self._check_match_tokens(generated_ids.numpy().tolist(), bad_words_ids))
 
+    def test_lm_head_model_no_beam_search_generate_dict_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = inputs_dict.get("input_ids", None)
+
+        # iterate over all generative models
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+            output_greedy = model.generate(
+                input_ids,
+                do_sample=False,
+                output_scores=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+            output_sample = model.generate(
+                input_ids,
+                do_sample=True,
+                output_scores=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+
+            if model.config.is_encoder_decoder:
+                self.assertIsInstance(output_greedy, TFGreedySearchEncoderDecoderOutput)
+                self.assertIsInstance(output_sample, TFSampleEncoderDecoderOutput)
+            else:
+                self.assertIsInstance(output_greedy, TFGreedySearchDecoderOnlyOutput)
+                self.assertIsInstance(output_sample, TFSampleDecoderOnlyOutput)
+
     def test_lm_head_model_random_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict.get("input_ids", None)
@@ -1139,6 +1180,39 @@ class TFModelTesterMixin:
             # only count generated tokens
             generated_ids = output_tokens[:, input_ids.shape[-1] :]
             self.assertFalse(self._check_match_tokens(generated_ids.numpy().tolist(), bad_words_ids))
+
+    def test_lm_head_model_beam_search_generate_dict_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = inputs_dict.get("input_ids", None)
+
+        # iterate over all generative models
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+            output_beam_search = model.generate(
+                input_ids,
+                num_beams=2,
+                do_sample=False,
+                output_scores=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+            output_beam_sample = model.generate(
+                input_ids,
+                num_beams=2,
+                do_sample=True,
+                output_scores=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+
+            if model.config.is_encoder_decoder:
+                self.assertIsInstance(output_beam_search, TFBeamSearchEncoderDecoderOutput)
+                self.assertIsInstance(output_beam_sample, TFBeamSampleEncoderDecoderOutput)
+            else:
+                self.assertIsInstance(output_beam_search, TFBeamSearchDecoderOnlyOutput)
+                self.assertIsInstance(output_beam_sample, TFBeamSampleDecoderOnlyOutput)
 
     def test_loss_computation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

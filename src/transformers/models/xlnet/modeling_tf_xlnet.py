@@ -796,7 +796,13 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             else:
                 hidden_states = tuple(tf.transpose(hs, perm=(1, 0, 2)) for hs in hidden_states)
         if inputs["output_attentions"]:
-            attentions = tuple(tf.transpose(t, perm=(2, 3, 0, 1)) for t in attentions)
+            if inputs["target_mapping"] is not None:
+                # when target_mapping is provided, there are 2-tuple of attentions
+                attentions = tuple(
+                    tuple(tf.transpose(attn_stream, perm=(2, 3, 0, 1)) for attn_stream in t) for t in attentions
+                )
+            else:
+                attentions = tuple(tf.transpose(t, perm=(2, 3, 0, 1)) for t in attentions)
 
         if not inputs["return_dict"]:
             return tuple(v for v in [output, new_mems, hidden_states, attentions] if v is not None)
