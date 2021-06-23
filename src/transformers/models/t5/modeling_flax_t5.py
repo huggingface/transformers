@@ -84,19 +84,19 @@ class FlaxT5DenseReluDense(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        wi_init_factor = self.config.initializer_factor * (self.config.d_model ** -0.5)
-        wo_init_factor = self.config.initializer_factor * (self.config.d_ff ** -0.5)
+        wi_init_std = self.config.initializer_factor * (self.config.d_model ** -0.5)
+        wo_init_std = self.config.initializer_factor * (self.config.d_ff ** -0.5)
 
         self.wi = nn.Dense(
             self.config.d_ff,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(wi_init_factor, self.dtype),
+            kernel_init=jax.nn.initializers.normal(wi_init_std, self.dtype),
             dtype=self.dtype,
         )
         self.wo = nn.Dense(
             self.config.d_model,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(wo_init_factor, self.dtype),
+            kernel_init=jax.nn.initializers.normal(wo_init_std, self.dtype),
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
@@ -114,25 +114,25 @@ class FlaxT5DenseGatedGeluDense(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        wi_init_factor = self.config.initializer_factor * (self.config.d_model ** -0.5)
-        wo_init_factor = self.config.initializer_factor * (self.config.d_ff ** -0.5)
+        wi_init_std = self.config.initializer_factor * (self.config.d_model ** -0.5)
+        wo_init_std = self.config.initializer_factor * (self.config.d_ff ** -0.5)
 
         self.wi_0 = nn.Dense(
             self.config.d_ff,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(wi_init_factor, self.dtype),
+            kernel_init=jax.nn.initializers.normal(wi_init_std, self.dtype),
             dtype=self.dtype,
         )
         self.wi_1 = nn.Dense(
             self.config.d_ff,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(wi_init_factor, self.dtype),
+            kernel_init=jax.nn.initializers.normal(wi_init_std, self.dtype),
             dtype=self.dtype,
         )
         self.wo = nn.Dense(
             self.config.d_model,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(wo_init_factor, self.dtype),
+            kernel_init=jax.nn.initializers.normal(wo_init_std, self.dtype),
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
@@ -185,31 +185,31 @@ class FlaxT5Attention(nn.Module):
         self.dropout = self.config.dropout_rate
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
-        inner_dim_scaled_init = self.config.initializer_factor * (self.inner_dim ** -0.5)
-        d_model_scaled_init = self.config.initializer_factor * (self.inner_dim ** -0.5)
+        inner_dim_init_std = self.config.initializer_factor * (self.inner_dim ** -0.5)
+        d_model_init_std = self.config.initializer_factor * (self.inner_dim ** -0.5)
 
         self.q = nn.Dense(
             self.inner_dim,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(d_model_scaled_init, self.dtype),
+            kernel_init=jax.nn.initializers.normal(d_model_init_std, self.dtype),
             dtype=self.dtype,
         )
         self.k = nn.Dense(
             self.inner_dim,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(d_model_scaled_init, self.dtype),
+            kernel_init=jax.nn.initializers.normal(d_model_init_std, self.dtype),
             dtype=self.dtype,
         )
         self.v = nn.Dense(
             self.inner_dim,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(d_model_scaled_init, self.dtype),
+            kernel_init=jax.nn.initializers.normal(d_model_init_std, self.dtype),
             dtype=self.dtype,
         )
         self.o = nn.Dense(
             self.d_model,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(inner_dim_scaled_init, self.dtype),
+            kernel_init=jax.nn.initializers.normal(inner_dim_init_std, self.dtype),
             dtype=self.dtype,
         )
 
@@ -217,7 +217,7 @@ class FlaxT5Attention(nn.Module):
             self.relative_attention_bias = nn.Embed(
                 self.relative_attention_num_buckets,
                 self.n_heads,
-                embedding_init=jax.nn.initializers.normal(d_model_scaled_init, self.dtype),
+                embedding_init=jax.nn.initializers.normal(d_model_init_std, self.dtype),
                 dtype=self.dtype,
             )
 
@@ -1147,7 +1147,7 @@ T5_START_DOCSTRING = r"""
     - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
 
     Parameters:
-        config (:class:`~transformers.BartConfig`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.T5Config`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
             model weights.
