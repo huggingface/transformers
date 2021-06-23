@@ -2444,7 +2444,9 @@ class Trainer:
             organization=self.args.push_to_hub_organization,
             use_auth_token=use_auth_token,
         )
-        self.repo = PushToHubMixin._create_or_get_repo(self.args.output_dir, repo_url=repo_url)
+        self.repo = PushToHubMixin._create_or_get_repo(
+            self.args.output_dir, repo_url=repo_url, use_auth_token=use_auth_token
+        )
 
         # By default, ignore the checkpoint folders
         if not os.path.exists(os.path.join(self.args.output_dir, ".gitignore")):

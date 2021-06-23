@@ -2099,7 +2099,7 @@ class PushToHubMixin:
         if commit_message is None:
             if "Tokenizer" in cls.__name__:
                 commit_message = "add tokenizer"
-            if "Config" in cls.__name__:
+            elif "Config" in cls.__name__:
                 commit_message = "add config"
             else:
                 commit_message = "add model"
