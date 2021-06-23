@@ -26,6 +26,9 @@ from io import StringIO
 from pathlib import Path
 from typing import Iterator, Union
 
+from transformers import logging as transformers_logging
+
+from .deepspeed import is_deepspeed_available
 from .file_utils import (
     is_datasets_available,
     is_faiss_available,
@@ -36,6 +39,7 @@ from .file_utils import (
     is_sentencepiece_available,
     is_soundfile_availble,
     is_tf_available,
+    is_timm_available,
     is_tokenizers_available,
     is_torch_available,
     is_torch_tpu_available,
@@ -226,6 +230,19 @@ def require_onnx(test_case):
         return test_case
 
 
+def require_timm(test_case):
+    """
+    Decorator marking a test that requires Timm.
+
+    These tests are skipped when Timm isn't installed.
+
+    """
+    if not is_timm_available():
+        return unittest.skip("test requires Timm")(test_case)
+    else:
+        return test_case
+
+
 def require_torch(test_case):
     """
     Decorator marking a test that requires PyTorch.
@@ -366,6 +383,21 @@ def require_torch_non_multi_gpu(test_case):
         return test_case
 
 
+def require_torch_up_to_2_gpus(test_case):
+    """
+    Decorator marking a test that requires 0 or 1 or 2 GPU setup (in PyTorch).
+    """
+    if not is_torch_available():
+        return unittest.skip("test requires PyTorch")(test_case)
+
+    import torch
+
+    if torch.cuda.device_count() > 2:
+        return unittest.skip("test requires 0 or 1 or 2 GPUs")(test_case)
+    else:
+        return test_case
+
+
 def require_torch_tpu(test_case):
     """
     Decorator marking a test that requires a TPU (in PyTorch).
@@ -448,6 +480,16 @@ def require_soundfile(test_case):
     """
     if not is_soundfile_availble():
         return unittest.skip("test requires soundfile")(test_case)
+    else:
+        return test_case
+
+
+def require_deepspeed(test_case):
+    """
+    Decorator marking a test that requires deepspeed
+    """
+    if not is_deepspeed_available():
+        return unittest.skip("test requires deepspeed")(test_case)
     else:
         return test_case
 
@@ -646,6 +688,26 @@ class CaptureLogger:
 
     def __repr__(self):
         return f"captured: {self.out}\n"
+
+
+@contextlib.contextmanager
+def LoggingLevel(level):
+    """
+    This is a context manager to temporarily change transformers modules logging level to the desired value and have it
+    restored to the original setting at the end of the scope.
+
+    For example ::
+
+        with LoggingLevel(logging.INFO):
+            AutoModel.from_pretrained("gpt2") # calls logger.info() several times
+
+    """
+    orig_level = transformers_logging.get_verbosity()
+    try:
+        transformers_logging.set_verbosity(level)
+        yield
+    finally:
+        transformers_logging.set_verbosity(orig_level)
 
 
 @contextlib.contextmanager
@@ -1200,6 +1262,28 @@ def execute_subprocess_async(cmd, env=None, stdin=None, timeout=180, quiet=False
         raise RuntimeError(f"'{cmd_str}' produced no output.")
 
     return result
+
+
+def pytest_xdist_worker_id():
+    """
+    Returns an int value of worker's numerical id under ``pytest-xdist``'s concurrent workers ``pytest -n N`` regime,
+    or 0 if ``-n 1`` or ``pytest-xdist`` isn't being used.
+    """
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
+    worker = re.sub(r"^gw", "", worker, 0, re.M)
+    return int(worker)
+
+
+def get_torch_dist_unique_port():
+    """
+    Returns a port number that can be fed to ``torch.distributed.launch``'s ``--master_port`` argument.
+
+    Under ``pytest-xdist`` it adds a delta number based on a worker id so that concurrent tests don't try to use the
+    same port at once.
+    """
+    port = 29500
+    uniq_delta = pytest_xdist_worker_id()
+    return port + uniq_delta
 
 
 def nested_simplify(obj, decimals=3):

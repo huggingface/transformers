@@ -38,6 +38,9 @@ IGNORE_NON_TESTED = [
     "BigBirdPegasusEncoder",  # Building part of bigger (tested) model.
     "BigBirdPegasusDecoder",  # Building part of bigger (tested) model.
     "BigBirdPegasusDecoderWrapper",  # Building part of bigger (tested) model.
+    "DetrEncoder",  # Building part of bigger (tested) model.
+    "DetrDecoder",  # Building part of bigger (tested) model.
+    "DetrDecoderWrapper",  # Building part of bigger (tested) model.
     "M2M100Encoder",  # Building part of bigger (tested) model.
     "M2M100Decoder",  # Building part of bigger (tested) model.
     "Speech2TextEncoder",  # Building part of bigger (tested) model.
@@ -93,6 +96,9 @@ IGNORE_NON_AUTO_CONFIGURED = [
     # models to ignore for model xxx mapping
     "CLIPTextModel",
     "CLIPVisionModel",
+    "FlaxCLIPTextModel",
+    "FlaxCLIPVisionModel",
+    "DetrForSegmentation",
     "DPRReader",
     "DPRSpanPredictor",
     "FlaubertForQuestionAnswering",
@@ -113,9 +119,15 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "TFRagSequenceForGeneration",
     "TFRagTokenForGeneration",
     "Wav2Vec2ForCTC",
+    "HubertForCTC",
     "XLMForQuestionAnswering",
     "XLNetForQuestionAnswering",
     "SeparableConv1D",
+    "VisualBertForRegionToPhraseAlignment",
+    "VisualBertForVisualReasoning",
+    "VisualBertForQuestionAnswering",
+    "VisualBertForMultipleChoice",
+    "TFWav2Vec2ForCTC",
 ]
 
 # This is to make sure the transformers module imported is the one in the repo.

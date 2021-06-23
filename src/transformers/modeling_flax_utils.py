@@ -41,11 +41,16 @@ from .file_utils import (
     is_remote_url,
     replace_return_docstrings,
 )
+from .generation_flax_utils import FlaxGenerationMixin
 from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
 from .utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+
+def quick_gelu(x):
+    return x * jax.nn.sigmoid(1.702 * x)
 
 
 ACT2FN = {
@@ -54,10 +59,11 @@ ACT2FN = {
     "silu": nn.swish,
     "swish": nn.swish,
     "gelu_new": partial(nn.gelu, approximate=True),
+    "quick_gelu": quick_gelu,
 }
 
 
-class FlaxPreTrainedModel(PushToHubMixin):
+class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     r"""
     Base class for all models.
 
@@ -341,6 +347,11 @@ class FlaxPreTrainedModel(PushToHubMixin):
         # if model is base model only use model_prefix key
         if cls.base_model_prefix not in dict(model.params) and cls.base_model_prefix in state:
             state = state[cls.base_model_prefix]
+
+        # if model is head model and we are loading weights from base model
+        # we initialize new params dict with base_model_prefix
+        if cls.base_model_prefix in dict(model.params) and cls.base_model_prefix not in state:
+            state = {cls.base_model_prefix: state}
 
         # flatten dicts
         state = flatten_dict(state)
