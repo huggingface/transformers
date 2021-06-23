@@ -160,6 +160,9 @@ class FlaxT5ModelTester:
 
         encoder_outputs = model.encode(input_ids)
 
+        # prevent fully zero'd out attention mask
+        decoder_attention_mask = jnp.ones_like(decoder_attention_mask)
+
         decoder_attention_mask_cache = jnp.concatenate(
             [
                 decoder_attention_mask,

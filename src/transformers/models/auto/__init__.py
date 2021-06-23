@@ -87,11 +87,13 @@ if is_tf_available():
 if is_flax_available():
     _import_structure["modeling_flax_auto"] = [
         "FLAX_MODEL_FOR_CAUSAL_LM_MAPPING",
+        "FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
         "FLAX_MODEL_FOR_MASKED_LM_MAPPING",
         "FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
         "FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
         "FLAX_MODEL_FOR_PRETRAINING_MAPPING",
         "FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING",
+        "FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
         "FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
         "FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
         "FLAX_MODEL_MAPPING",
@@ -103,6 +105,7 @@ if is_flax_available():
         "FlaxAutoModelForNextSentencePrediction",
         "FlaxAutoModelForPreTraining",
         "FlaxAutoModelForQuestionAnswering",
+        "FlaxAutoModelForSeq2SeqLM",
         "FlaxAutoModelForSequenceClassification",
         "FlaxAutoModelForTokenClassification",
     ]
@@ -173,11 +176,13 @@ if TYPE_CHECKING:
     if is_flax_available():
         from .modeling_flax_auto import (
             FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
+            FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             FLAX_MODEL_FOR_MASKED_LM_MAPPING,
             FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
             FLAX_MODEL_FOR_PRETRAINING_MAPPING,
             FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+            FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
             FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             FLAX_MODEL_MAPPING,
@@ -189,6 +194,7 @@ if TYPE_CHECKING:
             FlaxAutoModelForNextSentencePrediction,
             FlaxAutoModelForPreTraining,
             FlaxAutoModelForQuestionAnswering,
+            FlaxAutoModelForSeq2SeqLM,
             FlaxAutoModelForSequenceClassification,
             FlaxAutoModelForTokenClassification,
         )

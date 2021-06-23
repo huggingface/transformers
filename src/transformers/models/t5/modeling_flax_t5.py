@@ -254,7 +254,9 @@ class FlaxT5Attention(nn.Module):
             attention_mask = combine_masks(pad_mask, attention_mask)
         return key, value, attention_mask
 
-    def _create_position_bias(self, key_states, query_states, attention_mask, init_cache, seq_length):
+    def _create_position_bias(
+        self, key_states, query_states, attention_mask, init_cache, seq_length, causal_attention_mask_shift
+    ):
         cache_is_filled = self.causal and self.has_variable("cache", "cached_key") and (not init_cache)
         key_length = key_states.shape[1]
         query_length = key_length if cache_is_filled else query_states.shape[1]
@@ -269,9 +271,10 @@ class FlaxT5Attention(nn.Module):
         # if key and values are already calculated, only the last query position bias should be taken
         if cache_is_filled:
             max_decoder_length = self.variables["cache"]["cached_key"].shape[1]
-            attention_mask_shift = self.variables["cache"]["cache_index"] - 1
             position_bias = jax.lax.dynamic_slice(
-                position_bias, (0, 0, attention_mask_shift, 0), (1, self.n_heads, seq_length, max_decoder_length)
+                position_bias,
+                (0, 0, causal_attention_mask_shift, 0),
+                (1, self.n_heads, seq_length, max_decoder_length),
             )
         return position_bias
 
@@ -304,16 +307,21 @@ class FlaxT5Attention(nn.Module):
         # counter-act scaling in dot_product_attention_weights function
         query_states *= jnp.sqrt(query_states.shape[-1])
 
+        # for fast decoding causal attention mask should be shifted
+        causal_attention_mask_shift = (
+            self.variables["cache"]["cache_index"] if (self.has_variable("cache", "cached_key") and self.causal) else 0
+        )
         # create causal attention_mask; attention_mask has to be defined when model is causal
         if self.causal:
             causal_attention_mask = make_causal_mask(attention_mask, dtype="bool")
 
             # fast decoding for generate requires special attention_mask
             if self.has_variable("cache", "cached_key"):
-                attention_mask_shift = self.variables["cache"]["cache_index"]
                 max_decoder_length = self.variables["cache"]["cached_key"].shape[1]
                 causal_attention_mask = jax.lax.dynamic_slice(
-                    causal_attention_mask, (0, 0, attention_mask_shift, 0), (1, 1, seq_length, max_decoder_length)
+                    causal_attention_mask,
+                    (0, 0, causal_attention_mask_shift, 0),
+                    (1, 1, seq_length, max_decoder_length),
                 )
 
             # broadcast causal attention mask & attention mask to fit for merge
@@ -345,7 +353,7 @@ class FlaxT5Attention(nn.Module):
         if position_bias is None:
             # compute position bias (only for first layer)
             position_bias = self._create_position_bias(
-                key_states, query_states, attention_mask, init_cache, seq_length
+                key_states, query_states, attention_mask, init_cache, seq_length, causal_attention_mask_shift
             )
 
             if attention_mask is not None:
@@ -448,8 +456,8 @@ class FlaxT5LayerCrossAttention(nn.Module):
             position_bias=position_bias,
             output_attentions=output_attentions,
         )
-        layer_output = hidden_states + self.dropout(attention_output[0], deterministic=deterministic)
-        outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
+        hidden_states = hidden_states + self.dropout(attention_output[0], deterministic=deterministic)
+        outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
         return outputs
 
 
