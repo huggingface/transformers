@@ -1579,7 +1579,7 @@ larger multi-dimensional shape, this means that the parameter is partitioned and
 Filing Issues
 =======================================================================================================================
 
-Here is how to file an Issue so that we could quickly get to the bottom of the Issue and help you to unblock your work.
+Here is how to file an issue so that we could quickly get to the bottom of the issue and help you to unblock your work.
 
 In your report please always include:
 
