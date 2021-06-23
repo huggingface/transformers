@@ -81,7 +81,7 @@ During the first week after the community week announcement, **23.06. - 30.06.**
 ### How to propose a project
 
 Some default project ideas are given by the organizers. **However, we strongly encourage participants to submit their own project ideas!**
-Check out the [(TODO) HOW_TO_PROPOSE_PROJECT.md]( ) for more information on how to propose a new project.
+Check out the [HOW_TO_PROPOSE_PROJECT.md](https://github.com/huggingface/transformers/tree/master/examples/research_projects/jax-projects/HOW_TO_PROPOSE_PROJECT.md) for more information on how to propose a new project.
 
 ### How to form a team around a project
 
@@ -91,7 +91,7 @@ Feel free to leave comments, suggestions for improvement, or questions about mor
 If you have found the project that you ❤️  the most, leave a message "I would like to join this project" on the discussion thread. 
 We strongly advise you to also shortly state who you are, which time zone you are in and why you would like to work on this project, how you can contribute to the project and what your vision is for the project.
 For projects that see a lot of interest and for which enough participants have expressed interest in joining, an official team will be created by the organizers. 
-One of the organizers (`@Suzana`, `@valhalla`, `@osanseviero`, `@patrickvonplaten`) will leave a message "For this project the team: `<team_name>`, `<team_members>` , is officially created" on the thread and note down the teams on [(TODO) this google sheet]().
+One of the organizers (`@Suzana`, `@valhalla`, `@osanseviero`, `@patrickvonplaten`) will leave a message "For this project the team: `<team_name>`, `<team_members>` , is officially created" on the thread and note down the teams on [this google sheet](https://docs.google.com/spreadsheets/d/1GpHebL7qrwJOc9olTpIPgjf8vOS0jNb6zR_B8x_Jtik/edit?usp=sharing).
 
 Once created, the team can start refining their project:
 
@@ -136,7 +136,7 @@ be available in a couple of days.
 - [GPT2](https://github.com/huggingface/transformers/blob/master/src/transformers/models/gpt2/modeling_flax_gpt2.py)
 - [(TODO) MBART](https://github.com/huggingface/transformers/blob/master/src/transformers/models/mbart/modeling_flax_mbart.py)
 - [RoBERTa](https://github.com/huggingface/transformers/blob/master/src/transformers/models/roberta/modeling_flax_roberta.py)
-- [(TODO) T5](https://github.com/huggingface/transformers/blob/master/src/transformers/models/t5/modeling_flax_t5.py)
+- [T5](https://github.com/huggingface/transformers/blob/master/src/transformers/models/t5/modeling_flax_t5.py)
 - [ViT](https://github.com/huggingface/transformers/blob/master/src/transformers/models/vit/modeling_flax_vit.py)
 - [(TODO) Wav2Vec2](https://github.com/huggingface/transformers/blob/master/src/transformers/models/wav2vec2/modeling_flax_wav2vec2.py)
 
@@ -146,7 +146,7 @@ official [flax example folder](https://github.com/huggingface/transformers/tree/
 - [Causal language modeling (GPT2)](https://github.com/huggingface/transformers/blob/master/examples/flax/language-modeling/run_clm_flax.py)
 - [Masked language modeling (BERT, RoBERTa, ELECTRA, BigBird)](https://github.com/huggingface/transformers/blob/master/examples/flax/language-modeling/run_mlm_flax.py)
 - [Text classification (BERT, RoBERTa, ELECTRA, BigBird)](https://github.com/huggingface/transformers/blob/master/examples/flax/text-classification/run_flax_glue.py)
-- [(TODO) Summarization / Seq2Seq (BART, MBART, T5)]( )
+- [Summarization / Seq2Seq (BART, MBART, T5)](https://github.com/huggingface/transformers/blob/master/examples/flax/summarization/run_summarization_flax.py)
 - [(TODO) Masked Seq2Seq pret-training (T5)]( )
 - [(TODO) Image classification (ViT)]( )
 - [(TODO) CLIP pretraining, fine-tuning (CLIP)]( )
