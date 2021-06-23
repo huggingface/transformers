@@ -97,15 +97,17 @@ class ImageSegmentationPipeline(Pipeline):
                 The probability necessary to keep the pixel within the mask of said prediction.
 
         Return:
-            A list of dictionaries or a list of of list of dictionaries containing result. If the input is a single image, will return a
-            list of dictionaries, if the input is a list of several images, will return a list of list of dictionaries corresponding to
-            each image.
+            A list of dictionaries or a list of of list of dictionaries containing result. If the input is a single
+            image, will return a list of dictionaries, if the input is a list of several images, will return a list of
+            list of dictionaries corresponding to each image.
 
             The dictionaries contain the following keys:
 
-            - **label** (:obj:`str`) -- The label identified by the model. There could be duplicates within the list (corresponding to instances within a panoptic segmentation.
+            - **label** (:obj:`str`) -- The label identified by the model. There could be duplicates within the list
+              (corresponding to instances within a panoptic segmentation.
             - **score** (:obj:`int`) -- The score attributed by the model for that label as a probability.
-            - **mask** (:obj:`np.array`) -- The bitmask of shape (H, W) of the input image, 0 means the class is not affected to the label, 1 means it is.
+            - **mask** (:obj:`np.array`) -- The bitmask of shape (H, W) of the input image, 0 means the class is not
+              affected to the label, 1 means it is.
         """
         is_batched = isinstance(images, list)
 
