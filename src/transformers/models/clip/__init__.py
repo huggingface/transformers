@@ -52,7 +52,9 @@ if is_flax_available():
         "FlaxCLIPModel",
         "FlaxCLIPPreTrainedModel",
         "FlaxCLIPTextModel",
+        "FlaxCLIPTextPreTrainedModel",
         "FlaxCLIPVisionModel",
+        "FlaxCLIPVisionPreTrainedModel",
     ]
 
 
@@ -77,7 +79,14 @@ if TYPE_CHECKING:
         )
 
     if is_flax_available():
-        from .modeling_flax_clip import FlaxCLIPModel, FlaxCLIPPreTrainedModel, FlaxCLIPTextModel, FlaxCLIPVisionModel
+        from .modeling_flax_clip import (
+            FlaxCLIPModel,
+            FlaxCLIPPreTrainedModel,
+            FlaxCLIPTextModel,
+            FlaxCLIPTextPreTrainedModel,
+            FlaxCLIPVisionModel,
+            FlaxCLIPVisionPreTrainedModel,
+        )
 
 
 else:
