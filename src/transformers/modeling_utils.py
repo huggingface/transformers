@@ -84,18 +84,6 @@ except ImportError:
             return input
 
 
-def _dtype_from_str(dtype_str) -> torch.dtype:
-    """
-    Returns the converted from string :obj:`torch.dtype`, e.g. from ``float32`` to :obj:`torch.float32`. Returns
-    :obj:`None` if ``dtype_str`` is :obj:`None`.
-    """
-    if dtype_str is None:
-        return None
-    if isinstance(dtype_str, str):
-        return getattr(torch, dtype_str)
-    raise ValueError(f"dtype is expected to be the string attribute name of ``torch``, got {dtype_str}")
-
-
 def find_pruneable_heads_and_indices(
     heads: List[int], n_heads: int, head_size: int, already_pruned_heads: Set[int]
 ) -> Tuple[Set[int], torch.LongTensor]:
@@ -484,12 +472,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
 
         # override default dtype if needed
-        dtype_orig = None
-        dtype = _dtype_from_str(config.torch_dtype)
-        if dtype is not None:
-            logger.info(f"instantiating {cls.__name__} model under default dtype {dtype}")
-            dtype_orig = torch.get_default_dtype()
-            torch.set_default_dtype(dtype)
+        dtype_orig = cls._set_default_dtype(config.torch_dtype)
 
         if is_deepspeed_zero3_enabled():
             import deepspeed
@@ -507,6 +490,41 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             torch.set_default_dtype(dtype_orig)
 
         return model
+
+    @classmethod
+    def _set_default_dtype(cls, config_dtype_str, weight_dtype=None) -> torch.dtype:
+        """
+        If a floating ``dtype`` is passed via the model config or one of its weights ``torch.set_default_dtype`` is
+        used to change the global dtype. Which is needed when wanting to instantiate the model under specific dtype.
+
+        Args:
+            config_dtype_str - ``config.torch_dtype``
+            weight_dtype - optional ``dtype`` of one of the weights
+
+        Returns:`` the original ``dtype`` that can be used to restore torch.set_default_dtype(dtype) if it was
+        modified. It it wasn't returns :obj:`None`
+
+        Note ``set_default_dtype`` currently only works with floating-point types and assert if for
+        example``torch.int64`` is passed. So if non-float ``dtype`` is passed we don't do anything.
+
+        """
+        dtype_str = config_dtype_str
+        if dtype_str is None and weight_dtype is not None:
+            dtype_str = str(weight_dtype).split(".")[1]
+        if dtype_str is None:
+            return None
+        if not isinstance(dtype_str, str):
+            raise ValueError(f"dtype is expected to be the string attribute name of ``torch``, got {config_dtype_str}")
+
+        if "float" not in dtype_str:
+            print(f"instantiating {cls.__name__} model under default dtype, since {dtype_str} is not a float dtype")
+            return None
+
+        dtype = getattr(torch, dtype_str)
+        print(f"instantiating {cls.__name__} model under default dtype {dtype}")
+        dtype_orig = torch.get_default_dtype()
+        torch.set_default_dtype(dtype)
+        return dtype_orig
 
     @property
     def base_model(self) -> nn.Module:
@@ -1219,14 +1237,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # 1. If config.torch_dtype is not None, we use that dtype
             # 2. Otherwise, we try to auto-detect it from the loaded state_dict, by checking the first
             #    entry - we assume all weights are of the same dtype
-            dtype_orig = None
-            dtype = _dtype_from_str(config.torch_dtype)
-            if dtype is None:
-                dtype = next(iter(state_dict.values())).dtype
-            if dtype is not None:
-                logger.info(f"instantiating {cls.__name__} model under default dtype {dtype}")
-                dtype_orig = torch.get_default_dtype()
-                torch.set_default_dtype(dtype)
+            dtype_orig = cls._set_default_dtype(config.torch_dtype, next(iter(state_dict.values())).dtype)
 
         config.name_or_path = pretrained_model_name_or_path
 
