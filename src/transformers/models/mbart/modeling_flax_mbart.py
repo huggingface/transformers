@@ -241,7 +241,6 @@ class FlaxMBartAttention(nn.Module):
     embed_dim: int
     num_heads: int
     dropout: float = 0.0
-    is_decoder: bool = False
     causal: bool = False
     bias: bool = True
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -523,7 +522,6 @@ class FlaxMBartDecoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=self.config.decoder_attention_heads,
             dropout=self.config.attention_dropout,
-            is_decoder=True,
             causal=True,
         )
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
@@ -536,7 +534,6 @@ class FlaxMBartDecoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=self.config.decoder_attention_heads,
             dropout=self.config.attention_dropout,
-            is_decoder=True,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
         self.fc1 = nn.Dense(
@@ -930,7 +927,7 @@ class FlaxMBartModule(nn.Module):
         )
 
 
-class FlaxMBartPretrainedModel(FlaxPreTrainedModel):
+class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
     config_class = MBartConfig
     base_model_prefix: str = "model"
     module_class: nn.Module = None
@@ -1249,7 +1246,7 @@ class FlaxMBartPretrainedModel(FlaxPreTrainedModel):
     "The bare MBart Model transformer outputting raw hidden-states without any specific head on top.",
     MBART_START_DOCSTRING,
 )
-class FlaxMBartModel(FlaxMBartPretrainedModel):
+class FlaxMBartModel(FlaxMBartPreTrainedModel):
     config: MBartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
     module_class = FlaxMBartModule
@@ -1336,7 +1333,7 @@ class FlaxMBartForConditionalGenerationModule(nn.Module):
 @add_start_docstrings(
     "The MMBart Model with a language modeling head. Can be used for summarization.", MBART_START_DOCSTRING
 )
-class FlaxMBartForConditionalGeneration(FlaxMBartPretrainedModel):
+class FlaxMBartForConditionalGeneration(FlaxMBartPreTrainedModel):
     module_class = FlaxMBartForConditionalGenerationModule
     dtype: jnp.dtype = jnp.float32
 
@@ -1642,7 +1639,7 @@ class FlaxMBartForSequenceClassificationModule(nn.Module):
     """,
     MBART_START_DOCSTRING,
 )
-class FlaxMBartForSequenceClassification(FlaxMBartPretrainedModel):
+class FlaxMBartForSequenceClassification(FlaxMBartPreTrainedModel):
     module_class = FlaxMBartForSequenceClassificationModule
     dtype = jnp.float32
 
@@ -1730,7 +1727,7 @@ class FlaxMBartForQuestionAnsweringModule(nn.Module):
     """,
     MBART_START_DOCSTRING,
 )
-class FlaxMBartForQuestionAnswering(FlaxMBartPretrainedModel):
+class FlaxMBartForQuestionAnswering(FlaxMBartPreTrainedModel):
     module_class = FlaxMBartForQuestionAnsweringModule
     dtype = jnp.float32
 
