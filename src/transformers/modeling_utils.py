@@ -498,27 +498,32 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         used to change the global dtype. Which is needed when wanting to instantiate the model under specific dtype.
 
         Args:
-            config_dtype_str - ``config.torch_dtype``
-            weight_dtype - optional ``dtype`` of one of the weights
+            config_dtype_str (:obj:`str`):
+                value of ``config.torch_dtype``
+            weight_dtype (:obj:`torch.dtype`, `optional`, defaults to :obj:`None`):
+                ``dtype`` of one of the pretrained weights
 
-        Returns:`` the original ``dtype`` that can be used to restore torch.set_default_dtype(dtype) if it was
-        modified. It it wasn't returns :obj:`None`
+        Returns:
+            :obj:`torch.dtype`: the original ``dtype`` that can be used to restore ``torch.set_default_dtype(dtype)``
+            if it was modified. If it wasn't, returns :obj:`None`.
 
-        Note ``set_default_dtype`` currently only works with floating-point types and assert if for
-        example``torch.int64`` is passed. So if non-float ``dtype`` is passed we don't do anything.
-
+        Note ``set_default_dtype`` currently only works with floating-point types and asserts if for example,
+        ``torch.int64`` is passed. So if a non-float ``dtype`` is passed we don't do anything other than logging a
+        warning that the non-float dtype was ignored.
         """
         dtype_str = config_dtype_str
         if dtype_str is None and weight_dtype is not None:
             dtype_str = str(weight_dtype).split(".")[1]
+
         if dtype_str is None:
             return None
+
         if not isinstance(dtype_str, str):
             raise ValueError(f"dtype is expected to be the string attribute name of ``torch``, got {config_dtype_str}")
 
         if "float" not in dtype_str:
-            logger.info(
-                f"instantiating {cls.__name__} model under default dtype, since {dtype_str} is not a float dtype"
+            logger.warning(
+                f"instantiating {cls.__name__} model under default torch.dtype, since {dtype_str} is not a float dtype"
             )
             return None
 
