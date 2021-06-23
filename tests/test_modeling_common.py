@@ -67,7 +67,7 @@ if is_torch_available():
     )
 
 if is_torch_fx_available():
-    from transformers.modeling_fx_utils import symbolic_trace
+    from transformers.utils.fx import symbolic_trace
 
 
 def _config_zero_init(config):
