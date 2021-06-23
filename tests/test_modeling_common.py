@@ -1613,7 +1613,7 @@ class ModelPushToHubTester(unittest.TestCase):
         )
         model = BertModel(config)
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, push_to_hub=True, repo_name="test-model", use_auth_token=self._token)
+            model.save_pretrained(os.path.join(tmp_dir, "test-model"), push_to_hub=True, use_auth_token=self._token)
 
             new_model = BertModel.from_pretrained(f"{USER}/test-model")
             for p1, p2 in zip(model.parameters(), new_model.parameters()):
@@ -1626,9 +1626,8 @@ class ModelPushToHubTester(unittest.TestCase):
         model = BertModel(config)
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(
-                tmp_dir,
+                os.path.join(tmp_dir, "test-model-org"),
                 push_to_hub=True,
-                repo_name="test-model-org",
                 use_auth_token=self._token,
                 organization="valid_org",
             )

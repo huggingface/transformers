@@ -1487,7 +1487,7 @@ class TFModelPushToHubTester(unittest.TestCase):
         # Make sure model is properly initialized
         _ = model(model.dummy_inputs)
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, push_to_hub=True, repo_name="test-model-tf", use_auth_token=self._token)
+            model.save_pretrained(os.path.join(tmp_dir, "test-model-tf"), push_to_hub=True, use_auth_token=self._token)
 
             new_model = TFBertModel.from_pretrained(f"{USER}/test-model-tf")
             models_equal = True
@@ -1503,9 +1503,8 @@ class TFModelPushToHubTester(unittest.TestCase):
         model = TFBertModel(config)
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(
-                tmp_dir,
+                os.path.join(tmp_dir, "test-model-tf-org"),
                 push_to_hub=True,
-                repo_name="test-model-tf-org",
                 use_auth_token=self._token,
                 organization="valid_org",
             )
