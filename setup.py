@@ -100,7 +100,7 @@ _deps = [
     "flake8>=3.8.3",
     "flax>=0.3.4",
     "fugashi>=1.0",
-    "huggingface-hub==0.0.11",
+    "huggingface-hub==0.0.12",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
