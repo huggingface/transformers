@@ -45,7 +45,7 @@ if is_flax_available():
     )
 
 
-def prepare_bart_inputs_dict(
+def prepare_mbart_inputs_dict(
     config,
     input_ids,
     decoder_input_ids=None,
@@ -69,7 +69,7 @@ def prepare_bart_inputs_dict(
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
         "attention_mask": attention_mask,
-        "decoder_attention_mask": attention_mask,
+        "decoder_attention_mask": decoder_attention_mask,
     }
 
 
@@ -93,6 +93,7 @@ class FlaxMBartModelTester(unittest.TestCase):
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
+        decoder_start_token_id=2,
         initializer_range=0.02,
     ):
         self.parent = parent
@@ -112,6 +113,7 @@ class FlaxMBartModelTester(unittest.TestCase):
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
         self.initializer_range = initializer_range
 
     def prepare_config_and_inputs(self):
@@ -135,10 +137,11 @@ class FlaxMBartModelTester(unittest.TestCase):
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
+            decoder_start_token_id=self.decoder_start_token_id,
             initializer_range=self.initializer_range,
             use_cache=False,
         )
-        inputs_dict = prepare_bart_inputs_dict(config, input_ids, decoder_input_ids)
+        inputs_dict = prepare_mbart_inputs_dict(config, input_ids, decoder_input_ids)
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
@@ -447,7 +450,10 @@ class FlaxMBartModelIntegrationTest(unittest.TestCase):
     def translate_src_text(self, **tokenizer_kwargs):
         model_inputs = self.tokenizer(self.src_text, **tokenizer_kwargs, return_tensors="np")
         generated_ids = self.model.generate(
-            model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2
+            model_inputs.input_ids,
+            attention_mask=model_inputs.attention_mask,
+            decoder_start_token_id=self.tokenizer.lang_code_to_id["ro_RO"],
+            num_beams=2,
         )
         generated_words = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         return generated_words

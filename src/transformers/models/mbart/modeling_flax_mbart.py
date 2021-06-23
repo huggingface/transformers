@@ -574,6 +574,7 @@ class FlaxMBartDecoderLayer(nn.Module):
         if encoder_hidden_states is not None:
             residual = hidden_states
 
+            hidden_states = self.encoder_attn_layer_norm(hidden_states)
             hidden_states, cross_attn_weights = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
@@ -581,7 +582,6 @@ class FlaxMBartDecoderLayer(nn.Module):
             )
             hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
             hidden_states = residual + hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
         # Fully Connected
         residual = hidden_states
@@ -1526,7 +1526,7 @@ FLAX_MBART_CONDITIONAL_GENERATION_DOCSTRING = """
         >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='jax')
 
         >>> # Generate Summary
-        >>> summary_ids = model.generate(inputs['input_ids']).sequences
+        >>> summary_ids = model.generate(inputs['input_ids'], decoder_start_token_id=tokenizer.lang_code_to_id[tgt_lang]).sequences
         >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
 
     Mask filling example::

@@ -238,14 +238,14 @@ class FlaxGenerationMixin:
         )
         prng_key = prng_key if prng_key is not None else jax.random.PRNGKey(0)
 
+        if decoder_start_token_id is None and self.config.is_encoder_decoder:
+            raise ValueError("`decoder_start_token_id` has to be defined for encoder-decoder generation.")
+
         if self.config.is_encoder_decoder:
             # add encoder_outputs to model_kwargs
             model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
             # prepare decoder_input_ids for generation
-            if decoder_start_token_id is not None:
-                input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
-            else:
-                input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4")
+            input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
         do_sample = do_sample if do_sample is not None else self.config.do_sample
         num_beams = num_beams if num_beams is not None else self.config.num_beams
