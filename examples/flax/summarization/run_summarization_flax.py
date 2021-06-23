@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning the library models for sequence to sequence.
+Fine-tuning the library models for summarization.
 """
 # You can also adapt this script on your own sequence to sequence task. Pointers for this are left as comments.
 
@@ -66,21 +66,6 @@ except (LookupError, OSError):
         )
     with FileLock(".lock") as lock:
         nltk.download("punkt", quiet=True)
-
-# Cache the result
-has_tensorboard = is_tensorboard_available()
-if has_tensorboard:
-    try:
-        from flax.metrics.tensorboard import SummaryWriter
-    except ImportError as ie:
-        has_tensorboard = False
-        print(f"Unable to display metrics through TensorBoard because some package are not installed: {ie}")
-
-else:
-    print(
-        "Unable to display metrics through TensorBoard because the package is not installed: "
-        "Please run pip install tensorboard to enable."
-    )
 
 
 MODEL_CONFIG_CLASSES = list(FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys())
@@ -169,8 +154,8 @@ class DataTrainingArguments:
         metadata={
             "help": "The maximum total sequence length for validation target text after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
-            "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
-            "during ``evaluate`` and ``predict``."
+            "This argument is also used to override the `max_length` param of `model.generate`, which is used "
+            "during evaluation."
         },
     )
     max_train_samples: Optional[int] = field(
@@ -207,8 +192,8 @@ class DataTrainingArguments:
     num_beams: Optional[int] = field(
         default=None,
         metadata={
-            "help": "Number of beams to use for evaluation. This argument will be passed to ``model.generate``, "
-            "which is used during ``evaluate`` and ``predict``."
+            "help": "Number of beams to use for evaluation. This argument will be passed to `model.generate`, "
+            "which is used during evaluation."
         },
     )
     overwrite_cache: bool = field(
@@ -351,8 +336,6 @@ def main():
     # For CSV/JSON files this script will use the first column for the full texts and the second column for the
     # summaries (unless you specify column names for this with the `text_column` and `summary_column` arguments).
     #
-    # In distributed training, the load_dataset function guarantee that only one local process can concurrently
-    # download the dataset.
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         dataset = load_dataset(
@@ -375,9 +358,6 @@ def main():
 
     # Load pretrained model and tokenizer
 
-    # Distributed training:
-    # The .from_pretrained methods guarantee that only one local process can concurrently
-    # download model & vocab.
     if model_args.config_name:
         config = AutoConfig.from_pretrained(model_args.config_name, cache_dir=model_args.cache_dir)
     elif model_args.model_name_or_path:
@@ -553,8 +533,22 @@ def main():
         return result
 
     # Enable tensorboard only on the master node
+    has_tensorboard = is_tensorboard_available()
     if has_tensorboard and jax.process_index() == 0:
-        summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir).joinpath("logs").as_posix())
+        try:
+            from flax.metrics.tensorboard import SummaryWriter
+
+            summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir).joinpath("logs").as_posix())
+        except ImportError as ie:
+            has_tensorboard = False
+            logger.warning(
+                f"Unable to display metrics through TensorBoard because some package are not installed: {ie}"
+            )
+    else:
+        logger.warning(
+            "Unable to display metrics through TensorBoard because the package is not installed: "
+            "Please run pip install tensorboard to enable."
+        )
 
     # Initialize our training
     rng = jax.random.PRNGKey(training_args.seed)
@@ -653,12 +647,11 @@ def main():
         return metrics
 
     # Define generation function
-    gen_kwargs = {
-        "max_length": data_args.val_max_target_length
-        if data_args.val_max_target_length is not None
-        else model.config.max_length,
-        "num_beams": data_args.num_beams if data_args.num_beams is not None else model.config.num_beams,
-    }
+    max_length = (
+        data_args.val_max_target_length if data_args.val_max_target_length is not None else model.config.max_length
+    )
+    num_beams = data_args.num_beams if data_args.num_beams is not None else model.config.num_beams
+    gen_kwargs = {"max_length": max_length, "num_beams": num_beams}
 
     def generate_step(params, batch):
         model.params = params
