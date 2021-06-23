@@ -113,7 +113,7 @@ _deps = [
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
     "optuna",
-    "optax>=0.08",
+    "optax>=0.0.8",
     "packaging",
     "parameterized",
     "protobuf",
