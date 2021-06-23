@@ -521,13 +521,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if not isinstance(dtype_str, str):
             raise ValueError(f"dtype is expected to be the string attribute name of ``torch``, got {config_dtype_str}")
 
-        if "float" not in dtype_str:
+        dtype = getattr(torch, dtype_str)
+        if not dtype.is_floating_point:
             logger.warning(
-                f"instantiating {cls.__name__} model under default torch.dtype, since {dtype_str} is not a float dtype"
+                f"instantiating {cls.__name__} model under ``torch.get_default_dtype()``, since {dtype} is not a floating point dtype"
             )
             return None
 
-        dtype = getattr(torch, dtype_str)
         logger.info(f"instantiating {cls.__name__} model under default dtype {dtype}")
         dtype_orig = torch.get_default_dtype()
         torch.set_default_dtype(dtype)
