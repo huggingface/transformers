@@ -468,7 +468,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @classmethod
     def _from_config(cls, config, **kwargs):
         """
-        All context managers that the model should be init'ed under go here
+        All context managers that the model should be initialized under go here.
         """
 
         # override default dtype if needed
@@ -500,7 +500,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Args:
             config_dtype_str (:obj:`str`):
                 value of ``config.torch_dtype``
-            weight_dtype (:obj:`torch.dtype`, `optional`, defaults to :obj:`None`):
+            weight_dtype (:obj:`torch.dtype`, `optional`):
                 ``dtype`` of one of the pretrained weights
 
         Returns:
@@ -524,11 +524,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         dtype = getattr(torch, dtype_str)
         if not dtype.is_floating_point:
             logger.warning(
-                f"instantiating {cls.__name__} model under ``torch.get_default_dtype()``, since {dtype} is not a floating point dtype"
+                f"instantiating {cls.__name__} model under {torch.get_default_dtype()}, since {dtype} is not a floating point dtype"
             )
             return None
 
-        logger.info(f"instantiating {cls.__name__} model under default dtype {dtype}")
+        logger.info(f"Instantiating {cls.__name__} model under default dtype {dtype}.")
         dtype_orig = torch.get_default_dtype()
         torch.set_default_dtype(dtype)
         return dtype_orig
