@@ -28,10 +28,20 @@ _import_structure = {
 }
 
 if is_torch_available():
-    _import_structure["modeling_rag"] = ["RagModel", "RagSequenceForGeneration", "RagTokenForGeneration"]
+    _import_structure["modeling_rag"] = [
+        "RagModel",
+        "RagPreTrainedModel",
+        "RagSequenceForGeneration",
+        "RagTokenForGeneration",
+    ]
 
 if is_tf_available():
-    _import_structure["modeling_tf_rag"] = ["TFRagModel", "TFRagSequenceForGeneration", "TFRagTokenForGeneration"]
+    _import_structure["modeling_tf_rag"] = [
+        "TFRagModel",
+        "TFRagPreTrainedModel",
+        "TFRagSequenceForGeneration",
+        "TFRagTokenForGeneration",
+    ]
 
 
 if TYPE_CHECKING:
@@ -40,10 +50,15 @@ if TYPE_CHECKING:
     from .tokenization_rag import RagTokenizer
 
     if is_torch_available():
-        from .modeling_rag import RagModel, RagSequenceForGeneration, RagTokenForGeneration
+        from .modeling_rag import RagModel, RagPreTrainedModel, RagSequenceForGeneration, RagTokenForGeneration
 
     if is_tf_available():
-        from .modeling_tf_rag import TFRagModel, TFRagSequenceForGeneration, TFRagTokenForGeneration
+        from .modeling_tf_rag import (
+            TFRagModel,
+            TFRagPreTrainedModel,
+            TFRagSequenceForGeneration,
+            TFRagTokenForGeneration,
+        )
 
 else:
     import importlib

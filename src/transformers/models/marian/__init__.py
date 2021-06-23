@@ -43,7 +43,7 @@ if is_torch_available():
     ]
 
 if is_tf_available():
-    _import_structure["modeling_tf_marian"] = ["TFMarianModel", "TFMarianMTModel"]
+    _import_structure["modeling_tf_marian"] = ["TFMarianModel", "TFMarianMTModel", "TFMarianPreTrainedModel"]
 
 
 if TYPE_CHECKING:
@@ -62,7 +62,7 @@ if TYPE_CHECKING:
         )
 
     if is_tf_available():
-        from .modeling_tf_marian import TFMarianModel, TFMarianMTModel
+        from .modeling_tf_marian import TFMarianModel, TFMarianMTModel, TFMarianPreTrainedModel
 
 else:
     import importlib

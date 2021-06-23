@@ -46,6 +46,7 @@ if is_tf_available():
         "TFFlaubertForSequenceClassification",
         "TFFlaubertForTokenClassification",
         "TFFlaubertModel",
+        "TFFlaubertPreTrainedModel",
         "TFFlaubertWithLMHeadModel",
     ]
 
@@ -74,6 +75,7 @@ if TYPE_CHECKING:
             TFFlaubertForSequenceClassification,
             TFFlaubertForTokenClassification,
             TFFlaubertModel,
+            TFFlaubertPreTrainedModel,
             TFFlaubertWithLMHeadModel,
         )
 

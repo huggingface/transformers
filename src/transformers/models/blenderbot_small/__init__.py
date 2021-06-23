@@ -38,6 +38,7 @@ if is_tf_available():
     _import_structure["modeling_tf_blenderbot_small"] = [
         "TFBlenderbotSmallForConditionalGeneration",
         "TFBlenderbotSmallModel",
+        "TFBlenderbotSmallPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
@@ -54,7 +55,11 @@ if TYPE_CHECKING:
         )
 
     if is_tf_available():
-        from .modeling_tf_blenderbot_small import TFBlenderbotSmallForConditionalGeneration, TFBlenderbotSmallModel
+        from .modeling_tf_blenderbot_small import (
+            TFBlenderbotSmallForConditionalGeneration,
+            TFBlenderbotSmallModel,
+            TFBlenderbotSmallPreTrainedModel,
+        )
 
 else:
     import importlib

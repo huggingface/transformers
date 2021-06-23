@@ -55,6 +55,7 @@ if is_flax_available():
         "FlaxBartForQuestionAnswering",
         "FlaxBartForSequenceClassification",
         "FlaxBartModel",
+        "FlaxBartPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
@@ -85,6 +86,7 @@ if TYPE_CHECKING:
             FlaxBartForQuestionAnswering,
             FlaxBartForSequenceClassification,
             FlaxBartModel,
+            FlaxBartPreTrainedModel,
         )
 
 else:

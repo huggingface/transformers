@@ -32,6 +32,7 @@ if is_torch_available():
     _import_structure["modeling_bert_generation"] = [
         "BertGenerationDecoder",
         "BertGenerationEncoder",
+        "BertGenerationPreTrainedModel",
         "load_tf_weights_in_bert_generation",
     ]
 
@@ -46,6 +47,7 @@ if TYPE_CHECKING:
         from .modeling_bert_generation import (
             BertGenerationDecoder,
             BertGenerationEncoder,
+            BertGenerationPreTrainedModel,
             load_tf_weights_in_bert_generation,
         )
 
