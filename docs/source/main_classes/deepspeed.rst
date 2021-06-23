@@ -73,8 +73,6 @@ or via ``transformers``' ``extras``:
 
     pip install transformers[deepspeed]
 
-(will become available starting from ``transformers==4.6.0``)
-
 or find more details on `the DeepSpeed's GitHub page <https://github.com/microsoft/deepspeed#installation>`__ and
 `advanced install <https://www.deepspeed.ai/tutorials/advanced-install/>`__.
 
@@ -90,20 +88,31 @@ To make a local build for DeepSpeed:
     git clone https://github.com/microsoft/DeepSpeed/
     cd DeepSpeed
     rm -rf build
-    TORCH_CUDA_ARCH_LIST="6.1;8.6" DS_BUILD_OPS=1 pip install . \
+    TORCH_CUDA_ARCH_LIST="8.6" DS_BUILD_CPU_ADAM=1 DS_BUILD_UTILS=1 pip install . \
     --global-option="build_ext" --global-option="-j8" --no-cache -v \
     --disable-pip-version-check 2>&1 | tee build.log
 
-Edit ``TORCH_CUDA_ARCH_LIST`` to insert the code for the architectures of the GPU cards you intend to use.
+If you intend to use NVMe offload you will need to also include ``DS_BUILD_AIO=1`` in the instructions above (and also
+install `libaio-dev` system-wide).
 
-Or if you need to use the same setup on multiple machines, make a binary wheel:
+Edit ``TORCH_CUDA_ARCH_LIST`` to insert the code for the architectures of the GPU cards you intend to use. Assuming all
+your cards are the same you can get the arch via:
+
+.. code-block:: bash
+
+    CUDA_VISIBLE_DEVICES=0 python -c "import torch; print(torch.cuda.get_device_capability())"
+
+So if you get ``8, 6``, then use ``TORCH_CUDA_ARCH_LIST="8.6"``. If you have multiple different cards, you can list all
+of them like so ``TORCH_CUDA_ARCH_LIST="6.1;8.6"``
+
+If you need to use the same setup on multiple machines, make a binary wheel:
 
 .. code-block:: bash
 
     git clone https://github.com/microsoft/DeepSpeed/
     cd DeepSpeed
     rm -rf build
-    TORCH_CUDA_ARCH_LIST="6.1;8.6" DS_BUILD_OPS=1 \
+    TORCH_CUDA_ARCH_LIST="8.6" DS_BUILD_CPU_ADAM=1 DS_BUILD_UTILS=1 \
     python setup.py build_ext -j8 bdist_wheel
 
 it will generate something like ``dist/deepspeed-0.3.13+8cd046f-cp38-cp38-linux_x86_64.whl`` which now you can install
@@ -692,7 +701,17 @@ be ignored.
 
 - ``sub_group_size``: ``1e9``
 
-This one does impact GPU memory usage. But no docs at the moment on Deepspeed side to explain the tuning.
+``sub_group_size`` controls the granularity in which parameters are updated during optimizer steps. Parameters are
+grouped into buckets of ``sub_group_size`` and each buckets is updated one at a time. When used with NVMe offload in
+ZeRO-Infinity, ``sub_group_size`` therefore controls the granularity in which model states are moved in and out of CPU
+memory from NVMe during the optimizer step. This prevents running out of CPU memory for extremely large models.
+
+You can leave ``sub_group_size`` to its default value of `1e9` when not using NVMe offload. You may want to change its
+default value in the following cases:
+
+1. Running into OOM during optimizer step: Reduce ``sub_group_size`` to reduce memory utilization of temporary buffers
+2. Optimizer Step is taking a long time: Increase ``sub_group_size`` to improve bandwidth utilization as a result of
+   the increased data buffers.
 
 
 .. _deepspeed-nvme:
@@ -1553,6 +1572,56 @@ Also under ZeRO-3, if you write your own code and run into a model parameter wei
 
 stress on ``tensor([1.])``, or if you get an error where it says the parameter is of size ``1``, instead of some much
 larger multi-dimensional shape, this means that the parameter is partitioned and what you see is a ZeRO-3 placeholder.
+
+
+
+
+Filing Issues
+=======================================================================================================================
+
+Here is how to file an issue so that we could quickly get to the bottom of the issue and help you to unblock your work.
+
+In your report please always include:
+
+1. the full Deepspeed config file in the report
+
+2. either the command line arguments if you were using the :class:`~transformers.Trainer` or
+   :class:`~transformers.TrainingArguments` arguments if you were scripting the Trainer setup yourself. Please do not
+   dump the :class:`~transformers.TrainingArguments` as it has dozens of entries that are irrelevant.
+
+3. Output of:
+
+.. code-block:: bash
+
+    python -c 'import torch; print(f"torch: {torch.__version__}")'
+    python -c 'import transformers; print(f"transformers: {transformers.__version__}")'
+    python -c 'import deepspeed; print(f"deepspeed: {deepspeed.__version__}")'
+
+4. If possible include a link to a Google Colab notebook that we can reproduce the problem with. You can use this
+   `notebook <https://github.com/stas00/porting/blob/master/transformers/deepspeed/DeepSpeed_on_colab_CLI.ipynb>`__ as
+   a starting point.
+
+5. Unless it's impossible please always use a standard dataset that we can use and not something custom.
+
+6. If possible try to use one of the existing `examples
+   <https://github.com/huggingface/transformers/tree/master/examples/pytorch>`__ to reproduce the problem with.
+
+Things to consider:
+
+* Deepspeed is often not the cause of the problem.
+
+    Some of the filed issues proved to be Deepspeed-unrelated. That is once Deepspeed was removed from the setup, the
+    problem was still there.
+
+    Therefore, if it's not absolutely obvious it's a DeepSpeed-related problem, as in you can see that there is an
+    exception and you can see that DeepSpeed modules are involved, first re-test your setup without DeepSpeed in it.
+    And only if the problem persists then do mentioned Deepspeed and supply all the required details.
+
+* If it's clear to you that the issue is in the DeepSpeed core and not the integration part, please file the Issue
+  directly with `Deepspeed <https://github.com/microsoft/DeepSpeed/>`__. If you aren't sure, please do not worry,
+  either Issue tracker will do, we will figure it out once you posted it and redirect you to another Issue tracker if
+  need be.
+
 
 
 Troubleshooting
