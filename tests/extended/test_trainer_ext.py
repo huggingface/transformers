@@ -45,6 +45,9 @@ with ExtendSysPath(f"{bindir}/../../examples/pytorch/translation"):
 set_seed(42)
 MARIAN_MODEL = "sshleifer/student_marian_en_ro_6_1"
 MBART_TINY = "sshleifer/tiny-mbart"
+T5_TINY = "patrickvonplaten/t5-tiny-random"
+# using T5_TINY as it's fp32 model, MBART_TINY which is fp16 fails under 0 gpus with various
+# Half-related issues, e.g. RuntimeError: "LayerNormKernelImpl" not implemented for 'Half'
 
 
 # a candidate for testing_utils
@@ -82,7 +85,7 @@ class TestTrainerExt(TestCasePlus):
         output_dir = self.run_trainer(
             eval_steps=1,
             max_len=12,
-            model_name=MBART_TINY,
+            model_name=T5_TINY,
             num_train_epochs=1,
             distributed=distributed,
             extra_args_str=extra_args_str,
