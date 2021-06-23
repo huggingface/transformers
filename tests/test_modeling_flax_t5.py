@@ -466,7 +466,7 @@ class FlaxT5ModelIntegrationTests(unittest.TestCase):
 
         input_ids = tokenizer("summarize: Hello there", return_tensors="np").input_ids
 
-        sequences = model.generate(input_ids, trace=False).sequences
+        sequences = model.generate(input_ids).sequences
 
         output_str = tokenizer.batch_decode(sequences, skip_special_tokens=True)[0]
         self.assertTrue(output_str == "Hello there!")
