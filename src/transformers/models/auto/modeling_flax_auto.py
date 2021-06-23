@@ -62,6 +62,7 @@ from ..roberta.modeling_flax_roberta import (
     FlaxRobertaForTokenClassification,
     FlaxRobertaModel,
 )
+from ..t5.modeling_flax_t5 import FlaxT5ForConditionalGeneration, FlaxT5Model
 from ..vit.modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel
 from .auto_factory import auto_class_factory
 from .configuration_auto import (
@@ -72,6 +73,7 @@ from .configuration_auto import (
     ElectraConfig,
     GPT2Config,
     RobertaConfig,
+    T5Config,
     ViTConfig,
 )
 
@@ -90,6 +92,7 @@ FLAX_MODEL_MAPPING = OrderedDict(
         (ElectraConfig, FlaxElectraModel),
         (CLIPConfig, FlaxCLIPModel),
         (ViTConfig, FlaxViTModel),
+        (T5Config, FlaxT5Model),
     ]
 )
 
@@ -101,6 +104,7 @@ FLAX_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (BigBirdConfig, FlaxBigBirdForPreTraining),
         (BartConfig, FlaxBartForConditionalGeneration),
         (ElectraConfig, FlaxElectraForPreTraining),
+        (T5Config, FlaxT5ForConditionalGeneration),
     ]
 )
 
@@ -112,6 +116,14 @@ FLAX_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (BigBirdConfig, FlaxBigBirdForMaskedLM),
         (BartConfig, FlaxBartForConditionalGeneration),
         (ElectraConfig, FlaxElectraForMaskedLM),
+    ]
+)
+
+FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
+    [
+        # Model for Seq2Seq Causal LM mapping
+        (BartConfig, FlaxBartForConditionalGeneration),
+        (T5Config, FlaxT5ForConditionalGeneration),
     ]
 )
 
@@ -233,4 +245,10 @@ FlaxAutoModelForNextSentencePrediction = auto_class_factory(
     "FlaxAutoModelForNextSentencePrediction",
     FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
     head_doc="next sentence prediction",
+)
+
+FlaxAutoModelForSeq2SeqLM = auto_class_factory(
+    "FlaxAutoModelForSeq2SeqLM",
+    FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    head_doc="sequence-to-sequence language modeling",
 )

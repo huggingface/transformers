@@ -795,6 +795,21 @@ class T5ModelIntegrationTests(unittest.TestCase):
         return T5Tokenizer.from_pretrained("t5-base")
 
     @slow
+    def test_small_generation(self):
+        model = T5ForConditionalGeneration.from_pretrained("t5-small").to(torch_device)
+        model.config.max_length = 8
+        model.config.num_beams = 1
+        model.config.do_sample = False
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+        input_ids = tokenizer("summarize: Hello there", return_tensors="pt").input_ids
+
+        sequences = model.generate(input_ids)
+
+        output_str = tokenizer.batch_decode(sequences, skip_special_tokens=True)[0]
+        self.assertTrue(output_str == "Hello there!")
+
+    @slow
     def test_small_integration_test(self):
         """
         For comparision run:

@@ -72,7 +72,7 @@ def prepare_bart_inputs_dict(
     }
 
 
-class FlaxBartModelTester(unittest.TestCase):
+class FlaxBartModelTester:
     def __init__(
         self,
         parent,

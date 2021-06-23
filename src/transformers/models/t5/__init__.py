@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 from ...file_utils import (
     _BaseLazyModule,
+    is_flax_available,
     is_sentencepiece_available,
     is_tf_available,
     is_tokenizers_available,
@@ -56,6 +57,13 @@ if is_tf_available():
         "TFT5PreTrainedModel",
     ]
 
+if is_flax_available():
+    _import_structure["modeling_flax_t5"] = [
+        "FlaxT5ForConditionalGeneration",
+        "FlaxT5Model",
+        "FlaxT5PreTrainedModel",
+    ]
+
 
 if TYPE_CHECKING:
     from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
@@ -84,6 +92,10 @@ if TYPE_CHECKING:
             TFT5Model,
             TFT5PreTrainedModel,
         )
+
+    if is_flax_available():
+        from .modeling_flax_t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
+
 
 else:
     import importlib

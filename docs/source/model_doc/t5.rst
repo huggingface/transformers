@@ -160,3 +160,15 @@ TFT5EncoderModel
 
 .. autoclass:: transformers.TFT5EncoderModel
     :members: call
+
+FlaxT5Model
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxT5Model
+    :members: __call__, encode, decode
+
+FlaxT5ForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxT5ForConditionalGeneration
+    :members: __call__, encode, decode
