@@ -87,6 +87,7 @@ if stale_egg_info.exists():
 _deps = [
     "Pillow",
     "black==21.4b0",
+    "codecarbon==1.2.0",
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
@@ -113,6 +114,7 @@ _deps = [
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
     "optuna",
+    "optax>=0.0.8",
     "packaging",
     "parameterized",
     "protobuf",
@@ -233,7 +235,7 @@ if os.name == "nt":  # windows
     extras["flax"] = []  # jax is not supported on windows
 else:
     extras["retrieval"] = deps_list("faiss-cpu", "datasets")
-    extras["flax"] = deps_list("jax", "jaxlib", "flax")
+    extras["flax"] = deps_list("jax", "jaxlib", "flax", "optax")
 
 extras["tokenizers"] = deps_list("tokenizers")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
@@ -252,6 +254,7 @@ extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["speech"] = deps_list("soundfile", "torchaudio")
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
+extras["codecarbon"] = deps_list("codecarbon")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
@@ -274,6 +277,7 @@ extras["all"] = (
     + extras["vision"]
     + extras["integrations"]
     + extras["timm"]
+    + extras["codecarbon"]
 )
 
 extras["docs_specific"] = deps_list(
@@ -322,7 +326,7 @@ install_requires = [
     deps["huggingface-hub"],
     deps["numpy"],
     deps["packaging"],  # utilities from PyPA to e.g., compare versions
-    deps["pyyaml"], # used for the model cards metadata
+    deps["pyyaml"],  # used for the model cards metadata
     deps["regex"],  # for OpenAI GPT
     deps["requests"],  # for downloading models over HTTPS
     deps["sacremoses"],  # for XLM

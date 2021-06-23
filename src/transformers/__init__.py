@@ -1597,6 +1597,7 @@ if is_flax_available():
             "FlaxRobertaPreTrainedModel",
         ]
     )
+    _import_structure["models.t5"].extend(["FlaxT5ForConditionalGeneration", "FlaxT5Model"])
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel"])
 else:
     from .utils import dummy_flax_objects
@@ -2920,6 +2921,7 @@ if TYPE_CHECKING:
             FlaxRobertaModel,
             FlaxRobertaPreTrainedModel,
         )
+        from .models.t5 import FlaxT5ForConditionalGeneration, FlaxT5Model
         from .models.vit import FlaxViTForImageClassification, FlaxViTModel
     else:
         # Import the same objects as dummies to get them in the namespace.

@@ -4,6 +4,7 @@
 deps = {
     "Pillow": "Pillow",
     "black": "black==21.4b0",
+    "codecarbon": "codecarbon==1.2.0",
     "cookiecutter": "cookiecutter==1.7.2",
     "dataclasses": "dataclasses",
     "datasets": "datasets",
@@ -30,6 +31,7 @@ deps = {
     "onnxruntime-tools": "onnxruntime-tools>=1.4.2",
     "onnxruntime": "onnxruntime>=1.4.0",
     "optuna": "optuna",
+    "optax": "optax>=0.0.8",
     "packaging": "packaging",
     "parameterized": "parameterized",
     "protobuf": "protobuf",
