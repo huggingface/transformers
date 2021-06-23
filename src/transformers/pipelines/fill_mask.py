@@ -197,6 +197,8 @@ class FillMaskPipeline(Pipeline):
 
                 values, predictions = probs.topk(top_k)
                 if targets is not None:
+                    if len(predictions) == 1:
+                        predictions = [predictions]
                     predictions = target_ids[predictions]
 
             for v, p in zip(values.tolist(), predictions.tolist()):
