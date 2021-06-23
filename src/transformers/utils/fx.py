@@ -11,7 +11,7 @@ from torch.fx.node import Argument
 
 from transformers.file_utils import TORCH_FX_REQUIRED_VERSION, importlib_metadata, is_torch_fx_available
 
-from . import (
+from .. import (
     MODEL_FOR_CAUSAL_LM_MAPPING,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     MODEL_FOR_MASKED_LM_MAPPING,
@@ -26,7 +26,7 @@ from . import (
     PreTrainedModel,
     logging,
 )
-from .models.auto import get_values
+from ..models.auto import get_values
 
 
 logger = logging.get_logger(__name__)
