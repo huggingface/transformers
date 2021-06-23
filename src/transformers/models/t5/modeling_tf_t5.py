@@ -1481,6 +1481,10 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             encoder_outputs, past_key_values = past, None
         else:
             encoder_outputs, past_key_values = past[0], past[1]
+        if "encoder_hidden_states" in kwargs:
+            encoder_outputs = (*encoder_outputs, kwargs["encoder_hidden_states"])
+        if "encoder_attentions" in kwargs:
+            encoder_outputs = (*encoder_outputs, kwargs["encoder_attentions"])
 
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
