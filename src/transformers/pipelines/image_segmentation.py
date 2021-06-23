@@ -128,7 +128,7 @@ class ImageSegmentationPipeline(Pipeline):
                 labels = labels[keep]
                 masks = masks[keep]
                 masks = torch.nn.functional.interpolate(masks[:, None], target_size, mode="bilinear").squeeze(1)
-                masks = masks.exp() > mask_threshold
+                masks = masks.sigmoid() > mask_threshold
 
                 annotation = []
                 for mask, score, label in zip(masks, scores, labels):
