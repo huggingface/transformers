@@ -21,7 +21,7 @@ import random
 import tempfile
 import unittest
 import warnings
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 from huggingface_hub import HfApi
 from requests.exceptions import HTTPError
@@ -44,6 +44,7 @@ from transformers.testing_utils import (
 if is_torch_available():
     import numpy as np
     import torch
+    from torch import nn
 
     from transformers import (
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -66,7 +67,7 @@ if is_torch_available():
     )
 
 if is_torch_fx_available():
-    from transformers.modeling_fx_utils import symbolic_trace
+    from transformers.utils.fx import symbolic_trace
 
 
 def _config_zero_init(config):
@@ -982,7 +983,6 @@ class ModelTesterMixin:
 
         outputs = model(**inputs)
 
-        print(outputs)
         output = outputs[0]
 
         if config.is_encoder_decoder:
@@ -1151,10 +1151,10 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (torch.nn.Embedding, AdaptiveEmbedding))
-            model.set_input_embeddings(torch.nn.Embedding(10, 10))
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Embedding, AdaptiveEmbedding))
+            model.set_input_embeddings(nn.Embedding(10, 10))
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
 
     def test_correct_missing_keys(self):
         if not self.test_missing_keys:
@@ -1235,6 +1235,11 @@ class ModelTesterMixin:
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, (List, Tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif isinstance(tuple_object, Dict):
+                        for tuple_iterable_value, dict_iterable_value in zip(
+                            tuple_object.values(), dict_object.values()
+                        ):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif tuple_object is None:
                         return
@@ -1333,7 +1338,7 @@ class ModelTesterMixin:
             model.eval()
 
             # Wrap model in nn.DataParallel
-            model = torch.nn.DataParallel(model)
+            model = nn.DataParallel(model)
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -1608,7 +1613,7 @@ class ModelPushToHubTester(unittest.TestCase):
         )
         model = BertModel(config)
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, push_to_hub=True, repo_name="test-model", use_auth_token=self._token)
+            model.save_pretrained(os.path.join(tmp_dir, "test-model"), push_to_hub=True, use_auth_token=self._token)
 
             new_model = BertModel.from_pretrained(f"{USER}/test-model")
             for p1, p2 in zip(model.parameters(), new_model.parameters()):
@@ -1621,9 +1626,8 @@ class ModelPushToHubTester(unittest.TestCase):
         model = BertModel(config)
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(
-                tmp_dir,
+                os.path.join(tmp_dir, "test-model-org"),
                 push_to_hub=True,
-                repo_name="test-model-org",
                 use_auth_token=self._token,
                 organization="valid_org",
             )

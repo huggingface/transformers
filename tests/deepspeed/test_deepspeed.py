@@ -765,7 +765,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --eval_steps {eval_steps}
             --group_by_length
             --label_smoothing_factor 0.1
-            --adafactor
             --source_lang en
             --target_lang ro
             --report_to none

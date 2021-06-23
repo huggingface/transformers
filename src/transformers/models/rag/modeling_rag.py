@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple
 
 import torch
+from torch import nn
 
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings_to_model_forward, replace_return_docstrings
@@ -1065,10 +1066,10 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             return ll.squeeze(-1), smooth_obj.squeeze(-1)
 
         # seq_logits dim = (batch*n_docs, tgt_len , #vocabs)
-        seq_logprobs = torch.nn.functional.log_softmax(seq_logits, dim=-1).view(
+        seq_logprobs = nn.functional.log_softmax(seq_logits, dim=-1).view(
             seq_logits.shape[0] // n_docs, n_docs, -1, seq_logits.size(-1)
         )  # batch_size x n_docs x tgt_len x #vocab_size
-        doc_logprobs = torch.nn.functional.log_softmax(doc_scores, dim=1).unsqueeze(-1).unsqueeze(-1)
+        doc_logprobs = nn.functional.log_softmax(doc_scores, dim=1).unsqueeze(-1).unsqueeze(-1)
 
         # RAG-sequence marginalization
         first_token_scores = seq_logprobs[:, :, :1, :]
@@ -1212,7 +1213,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         n_docs = n_docs if n_docs is not None else self.config.n_docs
 
         # RAG-token marginalization
-        seq_logprobs = torch.nn.functional.log_softmax(seq_logits, dim=-1).view(
+        seq_logprobs = nn.functional.log_softmax(seq_logits, dim=-1).view(
             seq_logits.shape[0] // n_docs, n_docs, -1, seq_logits.size(-1)
         )
         doc_logprobs = torch.log_softmax(doc_scores, dim=1)

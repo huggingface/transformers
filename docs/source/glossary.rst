@@ -55,6 +55,12 @@ Input IDs
 The input ids are often the only required parameters to be passed to the model as input. *They are token indices,
 numerical representations of tokens building the sequences that will be used as input by the model*.
 
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/VFp38yj8h3A" title="YouTube video player"
+   frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
+   picture-in-picture" allowfullscreen></iframe>
+
 Each tokenizer works differently but the underlying mechanism remains the same. Here's an example using the BERT
 tokenizer, which is a `WordPiece <https://arxiv.org/pdf/1609.08144.pdf>`__ tokenizer:
 
@@ -120,8 +126,15 @@ because this is the way a :class:`~transformers.BertModel` is going to expect it
 Attention mask
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The attention mask is an optional argument used when batching sequences together. This argument indicates to the model
-which tokens should be attended to, and which should not.
+The attention mask is an optional argument used when batching sequences together.
+
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/M6adb1j2jPI" title="YouTube video player"
+   frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
+   picture-in-picture" allowfullscreen></iframe>
+
+This argument indicates to the model which tokens should be attended to, and which should not.
 
 For example, consider these two sequences:
 
@@ -175,10 +188,17 @@ in the dictionary returned by the tokenizer under the key "attention_mask":
 Token Type IDs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Some models' purpose is to do sequence classification or question answering. These require two different sequences to
-be joined in a single "input_ids" entry, which usually is performed with the help of special tokens, such as the
-classifier (``[CLS]``) and separator (``[SEP]``) tokens. For example, the BERT model builds its two sequence input as
-such:
+Some models' purpose is to do classification on pairs of sentences or question answering.
+
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/0u3ioSwev3s" title="YouTube video player"
+   frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
+   picture-in-picture" allowfullscreen></iframe>
+
+These require two different sequences to be joined in a single "input_ids" entry, which usually is performed with the
+help of special tokens, such as the classifier (``[CLS]``) and separator (``[SEP]``) tokens. For example, the BERT
+model builds its two sequence input as such:
 
 .. code-block::
 

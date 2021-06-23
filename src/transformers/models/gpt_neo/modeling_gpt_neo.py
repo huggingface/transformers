@@ -19,7 +19,6 @@ import os
 from typing import Tuple
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
@@ -186,7 +185,7 @@ class GPTNeoAttentionMixin:
         else:
             raise ValueError(f"Input tensor rank should be one of [2, 3], but is: {len(tensor.shape)}")
 
-        padded_tensor = F.pad(tensor, padding_side, value=pad_value)
+        padded_tensor = nn.functional.pad(tensor, padding_side, value=pad_value)
         padded_tensor = padded_tensor.unfold(dimension=1, size=window_size + block_length, step=block_length)
 
         if is_key_value:

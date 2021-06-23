@@ -15,7 +15,6 @@
 
 import dataclasses
 import gc
-import math
 import os
 import random
 import re
@@ -27,13 +26,22 @@ import numpy as np
 
 from huggingface_hub import HfApi
 from requests.exceptions import HTTPError
-from transformers import AutoTokenizer, IntervalStrategy, PretrainedConfig, TrainingArguments, is_torch_available
+from transformers import (
+    AutoTokenizer,
+    IntervalStrategy,
+    PretrainedConfig,
+    TrainingArguments,
+    is_torch_available,
+    logging,
+)
 from transformers.file_utils import WEIGHTS_NAME
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
     PASS,
     USER,
+    CaptureLogger,
     TestCasePlus,
+    get_gpu_count,
     get_tests_dir,
     is_staging_test,
     require_datasets,
@@ -44,6 +52,8 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_gpu,
     require_torch_multi_gpu,
+    require_torch_non_multi_gpu,
+    require_torch_up_to_2_gpus,
     slow,
 )
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
@@ -52,6 +62,7 @@ from transformers.utils.hp_naming import TrialShortNamer
 
 if is_torch_available():
     import torch
+    from torch import nn
     from torch.utils.data import IterableDataset
 
     from transformers import (
@@ -94,6 +105,11 @@ class RegressionDataset:
 class RegressionTrainingArguments(TrainingArguments):
     a: float = 0.0
     b: float = 0.0
+
+    def __post_init__(self):
+        super().__post_init__()
+        # save resources not dealing with reporting (also avoids the warning when it's not set)
+        self.report_to = []
 
 
 class RepeatDataset:
@@ -153,11 +169,11 @@ if is_torch_available():
             for i in range(len(self.dataset)):
                 yield self.dataset[i]
 
-    class RegressionModel(torch.nn.Module):
+    class RegressionModel(nn.Module):
         def __init__(self, a=0, b=0, double_output=False):
             super().__init__()
-            self.a = torch.nn.Parameter(torch.tensor(a).float())
-            self.b = torch.nn.Parameter(torch.tensor(b).float())
+            self.a = nn.Parameter(torch.tensor(a).float())
+            self.b = nn.Parameter(torch.tensor(b).float())
             self.double_output = double_output
             self.config = None
 
@@ -165,21 +181,21 @@ if is_torch_available():
             y = input_x * self.a + self.b
             if labels is None:
                 return (y, y) if self.double_output else (y,)
-            loss = torch.nn.functional.mse_loss(y, labels)
+            loss = nn.functional.mse_loss(y, labels)
             return (loss, y, y) if self.double_output else (loss, y)
 
-    class RegressionDictModel(torch.nn.Module):
+    class RegressionDictModel(nn.Module):
         def __init__(self, a=0, b=0):
             super().__init__()
-            self.a = torch.nn.Parameter(torch.tensor(a).float())
-            self.b = torch.nn.Parameter(torch.tensor(b).float())
+            self.a = nn.Parameter(torch.tensor(a).float())
+            self.b = nn.Parameter(torch.tensor(b).float())
             self.config = None
 
         def forward(self, input_x, labels=None, **kwargs):
             y = input_x * self.a + self.b
             result = {"output": y}
             if labels is not None:
-                result["loss"] = torch.nn.functional.mse_loss(y, labels)
+                result["loss"] = nn.functional.mse_loss(y, labels)
             return result
 
     class RegressionPreTrainedModel(PreTrainedModel):
@@ -188,15 +204,15 @@ if is_torch_available():
 
         def __init__(self, config):
             super().__init__(config)
-            self.a = torch.nn.Parameter(torch.tensor(config.a).float())
-            self.b = torch.nn.Parameter(torch.tensor(config.b).float())
+            self.a = nn.Parameter(torch.tensor(config.a).float())
+            self.b = nn.Parameter(torch.tensor(config.b).float())
             self.double_output = config.double_output
 
         def forward(self, input_x, labels=None, **kwargs):
             y = input_x * self.a + self.b
             if labels is None:
                 return (y, y) if self.double_output else (y,)
-            loss = torch.nn.functional.mse_loss(y, labels)
+            loss = nn.functional.mse_loss(y, labels)
             return (loss, y, y) if self.double_output else (loss, y)
 
     class RegressionRandomPreTrainedModel(PreTrainedModel):
@@ -205,8 +221,8 @@ if is_torch_available():
 
         def __init__(self, config):
             super().__init__(config)
-            self.a = torch.nn.Parameter(torch.tensor(config.a).float())
-            self.b = torch.nn.Parameter(torch.tensor(config.b).float())
+            self.a = nn.Parameter(torch.tensor(config.a).float())
+            self.b = nn.Parameter(torch.tensor(config.b).float())
 
         def forward(self, input_x, labels=None, **kwargs):
             y = input_x * self.a + self.b
@@ -218,21 +234,21 @@ if is_torch_available():
 
             if labels is None:
                 return (y,)
-            loss = torch.nn.functional.mse_loss(y, labels)
+            loss = nn.functional.mse_loss(y, labels)
             return (loss, y)
 
-    class TstLayer(torch.nn.Module):
+    class TstLayer(nn.Module):
         def __init__(self, hidden_size):
             super().__init__()
-            self.linear1 = torch.nn.Linear(hidden_size, hidden_size)
-            self.ln1 = torch.nn.LayerNorm(hidden_size)
-            self.linear2 = torch.nn.Linear(hidden_size, hidden_size)
-            self.ln2 = torch.nn.LayerNorm(hidden_size)
-            self.bias = torch.nn.Parameter(torch.zeros(hidden_size))
+            self.linear1 = nn.Linear(hidden_size, hidden_size)
+            self.ln1 = nn.LayerNorm(hidden_size)
+            self.linear2 = nn.Linear(hidden_size, hidden_size)
+            self.ln2 = nn.LayerNorm(hidden_size)
+            self.bias = nn.Parameter(torch.zeros(hidden_size))
 
         def forward(self, x):
-            h = self.ln1(torch.nn.functional.relu(self.linear1(x)))
-            h = torch.nn.functional.relu(self.linear2(x))
+            h = self.ln1(nn.functional.relu(self.linear1(x)))
+            h = nn.functional.relu(self.linear2(x))
             return self.ln2(x + h + self.bias)
 
     def get_regression_trainer(a=0, b=0, double_output=False, train_len=64, eval_len=64, pretrained=True, **kwargs):
@@ -322,7 +338,14 @@ class TrainerIntegrationCommon:
 @require_torch
 @require_sentencepiece
 @require_tokenizers
-class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
+class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
+    """
+    Only tests that want to tap into the auto-pre-run 2 trainings:
+    - self.default_trained_model
+    - self.alternate_trained_model
+    directly, or via check_trained_model
+    """
+
     def setUp(self):
         super().setUp()
         args = TrainingArguments(".")
@@ -341,6 +364,115 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         (a, b) = self.alternate_trained_model if alternate_seed else self.default_trained_model
         self.assertTrue(torch.allclose(model.a, a))
         self.assertTrue(torch.allclose(model.b, b))
+
+    def test_reproducible_training(self):
+        # Checks that training worked, model trained and seed made a reproducible training.
+        trainer = get_regression_trainer(learning_rate=0.1)
+        trainer.train()
+        self.check_trained_model(trainer.model)
+
+        # Checks that a different seed gets different (reproducible) results.
+        trainer = get_regression_trainer(learning_rate=0.1, seed=314)
+        trainer.train()
+        self.check_trained_model(trainer.model, alternate_seed=True)
+
+    @require_datasets
+    def test_trainer_with_datasets(self):
+        import datasets
+
+        np.random.seed(42)
+        x = np.random.normal(size=(64,)).astype(np.float32)
+        y = 2.0 * x + 3.0 + np.random.normal(scale=0.1, size=(64,))
+        train_dataset = datasets.Dataset.from_dict({"input_x": x, "label": y})
+
+        # Base training. Should have the same results as test_reproducible_training
+        model = RegressionModel()
+        args = TrainingArguments("./regression", learning_rate=0.1)
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        trainer.train()
+        self.check_trained_model(trainer.model)
+
+        # Can return tensors.
+        train_dataset.set_format(type="torch", dtype=torch.float32)
+        model = RegressionModel()
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        trainer.train()
+        self.check_trained_model(trainer.model)
+
+        # Adding one column not used by the model should have no impact
+        z = np.random.normal(size=(64,)).astype(np.float32)
+        train_dataset = datasets.Dataset.from_dict({"input_x": x, "label": y, "extra": z})
+        model = RegressionModel()
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        trainer.train()
+        self.check_trained_model(trainer.model)
+
+    def test_model_init(self):
+        train_dataset = RegressionDataset()
+        args = TrainingArguments("./regression", learning_rate=0.1)
+        trainer = Trainer(args=args, train_dataset=train_dataset, model_init=lambda: RegressionModel())
+        trainer.train()
+        self.check_trained_model(trainer.model)
+
+        # Re-training should restart from scratch, thus lead the same results.
+        trainer.train()
+        self.check_trained_model(trainer.model)
+
+        # Re-training should restart from scratch, thus lead the same results and new seed should be used.
+        trainer.args.seed = 314
+        trainer.train()
+        self.check_trained_model(trainer.model, alternate_seed=True)
+
+    def test_gradient_accumulation(self):
+        # Training with half the batch size but accumulation steps as 2 should give the same results.
+        trainer = get_regression_trainer(
+            gradient_accumulation_steps=2, per_device_train_batch_size=4, learning_rate=0.1
+        )
+        trainer.train()
+        self.check_trained_model(trainer.model)
+
+    def test_custom_optimizer(self):
+        train_dataset = RegressionDataset()
+        args = TrainingArguments("./regression")
+        model = RegressionModel()
+        optimizer = torch.optim.SGD(model.parameters(), lr=1.0)
+        lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda x: 1.0)
+        trainer = Trainer(model, args, train_dataset=train_dataset, optimizers=(optimizer, lr_scheduler))
+        trainer.train()
+
+        (a, b) = self.default_trained_model
+        self.assertFalse(torch.allclose(trainer.model.a, a))
+        self.assertFalse(torch.allclose(trainer.model.b, b))
+        self.assertEqual(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 1.0)
+
+    def test_adafactor_lr_none(self):
+        # test the special case where lr=None, since Trainer can't not have lr_scheduler
+
+        from transformers.optimization import Adafactor, AdafactorSchedule
+
+        train_dataset = RegressionDataset()
+        args = TrainingArguments("./regression")
+        model = RegressionModel()
+        optimizer = Adafactor(model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None)
+        lr_scheduler = AdafactorSchedule(optimizer)
+        trainer = Trainer(model, args, train_dataset=train_dataset, optimizers=(optimizer, lr_scheduler))
+        trainer.train()
+
+        (a, b) = self.default_trained_model
+        self.assertFalse(torch.allclose(trainer.model.a, a))
+        self.assertFalse(torch.allclose(trainer.model.b, b))
+        self.assertGreater(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 0)
+
+
+@require_torch
+@require_sentencepiece
+@require_tokenizers
+class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
+    def setUp(self):
+        super().setUp()
+        args = TrainingArguments(".")
+        self.n_epochs = args.num_train_epochs
+        self.batch_size = args.train_batch_size
 
     def test_trainer_works_with_dict(self):
         # Edge case because Apex with mode O2 will change our models to return dicts. This test checks it doesn't break
@@ -372,23 +504,12 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_training_arguments_are_left_untouched(self):
         trainer = get_regression_trainer()
         trainer.train()
-        args = TrainingArguments("./regression")
+        args = TrainingArguments("./regression", report_to=[])
         dict1, dict2 = args.to_dict(), trainer.args.to_dict()
         for key in dict1.keys():
             # Logging dir can be slightly different as they default to something with the time.
             if key != "logging_dir":
                 self.assertEqual(dict1[key], dict2[key])
-
-    def test_reproducible_training(self):
-        # Checks that training worked, model trained and seed made a reproducible training.
-        trainer = get_regression_trainer(learning_rate=0.1)
-        trainer.train()
-        self.check_trained_model(trainer.model)
-
-        # Checks that a different seed gets different (reproducible) results.
-        trainer = get_regression_trainer(learning_rate=0.1, seed=314)
-        trainer.train()
-        self.check_trained_model(trainer.model, alternate_seed=True)
 
     def test_number_of_steps_in_training(self):
         # Regular training has n_epochs * len(train_dl) steps
@@ -543,66 +664,28 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertTrue(np.array_equal(2 * expected + 1, seen[: expected.shape[0]]))
             self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
 
-    @require_datasets
-    def test_trainer_with_datasets(self):
-        import datasets
+    def test_log_level(self):
+        # testing only --log_level (--log_level_replica requires multiple gpus and DDP and is tested elsewhere)
+        logger = logging.get_logger()
+        log_info_string = "Running training"
 
-        np.random.seed(42)
-        x = np.random.normal(size=(64,)).astype(np.float32)
-        y = 2.0 * x + 3.0 + np.random.normal(scale=0.1, size=(64,))
-        train_dataset = datasets.Dataset.from_dict({"input_x": x, "label": y})
+        # test with the default log_level - should be info and thus log on the main process
+        with CaptureLogger(logger) as cl:
+            trainer = get_regression_trainer()
+            trainer.train()
+        self.assertIn(log_info_string, cl.out)
 
-        # Base training. Should have the same results as test_reproducible_training
-        model = RegressionModel()
-        args = TrainingArguments("./regression", learning_rate=0.1)
-        trainer = Trainer(model, args, train_dataset=train_dataset)
-        trainer.train()
-        self.check_trained_model(trainer.model)
+        # test with low log_level - lower than info
+        with CaptureLogger(logger) as cl:
+            trainer = get_regression_trainer(log_level="debug")
+            trainer.train()
+        self.assertIn(log_info_string, cl.out)
 
-        # Can return tensors.
-        train_dataset.set_format(type="torch", dtype=torch.float32)
-        model = RegressionModel()
-        trainer = Trainer(model, args, train_dataset=train_dataset)
-        trainer.train()
-        self.check_trained_model(trainer.model)
-
-        # Adding one column not used by the model should have no impact
-        z = np.random.normal(size=(64,)).astype(np.float32)
-        train_dataset = datasets.Dataset.from_dict({"input_x": x, "label": y, "extra": z})
-        model = RegressionModel()
-        trainer = Trainer(model, args, train_dataset=train_dataset)
-        trainer.train()
-        self.check_trained_model(trainer.model)
-
-    def test_custom_optimizer(self):
-        train_dataset = RegressionDataset()
-        args = TrainingArguments("./regression")
-        model = RegressionModel()
-        optimizer = torch.optim.SGD(model.parameters(), lr=1.0)
-        lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda x: 1.0)
-        trainer = Trainer(model, args, train_dataset=train_dataset, optimizers=(optimizer, lr_scheduler))
-        trainer.train()
-
-        (a, b) = self.default_trained_model
-        self.assertFalse(torch.allclose(trainer.model.a, a))
-        self.assertFalse(torch.allclose(trainer.model.b, b))
-        self.assertEqual(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 1.0)
-
-    def test_model_init(self):
-        train_dataset = RegressionDataset()
-        args = TrainingArguments("./regression", learning_rate=0.1)
-        trainer = Trainer(args=args, train_dataset=train_dataset, model_init=lambda: RegressionModel())
-        trainer.train()
-        self.check_trained_model(trainer.model)
-
-        # Re-training should restart from scratch, thus lead the same results.
-        trainer.train()
-        self.check_trained_model(trainer.model)
-
-        # Re-training should restart from scratch, thus lead the same results and new seed should be used.
-        trainer.args.seed = 314
-        trainer.train()
-        self.check_trained_model(trainer.model, alternate_seed=True)
+        # test with high log_level - should be quiet
+        with CaptureLogger(logger) as cl:
+            trainer = get_regression_trainer(log_level="error")
+            trainer.train()
+        self.assertNotIn(log_info_string, cl.out)
 
     def test_save_checkpoints(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -615,14 +698,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5, pretrained=False)
             trainer.train()
             self.check_saved_checkpoints(tmpdir, 5, int(self.n_epochs * 64 / self.batch_size), False)
-
-    def test_gradient_accumulation(self):
-        # Training with half the batch size but accumulation steps as 2 should give the same results.
-        trainer = get_regression_trainer(
-            gradient_accumulation_steps=2, per_device_train_batch_size=4, learning_rate=0.1
-        )
-        trainer.train()
-        self.check_trained_model(trainer.model)
 
     @require_torch_multi_gpu
     def test_run_seq2seq_double_train_wrap_once(self):
@@ -637,12 +712,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         model_wrapped_after = trainer.model_wrapped
         self.assertIs(model_wrapped_before, model_wrapped_after, "should be not wrapped twice")
 
+    @require_torch_up_to_2_gpus
     def test_can_resume_training(self):
-        if torch.cuda.device_count() > 2:
-            # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
-            # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
-            # won't be the same since the training dataloader is shuffled).
-            return
+        # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
+        # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
+        # won't be the same since the training dataloader is shuffled).
 
         with tempfile.TemporaryDirectory() as tmpdir:
             kwargs = dict(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1)
@@ -725,10 +799,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train(resume_from_checkpoint=True)
         self.assertTrue("No valid checkpoint found in output directory" in str(context.exception))
 
+    @require_torch_non_multi_gpu
     def test_resume_training_with_randomness(self):
-        if torch.cuda.device_count() >= 2:
-            # This test will fail flakily for more than 2 GPUs since the result will be slightly more different.
-            return
+        # This test will fail flakily for more than 1 GPUs since the result will be slightly more different
+        # TODO: investigate why it fails for 2 GPUs?
 
         if torch.cuda.is_available():
             torch.backends.cudnn.deterministic = True
@@ -750,15 +824,15 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train(resume_from_checkpoint=os.path.join(tmp_dir, "checkpoint-15"))
         (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
 
-        self.assertTrue(math.isclose(a, a1, rel_tol=1e-8))
-        self.assertTrue(math.isclose(b, b1, rel_tol=1e-8))
+        self.assertAlmostEqual(a, a1, delta=1e-8)
+        self.assertAlmostEqual(b, b1, delta=1e-8)
 
+    @require_torch_up_to_2_gpus
     def test_resume_training_with_gradient_accumulation(self):
-        if torch.cuda.device_count() > 2:
-            # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
-            # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
-            # won't be the same since the training dataloader is shuffled).
-            return
+        # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
+        # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
+        # won't be the same since the training dataloader is shuffled).
+
         with tempfile.TemporaryDirectory() as tmpdir:
             trainer = get_regression_trainer(
                 output_dir=tmpdir,
@@ -791,12 +865,12 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
 
+    @require_torch_up_to_2_gpus
     def test_resume_training_with_frozen_params(self):
-        if torch.cuda.device_count() > 2:
-            # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
-            # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
-            # won't be the same since the training dataloader is shuffled).
-            return
+        # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
+        # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
+        # won't be the same since the training dataloader is shuffled).
+
         with tempfile.TemporaryDirectory() as tmpdir:
             trainer = get_regression_trainer(
                 output_dir=tmpdir,
@@ -1045,7 +1119,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         assert_flos_extraction(trainer, trainer.model)
 
         # with enforced DataParallel
-        assert_flos_extraction(trainer, torch.nn.DataParallel(trainer.model))
+        assert_flos_extraction(trainer, nn.DataParallel(trainer.model))
 
         trainer.train()
         self.assertTrue(isinstance(trainer.state.total_flos, float))
@@ -1113,15 +1187,17 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # this is a sensitive test so let's keep debugging printouts in place for quick diagnosis.
         # it's using pretty large safety margins, but small enough to detect broken functionality.
         debug = 0
+        n_gpus = get_gpu_count()
 
         bs = 8
+        eval_len = 16 * n_gpus
         # make the params somewhat big so that there will be enough RAM consumed to be able to
         # measure things. We should get about 64KB for a+b in fp32
         a = torch.ones(1000, bs) + 0.001
         b = torch.ones(1000, bs) - 0.001
 
         # 1. with mem metrics enabled
-        trainer = get_regression_trainer(a=a, b=b, eval_len=16, skip_memory_metrics=False)
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, skip_memory_metrics=False)
         metrics = trainer.evaluate()
         del trainer
         gc.collect()
@@ -1142,7 +1218,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertLess(fp32_eval, 5_000)
 
         # 2. with mem metrics disabled
-        trainer = get_regression_trainer(a=a, b=b, eval_len=16, fp16_full_eval=True, skip_memory_metrics=False)
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, fp16_full_eval=True, skip_memory_metrics=False)
         metrics = trainer.evaluate()
         fp16_init = metrics["init_mem_gpu_alloc_delta"]
         fp16_eval = metrics["eval_mem_gpu_alloc_delta"]
@@ -1164,7 +1240,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
 
     def test_no_wd_param_group(self):
-        model = torch.nn.Sequential(TstLayer(128), torch.nn.ModuleList([TstLayer(128), TstLayer(128)]))
+        model = nn.Sequential(TstLayer(128), nn.ModuleList([TstLayer(128), TstLayer(128)]))
         trainer = Trainer(model=model)
         trainer.create_optimizer_and_scheduler(10)
         # fmt: off
@@ -1198,8 +1274,12 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
 
     def test_push_to_hub(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(output_dir=tmp_dir)
-            url = trainer.push_to_hub(repo_name="test-trainer", use_auth_token=self._token)
+            trainer = get_regression_trainer(
+                output_dir=os.path.join(tmp_dir, "test-trainer"),
+                push_to_hub=True,
+                push_to_hub_token=self._token,
+            )
+            url = trainer.push_to_hub()
 
             # Extract repo_name from the url
             re_search = re.search(ENDPOINT_STAGING + r"/([^/]+/[^/]+)/", url)
@@ -1216,9 +1296,13 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(output_dir=tmp_dir)
             trainer.save_model()
-            url = trainer.push_to_hub(
-                repo_name="test-trainer-org", organization="valid_org", use_auth_token=self._token
+            trainer = get_regression_trainer(
+                output_dir=os.path.join(tmp_dir, "test-trainer-org"),
+                push_to_hub=True,
+                push_to_hub_organization="valid_org",
+                push_to_hub_token=self._token,
             )
+            url = trainer.push_to_hub()
 
             # Extract repo_name from the url
             re_search = re.search(ENDPOINT_STAGING + r"/([^/]+/[^/]+)/", url)
@@ -1284,7 +1368,7 @@ class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
         self.n_epochs = args.num_train_epochs
         self.batch_size = args.train_batch_size
 
-    def test_hyperparameter_search(self):
+    def ray_hyperparameter_search(self):
         class MyTrialShortNamer(TrialShortNamer):
             DEFAULTS = {"a": 0, "b": 0}
 
@@ -1297,7 +1381,13 @@ class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
             }
 
         def model_init(config):
-            model_config = RegressionModelConfig(a=config["a"], b=config["b"], double_output=False)
+            if config is None:
+                a = 0
+                b = 0
+            else:
+                a = config["a"]
+                b = config["b"]
+            model_config = RegressionModelConfig(a=a, b=b, double_output=False)
 
             return RegressionPreTrainedModel(model_config)
 
@@ -1320,3 +1410,14 @@ class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
             trainer.hyperparameter_search(
                 direction="minimize", hp_space=hp_space, hp_name=hp_name, backend="ray", n_trials=4
             )
+
+    def test_hyperparameter_search(self):
+        self.ray_hyperparameter_search()
+
+    def test_hyperparameter_search_ray_client(self):
+        import ray
+        from ray.util.client.ray_client_helpers import ray_start_client_server
+
+        with ray_start_client_server():
+            assert ray.util.client.ray.is_connected()
+            self.ray_hyperparameter_search()
