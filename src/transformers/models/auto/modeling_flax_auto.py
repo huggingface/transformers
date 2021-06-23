@@ -114,6 +114,7 @@ FLAX_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (RobertaConfig, FlaxRobertaForMaskedLM),
         (BertConfig, FlaxBertForMaskedLM),
         (BigBirdConfig, FlaxBigBirdForMaskedLM),
+        (BartConfig, FlaxBartForConditionalGeneration),
         (ElectraConfig, FlaxElectraForMaskedLM),
     ]
 )
