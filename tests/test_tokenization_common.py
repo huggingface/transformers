@@ -3173,7 +3173,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
                 vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
             tokenizer = BertTokenizer(vocab_file)
             tokenizer.save_pretrained(
-                tmp_dir, push_to_hub=True, repo_name="test-tokenizer", use_auth_token=self._token
+                os.path.join(tmp_dir, "test-tokenizer"), push_to_hub=True, use_auth_token=self._token
             )
 
             new_tokenizer = BertTokenizer.from_pretrained(f"{USER}/test-tokenizer")
@@ -3186,9 +3186,8 @@ class TokenizerPushToHubTester(unittest.TestCase):
                 vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
             tokenizer = BertTokenizer(vocab_file)
             tokenizer.save_pretrained(
-                tmp_dir,
+                os.path.join(tmp_dir, "test-tokenizer-org"),
                 push_to_hub=True,
-                repo_name="test-tokenizer-org",
                 use_auth_token=self._token,
                 organization="valid_org",
             )

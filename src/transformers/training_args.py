@@ -17,6 +17,7 @@ import os
 import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .debug_utils import DebugOption
@@ -157,7 +158,7 @@ class TrainingArguments:
             node.
         logging_dir (:obj:`str`, `optional`):
             `TensorBoard <https://www.tensorflow.org/tensorboard>`__ log directory. Will default to
-            `runs/**CURRENT_DATETIME_HOSTNAME**`.
+            `output_dir/runs/**CURRENT_DATETIME_HOSTNAME**`.
         logging_strategy (:obj:`str` or :class:`~transformers.trainer_utils.IntervalStrategy`, `optional`, defaults to :obj:`"steps"`):
             The logging strategy to adopt during training. Possible values are:
 
@@ -318,15 +319,22 @@ class TrainingArguments:
             Whether to skip adding of memory profiler reports to metrics. This is skipped by default because it slows
             down the training and evaluation speed.
         push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to upload the trained model to the hub after training. This argument is not directly used by
-            :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
-            the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
-            details.
+            Whether or not to upload the trained model to the hub after training. If this is activated, and
+            :obj:`output_dir` exists, it needs to be a local clone of the repository to which the
+            :class:`~transformers.Trainer` will be pushed.
         resume_from_checkpoint (:obj:`str`, `optional`):
             The path to a folder with a valid checkpoint for your model. This argument is not directly used by
             :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
             the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
             details.
+        push_to_hub_model_id (:obj:`str`, `optional`):
+            The name of the repository to which push the :class:`~transformers.Trainer` when :obj:`push_to_hub=True`.
+            Will default to the name of :obj:`output_dir`.
+        push_to_hub_organization (:obj:`str`, `optional`):
+            The name of the organization in with to which push the :class:`~transformers.Trainer`.
+        push_to_hub_token (:obj:`str`, `optional`):
+            The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
+            :obj:`huggingface-cli login`.
     """
 
     output_dir: str = field(
@@ -590,6 +598,13 @@ class TrainingArguments:
         default=None,
         metadata={"help": "The path to a folder with a valid checkpoint for your model."},
     )
+    push_to_hub_model_id: str = field(
+        default=None, metadata={"help": "The name of the repository to which push the `Trainer`."}
+    )
+    push_to_hub_organization: str = field(
+        default=None, metadata={"help": "The name of the organization in with to which push the `Trainer`."}
+    )
+    push_to_hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
     _n_gpu: int = field(init=False, repr=False, default=-1)
     mp_parameters: str = field(
         default="",
@@ -612,6 +627,8 @@ class TrainingArguments:
         #  see https://github.com/huggingface/transformers/issues/10628
         if self.output_dir is not None:
             self.output_dir = os.path.expanduser(self.output_dir)
+        if self.logging_dir is None and self.output_dir is not None:
+            self.logging_dir = os.path.join(self.output_dir, default_logdir())
         if self.logging_dir is not None:
             self.logging_dir = os.path.expanduser(self.logging_dir)
 
@@ -704,6 +721,9 @@ class TrainingArguments:
             # note: leave self.deepspeed unmodified in case a user relies on it not to be modified)
             self.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.deepspeed)
             self.hf_deepspeed_config.trainer_config_process(self)
+
+        if self.push_to_hub_model_id is None:
+            self.push_to_hub_model_id = Path(self.output_dir).name
 
     def __str__(self):
         self_as_dict = asdict(self)
