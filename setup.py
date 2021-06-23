@@ -87,6 +87,7 @@ if stale_egg_info.exists():
 _deps = [
     "Pillow",
     "black==21.4b0",
+    "codecarbon==1.2.0",
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
@@ -252,6 +253,7 @@ extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["speech"] = deps_list("soundfile", "torchaudio")
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
+extras["codecarbon"] = deps_list("codecarbon")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
@@ -274,6 +276,7 @@ extras["all"] = (
     + extras["vision"]
     + extras["integrations"]
     + extras["timm"]
+    + extras["codecarbon"]
 )
 
 extras["docs_specific"] = deps_list(
