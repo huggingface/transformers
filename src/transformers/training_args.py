@@ -434,7 +434,7 @@ class TrainingArguments:
             "help": "When doing a multinode distributed training, whether to log once per node or just once on the main node."
         },
     )
-    logging_dir: Optional[str] = field(default_factory=default_logdir, metadata={"help": "Tensorboard log dir."})
+    logging_dir: Optional[str] = field(default=None, metadata={"help": "Tensorboard log dir."})
     logging_strategy: IntervalStrategy = field(
         default="steps",
         metadata={"help": "The logging strategy to use."},
