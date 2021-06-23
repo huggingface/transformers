@@ -458,6 +458,7 @@ Flax), PyTorch, and/or TensorFlow.
     contributing
     add_new_model
     fast_tokenizers
+    performance
     testing
     debugging
     serialization

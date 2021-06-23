@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning XLNet for question answering with beam search.
+Fine-tuning the library models for question answering.
 """
 # You can also adapt this script on your own question answering task. Pointers for this are left as comments.
 
@@ -22,36 +22,35 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
+import tensorflow as tf
 from datasets import load_dataset, load_metric
 
 import transformers
-from trainer_qa import QuestionAnsweringTrainer
 from transformers import (
-    DataCollatorWithPadding,
+    AutoConfig,
+    AutoTokenizer,
     EvalPrediction,
     HfArgumentParser,
-    TrainingArguments,
-    XLNetConfig,
-    XLNetForQuestionAnswering,
-    XLNetTokenizerFast,
-    default_data_collator,
+    PreTrainedTokenizerFast,
+    TFAutoModelForQuestionAnswering,
+    TFTrainingArguments,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint
+from transformers.file_utils import CONFIG_NAME, TF2_WEIGHTS_NAME
 from transformers.utils import check_min_version
-from transformers.utils.versions import require_version
-from utils_qa import postprocess_qa_predictions_with_beam_search
+from utils_qa import postprocess_qa_predictions
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.8.0.dev0")
-require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
+check_min_version("4.7.0.dev0")
 
 logger = logging.getLogger(__name__)
 
 
+# region Arguments
 @dataclass
 class ModelArguments:
     """
@@ -69,7 +68,7 @@ class ModelArguments:
     )
     cache_dir: Optional[str] = field(
         default=None,
-        metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+        metadata={"help": "Path to directory to store the pretrained models downloaded from huggingface.co"},
     )
     model_revision: str = field(
         default="main",
@@ -103,7 +102,7 @@ class DataTrainingArguments:
     )
     test_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input test data file to test the perplexity on (a text file)."},
+        metadata={"help": "An optional input test data file to evaluate the perplexity on (a text file)."},
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
@@ -120,7 +119,7 @@ class DataTrainingArguments:
         },
     )
     pad_to_max_length: bool = field(
-        default=True,
+        default=False,
         metadata={
             "help": "Whether to pad all samples to `max_seq_length`. "
             "If False, will pad the samples dynamically when batching to the maximum length in the batch (which can "
@@ -182,7 +181,7 @@ class DataTrainingArguments:
             and self.validation_file is None
             and self.test_file is None
         ):
-            raise ValueError("Need either a dataset name or a training/validation/test file.")
+            raise ValueError("Need either a dataset name or a training/validation file/test_file.")
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
@@ -195,12 +194,76 @@ class DataTrainingArguments:
                 assert extension in ["csv", "json"], "`test_file` should be a csv or a json file."
 
 
+# endregion
+
+# region Helper classes
+class SavePretrainedCallback(tf.keras.callbacks.Callback):
+    # Hugging Face models have a save_pretrained() method that saves both the weights and the necessary
+    # metadata to allow them to be loaded as a pretrained model in future. This is a simple Keras callback
+    # that saves the model with this method after each epoch.
+    def __init__(self, output_dir, **kwargs):
+        super().__init__()
+        self.output_dir = output_dir
+
+    def on_epoch_end(self, epoch, logs=None):
+        self.model.save_pretrained(self.output_dir)
+
+
+def convert_dataset_for_tensorflow(
+    dataset, batch_size, dataset_mode="variable_batch", shuffle=True, drop_remainder=True
+):
+    """Converts a Hugging Face dataset to a Tensorflow Dataset. The dataset_mode controls whether we pad all batches
+    to the maximum sequence length, or whether we only pad to the maximum length within that batch. The former
+    is most useful when training on TPU, as a new graph compilation is required for each sequence length.
+    """
+
+    def densify_ragged_batch(features, label=None):
+        features = {
+            feature: ragged_tensor.to_tensor(shape=batch_shape[feature]) if feature in tensor_keys else ragged_tensor
+            for feature, ragged_tensor in features.items()
+        }
+        if label is None:
+            return features
+        else:
+            return features, label
+
+    tensor_keys = ["attention_mask", "input_ids"]
+    label_keys = ["start_positions", "end_positions"]
+    if dataset_mode == "variable_batch":
+        batch_shape = {key: None for key in tensor_keys}
+        data = {key: tf.ragged.constant(dataset[key]) for key in tensor_keys}
+    elif dataset_mode == "constant_batch":
+        data = {key: tf.ragged.constant(dataset[key]) for key in tensor_keys}
+        batch_shape = {
+            key: tf.concat(([batch_size], ragged_tensor.bounding_shape()[1:]), axis=0)
+            for key, ragged_tensor in data.items()
+        }
+    else:
+        raise ValueError("Unknown dataset mode!")
+
+    if all([key in dataset.features for key in label_keys]):
+        for key in label_keys:
+            data[key] = tf.convert_to_tensor(dataset[key])
+        dummy_labels = tf.zeros_like(dataset[key])
+        tf_dataset = tf.data.Dataset.from_tensor_slices((data, dummy_labels))
+    else:
+        tf_dataset = tf.data.Dataset.from_tensor_slices(data)
+    if shuffle:
+        tf_dataset = tf_dataset.shuffle(buffer_size=len(dataset))
+    tf_dataset = tf_dataset.batch(batch_size=batch_size, drop_remainder=drop_remainder).map(densify_ragged_batch)
+    return tf_dataset
+
+
+# endregion
+
+
 def main():
+    # region Argument parsing
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TFTrainingArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
@@ -208,7 +271,27 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    # Setup logging
+    output_dir = Path(training_args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    # endregion
+
+    # region Checkpoints
+    checkpoint = None
+    if len(os.listdir(training_args.output_dir)) > 0 and not training_args.overwrite_output_dir:
+        if (output_dir / CONFIG_NAME).is_file() and (output_dir / TF2_WEIGHTS_NAME).is_file():
+            checkpoint = output_dir
+            logger.info(
+                f"Checkpoint detected, resuming training from checkpoint in {training_args.output_dir}. To avoid this"
+                " behavior, change the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
+            )
+        else:
+            raise ValueError(
+                f"Output directory ({training_args.output_dir}) already exists and is not empty. "
+                "Use --overwrite_output_dir to continue regardless."
+            )
+    # endregion
+
+    # region Logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
@@ -216,36 +299,18 @@ def main():
     )
     logger.setLevel(logging.INFO if training_args.should_log else logging.WARN)
 
-    # Log on each process the small summary:
-    logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
-    )
     # Set the verbosity to info of the Transformers logger (on main process only):
     if training_args.should_log:
         transformers.utils.logging.set_verbosity_info()
         transformers.utils.logging.enable_default_handler()
         transformers.utils.logging.enable_explicit_format()
     logger.info(f"Training/evaluation parameters {training_args}")
-
-    # Detecting last checkpoint.
-    last_checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
-        last_checkpoint = get_last_checkpoint(training_args.output_dir)
-        if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
-            raise ValueError(
-                f"Output directory ({training_args.output_dir}) already exists and is not empty. "
-                "Use --overwrite_output_dir to overcome."
-            )
-        elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
-            logger.info(
-                f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
-                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
-            )
+    # endregion
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
 
+    # region Load Data
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
     # (the dataset will be downloaded automatically from the datasets Hub).
@@ -263,6 +328,7 @@ def main():
         if data_args.train_file is not None:
             data_files["train"] = data_args.train_file
             extension = data_args.train_file.split(".")[-1]
+
         if data_args.validation_file is not None:
             data_files["validation"] = data_args.validation_file
             extension = data_args.validation_file.split(".")[-1]
@@ -272,35 +338,39 @@ def main():
         datasets = load_dataset(extension, data_files=data_files, field="data", cache_dir=model_args.cache_dir)
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # endregion
 
-    # Load pretrained model and tokenizer
+    # region Load pretrained model and tokenizer
     #
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
-    config = XLNetConfig.from_pretrained(
+    config = AutoConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
-    tokenizer = XLNetTokenizerFast.from_pretrained(
+    tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
+        use_fast=True,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
-    model = XLNetForQuestionAnswering.from_pretrained(
-        model_args.model_name_or_path,
-        from_tf=bool(".ckpt" in model_args.model_name_or_path),
-        config=config,
-        cache_dir=model_args.cache_dir,
-        revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
-    )
+    # endregion
 
-    # Preprocessing the datasets.
-    # Preprocessing is slighlty different for training and evaluation.
+    # region Tokenizer check: this script requires a fast tokenizer.
+    if not isinstance(tokenizer, PreTrainedTokenizerFast):
+        raise ValueError(
+            "This example script only works for models that have a fast tokenizer. Checkout the big table of models "
+            "at https://huggingface.co/transformers/index.html#supported-frameworks to find the model types that meet this "
+            "requirement"
+        )
+    # endregion
+
+    # region Preprocessing the datasets
+    # Preprocessing is slightly different for training and evaluation.
     if training_args.do_train:
         column_names = datasets["train"].column_names
     elif training_args.do_eval:
@@ -334,9 +404,7 @@ def main():
             stride=data_args.doc_stride,
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
-            return_special_tokens_mask=True,
-            return_token_type_ids=True,
-            padding="max_length",
+            padding="max_length" if data_args.pad_to_max_length else False,
         )
 
         # Since one example might give us several features if it has a long context, we need a map from a feature to
@@ -345,37 +413,18 @@ def main():
         # The offset mappings will give us a map from token to character position in the original context. This will
         # help us compute the start_positions and end_positions.
         offset_mapping = tokenized_examples.pop("offset_mapping")
-        # The special tokens will help us build the p_mask (which indicates the tokens that can't be in answers).
-        special_tokens = tokenized_examples.pop("special_tokens_mask")
 
         # Let's label those examples!
         tokenized_examples["start_positions"] = []
         tokenized_examples["end_positions"] = []
-        tokenized_examples["is_impossible"] = []
-        tokenized_examples["cls_index"] = []
-        tokenized_examples["p_mask"] = []
 
         for i, offsets in enumerate(offset_mapping):
             # We will label impossible answers with the index of the CLS token.
             input_ids = tokenized_examples["input_ids"][i]
             cls_index = input_ids.index(tokenizer.cls_token_id)
-            tokenized_examples["cls_index"].append(cls_index)
 
             # Grab the sequence corresponding to that example (to know what is the context and what is the question).
-            sequence_ids = tokenized_examples["token_type_ids"][i]
-            for k, s in enumerate(special_tokens[i]):
-                if s:
-                    sequence_ids[k] = 3
-            context_idx = 1 if pad_on_right else 0
-
-            # Build the p_mask: non special tokens and context gets 0.0, the others get 1.0.
-            # The cls token gets 1.0 too (for predictions of empty answers).
-            tokenized_examples["p_mask"].append(
-                [
-                    0.0 if (not special_tokens[i][k] and s == context_idx) or k == cls_index else 1.0
-                    for k, s in enumerate(sequence_ids)
-                ]
-            )
+            sequence_ids = tokenized_examples.sequence_ids(i)
 
             # One example can give several spans, this is the index of the example containing this span of text.
             sample_index = sample_mapping[i]
@@ -384,7 +433,6 @@ def main():
             if len(answers["answer_start"]) == 0:
                 tokenized_examples["start_positions"].append(cls_index)
                 tokenized_examples["end_positions"].append(cls_index)
-                tokenized_examples["is_impossible"].append(1.0)
             else:
                 # Start/end character index of the answer in the text.
                 start_char = answers["answer_start"][0]
@@ -392,18 +440,18 @@ def main():
 
                 # Start token index of the current span in the text.
                 token_start_index = 0
-                while sequence_ids[token_start_index] != context_idx:
+                while sequence_ids[token_start_index] != (1 if pad_on_right else 0):
                     token_start_index += 1
 
                 # End token index of the current span in the text.
                 token_end_index = len(input_ids) - 1
-                while sequence_ids[token_end_index] != context_idx:
+                while sequence_ids[token_end_index] != (1 if pad_on_right else 0):
                     token_end_index -= 1
+
                 # Detect if the answer is out of the span (in which case this feature is labeled with the CLS index).
                 if not (offsets[token_start_index][0] <= start_char and offsets[token_end_index][1] >= end_char):
                     tokenized_examples["start_positions"].append(cls_index)
                     tokenized_examples["end_positions"].append(cls_index)
-                    tokenized_examples["is_impossible"].append(1.0)
                 else:
                     # Otherwise move the token_start_index and token_end_index to the two ends of the answer.
                     # Note: we could go after the last offset if the answer is the last word (edge case).
@@ -413,29 +461,29 @@ def main():
                     while offsets[token_end_index][1] >= end_char:
                         token_end_index -= 1
                     tokenized_examples["end_positions"].append(token_end_index + 1)
-                    tokenized_examples["is_impossible"].append(0.0)
 
         return tokenized_examples
 
+    processed_datasets = dict()
     if training_args.do_train:
         if "train" not in datasets:
             raise ValueError("--do_train requires a train dataset")
         train_dataset = datasets["train"]
         if data_args.max_train_samples is not None:
-            # Select samples from Dataset, This will help to decrease processing time
+            # We will select sample from whole data if agument is specified
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
-        # Create Training Features
+        # Create train feature from dataset
         train_dataset = train_dataset.map(
             prepare_train_features,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
             remove_columns=column_names,
             load_from_cache_file=not data_args.overwrite_cache,
-            desc="Running tokenizer on train dataset",
         )
         if data_args.max_train_samples is not None:
-            # Select samples from dataset again since Feature Creation might increase number of features
+            # Number of samples might increase during Feature Creation, We select only specified max samples
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
+        processed_datasets["train"] = train_dataset
 
     # Validation preprocessing
     def prepare_validation_features(examples):
@@ -450,45 +498,21 @@ def main():
             stride=data_args.doc_stride,
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
-            return_special_tokens_mask=True,
-            return_token_type_ids=True,
-            padding="max_length",
+            padding="max_length" if data_args.pad_to_max_length else False,
         )
 
         # Since one example might give us several features if it has a long context, we need a map from a feature to
         # its corresponding example. This key gives us just that.
         sample_mapping = tokenized_examples.pop("overflow_to_sample_mapping")
 
-        # The special tokens will help us build the p_mask (which indicates the tokens that can't be in answers).
-        special_tokens = tokenized_examples.pop("special_tokens_mask")
-
         # For evaluation, we will need to convert our predictions to substrings of the context, so we keep the
         # corresponding example_id and we will store the offset mappings.
         tokenized_examples["example_id"] = []
 
-        # We still provide the index of the CLS token and the p_mask to the model, but not the is_impossible label.
-        tokenized_examples["cls_index"] = []
-        tokenized_examples["p_mask"] = []
-
-        for i, input_ids in enumerate(tokenized_examples["input_ids"]):
-            # Find the CLS token in the input ids.
-            cls_index = input_ids.index(tokenizer.cls_token_id)
-            tokenized_examples["cls_index"].append(cls_index)
-
+        for i in range(len(tokenized_examples["input_ids"])):
             # Grab the sequence corresponding to that example (to know what is the context and what is the question).
-            sequence_ids = tokenized_examples["token_type_ids"][i]
-            for k, s in enumerate(special_tokens[i]):
-                if s:
-                    sequence_ids[k] = 3
-            context_idx = 1 if pad_on_right else 0
-
-            # Build the p_mask: non special tokens and context gets 0.0, the others 1.0.
-            tokenized_examples["p_mask"].append(
-                [
-                    0.0 if (not special_tokens[i][k] and s == context_idx) or k == cls_index else 1.0
-                    for k, s in enumerate(sequence_ids)
-                ]
-            )
+            sequence_ids = tokenized_examples.sequence_ids(i)
+            context_index = 1 if pad_on_right else 0
 
             # One example can give several spans, this is the index of the example containing this span of text.
             sample_index = sample_mapping[i]
@@ -497,7 +521,7 @@ def main():
             # Set to None the offset_mapping that are not part of the context so it's easy to determine if a token
             # position is part of the context or not.
             tokenized_examples["offset_mapping"][i] = [
-                (o if sequence_ids[k] == context_idx else None)
+                (o if sequence_ids[k] == context_index else None)
                 for k, o in enumerate(tokenized_examples["offset_mapping"][i])
             ]
 
@@ -508,20 +532,20 @@ def main():
             raise ValueError("--do_eval requires a validation dataset")
         eval_examples = datasets["validation"]
         if data_args.max_eval_samples is not None:
-            # Selecting Eval Samples from Dataset
+            # We will select sample from whole data
             eval_examples = eval_examples.select(range(data_args.max_eval_samples))
-        # Create Features from Eval Dataset
+        # Validation Feature Creation
         eval_dataset = eval_examples.map(
             prepare_validation_features,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
             remove_columns=column_names,
             load_from_cache_file=not data_args.overwrite_cache,
-            desc="Running tokenizer on validation dataset",
         )
         if data_args.max_eval_samples is not None:
-            # Selecting Samples from Dataset again since Feature Creation might increase samples size
+            # During Feature creation dataset samples might increase, we will select required samples again
             eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
+        processed_datasets["validation"] = eval_dataset
 
     if training_args.do_predict:
         if "test" not in datasets:
@@ -530,49 +554,38 @@ def main():
         if data_args.max_predict_samples is not None:
             # We will select sample from whole data
             predict_examples = predict_examples.select(range(data_args.max_predict_samples))
-        # Test Feature Creation
+        # Predict Feature Creation
         predict_dataset = predict_examples.map(
             prepare_validation_features,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
             remove_columns=column_names,
             load_from_cache_file=not data_args.overwrite_cache,
-            desc="Running tokenizer on prediction dataset",
         )
         if data_args.max_predict_samples is not None:
             # During Feature creation dataset samples might increase, we will select required samples again
             predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
+        processed_datasets["test"] = predict_dataset
+    # endregion
 
-    # Data collator
-    # We have already padded to max length if the corresponding flag is True, otherwise we need to pad in the data
-    # collator.
-    data_collator = (
-        default_data_collator
-        if data_args.pad_to_max_length
-        else DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8 if training_args.fp16 else None)
-    )
-
-    # Post-processing:
+    # region Metrics and Post-processing:
     def post_processing_function(examples, features, predictions, stage="eval"):
         # Post-processing: we match the start logits and end logits to answers in the original context.
-        predictions, scores_diff_json = postprocess_qa_predictions_with_beam_search(
+        predictions = postprocess_qa_predictions(
             examples=examples,
             features=features,
             predictions=predictions,
             version_2_with_negative=data_args.version_2_with_negative,
             n_best_size=data_args.n_best_size,
             max_answer_length=data_args.max_answer_length,
-            start_n_top=model.config.start_n_top,
-            end_n_top=model.config.end_n_top,
+            null_score_diff_threshold=data_args.null_score_diff_threshold,
             output_dir=training_args.output_dir,
-            is_world_process_zero=trainer.is_world_process_zero(),
             prefix=stage,
         )
         # Format the result to the format the metric expects.
         if data_args.version_2_with_negative:
             formatted_predictions = [
-                {"id": k, "prediction_text": v, "no_answer_probability": scores_diff_json[k]}
-                for k, v in predictions.items()
+                {"id": k, "prediction_text": v, "no_answer_probability": 0.0} for k, v in predictions.items()
             ]
         else:
             formatted_predictions = [{"id": k, "prediction_text": v} for k, v in predictions.items()]
@@ -585,81 +598,96 @@ def main():
     def compute_metrics(p: EvalPrediction):
         return metric.compute(predictions=p.predictions, references=p.label_ids)
 
-    # Initialize our Trainer
-    trainer = QuestionAnsweringTrainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset if training_args.do_train else None,
-        eval_dataset=eval_dataset if training_args.do_eval else None,
-        eval_examples=eval_examples if training_args.do_eval else None,
-        tokenizer=tokenizer,
-        data_collator=data_collator,
-        post_process_function=post_processing_function,
-        compute_metrics=compute_metrics,
-    )
+    # endregion
 
-    # Training
-    if training_args.do_train:
-        checkpoint = None
-        if training_args.resume_from_checkpoint is not None:
-            checkpoint = training_args.resume_from_checkpoint
-        elif last_checkpoint is not None:
-            checkpoint = last_checkpoint
-        train_result = trainer.train(resume_from_checkpoint=checkpoint)
-        trainer.save_model()  # Saves the tokenizer too for easy upload
-
-        metrics = train_result.metrics
-
-        max_train_samples = (
-            data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
+    with training_args.strategy.scope():
+        # region Load model
+        if checkpoint is None:
+            model_path = model_args.model_name_or_path
+        else:
+            model_path = checkpoint
+        model = TFAutoModelForQuestionAnswering.from_pretrained(
+            model_path,
+            config=config,
+            cache_dir=model_args.cache_dir,
+            revision=model_args.model_revision,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
-        metrics["train_samples"] = min(max_train_samples, len(train_dataset))
-
-        trainer.log_metrics("train", metrics)
-        trainer.save_metrics("train", metrics)
-        trainer.save_state()
-
-    # Evaluation
-    if training_args.do_eval:
-        logger.info("*** Evaluate ***")
-        metrics = trainer.evaluate()
-
-        max_eval_samples = data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
-        metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
-
-        trainer.log_metrics("eval", metrics)
-        trainer.save_metrics("eval", metrics)
-
-    # Prediction
-    if training_args.do_predict:
-        logger.info("*** Predict ***")
-        results = trainer.predict(predict_dataset, predict_examples)
-        metrics = results.metrics
-
-        max_predict_samples = (
-            data_args.max_predict_samples if data_args.max_predict_samples is not None else len(predict_dataset)
+        optimizer = tf.keras.optimizers.Adam(
+            learning_rate=training_args.learning_rate,
+            beta_1=training_args.adam_beta1,
+            beta_2=training_args.adam_beta2,
+            epsilon=training_args.adam_epsilon,
+            clipnorm=training_args.max_grad_norm,
         )
-        metrics["predict_samples"] = min(max_predict_samples, len(predict_dataset))
 
-        trainer.log_metrics("predict", metrics)
-        trainer.save_metrics("predict", metrics)
+        def dummy_loss(y_true, y_pred):
+            return tf.reduce_mean(y_pred)
+
+        losses = {"loss": dummy_loss}
+        model.compile(optimizer=optimizer, loss=losses)
+        # endregion
+
+        # region Training
+        if training_args.do_train:
+            # Make a tf.data.Dataset for this
+            if isinstance(training_args.strategy, tf.distribute.TPUStrategy) or data_args.pad_to_max_length:
+                logger.info("Padding all batches to max length because argument was set or we're on TPU.")
+                dataset_mode = "constant_batch"
+            else:
+                dataset_mode = "variable_batch"
+            training_dataset = convert_dataset_for_tensorflow(
+                processed_datasets["train"],
+                batch_size=training_args.per_device_train_batch_size,
+                dataset_mode=dataset_mode,
+                drop_remainder=True,
+                shuffle=True,
+            )
+            model.fit(training_dataset, epochs=int(training_args.num_train_epochs))
+        # endregion
+
+        # region Evaluation
+        if training_args.do_eval:
+            logger.info("*** Evaluation ***")
+            eval_inputs = {
+                "input_ids": tf.ragged.constant(processed_datasets["validation"]["input_ids"]).to_tensor(),
+                "attention_mask": tf.ragged.constant(processed_datasets["validation"]["attention_mask"]).to_tensor(),
+            }
+            eval_predictions = model.predict(eval_inputs)
+
+            post_processed_eval = post_processing_function(
+                datasets["validation"],
+                processed_datasets["validation"],
+                (eval_predictions.start_logits, eval_predictions.end_logits),
+            )
+            metrics = compute_metrics(post_processed_eval)
+            logging.info("Evaluation metrics:")
+            for metric, value in metrics.items():
+                logging.info(f"{metric}: {value:.3f}")
+        # endregion
+
+        # region Prediction
+        if training_args.do_predict:
+            logger.info("*** Predict ***")
+            predict_inputs = {
+                "input_ids": tf.ragged.constant(processed_datasets["test"]["input_ids"]).to_tensor(),
+                "attention_mask": tf.ragged.constant(processed_datasets["test"]["attention_mask"]).to_tensor(),
+            }
+            test_predictions = model.predict(predict_inputs)
+            post_processed_test = post_processing_function(
+                datasets["test"],
+                processed_datasets["test"],
+                (test_predictions.start_logits, test_predictions.end_logits),
+            )
+            metrics = compute_metrics(post_processed_test)
+
+            logging.info("Test metrics:")
+            for metric, value in metrics.items():
+                logging.info(f"{metric}: {value:.3f}")
+        # endregion
 
     if training_args.push_to_hub:
-        kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "question-answering"}
-        if data_args.dataset_name is not None:
-            kwargs["dataset_tags"] = data_args.dataset_name
-            if data_args.dataset_config_name is not None:
-                kwargs["dataset_args"] = data_args.dataset_config_name
-                kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
-            else:
-                kwargs["dataset"] = data_args.dataset_name
-
-        trainer.push_to_hub(**kwargs)
-
-
-def _mp_fn(index):
-    # For xla_spawn (TPUs)
-    main()
+        model.push_to_hub()
 
 
 if __name__ == "__main__":

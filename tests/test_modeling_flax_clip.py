@@ -209,6 +209,13 @@ class FlaxCLIPVisionModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 [self.model_tester.num_attention_heads, seq_length, seq_length],
             )
 
+    # FlaxCLIPVisionModel does not have any base model
+    def test_save_load_from_base(self):
+        pass
+
+    def test_save_load_to_base(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
@@ -295,6 +302,13 @@ class FlaxCLIPTextModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = FlaxCLIPTextModelTester(self)
+
+    # FlaxCLIPTextModel does not have any base model
+    def test_save_load_from_base(self):
+        pass
+
+    def test_save_load_to_base(self):
+        pass
 
     @slow
     def test_model_from_pretrained(self):
@@ -511,3 +525,37 @@ class FlaxCLIPModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 )
                 for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs_loaded[:4]):
                     self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
+
+    # overwrite from common since FlaxCLIPModel returns nested output
+    # which is not supported in the common test
+    def test_from_pretrained_save_pretrained(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class.__name__ != "FlaxBertModel":
+                continue
+
+            with self.subTest(model_class.__name__):
+                model = model_class(config)
+
+                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                outputs = model(**prepared_inputs_dict).to_tuple()
+
+                # verify that normal save_pretrained works as expected
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname)
+                    model_loaded = model_class.from_pretrained(tmpdirname)
+
+                outputs_loaded = model_loaded(**prepared_inputs_dict).to_tuple()[:4]
+                for output_loaded, output in zip(outputs_loaded, outputs):
+                    self.assert_almost_equals(output_loaded, output, 1e-3)
+
+                # verify that save_pretrained for distributed training
+                # with `params=params` works as expected
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname, params=model.params)
+                    model_loaded = model_class.from_pretrained(tmpdirname)
+
+                outputs_loaded = model_loaded(**prepared_inputs_dict).to_tuple()[:4]
+                for output_loaded, output in zip(outputs_loaded, outputs):
+                    self.assert_almost_equals(output_loaded, output, 1e-3)

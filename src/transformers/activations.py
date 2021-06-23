@@ -73,8 +73,18 @@ else:
     silu = nn.functional.silu
 
 
-def mish(x):
+def _mish_python(x):
+    """
+    See Mish: A Self-Regularized Non-Monotonic Activation Function (Misra., https://arxiv.org/abs/1908.08681). Also
+    visit the official repository for the paper: https://github.com/digantamisra98/Mish
+    """
     return x * torch.tanh(nn.functional.softplus(x))
+
+
+if version.parse(torch.__version__) < version.parse("1.9"):
+    mish = _mish_python
+else:
+    mish = nn.functional.mish
 
 
 def linear_act(x):

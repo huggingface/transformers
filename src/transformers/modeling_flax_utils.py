@@ -348,6 +348,11 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if cls.base_model_prefix not in dict(model.params) and cls.base_model_prefix in state:
             state = state[cls.base_model_prefix]
 
+        # if model is head model and we are loading weights from base model
+        # we initialize new params dict with base_model_prefix
+        if cls.base_model_prefix in dict(model.params) and cls.base_model_prefix not in state:
+            state = {cls.base_model_prefix: state}
+
         # flatten dicts
         state = flatten_dict(state)
 

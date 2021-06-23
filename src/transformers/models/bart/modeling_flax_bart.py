@@ -592,7 +592,7 @@ class FlaxBartDecoderLayerCollection(nn.Module):
         self.layers = [
             FlaxBartDecoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.decoder_layers)
         ]
-        self.layerdrop = self.config.encoder_layerdrop
+        self.layerdrop = self.config.decoder_layerdrop
 
     def __call__(
         self,
@@ -689,7 +689,6 @@ class FlaxBartEncoder(nn.Module):
 
     def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
-        self.layerdrop = self.config.encoder_layerdrop
 
         embed_dim = self.config.d_model
         self.padding_idx = self.config.pad_token_id
@@ -763,7 +762,6 @@ class FlaxBartDecoder(nn.Module):
 
     def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
-        self.layerdrop = self.config.decoder_layerdrop
 
         embed_dim = self.config.d_model
         self.padding_idx = self.config.pad_token_id
@@ -910,7 +908,7 @@ class FlaxBartModule(nn.Module):
         )
 
 
-class FlaxBartPretrainedModel(FlaxPreTrainedModel):
+class FlaxBartPreTrainedModel(FlaxPreTrainedModel):
     config_class = BartConfig
     base_model_prefix: str = "model"
     module_class: nn.Module = None
@@ -1231,7 +1229,7 @@ class FlaxBartPretrainedModel(FlaxPreTrainedModel):
     "The bare Bart Model transformer outputting raw hidden-states without any specific head on top.",
     BART_START_DOCSTRING,
 )
-class FlaxBartModel(FlaxBartPretrainedModel):
+class FlaxBartModel(FlaxBartPreTrainedModel):
     config: BartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
     module_class = FlaxBartModule
@@ -1317,7 +1315,7 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
 @add_start_docstrings(
     "The BART Model with a language modeling head. Can be used for summarization.", BART_START_DOCSTRING
 )
-class FlaxBartForConditionalGeneration(FlaxBartPretrainedModel):
+class FlaxBartForConditionalGeneration(FlaxBartPreTrainedModel):
     module_class = FlaxBartForConditionalGenerationModule
     dtype: jnp.dtype = jnp.float32
 
@@ -1622,7 +1620,7 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
     """,
     BART_START_DOCSTRING,
 )
-class FlaxBartForSequenceClassification(FlaxBartPretrainedModel):
+class FlaxBartForSequenceClassification(FlaxBartPreTrainedModel):
     module_class = FlaxBartForSequenceClassificationModule
     dtype = jnp.float32
 
@@ -1709,7 +1707,7 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
     """,
     BART_START_DOCSTRING,
 )
-class FlaxBartForQuestionAnswering(FlaxBartPretrainedModel):
+class FlaxBartForQuestionAnswering(FlaxBartPreTrainedModel):
     module_class = FlaxBartForQuestionAnsweringModule
     dtype = jnp.float32
 
