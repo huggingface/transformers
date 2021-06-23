@@ -1610,12 +1610,12 @@ Things to consider:
 
 * Deepspeed is often not the cause of the problem.
 
-   Some of the filed issues proved to be Deepspeed-unrelated. That is once Deepspeed was removed from the setup, the
-   problem was still there.
+    Some of the filed issues proved to be Deepspeed-unrelated. That is once Deepspeed was removed from the setup, the
+    problem was still there.
 
-   Therefore, if it's not absolutely obvious it's a DeepSpeed-related problem, as in you can see that there is an
-   exception and you can see that DeepSpeed modules are involved, first re-test your setup without DeepSpeed in it. And
-   only if the problem persists then do mentioned Deepspeed and supply all the required details.
+    Therefore, if it's not absolutely obvious it's a DeepSpeed-related problem, as in you can see that there is an
+    exception and you can see that DeepSpeed modules are involved, first re-test your setup without DeepSpeed in it. And
+    only if the problem persists then do mentioned Deepspeed and supply all the required details.
 
 * If it's clear to you that the issue is in the DeepSpeed core and not the integration part, please file the Issue
   directly with `Deepspeed <https://github.com/microsoft/DeepSpeed/>`__. If you aren't sure, please do not worry,
