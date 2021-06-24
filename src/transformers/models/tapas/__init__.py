@@ -33,6 +33,7 @@ if is_torch_available():
         "TapasForQuestionAnswering",
         "TapasForSequenceClassification",
         "TapasModel",
+        "TapasPreTrainedModel",
     ]
 
 
@@ -47,6 +48,7 @@ if TYPE_CHECKING:
             TapasForQuestionAnswering,
             TapasForSequenceClassification,
             TapasModel,
+            TapasPreTrainedModel,
         )
 
 else:

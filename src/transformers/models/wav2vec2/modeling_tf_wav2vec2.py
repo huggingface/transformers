@@ -1523,7 +1523,8 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
             >>> ds = ds.map(map_to_array)
 
             >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values # Batch size 1
-            >>> logits = model(input_values).logits >>> predicted_ids = tf.argmax(logits, axis=-1)
+            >>> logits = model(input_values).logits
+            >>> predicted_ids = tf.argmax(logits, axis=-1)
 
             >>> transcription = processor.decode(predicted_ids[0])
 
@@ -1532,7 +1533,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
 
             >>> # wrap processor as target processor to encode labels
             >>> with processor.as_target_processor():
-            >>>     labels = processor(transcription, return_tensors="tf").input_values
+            >>>     labels = processor(transcription, return_tensors="tf").input_ids
 
             >>> loss = model(input_values, labels=labels).loss
         """
