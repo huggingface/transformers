@@ -451,7 +451,7 @@ of tokens.
     >>> ## PYTORCH CODE
     >>> from transformers import AutoModelWithLMHead, AutoTokenizer, top_k_top_p_filtering
     >>> import torch
-    >>> from torch.nn import functional as F
+    >>> from torch import nn
 
     >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
     >>> model = AutoModelWithLMHead.from_pretrained("gpt2")
@@ -467,7 +467,7 @@ of tokens.
     >>> filtered_next_token_logits = top_k_top_p_filtering(next_token_logits, top_k=50, top_p=1.0)
 
     >>> # sample
-    >>> probs = F.softmax(filtered_next_token_logits, dim=-1)
+    >>> probs = nn.functional.softmax(filtered_next_token_logits, dim=-1)
     >>> next_token = torch.multinomial(probs, num_samples=1)
 
     >>> generated = torch.cat([input_ids, next_token], dim=-1)
@@ -827,18 +827,18 @@ CNN / Daily Mail), it yields very good results.
 .. code-block::
 
     >>> ## PYTORCH CODE
-    >>> from transformers import AutoModelWithLMHead, AutoTokenizer
+    >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-    >>> model = AutoModelWithLMHead.from_pretrained("t5-base")
+    >>> model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
     >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
     >>> # T5 uses a max_length of 512 so we cut the article to 512 tokens.
-    >>> inputs = tokenizer.encode("summarize: " + ARTICLE, return_tensors="pt", max_length=512)
+    >>> inputs = tokenizer.encode("summarize: " + ARTICLE, return_tensors="pt", max_length=512, truncation=True)
     >>> outputs = model.generate(inputs, max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True)
     >>> ## TENSORFLOW CODE
-    >>> from transformers import TFAutoModelWithLMHead, AutoTokenizer
+    >>> from transformers import TFAutoModelForSeq2SeqLM, AutoTokenizer
 
-    >>> model = TFAutoModelWithLMHead.from_pretrained("t5-base")
+    >>> model = TFAutoModelForSeq2SeqLM.from_pretrained("t5-base")
     >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
     >>> # T5 uses a max_length of 512 so we cut the article to 512 tokens.

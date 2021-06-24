@@ -100,6 +100,10 @@ def is_neptune_available():
     return importlib.util.find_spec("neptune") is not None
 
 
+def is_codecarbon_available():
+    return importlib.util.find_spec("codecarbon") is not None
+
+
 def hp_params(trial):
     if is_optuna_available():
         import optuna
@@ -163,11 +167,21 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
             local_trainer._tune_save_checkpoint()
             ray.tune.report(objective=local_trainer.objective, **metrics, done=True)
 
+    if not trainer._memory_tracker.skip_memory_metrics:
+        from .trainer_utils import TrainerMemoryTracker
+
+        logger.warning(
+            "Memory tracking for your Trainer is currently "
+            "enabled. Automatically disabling the memory tracker "
+            "since the memory tracker is not serializable."
+        )
+        trainer._memory_tracker = TrainerMemoryTracker(skip_memory_metrics=True)
+
     # The model and TensorBoard writer do not pickle so we have to remove them (if they exists)
     # while doing the ray hp search.
-
     _tb_writer = trainer.pop_callback(TensorBoardCallback)
     trainer.model = None
+
     # Setup default `resources_per_trial`.
     if "resources_per_trial" not in kwargs:
         # Default to 1 CPU and 1 GPU (if applicable) per trial.
@@ -194,7 +208,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         trainer.use_tune_checkpoints = True
         if kwargs["keep_checkpoints_num"] > 1:
             logger.warning(
-                f"Currently keeping {kwargs['keep_checkpoint_num']} checkpoints for each trial. "
+                f"Currently keeping {kwargs['keep_checkpoints_num']} checkpoints for each trial. "
                 "Checkpoints are usually huge, "
                 "consider setting `keep_checkpoints_num=1`."
             )
@@ -249,6 +263,8 @@ def get_available_reporting_integrations():
         integrations.append("tensorboard")
     if is_wandb_available():
         integrations.append("wandb")
+    if is_codecarbon_available():
+        integrations.append("codecarbon")
     return integrations
 
 
@@ -708,6 +724,34 @@ class NeptuneCallback(TrainerCallback):
             pass
 
 
+class CodeCarbonCallback(TrainerCallback):
+    """
+    A :class:`~transformers.TrainerCallback` that tracks the CO2 emission of training.
+    """
+
+    def __init__(self):
+        assert (
+            is_codecarbon_available()
+        ), "CodeCarbonCallback requires `codecarbon` to be installed. Run `pip install codecarbon`."
+        import codecarbon
+
+        self._codecarbon = codecarbon
+        self.tracker = None
+
+    def on_init_end(self, args, state, control, **kwargs):
+        if self.tracker is None and state.is_local_process_zero:
+            # CodeCarbon will automatically handle environment variables for configuration
+            self.tracker = self._codecarbon.EmissionsTracker(output_dir=args.output_dir)
+
+    def on_train_begin(self, args, state, control, model=None, **kwargs):
+        if self.tracker and state.is_local_process_zero:
+            self.tracker.start()
+
+    def on_train_end(self, args, state, control, **kwargs):
+        if self.tracker and state.is_local_process_zero:
+            self.tracker.stop()
+
+
 INTEGRATION_TO_CALLBACK = {
     "azure_ml": AzureMLCallback,
     "comet_ml": CometCallback,
@@ -715,6 +759,7 @@ INTEGRATION_TO_CALLBACK = {
     "neptune": NeptuneCallback,
     "tensorboard": TensorBoardCallback,
     "wandb": WandbCallback,
+    "codecarbon": CodeCarbonCallback,
 }
 
 

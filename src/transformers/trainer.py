@@ -24,7 +24,6 @@ import random
 import re
 import shutil
 import sys
-import tempfile
 import time
 import warnings
 from logging import StreamHandler
@@ -264,7 +263,7 @@ class Trainer:
 
     def __init__(
         self,
-        model: Union[PreTrainedModel, torch.nn.Module] = None,
+        model: Union[PreTrainedModel, nn.Module] = None,
         args: TrainingArguments = None,
         data_collator: Optional[DataCollator] = None,
         train_dataset: Optional[Dataset] = None,
@@ -289,6 +288,10 @@ class Trainer:
         # memory metrics - must set up as early as possible
         self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
         self._memory_tracker.start()
+
+        # set the correct log level depending on the node
+        log_level = args.get_process_log_level()
+        logging.set_verbosity(log_level)
 
         # force device and distributed setup init explicitly
         args._setup_devices
@@ -387,9 +390,12 @@ class Trainer:
         # Will be set to True by `self._setup_loggers()` on first call to `self.log()`.
         self._loggers_initialized = False
 
-        # Create output directory if needed
+        # Create clone of distant repo and output directory if needed
+        if self.args.push_to_hub:
+            self.init_git_repo()
         if self.is_world_process_zero():
             os.makedirs(self.args.output_dir, exist_ok=True)
+
         if not callable(self.data_collator) and callable(getattr(self.data_collator, "collate_batch", None)):
             raise ValueError("The `data_collator` should be a simple callable (function, class with `__call__`).")
 
@@ -772,7 +778,7 @@ class Trainer:
         Trainer's init through :obj:`optimizers`, or subclass and override this method in a subclass.
         """
         if self.optimizer is None:
-            decay_parameters = get_parameter_names(self.model, [torch.nn.LayerNorm])
+            decay_parameters = get_parameter_names(self.model, [nn.LayerNorm])
             decay_parameters = [name for name in decay_parameters if "bias" not in name]
             optimizer_grouped_parameters = [
                 {
@@ -933,7 +939,7 @@ class Trainer:
 
         # Multi-gpu training (should be after apex fp16 initialization)
         if self.args.n_gpu > 1:
-            model = torch.nn.DataParallel(model)
+            model = nn.DataParallel(model)
 
         # Note: in torch.distributed mode, there's no point in wrapping the model
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
@@ -970,7 +976,7 @@ class Trainer:
                 find_unused_parameters = not getattr(model.config, "gradient_checkpointing", False)
             else:
                 find_unused_parameters = True
-            model = torch.nn.parallel.DistributedDataParallel(
+            model = nn.parallel.DistributedDataParallel(
                 model,
                 device_ids=[self.args.local_rank],
                 output_device=self.args.local_rank,
@@ -1288,7 +1294,7 @@ class Trainer:
                             model.clip_grad_norm_(args.max_grad_norm)
                         else:
                             # Revert to normal clipping otherwise, handling Apex or full precision
-                            torch.nn.utils.clip_grad_norm_(
+                            nn.utils.clip_grad_norm_(
                                 amp.master_params(self.optimizer) if self.use_apex else model.parameters(),
                                 args.max_grad_norm,
                             )
@@ -2426,6 +2432,27 @@ class Trainer:
         else:
             return 0
 
+    def init_git_repo(self):
+        """
+        Initializes a git repo in :obj:`self.args.push_to_hub_model_id`.
+        """
+        if not self.is_world_process_zero():
+            return
+        use_auth_token = True if self.args.push_to_hub_token is None else self.args.push_to_hub_token
+        repo_url = PushToHubMixin._get_repo_url_from_name(
+            self.args.push_to_hub_model_id,
+            organization=self.args.push_to_hub_organization,
+            use_auth_token=use_auth_token,
+        )
+        self.repo = PushToHubMixin._create_or_get_repo(
+            self.args.output_dir, repo_url=repo_url, use_auth_token=use_auth_token
+        )
+
+        # By default, ignore the checkpoint folders
+        if not os.path.exists(os.path.join(self.args.output_dir, ".gitignore")):
+            with open(os.path.join(self.args.output_dir, ".gitignore"), "w", encoding="utf-8") as writer:
+                writer.writelines(["checkpoint-*/"])
+
     def create_model_card(
         self,
         language: Optional[str] = None,
@@ -2433,6 +2460,7 @@ class Trainer:
         tags: Optional[str] = None,
         model_name: Optional[str] = None,
         finetuned_from: Optional[str] = None,
+        tasks: Optional[str] = None,
         dataset_tags: Optional[Union[str, List[str]]] = None,
         dataset: Optional[Union[str, List[str]]] = None,
         dataset_args: Optional[Union[str, List[str]]] = None,
@@ -2444,6 +2472,7 @@ class Trainer:
             tags=tags,
             model_name=model_name,
             finetuned_from=finetuned_from,
+            tasks=tasks,
             dataset_tags=dataset_tags,
             dataset=dataset,
             dataset_args=dataset_args,
@@ -2452,38 +2481,13 @@ class Trainer:
         with open(os.path.join(self.args.output_dir, "README.md"), "w") as f:
             f.write(model_card)
 
-    def push_to_hub(
-        self,
-        repo_name: Optional[str] = None,
-        repo_url: Optional[str] = None,
-        commit_message: Optional[str] = "add model",
-        organization: Optional[str] = None,
-        private: bool = None,
-        use_auth_token: Optional[Union[bool, str]] = None,
-        **kwargs,
-    ):
+    def push_to_hub(self, commit_message: Optional[str] = "add model", **kwargs) -> str:
         """
-        Upload `self.model` to the 🤗 model hub.
+        Upload `self.model` and `self.tokenizer` to the 🤗 model hub on the repo `self.args.push_to_hub_model_id`.
 
         Parameters:
-            repo_name (:obj:`str`, `optional`):
-                Repository name for your model or tokenizer in the hub. If not specified and :obj:`repo_url` is not
-                specified either, will default to the stem of :obj:`self.args.output_dir`.
-            repo_url (:obj:`str`, `optional`):
-                Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
-                repository will be created in your namespace (unless you specify an :obj:`organization`) with
-                :obj:`repo_name`.
             commit_message (:obj:`str`, `optional`, defaults to :obj:`"add model"`):
                 Message to commit while pushing.
-            organization (:obj:`str`, `optional`):
-                Organization in which you want to push your model or tokenizer (you must be a member of this
-                organization).
-            private (:obj:`bool`, `optional`):
-                Whether or not the repository created should be private (requires a paying subscription).
-            use_auth_token (:obj:`bool` or :obj:`str`, `optional`):
-                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
-                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`). Will default to
-                :obj:`True` if :obj:`repo_url` is not specified.
             kwargs:
                 Additional keyword arguments passed along to :meth:`~transformers.Trainer.create_model_card`.
 
@@ -2493,37 +2497,9 @@ class Trainer:
         if not self.is_world_process_zero():
             return
 
-        if not isinstance(unwrap_model(self.model), PushToHubMixin):
-            raise ValueError(
-                "The `upload_model_to_hub` method only works for models that inherit from `PushToHubMixin` models."
-            )
-
-        if repo_url is None and repo_name is None:
-            repo_name = Path(self.args.output_dir).name
-
-        if repo_name is not None:
-            model_name = repo_name
-        elif repo_url is not None:
-            model_name = repo_url.split("/")[-1]
-        else:
-            model_name = None
-        self.create_model_card(model_name=model_name, **kwargs)
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            shutil.copy(os.path.join(self.args.output_dir, "README.md"), os.path.join(tmp_dir, "README.md"))
-            unwrap_model(self.model).save_pretrained(tmp_dir)
-            if self.tokenizer is not None:
-                self.tokenizer.save_pretrained(tmp_dir)
-
-            return unwrap_model(self.model)._push_to_hub(
-                save_directory=tmp_dir,
-                repo_name=repo_name,
-                repo_url=repo_url,
-                commit_message=commit_message,
-                organization=organization,
-                private=private,
-                use_auth_token=use_auth_token,
-            )
+        self.create_model_card(model_name=self.args.push_to_hub_model_id, **kwargs)
+        self.save_model()
+        return self.repo.push_to_hub(commit_message=commit_message)
 
     #
     # Deprecated code
