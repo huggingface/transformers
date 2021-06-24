@@ -144,7 +144,6 @@ _deps = [
     "starlette",
     "tensorflow-cpu>=2.3",
     "tensorflow>=2.3",
-    "tensorflow-probability",
     "timeout-decorator",
     "timm",
     "tokenizers>=0.10.1,<0.11",
@@ -226,8 +225,8 @@ extras = {}
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic")
 extras["sklearn"] = deps_list("scikit-learn")
 
-extras["tf"] = deps_list("tensorflow", "tensorflow-probability", "onnxconverter-common", "keras2onnx")
-extras["tf-cpu"] = deps_list("tensorflow-cpu", "tensorflow-probability", "onnxconverter-common", "keras2onnx")
+extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "keras2onnx")
+extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "keras2onnx")
 
 extras["torch"] = deps_list("torch")
 

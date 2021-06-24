@@ -40,6 +40,99 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
+    def _test_normal_with_special_tokens_mask(self, features):
+        tokenizer = BertTokenizer(self.vocab_file)
+        special_tokens_mask = tokenizer.get_special_tokens_mask
+        tf_data_collator = TFDataCollatorForLanguageModeling(tokenizer, special_tokens_mask)
+
+        tf_dataset = tf.data.Dataset(features)
+
+        # --- Pre Batching w/ No Padding ----
+        batch = (
+            tf_dataset
+            .batch(2)
+            .map(tf_data_collator)
+        )
+
+        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
+        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 10)))
+
+        # --- Post Batching w/ No Padding
+        batch = (
+            tf_dataset
+            .map(tf_data_collator)
+            .batch(2)
+        )
+
+        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
+        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 10)))
+
+        # --- Pre Batching w/ Padding ---
+        batch = (
+            tf_dataset
+            .padded_batch(2, 16)
+            .map(tf_data_collator)
+        )
+
+        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
+        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 10)))
+
+        # --- Post Batching w/ Padding ---
+        batch = (
+            tf_dataset
+            .map(tf_data_collator)
+            .padded_batch(2, 16)
+        )
+
+        batch = tf_data_collator(features)
+        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
+
+    def _test_normal_without_special_tokens_mask(self, features):
+        tokenizer = BertTokenizer(self.vocab_file)
+        tf_data_collator = TFDataCollatorForLanguageModeling(tokenizer)
+
+        tf_dataset = tf.data.Dataset(features)
+
+        # --- Pre Batching w/ No Padding ----
+        batch = (
+            tf_dataset
+            .batch(2)
+            .map(tf_data_collator)
+        )
+
+        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
+        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 10)))
+
+        # --- Post Batching w/ No Padding
+        batch = (
+            tf_dataset
+            .map(tf_data_collator)
+            .batch(2)
+        )
+
+        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
+        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 10)))
+
+        # --- Pre Batching w/ Padding ---
+        batch = (
+            tf_dataset
+            .padded_batch(2, 16)
+            .map(tf_data_collator)
+        )
+
+        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
+        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 10)))
+
+        # --- Post Batching w/ Padding ---
+        batch = (
+            tf_dataset
+            .map(tf_data_collator)
+            .padded_batch(2, 16)
+        )
+
+        batch = tf_data_collator(features)
+        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
+
     def _test_no_pad_and_pad(self, no_pad_features, pad_features):
         tokenizer = BertTokenizer(self.vocab_file)
         data_collator = TFDataCollatorForLanguageModeling(tokenizer, mlm=False)
