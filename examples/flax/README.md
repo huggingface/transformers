@@ -19,6 +19,17 @@ This folder contains actively maintained examples of 🤗 Transformers using the
 
 *NOTE*: Currently, there is no "Trainer" abstraction for JAX/Flax -- all examples contain an explicit training loop.
 
+The following table lists all of our examples on how to use 🤗 Transformers with the JAX/Flax backend:
+- with information about the model and dataset used,
+- whether or not they leverage the [🤗 Datasets](https://github.com/huggingface/datasets) library,
+- links to **Colab notebooks** to walk through the scripts and run them easily.
+
+| Task | Example model | Example dataset | 🤗 Datasets | Colab
+|---|---|---|:---:|:---:|
+| [**`causal-language-modeling`**](https://github.com/huggingface/transformers/tree/master/examples/flax/language-modeling) | GPT2 | OSCAR | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/causal_language_modeling_flax.ipynb)
+| [**`masked-language-modeling`**](https://github.com/huggingface/transformers/tree/master/examples/flax/language-modeling) | RoBERTa | OSCAR | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/masked_language_modeling_flax.ipynb)
+| [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/flax/text-classification) | BERT | GLUE | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification_flax.ipynb)
+
 ## Intro: JAX and Flax
 
 [JAX](https://github.com/google/jax) is a numerical computation library that exposes a NumPy-like API with tracing capabilities. With JAX's `jit`, you can
@@ -47,17 +58,4 @@ be adding a guide for porting models from PyTorch in the upcoming few weeks.
 For a complete overview of models that are supported in JAX/Flax, please have a look at [this](https://huggingface.co/transformers/master/index.html#supported-frameworks) table.
 
 Over 3000 pretrained checkpoints are supported in JAX/Flax as of May 2021.
-Click [here](https://huggingface.co/models?filter=jax) to see the full list on the 🤗 hub. 
-
-## Examples
-
-The following table lists all of our examples on how to use 🤗 Transformers with the JAX/Flax backend:
-- with information about the model and dataset used,
-- whether or not they leverage the [🤗 Datasets](https://github.com/huggingface/datasets) library,
-- links to **Colab notebooks** to walk through the scripts and run them easily.
-
-| Task | Example model | Example dataset | 🤗 Datasets | Colab
-|---|---|---|:---:|:---:|
-| [**`causal-language-modeling`**](https://github.com/huggingface/transformers/tree/master/examples/flax/language-modeling) | GPT2 | OSCAR | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/causal_language_modeling_flax.ipynb)
-| [**`masked-language-modeling`**](https://github.com/huggingface/transformers/tree/master/examples/flax/language-modeling) | RoBERTa | OSCAR | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/masked_language_modeling_flax.ipynb)
-| [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/flax/text-classification) | BERT | GLUE | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification_flax.ipynb)
+Click [here](https://huggingface.co/models?filter=jax) to see the full list on the 🤗 hub.
