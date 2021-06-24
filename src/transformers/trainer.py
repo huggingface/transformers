@@ -1780,7 +1780,7 @@ class Trainer:
         Subclass and override for custom behavior.
         """
         if self.label_smoother is not None and "labels" in inputs:
-            labels = inputs.pop("labels")
+            labels = inputs["labels"]
         else:
             labels = None
         outputs = model(**inputs)
