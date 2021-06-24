@@ -1587,7 +1587,6 @@ class ModelUtilsTest(unittest.TestCase):
             self.assertIsNotNone(model)
             self.assertIsInstance(model, PreTrainedModel)
             for value in loading_info.values():
-                print(loading_info)
                 self.assertEqual(len(value), 0)
 
             config = BertConfig.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
