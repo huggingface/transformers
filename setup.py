@@ -125,7 +125,7 @@ _deps = [
     "pytest-sugar",
     "pytest-xdist",
     "python>=3.6.0",
-    "ray",
+    "ray[tune]",
     "recommonmark",
     "regex!=2019.12.17",
     "requests",
@@ -246,7 +246,7 @@ extras["sagemaker"] = deps_list("sagemaker")
 extras["deepspeed"] = deps_list("deepspeed")
 extras["fairscale"] = deps_list("fairscale")
 extras["optuna"] = deps_list("optuna")
-extras["ray"] = deps_list("ray")
+extras["ray"] = deps_list("ray[tune]")
 
 extras["integrations"] = extras["optuna"] + extras["ray"]
 
