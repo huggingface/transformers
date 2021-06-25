@@ -5,6 +5,7 @@ from tqdm import tqdm
 
 import jsonlines
 
+
 DOC_STRIDE = 2048
 MAX_LENGTH = 4096
 SEED = 42
@@ -95,9 +96,7 @@ def get_context_and_ans(example, assertion=False):
     # handling normal samples
 
     cols = ["start_token", "end_token"]
-    answer.update(
-        {k: answer[k][0] if len(answer[k]) > 0 else answer[k] for k in cols}
-    )  # e.g. [10] == 10
+    answer.update({k: answer[k][0] if len(answer[k]) > 0 else answer[k] for k in cols})  # e.g. [10] == 10
 
     doc = example["document"]["tokens"]
     start_token = answer["start_token"]
@@ -136,9 +135,7 @@ def get_context_and_ans(example, assertion=False):
     }
 
 
-def get_strided_contexts_and_ans(
-    example, tokenizer, doc_stride=2048, max_length=4096, assertion=True
-):
+def get_strided_contexts_and_ans(example, tokenizer, doc_stride=2048, max_length=4096, assertion=True):
     # overlap will be of doc_stride - q_len
 
     out = get_context_and_ans(example, assertion=assertion)
@@ -192,24 +189,18 @@ def get_strided_contexts_and_ans(
         ).input_ids
     )
     answer["end_token"] = len(
-        tokenizer(
-            " ".join(splitted_context[: answer["end_token"]]), add_special_tokens=False
-        ).input_ids
+        tokenizer(" ".join(splitted_context[: answer["end_token"]]), add_special_tokens=False).input_ids
     )
 
     answer["start_token"] += q_len
     answer["end_token"] += q_len
 
     # fixing end token
-    num_sub_tokens = len(
-        tokenizer(complete_end_token, add_special_tokens=False).input_ids
-    )
+    num_sub_tokens = len(tokenizer(complete_end_token, add_special_tokens=False).input_ids)
     if num_sub_tokens > 1:
         answer["end_token"] += num_sub_tokens - 1
 
-    old = input_ids[
-        answer["start_token"] : answer["end_token"] + 1
-    ]  # right & left are inclusive
+    old = input_ids[answer["start_token"] : answer["end_token"] + 1]  # right & left are inclusive
     start_token = answer["start_token"]
     end_token = answer["end_token"]
 
@@ -277,9 +268,7 @@ def get_strided_contexts_and_ans(
     }
 
 
-def prepare_inputs(
-    example, tokenizer, doc_stride=2048, max_length=4096, assertion=False
-):
+def prepare_inputs(example, tokenizer, doc_stride=2048, max_length=4096, assertion=False):
     example = get_strided_contexts_and_ans(
         example,
         tokenizer,
@@ -318,6 +307,7 @@ def save_to_disk(hf_data, file_name):
 if __name__ == "__main__":
     """Running area"""
     from datasets import load_dataset
+
     from transformers import BigBirdTokenizer
 
     data = load_dataset("natural_questions")
@@ -332,9 +322,7 @@ if __name__ == "__main__":
         max_length=MAX_LENGTH,
         assertion=False,
     )
-    data = data.map(
-        prepare_inputs, fn_kwargs=fn_kwargs, cache_file_name=cache_file_name
-    )
+    data = data.map(prepare_inputs, fn_kwargs=fn_kwargs, cache_file_name=cache_file_name)
     data = data.remove_columns(["annotations", "document", "id", "question"])
     print(data)
 

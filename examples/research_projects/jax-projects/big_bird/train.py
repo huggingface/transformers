@@ -1,20 +1,13 @@
 import os
-from datasets import load_dataset
-import wandb
 from dataclasses import replace
-from transformers import BigBirdTokenizerFast
+
+from datasets import load_dataset
 
 import jax
+import wandb
+from bigbird_flax import Args, DataCollator, FlaxBigBirdForNaturalQuestions, Trainer, build_tx, train_step, val_step
 from flax import jax_utils
-from bigbird_flax import (
-    Args,
-    FlaxBigBirdForNaturalQuestions,
-    DataCollator,
-    build_tx,
-    Trainer,
-    train_step,
-    val_step,
-)
+from transformers import BigBirdTokenizerFast
 
 
 if __name__ == "__main__":
@@ -25,9 +18,10 @@ if __name__ == "__main__":
     # setup for wandb sweep
     args = Args()
     logger = wandb.init(project="bigbird-natural-questions", config=args.__dict__)
-    wandb_args = dict(logger.config); del wandb_args["batch_size"]
+    wandb_args = dict(logger.config)
+    del wandb_args["batch_size"]
     args = replace(args, **wandb_args)
-    base_dir = args.base_dir + "-" +  wandb.run.id
+    base_dir = args.base_dir + "-" + wandb.run.id
     args = replace(args, base_dir=base_dir)
     print(args)
 
@@ -47,7 +41,9 @@ if __name__ == "__main__":
     print(tr_dataset)
     print(val_dataset)
 
-    model = FlaxBigBirdForNaturalQuestions.from_pretrained(args.model_id, block_size=args.block_size, num_random_blocks=args.num_random_blocks)
+    model = FlaxBigBirdForNaturalQuestions.from_pretrained(
+        args.model_id, block_size=args.block_size, num_random_blocks=args.num_random_blocks
+    )
     tokenizer = BigBirdTokenizerFast.from_pretrained(args.model_id)
     data_collator = DataCollator(pad_id=tokenizer.pad_token_id, max_length=4096)
 

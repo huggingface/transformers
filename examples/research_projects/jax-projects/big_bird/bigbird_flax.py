@@ -4,24 +4,20 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Callable
 
-import wandb
+from tqdm.auto import tqdm
+
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import joblib
 import optax
-from flax import traverse_util, struct, jax_utils
+import wandb
+from flax import jax_utils, struct, traverse_util
 from flax.serialization import from_bytes, to_bytes
 from flax.training import train_state
 from flax.training.common_utils import shard
-from tqdm.auto import tqdm
-
-from transformers import (
-    BigBirdConfig,
-    FlaxBigBirdForQuestionAnswering
-)
-from transformers.models.big_bird.modeling_flax_big_bird import \
-    FlaxBigBirdForQuestionAnsweringModule
+from transformers import BigBirdConfig, FlaxBigBirdForQuestionAnswering
+from transformers.models.big_bird.modeling_flax_big_bird import FlaxBigBirdForQuestionAnsweringModule
 
 
 class FlaxBigBirdForNaturalQuestionsModule(FlaxBigBirdForQuestionAnsweringModule):
@@ -42,16 +38,14 @@ class FlaxBigBirdForNaturalQuestionsModule(FlaxBigBirdForQuestionAnsweringModule
     def __call__(self, *args, **kwargs):
         outputs = super().__call__(*args, **kwargs)
         cls_out = self.cls(outputs[2])
-        return outputs[:2] + (cls_out, )
+        return outputs[:2] + (cls_out,)
 
 
 class FlaxBigBirdForNaturalQuestions(FlaxBigBirdForQuestionAnswering):
     module_class = FlaxBigBirdForNaturalQuestionsModule
 
 
-def calculate_loss_for_nq(
-    start_logits, start_labels, end_logits, end_labels, pooled_logits, pooler_labels
-):
+def calculate_loss_for_nq(start_logits, start_labels, end_logits, end_labels, pooled_logits, pooler_labels):
     def cross_entropy(logits, labels, reduction=None):
         """
         Args:
@@ -83,7 +77,6 @@ class Args:
     num_random_blocks: int = 3
 
     batch_size_per_device: int = 1
-    gradient_accumulation_steps: int = None # it's not implemented currently
     max_epochs: int = 5
 
     # tx_args
@@ -147,15 +140,12 @@ def get_batched_dataset(dataset, batch_size, seed=None):
 
 @partial(jax.pmap, axis_name="batch")
 def train_step(state, drp_rng, **model_inputs):
-
     def loss_fn(params):
         start_labels = model_inputs.pop("start_labels")
         end_labels = model_inputs.pop("end_labels")
         pooled_labels = model_inputs.pop("pooled_labels")
 
-        outputs = state.apply_fn(
-            **model_inputs, params=params, dropout_rng=drp_rng, train=True
-        )
+        outputs = state.apply_fn(**model_inputs, params=params, dropout_rng=drp_rng, train=True)
         start_logits, end_logits, pooled_logits = outputs
 
         return state.loss_fn(
@@ -183,20 +173,15 @@ def val_step(state, **model_inputs):
     end_labels = model_inputs.pop("end_labels")
     pooled_labels = model_inputs.pop("pooled_labels")
 
-    outputs = state.apply_fn(
-        **model_inputs, params=state.params, train=False
-    )
+    outputs = state.apply_fn(**model_inputs, params=state.params, train=False)
     start_logits, end_logits, pooled_logits = outputs
 
-    loss = state.loss_fn(
-        start_logits, start_labels, end_logits, end_labels, pooled_logits, pooled_labels
-    )
+    loss = state.loss_fn(start_logits, start_labels, end_logits, end_labels, pooled_logits, pooled_labels)
     metrics = jax.lax.pmean({"loss": loss}, axis_name="batch")
     return metrics
 
 
 class TrainState(train_state.TrainState):
-    gradient_accumulation_steps: int = struct.field(pytree_node=False)
     loss_fn: Callable = struct.field(pytree_node=False)
 
 
@@ -216,13 +201,10 @@ class Trainer:
             apply_fn=model.__call__,
             params=params,
             tx=tx,
-            gradient_accumulation_steps=self.args.gradient_accumulation_steps,
             loss_fn=calculate_loss_for_nq,
         )
         if ckpt_dir is not None:
-            params, opt_state, step, args, data_collator = restore_checkpoint(
-                ckpt_dir, state
-            )
+            params, opt_state, step, args, data_collator = restore_checkpoint(ckpt_dir, state)
             tx_args = {
                 "lr": args.lr,
                 "init_lr": args.init_lr,
@@ -266,7 +248,9 @@ class Trainer:
                     lr = self.scheduler_fn(state_step - 1)
 
                     eval_loss = self.evaluate(state, val_dataset)
-                    logging_dict = dict(step=state_step.item(), eval_loss=eval_loss.item(), tr_loss=tr_loss, lr=lr.item())
+                    logging_dict = dict(
+                        step=state_step.item(), eval_loss=eval_loss.item(), tr_loss=tr_loss, lr=lr.item()
+                    )
                     tqdm.write(str(logging_dict))
                     self.logger.log(logging_dict, commit=True)
 
@@ -319,30 +303,19 @@ def restore_checkpoint(save_dir, state):
 
 def scheduler_fn(lr, init_lr, warmup_steps, num_train_steps):
     decay_steps = num_train_steps - warmup_steps
-    warmup_fn = optax.linear_schedule(
-        init_value=init_lr, end_value=lr, transition_steps=warmup_steps
-    )
-    decay_fn = optax.linear_schedule(
-        init_value=lr, end_value=1e-7, transition_steps=decay_steps
-    )
-    lr = optax.join_schedules(
-        schedules=[warmup_fn, decay_fn], boundaries=[warmup_steps]
-    )
+    warmup_fn = optax.linear_schedule(init_value=init_lr, end_value=lr, transition_steps=warmup_steps)
+    decay_fn = optax.linear_schedule(init_value=lr, end_value=1e-7, transition_steps=decay_steps)
+    lr = optax.join_schedules(schedules=[warmup_fn, decay_fn], boundaries=[warmup_steps])
     return lr
 
 
 def build_tx(lr, init_lr, warmup_steps, num_train_steps, weight_decay):
     def weight_decay_mask(params):
         params = traverse_util.flatten_dict(params)
-        mask = {
-            k: (v[-1] != "bias" and v[-2:] != ("LayerNorm", "scale"))
-            for k, v in params.items()
-        }
+        mask = {k: (v[-1] != "bias" and v[-2:] != ("LayerNorm", "scale")) for k, v in params.items()}
         return traverse_util.unflatten_dict(mask)
 
     lr = scheduler_fn(lr, init_lr, warmup_steps, num_train_steps)
 
-    tx = optax.adamw(
-        learning_rate=lr, weight_decay=weight_decay, mask=weight_decay_mask
-    )
+    tx = optax.adamw(learning_rate=lr, weight_decay=weight_decay, mask=weight_decay_mask)
     return tx, lr
