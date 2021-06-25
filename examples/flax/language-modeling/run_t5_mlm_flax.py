@@ -566,7 +566,7 @@ if __name__ == "__main__":
         try:
             from flax.metrics.tensorboard import SummaryWriter
 
-            summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir).joinpath("logs").as_posix())
+            summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir))
         except ImportError as ie:
             has_tensorboard = False
             logger.warning(
@@ -577,9 +577,6 @@ if __name__ == "__main__":
             "Unable to display metrics through TensorBoard because the package is not installed: "
             "Please run pip install tensorboard to enable."
         )
-
-    if has_tensorboard and jax.process_index() == 0:
-        summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir).joinpath("logs").as_posix())
 
     # Initialize our training
     rng = jax.random.PRNGKey(training_args.seed)
