@@ -3,3 +3,4 @@ datasets
 sentencepiece
 wandb
 flax
+jsonlines

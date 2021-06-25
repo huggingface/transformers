@@ -307,7 +307,6 @@ def save_to_disk(hf_data, file_name):
 if __name__ == "__main__":
     """Running area"""
     from datasets import load_dataset
-
     from transformers import BigBirdTokenizer
 
     data = load_dataset("natural_questions")
@@ -315,16 +314,16 @@ if __name__ == "__main__":
 
     data = data["train" if PROCESS_TRAIN == "true" else "validation"]
 
-    cache_file_name = "data/nq-training" if PROCESS_TRAIN == "true" else "data/nq-validation"
     fn_kwargs = dict(
         tokenizer=tokenizer,
         doc_stride=DOC_STRIDE,
         max_length=MAX_LENGTH,
         assertion=False,
     )
-    data = data.map(prepare_inputs, fn_kwargs=fn_kwargs, cache_file_name=cache_file_name)
+    data = data.map(prepare_inputs, fn_kwargs=fn_kwargs)
     data = data.remove_columns(["annotations", "document", "id", "question"])
     print(data)
 
     np.random.seed(SEED)
-    save_to_disk(data, file_name=cache_file_name + ".jsonl")
+    cache_file_name = "nq-training.jsonl" if PROCESS_TRAIN == "true" else "nq-validation.jsonl"
+    save_to_disk(data, file_name=cache_file_name)
