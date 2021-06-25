@@ -1,0 +1,6 @@
+git+https://github.com/huggingface/transformers@master
+datasets
+sentencepiece
+wandb
+flax
+jsonlines
