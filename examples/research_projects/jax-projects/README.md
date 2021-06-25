@@ -76,7 +76,7 @@ To be invited to the Slack channel, please make sure you have signed up [on the 
 
 ## Projects
 
-During the first week after the community week announcement, **23.06. - 30.06.**, teams will be formed around the most promising and interesting project ideas. Each team can consist of 2 to 5 participants. Projects can be accessed [here](https://discuss.huggingface.co/c/flax-jax-projects/22).
+During the first week after the community week announcement, **23.06. - 30.06.**, teams will be formed around the most promising and interesting project ideas. Each team can consist of 2 to 10 participants. Projects can be accessed [here](https://discuss.huggingface.co/c/flax-jax-projects/22).
 
 ### How to propose a project
 
