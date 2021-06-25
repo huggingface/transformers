@@ -274,9 +274,9 @@ config.save_pretrained(model_dir)
 Next we can run the example script to pretrain the model:
 
 ```bash
-./run_mlm_flax.py \
+./run_t5_mlm_flax.py \
     --output_dir="./runs" \
-    --model_type="roberta" \
+    --model_type="t5" \
     --config_name="${MODEL_DIR}" \
     --tokenizer_name="${MODEL_DIR}" \
     --dataset_name="oscar" \
