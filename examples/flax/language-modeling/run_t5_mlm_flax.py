@@ -57,22 +57,6 @@ from transformers import (
 from transformers.models.t5.modeling_flax_t5 import shift_tokens_right
 
 
-# Cache the result
-has_tensorboard = is_tensorboard_available()
-if has_tensorboard:
-    try:
-        from flax.metrics.tensorboard import SummaryWriter
-    except ImportError as ie:
-        has_tensorboard = False
-        print(f"Unable to display metrics through TensorBoard because some package are not installed: {ie}")
-
-else:
-    print(
-        "Unable to display metrics through TensorBoard because the package is not installed: "
-        "Please run pip install tensorboard to enable."
-    )
-
-
 MODEL_CONFIG_CLASSES = list(FLAX_MODEL_FOR_MASKED_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
@@ -182,7 +166,15 @@ class DataTrainingArguments:
 def compute_input_and_target_lengths(inputs_length, noise_density, mean_noise_span_length):
     """This function is copy of `random_spans_helper <https://github.com/google-research/text-to-text-transfer-transformer/blob/84f8bcc14b5f2c03de51bd3587609ba8f6bbd1cd/t5/data/preprocessors.py#L2466>`__ .
 
-    Training parameters to avoid padding with random_spans_noise_mask. When training a model with random_spans_noise_mask, we would like to set the other training hyperparmeters in a way that avoids padding.  This function helps us compute these hyperparameters. We assume that each noise span in the input is replaced by extra_tokens_per_span_inputs sentinel tokens, and each non-noise span in the targets is replaced by extra_tokens_per_span_targets sentinel tokens. This function tells us the required number of tokens in the raw example (for split_tokens()) as well as the length of the encoded targets. Note that this function assumes the inputs and targets will have EOS appended and includes that in the reported length.
+    Training parameters to avoid padding with random_spans_noise_mask.
+    When training a model with random_spans_noise_mask, we would like to set the other
+    training hyperparmeters in a way that avoids padding.
+    This function helps us compute these hyperparameters.
+    We assume that each noise span in the input is replaced by extra_tokens_per_span_inputs sentinel tokens,
+    and each non-noise span in the targets is replaced by extra_tokens_per_span_targets sentinel tokens.
+    This function tells us the required number of tokens in the raw example (for split_tokens())
+    as well as the length of the encoded targets. Note that this function assumes
+    the inputs and targets will have EOS appended and includes that in the reported length.
 
     Args:
         inputs_length: an integer - desired length of the tokenized inputs sequence
@@ -221,20 +213,27 @@ def compute_input_and_target_lengths(inputs_length, noise_density, mean_noise_sp
 @flax.struct.dataclass
 class FlaxDataCollatorForT5MLM:
     """
-    Data collator used for T5 span-masked language modeling. It is made sure that after masking the inputs are of length `data_args.max_seq_length` and targets are also of fixed length.
+    Data collator used for T5 span-masked language modeling.
+    It is made sure that after masking the inputs are of length `data_args.max_seq_length` and targets are also of fixed length.
     For more information on how T5 span-masked language modeling works, one can take a look
-    at the `official paper <https://arxiv.org/pdf/1910.10683.pdf>`__ or the `official code for preprocessing <https://github.com/google-research/text-to-text-transfer-transformer/blob/master/t5/data/preprocessors.py>`__ .
+    at the `official paper <https://arxiv.org/pdf/1910.10683.pdf>`__
+    or the `official code for preprocessing <https://github.com/google-research/text-to-text-transfer-transformer/blob/master/t5/data/preprocessors.py>`__ .
 
     Args:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
             The tokenizer used for encoding the data.
-        noise_density (:obj:`float`, `optional`, defaults to 0.15):
+        noise_density (:obj:`float`):
             The probability with which to (randomly) mask tokens in the input.
-    mean_noise_span_length: float
-    input_length: int
-    target_length: int
-    pad_token_id: int
-    decoder_start_token_id: int
+        mean_noise_span_length (:obj:`float`):
+            The average span length of the masked tokens.
+        input_length (:obj:`int`):
+            The expected input length after masking.
+        target_length (:obj:`int`):
+            The expected target length after masking.
+        pad_token_id: (:obj:`int`):
+            The pad token id of the model
+        decoder_start_token_id: (:obj:`int):
+            The decoder start token id of the model
     """
 
     tokenizer: PreTrainedTokenizerBase
@@ -474,8 +473,6 @@ if __name__ == "__main__":
             extension = "text"
         datasets = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
 
-    datasets["train"] = datasets["train"].select(range(4000))
-    datasets["validation"] = datasets["validation"].select(range(1000))
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
@@ -564,6 +561,23 @@ if __name__ == "__main__":
     )
 
     # Enable tensorboard only on the master node
+    has_tensorboard = is_tensorboard_available()
+    if has_tensorboard and jax.process_index() == 0:
+        try:
+            from flax.metrics.tensorboard import SummaryWriter
+
+            summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir).joinpath("logs").as_posix())
+        except ImportError as ie:
+            has_tensorboard = False
+            logger.warning(
+                f"Unable to display metrics through TensorBoard because some package are not installed: {ie}"
+            )
+    else:
+        logger.warning(
+            "Unable to display metrics through TensorBoard because the package is not installed: "
+            "Please run pip install tensorboard to enable."
+        )
+
     if has_tensorboard and jax.process_index() == 0:
         summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir).joinpath("logs").as_posix())
 
@@ -738,7 +752,7 @@ if __name__ == "__main__":
             cur_step = epoch * (len(tokenized_datasets["train"]) // train_batch_size)
             write_metric(train_metrics, eval_metrics, train_time, cur_step)
 
-    # save last checkpoint
-    if jax.process_index() == 0:
-        params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
-        model.save_pretrained(training_args.output_dir, params=params)
+        # save last checkpoint
+        if jax.process_index() == 0:
+            params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+            model.save_pretrained(training_args.output_dir, params=params, push_to_hub=True)

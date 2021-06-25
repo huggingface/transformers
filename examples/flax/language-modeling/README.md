@@ -197,7 +197,26 @@ in Norwegian on a single TPUv3-8 pod.
 
 The example script uses the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
 
-Let's start by creating a folder to save the trained model and a symbolic link to the `run_mlm_flax.py` script.
+Let's start by creating a model repository to save the trained model and logs.
+Here we call the model `"norwegian-t5-base"`, but you can change the model name as you like.
+
+You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
+you are logged in) or via the command line:
+
+```
+huggingface-cli repo create norwegian-t5-base
+```
+
+Next we clone the model repository to add the tokenizer and model files.
+
+```
+git clone https://huggingface.co/<your-username>/norwegian-t5-base
+```
+
+Great, we have set up our model directly. During training, we will automatically
+push the training logs and model weights to the repo.
+
+Next, let's add a symbolic link to the `run_t5_mlm_flax.py` and `t5_tokenizer_model` scripts.
 
 ```bash
 export MODEL_DIR="./norwegian-t5-base"
@@ -215,7 +234,7 @@ which is heavily inspired from [yandex-research/DeDLOC's tokenizer model](https:
 
 The tokenizer is trained on the complete Norwegian dataset of OSCAR
 and consequently saved in `${MODEL_DIR}`
-This can take up to 45 minutes depending on your hardware ☕.
+This can take up to 120 minutes depending on your hardware ☕☕☕ .
 
 ```python
 import datasets
@@ -275,7 +294,7 @@ Next we can run the example script to pretrain the model:
 
 ```bash
 ./run_t5_mlm_flax.py \
-    --output_dir="./runs" \
+    --output_dir="${MODEL_DIR}" \
     --model_type="t5" \
     --config_name="${MODEL_DIR}" \
     --tokenizer_name="${MODEL_DIR}" \
