@@ -21,7 +21,6 @@ import tempfile
 from pathlib import Path
 
 from .utils import logging
-from .utils.notebook import NotebookProgressCallback
 
 
 logger = logging.get_logger(__name__)
@@ -154,8 +153,13 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
     import ray
 
     def _objective(trial, local_trainer, checkpoint_dir=None):
-        if local_trainer.pop_callback(NotebookProgressCallback):
-            local_trainer.add_callback(ProgressCallback)
+        try:
+            from transformers.utils.notebook import NotebookProgressCallback
+
+            if local_trainer.pop_callback(NotebookProgressCallback):
+                local_trainer.add_callback(ProgressCallback)
+        except ModuleNotFoundError:
+            pass
 
         checkpoint = None
         if checkpoint_dir:
