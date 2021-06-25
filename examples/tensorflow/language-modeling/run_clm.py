@@ -61,6 +61,7 @@ MODEL_CONFIG_CLASSES = list(MODEL_FOR_MASKED_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 # endregion
 
+
 # region Command-line arguments
 @dataclass
 class ModelArguments:
@@ -438,7 +439,12 @@ def main():
 
     with training_args.strategy.scope():
         # region Prepare model
-        if model_args.model_name_or_path:
+        if checkpoint is not None:
+            model = TFAutoModelForCausalLM.from_pretrained(
+                checkpoint,
+                config=config,
+            )
+        elif model_args.model_name_or_path:
             model = TFAutoModelForCausalLM.from_pretrained(
                 model_args.model_name_or_path,
                 config=config,
