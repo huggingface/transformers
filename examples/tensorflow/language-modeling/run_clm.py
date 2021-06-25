@@ -22,6 +22,7 @@ https://huggingface.co/models?filter=masked-lm
 """
 # You can also adapt this script on your own mlm task. Pointers for this are left as comments.
 
+# region Imports
 import logging
 import math
 import os
@@ -46,7 +47,7 @@ from transformers import (
     AutoConfig,
     AutoTokenizer,
     HfArgumentParser,
-    TFAutoModelForMaskedLM,
+    TFAutoModelForCausalLM,
     TFTrainingArguments,
     create_optimizer,
     set_seed,
@@ -58,6 +59,7 @@ logger = logging.getLogger(__name__)
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt")
 MODEL_CONFIG_CLASSES = list(MODEL_FOR_MASKED_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+# endregion
 
 # region Command-line arguments
 @dataclass
@@ -197,7 +199,6 @@ class DataTrainingArguments:
 
 # endregion
 
-
 # region Helper classes
 class SavePretrainedCallback(tf.keras.callbacks.Callback):
     # Hugging Face models have a save_pretrained() method that saves both the weights and the necessary
@@ -214,51 +215,15 @@ class SavePretrainedCallback(tf.keras.callbacks.Callback):
 # endregion
 
 # region Data generator
-def sample_generator(dataset, tokenizer, mlm_probability=0.15, pad_to_multiple_of=None):
-    if tokenizer.mask_token is None:
-        raise ValueError("This tokenizer does not have a mask token which is necessary for masked language modeling. ")
+def sample_generator(dataset, tokenizer):
     # Trim off the last partial batch if present
     sample_ordering = np.random.permutation(len(dataset))
     for sample_idx in sample_ordering:
         example = dataset[int(sample_idx)]
         # Handle dicts with proper padding and conversion to tensor.
-        example = tokenizer.pad(example, return_tensors="np", pad_to_multiple_of=pad_to_multiple_of)
-        special_tokens_mask = example.pop("special_tokens_mask", None)
-        example["input_ids"], example["labels"] = mask_tokens(
-            example["input_ids"], mlm_probability, tokenizer, special_tokens_mask=special_tokens_mask
-        )
-        if tokenizer.pad_token_id is not None:
-            example["labels"][example["labels"] == tokenizer.pad_token_id] = -100
-        example = {key: tf.convert_to_tensor(arr) for key, arr in example.items()}
-
+        example = {key: tf.convert_to_tensor(arr, dtype_hint=tf.int64) for key, arr in example.items()}
         yield example, example["labels"]  # TF needs some kind of labels, even if we don't use them
     return
-
-
-def mask_tokens(inputs, mlm_probability, tokenizer, special_tokens_mask):
-    """
-    Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
-    """
-    labels = np.copy(inputs)
-    # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
-    probability_matrix = np.random.random_sample(labels.shape)
-    special_tokens_mask = special_tokens_mask.astype(np.bool_)
-
-    probability_matrix[special_tokens_mask] = 0.0
-    masked_indices = probability_matrix > (1 - mlm_probability)
-    labels[~masked_indices] = -100  # We only compute loss on masked tokens
-
-    # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-    indices_replaced = (np.random.random_sample(labels.shape) < 0.8) & masked_indices
-    inputs[indices_replaced] = tokenizer.convert_tokens_to_ids(tokenizer.mask_token)
-
-    # 10% of the time, we replace masked input tokens with random word
-    indices_random = (np.random.random_sample(labels.shape) < 0.5) & masked_indices & ~indices_replaced
-    random_words = np.random.randint(low=0, high=len(tokenizer), size=np.count_nonzero(indices_random), dtype=np.int64)
-    inputs[indices_random] = random_words
-
-    # The rest of the time (10% of the time) we keep the masked input tokens unchanged
-    return inputs, labels
 
 
 # endregion
@@ -298,7 +263,7 @@ def main():
             training_args.output_dir / TF2_WEIGHTS_NAME
         ).is_file():
             checkpoint = training_args.output_dir
-            logger.warning(
+            logger.info(
                 f"Checkpoint detected, resuming training from checkpoint in {training_args.output_dir}. To avoid this"
                 " behavior, change the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
             )
@@ -363,9 +328,7 @@ def main():
     #
     # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
-    if checkpoint is not None:
-        config = AutoConfig.from_pretrained(checkpoint)
-    elif model_args.config_name:
+    if model_args.config_name:
         config = AutoConfig.from_pretrained(model_args.config_name)
     elif model_args.model_name_or_path:
         config = AutoConfig.from_pretrained(model_args.model_name_or_path)
@@ -405,84 +368,66 @@ def main():
             )
         max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
-    if data_args.line_by_line:
-        # When using line_by_line, we just tokenize each nonempty line.
-        padding = "max_length" if data_args.pad_to_max_length else False
+    # First we tokenize all the texts.
+    column_names = raw_datasets["train"].column_names
+    text_column_name = "text" if "text" in column_names else column_names[0]
 
-        def tokenize_function(examples):
-            # Remove empty lines
-            examples[text_column_name] = [
-                line for line in examples[text_column_name] if len(line) > 0 and not line.isspace()
-            ]
-            return tokenizer(
-                examples[text_column_name],
-                padding=padding,
-                truncation=True,
-                max_length=max_seq_length,
-                # We use this option because DataCollatorForLanguageModeling (see below) is more efficient when it
-                # receives the `special_tokens_mask`.
-                return_special_tokens_mask=True,
-            )
+    def tokenize_function(examples):
+        return tokenizer(examples[text_column_name])
 
-        tokenized_datasets = raw_datasets.map(
-            tokenize_function,
-            batched=True,
-            num_proc=data_args.preprocessing_num_workers,
-            remove_columns=[text_column_name],
-            load_from_cache_file=not data_args.overwrite_cache,
-            desc="Running tokenizer on dataset line_by_line",
+    tokenized_datasets = raw_datasets.map(
+        tokenize_function,
+        batched=True,
+        num_proc=data_args.preprocessing_num_workers,
+        remove_columns=column_names,
+        load_from_cache_file=not data_args.overwrite_cache,
+        desc="Running tokenizer on dataset",
+    )
+
+    block_size = tokenizer.model_max_length
+    if block_size > 1024:
+        logger.warning(
+            f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
+            "Picking 1024 instead. You can change that default value by passing --block_size xxx."
         )
-    else:
-        # Otherwise, we tokenize every text, then concatenate them together before splitting them in smaller parts.
-        # We use `return_special_tokens_mask=True` because DataCollatorForLanguageModeling (see below) is more
-        # efficient when it receives the `special_tokens_mask`.
-        def tokenize_function(examples):
-            return tokenizer(examples[text_column_name], return_special_tokens_mask=True)
+        block_size = 1024
 
-        tokenized_datasets = raw_datasets.map(
-            tokenize_function,
-            batched=True,
-            num_proc=data_args.preprocessing_num_workers,
-            remove_columns=column_names,
-            load_from_cache_file=not data_args.overwrite_cache,
-            desc="Running tokenizer on every text in dataset",
-        )
+    # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
+    def group_texts(examples):
+        # Concatenate all texts.
+        concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
+        total_length = len(concatenated_examples[list(examples.keys())[0]])
+        # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
+        # customize this part to your needs.
+        total_length = (total_length // block_size) * block_size
+        # Split by chunks of max_len.
+        result = {
+            k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
+            for k, t in concatenated_examples.items()
+        }
+        result["labels"] = result["input_ids"].copy()
+        return result
 
-        # Main data processing function that will concatenate all texts from our dataset and generate chunks of
-        # max_seq_length.
-        def group_texts(examples):
-            # Concatenate all texts.
-            concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
-            total_length = len(concatenated_examples[list(examples.keys())[0]])
-            # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
-            # customize this part to your needs.
-            total_length = (total_length // max_seq_length) * max_seq_length
-            # Split by chunks of max_len.
-            result = {
-                k: [t[i : i + max_seq_length] for i in range(0, total_length, max_seq_length)]
-                for k, t in concatenated_examples.items()
-            }
-            return result
+    # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a remainder
+    # for each of those groups of 1,000 texts. You can adjust that batch_size here but a higher value might be slower
+    # to preprocess.
+    #
+    # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
+    # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
 
-        # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a
-        # remainder for each of those groups of 1,000 texts. You can adjust that batch_size here but a higher value
-        # might be slower to preprocess.
-        #
-        # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
-        # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
+    lm_datasets = tokenized_datasets.map(
+        group_texts,
+        batched=True,
+        num_proc=data_args.preprocessing_num_workers,
+        load_from_cache_file=not data_args.overwrite_cache,
+        desc=f"Grouping texts in chunks of {block_size}",
+    )
 
-        tokenized_datasets = tokenized_datasets.map(
-            group_texts,
-            batched=True,
-            num_proc=data_args.preprocessing_num_workers,
-            load_from_cache_file=not data_args.overwrite_cache,
-            desc=f"Grouping texts in chunks of {max_seq_length}",
-        )
+    train_dataset = lm_datasets["train"]
+    eval_dataset = lm_datasets["validation"]
 
-    train_dataset = tokenized_datasets["train"]
     if data_args.max_train_samples is not None:
         train_dataset = train_dataset.select(range(data_args.max_train_samples))
-    eval_dataset = tokenized_datasets["validation"]
     if data_args.max_eval_samples is not None:
         eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
 
@@ -493,19 +438,14 @@ def main():
 
     with training_args.strategy.scope():
         # region Prepare model
-        if checkpoint is not None:
-            model = TFAutoModelForMaskedLM.from_pretrained(
-                checkpoint,
-                config=config,
-            )
-        elif model_args.model_name_or_path:
-            model = TFAutoModelForMaskedLM.from_pretrained(
+        if model_args.model_name_or_path:
+            model = TFAutoModelForCausalLM.from_pretrained(
                 model_args.model_name_or_path,
                 config=config,
             )
         else:
             logger.info("Training new model from scratch")
-            model = TFAutoModelForMaskedLM.from_config(config)
+            model = TFAutoModelForCausalLM.from_config(config)
 
         model.resize_token_embeddings(len(tokenizer))
         # endregion
@@ -518,7 +458,6 @@ def main():
             for feature in train_dataset.features
             if feature != "special_tokens_mask"
         }
-        train_sig["labels"] = train_sig["input_ids"]
         train_sig = (train_sig, train_sig["labels"])
         tf_train_dataset = (
             tf.data.Dataset.from_generator(train_gen, output_signature=train_sig)
@@ -531,10 +470,11 @@ def main():
             for feature in eval_dataset.features
             if feature != "special_tokens_mask"
         }
-        eval_sig["labels"] = eval_sig["input_ids"]
         eval_sig = (eval_sig, eval_sig["labels"])
-        tf_eval_dataset = tf.data.Dataset.from_generator(eval_gen, output_signature=eval_sig).batch(
-            batch_size=num_replicas * training_args.per_device_eval_batch_size, drop_remainder=True
+        tf_eval_dataset = (
+            tf.data.Dataset.from_generator(eval_gen, output_signature=eval_sig)
+            .batch(batch_size=num_replicas * training_args.per_device_eval_batch_size, drop_remainder=True)
+            .repeat(int(training_args.num_train_epochs))
         )
         # endregion
 
@@ -579,17 +519,17 @@ def main():
             validation_perplexity = math.exp(history.history["val_loss"][-1])
         except OverflowError:
             validation_perplexity = math.inf
-        logger.warning(f"  Final train loss: {history.history['loss'][-1]:.3f}")
-        logger.warning(f"  Final train perplexity: {train_perplexity:.3f}")
-        logger.warning(f"  Final validation loss: {history.history['val_loss'][-1]:.3f}")
-        logger.warning(f"  Final validation perplexity: {validation_perplexity:.3f}")
+        logger.info(f"  Final train loss: {history.history['loss'][-1]:.3f}")
+        logger.info(f"  Final train perplexity: {train_perplexity:.3f}")
+        logger.info(f"  Final validation loss: {history.history['val_loss'][-1]:.3f}")
+        logger.info(f"  Final validation perplexity: {validation_perplexity:.3f}")
         # endregion
 
         if training_args.output_dir is not None:
             model.save_pretrained(training_args.output_dir)
 
     if training_args.push_to_hub:
-        # You'll probably want to append some of your own metadata here!
+        # You'll probably want to include some of your own metadata here!
         model.push_to_hub()
 
 
