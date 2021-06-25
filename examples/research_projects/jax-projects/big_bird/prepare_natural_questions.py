@@ -307,6 +307,7 @@ def save_to_disk(hf_data, file_name):
 if __name__ == "__main__":
     """Running area"""
     from datasets import load_dataset
+
     from transformers import BigBirdTokenizer
 
     data = load_dataset("natural_questions")
