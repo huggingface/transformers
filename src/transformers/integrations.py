@@ -42,7 +42,7 @@ if _has_comet:
         _has_comet = False
 
 from .file_utils import ENV_VARS_TRUE_VALUES, is_torch_tpu_available  # noqa: E402
-from .trainer_callback import TrainerCallback  # noqa: E402
+from .trainer_callback import ProgressCallback, TrainerCallback  # noqa: E402
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy  # noqa: E402
 
 
@@ -153,6 +153,14 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
     import ray
 
     def _objective(trial, local_trainer, checkpoint_dir=None):
+        try:
+            from transformers.utils.notebook import NotebookProgressCallback
+
+            if local_trainer.pop_callback(NotebookProgressCallback):
+                local_trainer.add_callback(ProgressCallback)
+        except ModuleNotFoundError:
+            pass
+
         checkpoint = None
         if checkpoint_dir:
             for subdir in os.listdir(checkpoint_dir):
