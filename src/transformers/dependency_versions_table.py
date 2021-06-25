@@ -42,7 +42,7 @@ deps = {
     "pytest-sugar": "pytest-sugar",
     "pytest-xdist": "pytest-xdist",
     "python": "python>=3.6.0",
-    "ray[tune]": "ray[tune]",
+    "ray": "ray",
     "recommonmark": "recommonmark",
     "regex": "regex!=2019.12.17",
     "requests": "requests",
