@@ -308,7 +308,7 @@ if __name__ == "__main__":
 
     # Setup logging
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         level="NOTSET",
         datefmt="[%X]",
     )
