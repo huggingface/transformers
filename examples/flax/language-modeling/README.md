@@ -220,7 +220,6 @@ Next, let's add a symbolic link to the `run_t5_mlm_flax.py` and `t5_tokenizer_mo
 
 ```bash
 export MODEL_DIR="./norwegian-t5-base"
-mkdir -p ${MODEL_DIR}
 ln -s ~/transformers/examples/flax/language-modeling/run_t5_mlm_flax.py run_t5_mlm_flax.py
 ln -s ~/transformers/examples/flax/language-modeling/t5_tokenizer_model.py t5_tokenizer_model.py
 ```
@@ -315,7 +314,7 @@ Next we can run the example script to pretrain the model:
 Training should converge at a loss and accuracy 
 of XXX and XXX respectively after 18 epochs on a single TPUv3-8.
 This should take less than 18 hours.
-Training statistics can be accessed on [tfhub.de (TODO)]()
+Training statistics can be accessed on directly on the 🤗 [hub (TODO)]()
 
 ## Runtime evaluation
 
