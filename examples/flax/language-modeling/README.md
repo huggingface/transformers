@@ -223,12 +223,12 @@ import datasets
 from t5_tokenizer_model import SentencePieceUnigramTokenizer
 
 
-vocab_size = 31_995
+vocab_size = 32_000
 input_sentence_size = None
 model_dir = "./norwegian-t5-base"  # ${MODEL_DIR}
 
 # Initialize a dataset
-dataset = datasets.load_dataset("oscar", name="unshuffled_deduplicated_is", split="train")
+dataset = datasets.load_dataset("oscar", name="unshuffled_deduplicated_no", split="train")
 
 tokenizer = SentencePieceUnigramTokenizer()
 
@@ -283,7 +283,7 @@ Next we can run the example script to pretrain the model:
     --dataset_config_name="unshuffled_deduplicated_no" \
     --max_seq_length="512" \
     --weight_decay="0.01" \
-    --per_device_train_batch_size="" \
+    --per_device_train_batch_size="16" \
     --per_device_eval_batch_size="16" \
     --learning_rate="3e-4" \
     --warmup_steps="1000" \
