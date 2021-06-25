@@ -41,6 +41,10 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
+    def assert_all_equal(self, batches: list, key: str, shape: tuple) -> bool:
+        for batch in batches:
+            self.assertEqual(batch[key], tf.TensorShape(shape))
+
     def _test_normal_with_special_tokens_mask(self, features):
         tokenizer = BertTokenizer(self.vocab_file)
         special_tokens_mask = tokenizer.get_special_tokens_mask
@@ -55,8 +59,8 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
             .map(tf_data_collator)
         )
 
-        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
-        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 10)))
+        self.assert_all_equal(batch, 'input_ids', (2, 10))
+        self.assert_all_equal(batch, 'labels', (2, 10))
 
         # --- Post Batching w/ No Padding
         batch = (
@@ -93,51 +97,54 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
         tf_data_collator = TFDataCollatorForLanguageModeling(tokenizer)
 
         tf_dataset_no_pad = tf.data.Dataset.from_generator(
-            lambda: no_pad_features, output_shapes=None
+            lambda: no_pad_features, output_types=tf.int32
         )
         tf_dataset_pad = tf.data.Dataset.from_generator(
-            lambda: pad_features, output_shapes=None
+            lambda: pad_features, output_types=tf.int32
         )
 
         # --- Pre Batching w/ No Padding ----
         batch = (
-            deepcopy(tf_dataset_no_pad)
-            .batch(2)
+            tf_dataset_no_pad
+            .batch(1)
             .map(tf_data_collator)
+            .as_numpy_iterator()
         )
 
+        # print(list(batch.as_numpy_iterator()))
+        print(type(batch))
         self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
         self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 10)))
 
         # --- Post Batching w/ No Padding
-        batch = ( 
-            deepcopy(tf_dataset_no_pad)
-            .map(tf_data_collator)
-            .batch(2)
-        )
-
-        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
-        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 10)))
-
-        # --- Pre Batching w/ Padding ---
-        batch = (
-            deepcopy(tf_dataset_pad)
-            .padded_batch(2, 16)
-            .map(tf_data_collator)
-        )
-
-        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
-        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 10)))
-
-        # --- Post Batching w/ Padding ---
-        batch = (
-            deepcopy(tf_dataset_pad)
-            .map(tf_data_collator)
-            .padded_batch(2, 16)
-        )
-
-        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
-        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 10)))
+        #batch = (
+        #     deepcopy(tf_dataset_no_pad)
+        #     .map(tf_data_collator)
+        #     .batch(2)
+        # )
+        #
+        # self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
+        # self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 10)))
+        #
+        # # --- Pre Batching w/ Padding ---
+        # batch = (
+        #     deepcopy(tf_dataset_pad)
+        #     .padded_batch(2, 16)
+        #     .map(tf_data_collator)
+        # )
+        #
+        # self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
+        # self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 10)))
+        #
+        # # --- Post Batching w/ Padding ---
+        # batch = (
+        #     deepcopy(tf_dataset_pad)
+        #     .map(tf_data_collator)
+        #     .padded_batch(2, 16)
+        # )
+        #
+        # self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
+        # self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 10)))
 
         # batch = tf_data_collator(features)
         # self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
@@ -166,16 +173,17 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
         self._test_normal_without_special_tokens_mask(no_pad_features, pad_features)
 
         # tf.Tensor case
-        no_pad_features = [(tf.constant(list(range(10))), tf.constant(list(range(10)))),
-                           (tf.constant(list(range(10))), tf.constant(list(range(10))))]
-        pad_features = [(tf.constant(list(range(5))), tf.constant(list(range(10)))),
-                        (tf.constant(list(range(5))), tf.constant(list(range(10))))]
-        self._test_normal_without_special_tokens_mask(no_pad_features, pad_features)
+        # no_pad_features = [(tf.constant(list(range(10))), tf.constant(list(range(10)))),
+        #                    (tf.constant(list(range(10))), tf.constant(list(range(10))))]
+        # pad_features = [(tf.constant(list(range(5))), tf.constant(list(range(10)))),
+        #                 (tf.constant(list(range(5))), tf.constant(list(range(10))))]
+        # self._test_normal_without_special_tokens_mask(no_pad_features, pad_features)
 
     def test_nsp(self):
         tokenizer = BertTokenizer(self.vocab_file)
-        features = [(tf.constant(list(range(5))), tf.constant(list(range(5))), 0),
-                        (tf.constant(list(range(5))), tf.constant(list(range(5))), 1)]
+        features = {"input_data": [[0, 1, 2, 3, 4] for i in range(2)],
+                     "token_type_ids": [[0, 1, 2, 3, 4] for i in range(2)],
+                     "sentence_prediction_label": [i for i in range(2)]}
         data_collator = TFDataCollatorForLanguageModeling(tokenizer)
         batch = data_collator(features)
 
@@ -194,8 +202,9 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
 
     def test_sop(self):
         tokenizer = BertTokenizer(self.vocab_file)
-        features = [(tf.constant(list(range(5))), tf.constant(list(range(5))), 0),
-                        (tf.constant(list(range(5))), tf.constant(list(range(5))), 1)]
+        features = {"input_data": [[0, 1, 2, 3, 4] for i in range(2)],
+                     "token_type_ids": [[0, 1, 2, 3, 4] for i in range(2)],
+                     "sentence_prediction_label": [i for i in range(2)]}
         data_collator = TFDataCollatorForLanguageModeling(tokenizer)
         batch = data_collator(features)
 

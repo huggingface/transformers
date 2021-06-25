@@ -20,7 +20,7 @@ import tensorflow as tf
 from ..tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 
 
-@dataclass
+@dataclass(frozen=True)
 class TFDataCollatorForLanguageModeling:
     """
     Data collator used for language modeling. Encodes sequences for Masked Language Modeling as mentioned in the paper
@@ -82,11 +82,11 @@ class TFDataCollatorForLanguageModeling:
 
         if self.special_tokens_mask is None:
             special_tokens_tensor = tf.constant(self.tokenizer.all_special_ids, dtype=tf.int32)
-            self.special_tokens_mask = self.mask_special_tokens(labels, self.special_tokens_tensor)
+            special_tokens_mask = self.mask_special_tokens(labels, special_tokens_tensor)
         else:
-            self.special_tokens_mask = tf.cast(self.special_tokens_mask, dtype=tf.bool)
+            special_tokens_mask = tf.cast(self.special_tokens_mask, dtype=tf.bool)
 
-        probability_matrix = tf.where(~self.special_tokens_mask, probability_matrix, 0)
+        probability_matrix = tf.where(~special_tokens_mask, probability_matrix, 0)
         masked_indices = self.pseudo_bernoulli(probability_matrix, labels)
 
         labels = tf.where(masked_indices, labels, -100)  # We only compute loss on masked tokens
