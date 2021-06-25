@@ -338,7 +338,7 @@ def main():
 
     model.resize_token_embeddings(len(tokenizer))
 
-    # Preprocessing the raw_datasets.
+    # Preprocessing the datasets.
     # First we tokenize all the texts.
     if training_args.do_train:
         column_names = raw_datasets["train"].column_names

@@ -324,7 +324,7 @@ def main():
             )
         max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
-    # Preprocessing the raw_datasets.
+    # Preprocessing the datasets.
     def preprocess_function(examples):
         first_sentences = [[context] * 4 for context in examples[context_name]]
         question_headers = examples[question_header_name]

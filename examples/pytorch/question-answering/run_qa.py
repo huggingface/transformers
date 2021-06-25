@@ -314,7 +314,7 @@ def main():
             "requirement"
         )
 
-    # Preprocessing the raw_datasets.
+    # Preprocessing the datasets.
     # Preprocessing is slighlty different for training and evaluation.
     if training_args.do_train:
         column_names = raw_datasets["train"].column_names
