@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
+from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordPieceTrainer
 
 from .convert_slow_tokenizer import convert_slow_tokenizer
 from .file_utils import PaddingStrategy, add_end_docstrings
@@ -59,6 +60,12 @@ INIT_TOKENIZER_DOCSTRING += """
             A :class:`tokenizers.Tokenizer` object from 🤗 tokenizers to instantiate from. See :doc:`Using tokenizers
             from 🤗 tokenizers <../fast_tokenizers>` for more information.
 """
+
+MODEL_TO_TRAINER_MAPPING = {
+    "BPE": BpeTrainer,
+    "Unigram": UnigramTrainer,
+    "WordPiece": WordPieceTrainer,
+}
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
@@ -555,3 +562,50 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             file_names = file_names + (tokenizer_file,)
 
         return file_names
+
+    def train_new_from_iterator(self, text_iterator, vocab_size, special_tokens=None, **kwargs):
+        tokenizer_json = json.loads(self._tokenizer.to_str())
+        # Remove added tokens for now (uses IDs of tokens)
+        added_tokens = tokenizer_json.pop("added_tokens")
+        # Remove post processor for now (uses IDs of tokens)
+        post_processor = tokenizer_json.pop("post_processor")
+        # Remove vocab
+        if tokenizer_json["model"]["type"] == "BPE":
+            tokenizer_json["model"]["vocab"] = {}
+            tokenizer_json["model"]["merges"] = []
+        elif tokenizer_json["model"]["type"] == "Unigram":
+            if tokenizer_json["model"]["unk_id"] is not None:
+                unk_id = tokenizer_json["model"]["unk_id"]
+                tokenizer_json["model"]["unk_id"] = 0
+                tokenizer_json["model"]["vocab"] = [tokenizer_json["model"]["vocab"][unk_id]]
+        elif tokenizer_json["model"]["type"] == "WordPiece":
+            tokenizer_json["model"]["vocab"] = {}
+
+        tokenizer = TokenizerFast.from_str(json.dumps(tokenizer_json))
+
+        # Get the special tokens from the current tokenizer if none are specified.
+        if special_tokens is None:
+            special_tokens = []
+            for added_token in added_tokens:
+                if tokenizer_json["model"]["type"] != "Unigram":
+                    special = added_token.pop("special")
+                    if not special:
+                        continue
+                    _ = added_token.pop("id")
+                special_tokens.append(AddedToken(**added_token))
+
+        trainer_class = MODEL_TO_TRAINER_MAPPING[tokenizer_json["model"]["type"]]
+        trainer = trainer_class(vocab_size=vocab_size, special_tokens=special_tokens, **kwargs)
+        tokenizer.train_from_iterator(text_iterator, trainer=trainer)
+
+        if post_processor is not None and "special_tokens" in post_processor:
+            # Almost done, we just have to adjust the token IDs in the post processor
+            trained_tokenizer_json = json.loads(tokenizer.to_str())
+            for key in post_processor["special_tokens"]:
+                post_processor["special_tokens"][key]["ids"] = [
+                    tokenizer.token_to_id(token) for token in post_processor["special_tokens"][key]["tokens"]
+                ]
+            trained_tokenizer_json["post_processor"] = post_processor
+            tokenizer = TokenizerFast.from_str(json.dumps(trained_tokenizer_json))
+
+        return self.__class__(tokenizer_object=tokenizer)
