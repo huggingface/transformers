@@ -71,9 +71,7 @@ def postprocess_qa_predictions(
         prefix (:obj:`str`, `optional`):
             If provided, the dictionaries mentioned above are saved with `prefix` added to their names.
         log_level (:obj:`int`, `optional`, defaults to ``logging.WARNING``):
-            log level to be used depending on whether this process is the main process of node 0, main process
-            of node non-0, or a non-main process. Possible choices are the log levels as int: 'logging.WARNING',
-            'logging.INFO' etc depending on `TrainingArguments`
+            ``logging`` log level (e.g., ``logging.WARNING``)
     """
     assert len(predictions) == 2, "`predictions` should be a tuple with two elements (start_logits, end_logits)."
     all_start_logits, all_end_logits = predictions
@@ -283,9 +281,7 @@ def postprocess_qa_predictions_with_beam_search(
         prefix (:obj:`str`, `optional`):
             If provided, the dictionaries mentioned above are saved with `prefix` added to their names.
         log_level (:obj:`int`, `optional`, defaults to ``logging.WARNING``):
-            log level to be used depending on whether this process is the main process of node 0, main process
-            of node non-0, or a non-main process. Possible choices are the log levels as int: 'logging.WARNING',
-            'logging.INFO' etc depending on `TrainingArguments`
+            ``logging`` log level (e.g., ``logging.WARNING``)
     """
     assert len(predictions) == 5, "`predictions` should be a tuple with five elements."
     start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits = predictions
