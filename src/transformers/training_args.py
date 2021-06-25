@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
 import json
 import os
 import warnings
@@ -967,6 +968,30 @@ class TrainingArguments:
         Whether or not to use no_sync for the gradients when doing gradient accumulation.
         """
         return not (self.deepspeed or is_sagemaker_dp_enabled() or is_sagemaker_mp_enabled())
+
+    @contextlib.contextmanager
+    def main_process_first(self):
+        """
+        A context manager for torch distributed environment where on needs to do something on the main process, while
+        blocking replicas, and when it's finished releasing the replicas.
+
+        One such use is for ``datasets``'s ``map`` feature which to be efficient should be run once on the main
+        process, which also creates a cached version and then having the replicas load the cached version of the same.
+        """
+        if is_torch_available() and self.world_size > 1:
+            try:
+                if self.local_rank > 0:
+                    # tell all replicas to wait
+                    logger.debug(f"{self.local_rank}: Waiting for the main process to perform work")
+                    torch.distributed.barrier()
+                yield
+            finally:
+                if self.local_rank == 0:
+                    # the wait is over
+                    logger.debug(f"{self.local_rank}: Releasing all replicas")
+                    torch.distributed.barrier()
+        else:
+            yield
 
     def to_dict(self):
         """
