@@ -187,6 +187,116 @@ of 3.24 and 25.72 respectively after 20 epochs on a single TPUv3-8.
 This should take less than ~21 hours.
 Training statistics can be accessed on [tfhub.de](https://tensorboard.dev/experiment/2zEhLwJ0Qp2FAkI3WVH9qA).
 
+## T5-like span-masked language modeling
+
+In the following, we demonstrate how to train a T5 model using the span-masked language model 
+objective as proposed in the [Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer](https://arxiv.org/abs/1910.10683).
+More specifically, we demonstrate how JAX/Flax can be leveraged 
+to pre-train [**`t5-base`**](https://huggingface.co/t5-base)
+in Norwegian on a single TPUv3-8 pod.
+
+The example script uses the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
+
+Let's start by creating a folder to save the trained model and a symbolic link to the `run_mlm_flax.py` script.
+
+```bash
+export MODEL_DIR="./norwegian-t5-base"
+mkdir -p ${MODEL_DIR}
+ln -s ~/transformers/examples/flax/language-modeling/run_t5_mlm_flax.py run_t5_mlm_flax.py
+ln -s ~/transformers/examples/flax/language-modeling/t5_tokenizer_model.py t5_tokenizer_model.py
+```
+
+### Train tokenizer
+
+In the first step, we train a tokenizer to efficiently process the text input for the model. 
+We make use of the [tokenizers](https://github.com/huggingface/tokenizers) library to train 
+a sentencepiece unigram tokenizer as shown in [t5_tokenizer_model.py](https://github.com/huggingface/transformers/tree/master/examples/flax/language-modeling/t5_tokenizer_model.py) 
+which is heavily inspired from [yandex-research/DeDLOC's tokenizer model](https://github.com/yandex-research/DeDLOC/blob/5c994bc64e573702a9a79add3ecd68b38f14b548/sahajbert/tokenizer/tokenizer_model.py) .
+
+The tokenizer is trained on the complete Norwegian dataset of OSCAR
+and consequently saved in `${MODEL_DIR}`
+This can take up to 45 minutes depending on your hardware ☕.
+
+```python
+import datasets
+
+from t5_tokenizer_model import SentencePieceUnigramTokenizer
+
+
+vocab_size = 31_995
+input_sentence_size = None
+model_dir = "./norwegian-t5-base"  # ${MODEL_DIR}
+
+# Initialize a dataset
+dataset = datasets.load_dataset("oscar", name="unshuffled_deduplicated_is", split="train")
+
+tokenizer = SentencePieceUnigramTokenizer()
+
+
+# Build an iterator over this dataset
+def batch_iterator(input_sentence_size=None):
+    if input_sentence_size is None:
+        input_sentence_size = len(dataset)
+    batch_length = 100
+    for i in range(0, input_sentence_size, batch_length):
+        yield dataset[i: i + batch_length]["text"]
+
+
+# Train tokenizer
+tokenizer.train_from_iterator(
+    iterator=batch_iterator(input_sentence_size=input_sentence_size),
+    vocab_size=vocab_size,
+    show_progress=True,
+    special_tokens=["<pad>", "</s>", "<unk>"],
+)
+
+# Save files to disk
+tokenizer.save(f"{model_dir}/tokenizer.json")
+```
+
+### Create configuration
+
+Next, we create the model's configuration file. This is as simple 
+as loading and storing [`**t5-base**`](https://huggingface.co/t5-base)
+in the local model folder:
+
+```python
+from transformers import T5Config
+
+model_dir = "./norwegian-t5-base"  # ${MODEL_DIR}
+
+config = T5Config.from_pretrained("t5-base")
+config.save_pretrained(model_dir)
+```
+
+### Train model
+
+Next we can run the example script to pretrain the model:
+
+```bash
+./run_mlm_flax.py \
+    --output_dir="./runs" \
+    --model_type="roberta" \
+    --config_name="${MODEL_DIR}" \
+    --tokenizer_name="${MODEL_DIR}" \
+    --dataset_name="oscar" \
+    --dataset_config_name="unshuffled_deduplicated_no" \
+    --max_seq_length="512" \
+    --weight_decay="0.01" \
+    --per_device_train_batch_size="" \
+    --per_device_eval_batch_size="16" \
+    --learning_rate="3e-4" \
+    --warmup_steps="1000" \
+    --overwrite_output_dir \
+    --num_train_epochs="18" \
+    --adam_beta1="0.9" \
+    --adam_beta2="0.98"
+```
+
+Training should converge at a loss and accuracy 
+of XXX and XXX respectively after 18 epochs on a single TPUv3-8.
+This should take less than 18 hours.
+Training statistics can be accessed on [tfhub.de (TODO)]()
 
 ## Runtime evaluation
 

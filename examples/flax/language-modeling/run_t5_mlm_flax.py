@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 
 # You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import numpy as np
 from datasets import load_dataset
@@ -44,12 +44,12 @@ from flax.training.common_utils import get_metrics, onehot, shard
 from transformers import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_MASKED_LM_MAPPING,
-    AutoConfig,
-    AutoTokenizer,
-    FlaxAutoModelForSeq2SeqLM,
+    BatchEncoding,
+    FlaxT5ForConditionalGeneration,
     HfArgumentParser,
     PreTrainedTokenizerBase,
-    TensorType,
+    T5Config,
+    T5TokenizerFast,
     TrainingArguments,
     is_tensorboard_available,
     set_seed,
@@ -221,21 +221,20 @@ def compute_input_and_target_lengths(inputs_length, noise_density, mean_noise_sp
 @flax.struct.dataclass
 class FlaxDataCollatorForT5MLM:
     """
-    Data collator used for language modeling. Inputs are dynamically padded to the maximum length of a batch if they
-    are not all of the same length.
+    Data collator used for T5 span-masked language modeling. It is made sure that after masking the inputs are of length `data_args.max_seq_length` and targets are also of fixed length.
+    For more information on how T5 span-masked language modeling works, one can take a look
+    at the `official paper <https://arxiv.org/pdf/1910.10683.pdf>`__ or the `official code for preprocessing <https://github.com/google-research/text-to-text-transfer-transformer/blob/master/t5/data/preprocessors.py>`__ .
 
     Args:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
             The tokenizer used for encoding the data.
-        mlm_probability (:obj:`float`, `optional`, defaults to 0.15):
+        noise_density (:obj:`float`, `optional`, defaults to 0.15):
             The probability with which to (randomly) mask tokens in the input.
-
-    .. note::
-
-        For best performance, this data collator should be used with a dataset having items that are dictionaries or
-        BatchEncoding, with the :obj:`"special_tokens_mask"` key, as returned by a
-        :class:`~transformers.PreTrainedTokenizer` or a :class:`~transformers.PreTrainedTokenizerFast` with the
-        argument :obj:`return_special_tokens_mask=True`.
+    mean_noise_span_length: float
+    input_length: int
+    target_length: int
+    pad_token_id: int
+    decoder_start_token_id: int
     """
 
     tokenizer: PreTrainedTokenizerBase
@@ -247,8 +246,11 @@ class FlaxDataCollatorForT5MLM:
     decoder_start_token_id: int
 
     def __call__(self, examples: List[Dict[str, np.ndarray]]) -> Dict[str, np.ndarray]:
-        # Handle dict or lists with proper padding and conversion to tensor.
-        batch = self.tokenizer.pad(examples, return_tensors=TensorType.NUMPY)
+
+        # convert list to dict and tensorize input
+        batch = BatchEncoding(
+            {k: np.array([examples[i][k] for i in range(len(examples))]) for k, v in examples[0].items()}
+        )
 
         input_ids = batch["input_ids"]
         batch_size, expandend_input_length = input_ids.shape
@@ -273,10 +275,14 @@ class FlaxDataCollatorForT5MLM:
         batch["decoder_input_ids"] = shift_tokens_right(
             batch["labels"], self.pad_token_id, self.decoder_start_token_id
         )
-
         return batch
 
     def create_sentinel_ids(self, mask_indices):
+        """
+        Sentinel ids creation given the indices that should be masked.
+        The start indices of each mask are replaced by the sentinel ids in increasing
+        order. Consecutive mask indices to be deleted are replaced with `-1`.
+        """
         start_indices = mask_indices - np.roll(mask_indices, 1, axis=-1) * mask_indices
         start_indices[:, 0] = mask_indices[:, 0]
 
@@ -287,6 +293,9 @@ class FlaxDataCollatorForT5MLM:
         return sentinel_ids
 
     def filter_input_ids(self, input_ids, sentinel_ids):
+        """
+        Puts sentinel mask on `input_ids` and fuse consecutive mask tokens into a single mask token by deleting. This will reduce the sequence length from `expanded_inputs_length` to `input_length`.
+        """
         batch_size = input_ids.shape[0]
 
         input_ids_full = np.where(sentinel_ids != 0, sentinel_ids, input_ids)
@@ -297,7 +306,10 @@ class FlaxDataCollatorForT5MLM:
         return input_ids
 
     def random_spans_noise_mask(self, length):
-        """Noise mask consisting of random spans of noise tokens.
+
+        """This function is copy of `random_spans_helper <https://github.com/google-research/text-to-text-transfer-transformer/blob/84f8bcc14b5f2c03de51bd3587609ba8f6bbd1cd/t5/data/preprocessors.py#L2682>`__ .
+
+        Noise mask consisting of random spans of noise tokens.
         The number of noise tokens and the number of noise spans and non-noise spans
         are determined deterministically as follows:
         num_noise_tokens = round(length * noise_density)
@@ -355,35 +367,6 @@ class FlaxDataCollatorForT5MLM:
         is_noise = np.equal(span_num % 2, 1)
 
         return is_noise[:orig_length]
-
-    def mask_tokens(
-        self, inputs: np.ndarray, special_tokens_mask: Optional[np.ndarray]
-    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        """
-        Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
-        """
-        labels = inputs.copy()
-        # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
-        probability_matrix = np.full(labels.shape, self.mlm_probability)
-        special_tokens_mask = special_tokens_mask.astype("bool")
-
-        probability_matrix[special_tokens_mask] = 0.0
-        masked_indices = np.random.binomial(1, probability_matrix).astype("bool")
-        labels[~masked_indices] = -100  # We only compute loss on masked tokens
-
-        # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-        indices_replaced = np.random.binomial(1, np.full(labels.shape, 0.8)).astype("bool") & masked_indices
-        inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
-
-        # 10% of the time, we replace masked input tokens with random word
-        indices_random = np.random.binomial(1, np.full(labels.shape, 0.5)).astype("bool")
-        indices_random &= masked_indices & ~indices_replaced
-
-        random_words = np.random.randint(self.tokenizer.vocab_size, size=labels.shape, dtype="i4")
-        inputs[indices_random] = random_words[indices_random]
-
-        # The rest of the time (10% of the time) we keep the masked input tokens unchanged
-        return inputs, labels
 
 
 def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndarray:
@@ -502,19 +485,19 @@ if __name__ == "__main__":
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
     if model_args.config_name:
-        config = AutoConfig.from_pretrained(model_args.config_name, cache_dir=model_args.cache_dir)
+        config = T5Config.from_pretrained(model_args.config_name, cache_dir=model_args.cache_dir)
     elif model_args.model_name_or_path:
-        config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
+        config = T5Config.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
 
     if model_args.tokenizer_name:
-        tokenizer = AutoTokenizer.from_pretrained(
+        tokenizer = T5TokenizerFast.from_pretrained(
             model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
         )
     elif model_args.model_name_or_path:
-        tokenizer = AutoTokenizer.from_pretrained(
+        tokenizer = T5TokenizerFast.from_pretrained(
             model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
         )
     else:
@@ -533,11 +516,9 @@ if __name__ == "__main__":
 
     max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
-    # Otherwise, we tokenize every text, then concatenate them together before splitting them in smaller parts.
-    # We use `return_special_tokens_mask=True` because DataCollatorForLanguageModeling (see below) is more
-    # efficient when it receives the `special_tokens_mask`.
+    # Otherwise, we tokenize every text, then concatenate them together before splitting them in smaller parts. Since we make sure that all sequences are of the same length, no attention_mask is needed.
     def tokenize_function(examples):
-        return tokenizer(examples[text_column_name], return_special_tokens_mask=True)
+        return tokenizer(examples[text_column_name], return_attention_mask=False)
 
     tokenized_datasets = datasets.map(
         tokenize_function,
@@ -590,9 +571,7 @@ if __name__ == "__main__":
     rng = jax.random.PRNGKey(training_args.seed)
     dropout_rngs = jax.random.split(rng, jax.local_device_count())
 
-    model = FlaxAutoModelForSeq2SeqLM.from_config(
-        config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
-    )
+    model = FlaxT5ForConditionalGeneration(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
 
     # Data collator
     # This one will take care of randomly masking the tokens.
@@ -658,11 +637,7 @@ if __name__ == "__main__":
             logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
 
             # compute loss, ignore padded input tokens
-            label_mask = jnp.where(labels > 0, 1.0, 0.0)
-            loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1])) * label_mask
-
-            # take average
-            loss = loss.sum() / label_mask.sum()
+            loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1])).mean()
 
             return loss
 
@@ -687,15 +662,14 @@ if __name__ == "__main__":
         logits = model(**batch, params=params, train=False)[0]
 
         # compute loss, ignore padded input tokens
-        label_mask = jnp.where(labels > 0, 1.0, 0.0)
-        loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1])) * label_mask
+        loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1]))
 
         # compute accuracy
-        accuracy = jnp.equal(jnp.argmax(logits, axis=-1), labels) * label_mask
+        accuracy = jnp.equal(jnp.argmax(logits, axis=-1), labels)
 
         # summarize metrics
-        metrics = {"loss": loss.sum(), "accuracy": accuracy.sum(), "normalizer": label_mask.sum()}
-        metrics = jax.lax.psum(metrics, axis_name="batch")
+        metrics = {"loss": loss.mean(), "accuracy": accuracy.mean()}
+        metrics = jax.lax.pmean(metrics, axis_name="batch")
 
         return metrics
 
@@ -732,7 +706,7 @@ if __name__ == "__main__":
         train_time += time.time() - train_start
 
         epochs.write(
-            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']})"
+            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss'].mean()}, Learning Rate: {train_metric['learning_rate'].mean()})"
         )
 
         # ======================== Evaluating ==============================
@@ -750,11 +724,9 @@ if __name__ == "__main__":
             metrics = p_eval_step(state.params, model_inputs)
             eval_metrics.append(metrics)
 
-        # normalize eval metrics
+        # get eval metrics
         eval_metrics = get_metrics(eval_metrics)
-        eval_metrics = jax.tree_map(jnp.sum, eval_metrics)
-        eval_normalizer = eval_metrics.pop("normalizer")
-        eval_metrics = jax.tree_map(lambda x: x / eval_normalizer, eval_metrics)
+        eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
 
         # Update progress bar
         epochs.desc = (
