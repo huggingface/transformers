@@ -428,7 +428,7 @@ def main():
         train_dataset = raw_datasets["train"]
         if data_args.max_train_samples is not None:
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
-        with training_args.main_process_first():
+        with training_args.main_process_first(desc="train dataset map pre-processing"):
             train_dataset = train_dataset.map(
                 preprocess_function,
                 batched=True,
@@ -445,7 +445,7 @@ def main():
         eval_dataset = raw_datasets["validation"]
         if data_args.max_eval_samples is not None:
             eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
-        with training_args.main_process_first():
+        with training_args.main_process_first(desc="eval dataset map pre-processing"):
             eval_dataset = eval_dataset.map(
                 preprocess_function,
                 batched=True,
@@ -462,7 +462,7 @@ def main():
         predict_dataset = raw_datasets["test"]
         if data_args.max_predict_samples is not None:
             predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
-        with training_args.main_process_first():
+        with training_args.main_process_first(desc="predict dataset map pre-processing"):
             predict_dataset = predict_dataset.map(
                 preprocess_function,
                 batched=True,
