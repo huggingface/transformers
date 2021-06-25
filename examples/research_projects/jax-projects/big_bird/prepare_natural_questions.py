@@ -4,19 +4,12 @@ import numpy as np
 from tqdm import tqdm
 
 import jsonlines
-import argparse
-from datasets import load_dataset
-from transformers import AutoTokenizer
 
-PROCESS_TRAIN = eval(os.environ.pop("PROCESS_TRAIN", "False"))
-
-CATEGORY_MAPPING = {
-    "null": 0,
-    "short": 1,
-    "long": 2,
-    "yes": 3,
-    "no": 4,
-}
+DOC_STRIDE = 2048
+MAX_LENGTH = 4096
+SEED = 42
+PROCESS_TRAIN = os.environ.pop("PROCESS_TRAIN", "false")
+CATEGORY_MAPPING = {"null": 0, "short": 1, "long": 2, "yes": 3, "no": 4}
 
 
 def _get_single_answer(example):
@@ -294,6 +287,7 @@ def prepare_inputs(
         max_length=max_length,
         assertion=assertion,
     )
+
     return example
 
 
@@ -321,34 +315,28 @@ def save_to_disk(hf_data, file_name):
                 )
 
 
-def get_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--file_name", type=str)
-    parser.add_argument("--doc_stride", default=2048, type=int)
-    parser.add_argument("--max_length", default=4096, type=int)
-    parser.add_argument("--seed", default=0, type=int)
-    parser.add_argument("--is_train", action="store_true", default=False, type=bool)
-    parser.add_argument("model_id", default="google/bigbird-roberta-base", type=str)
-    return parser.parse_args()
-
-
 if __name__ == "__main__":
-    args = get_args()
+    """Running area"""
+    from datasets import load_dataset
+    from transformers import BigBirdTokenizer
 
-    dataset = load_dataset("natural_questions")
-    tokenizer = AutoTokenizer.from_pretrained(args.model_id)
+    data = load_dataset("natural_questions")
+    tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
 
-    dataset = dataset["train" if args.is_train else "validation"]
+    data = data["train" if PROCESS_TRAIN == "true" else "validation"]
 
+    cache_file_name = "data/nq-training" if PROCESS_TRAIN == "true" else "data/nq-validation"
     fn_kwargs = dict(
         tokenizer=tokenizer,
-        doc_stride=args.doc_stride,
-        max_length=args.max_length,
+        doc_stride=DOC_STRIDE,
+        max_length=MAX_LENGTH,
         assertion=False,
     )
-    dataset = dataset.map(prepare_inputs, fn_kwargs=fn_kwargs)
-    dataset = dataset.remove_columns(["annotations", "document", "id", "question"])
-    print(dataset)
+    data = data.map(
+        prepare_inputs, fn_kwargs=fn_kwargs, cache_file_name=cache_file_name
+    )
+    data = data.remove_columns(["annotations", "document", "id", "question"])
+    print(data)
 
-    np.random.seed(args.seed)
-    save_to_disk(dataset, file_name=args.file_name + ".jsonl")
+    np.random.seed(SEED)
+    save_to_disk(data, file_name=cache_file_name + ".jsonl")
