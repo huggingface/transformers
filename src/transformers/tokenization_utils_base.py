@@ -1943,15 +1943,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_class = tokenizer_class[:-4]
         tokenizer_config["tokenizer_class"] = tokenizer_class
 
-        with open(tokenizer_config_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(tokenizer_config, ensure_ascii=False))
-        logger.info(f"tokenizer config file saved in {tokenizer_config_file}")
+        if self.is_fast is False:
+            with open(tokenizer_config_file, "w", encoding="utf-8") as f:
+                f.write(json.dumps(tokenizer_config, ensure_ascii=False))
+            logger.info(f"tokenizer config file saved in {tokenizer_config_file}")
 
-        # Sanitize AddedTokens in special_tokens_map
-        write_dict = convert_added_tokens(self.special_tokens_map_extended, add_type_field=False)
-        with open(special_tokens_map_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(write_dict, ensure_ascii=False))
-        logger.info(f"Special tokens file saved in {special_tokens_map_file}")
+            # Sanitize AddedTokens in special_tokens_map
+            write_dict = convert_added_tokens(self.special_tokens_map_extended, add_type_field=False)
+            with open(special_tokens_map_file, "w", encoding="utf-8") as f:
+                f.write(json.dumps(write_dict, ensure_ascii=False))
+            logger.info(f"Special tokens file saved in {special_tokens_map_file}")
 
         file_names = (tokenizer_config_file, special_tokens_map_file)
 
