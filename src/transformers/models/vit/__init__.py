@@ -37,7 +37,11 @@ if is_torch_available():
 
 
 if is_flax_available():
-    _import_structure["modeling_flax_vit"] = ["FlaxViTForImageClassification", "FlaxViTModel"]
+    _import_structure["modeling_flax_vit"] = [
+        "FlaxViTForImageClassification",
+        "FlaxViTModel",
+        "FlaxViTPreTrainedModel",
+    ]
 
 if TYPE_CHECKING:
     from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
@@ -54,7 +58,7 @@ if TYPE_CHECKING:
         )
 
     if is_flax_available():
-        from .modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel
+        from .modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel, FlaxViTPreTrainedModel
 
 
 else:

@@ -41,6 +41,7 @@ if is_torch_available():
         "ReformerLayer",
         "ReformerModel",
         "ReformerModelWithLMHead",
+        "ReformerPreTrainedModel",
     ]
 
 
@@ -63,6 +64,7 @@ if TYPE_CHECKING:
             ReformerLayer,
             ReformerModel,
             ReformerModelWithLMHead,
+            ReformerPreTrainedModel,
         )
 
 else:

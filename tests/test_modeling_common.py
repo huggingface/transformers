@@ -67,7 +67,7 @@ if is_torch_available():
     )
 
 if is_torch_fx_available():
-    from transformers.modeling_fx_utils import symbolic_trace
+    from transformers.utils.fx import symbolic_trace
 
 
 def _config_zero_init(config):
@@ -564,13 +564,34 @@ class ModelTesterMixin:
             model_state_dict = model.state_dict()
             loaded_model_state_dict = loaded_model.state_dict()
 
+            non_persistent_buffers = {}
+            for key in loaded_model_state_dict.keys():
+                if key not in model_state_dict.keys():
+                    non_persistent_buffers[key] = loaded_model_state_dict[key]
+
+            loaded_model_state_dict = {
+                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+            }
+
             self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+
+            model_buffers = list(model.buffers())
+            for non_persistent_buffer in non_persistent_buffers.values():
+                found_buffer = False
+                for i, model_buffer in enumerate(model_buffers):
+                    if torch.equal(non_persistent_buffer, model_buffer):
+                        found_buffer = True
+                        break
+
+                self.assertTrue(found_buffer)
+                model_buffers.pop(i)
 
             models_equal = True
             for layer_name, p1 in model_state_dict.items():
-                p2 = loaded_model_state_dict[layer_name]
-                if p1.data.ne(p2.data).sum() > 0:
-                    models_equal = False
+                if layer_name in loaded_model_state_dict:
+                    p2 = loaded_model_state_dict[layer_name]
+                    if p1.data.ne(p2.data).sum() > 0:
+                        models_equal = False
 
             self.assertTrue(models_equal)
 
@@ -1613,7 +1634,7 @@ class ModelPushToHubTester(unittest.TestCase):
         )
         model = BertModel(config)
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, push_to_hub=True, repo_name="test-model", use_auth_token=self._token)
+            model.save_pretrained(os.path.join(tmp_dir, "test-model"), push_to_hub=True, use_auth_token=self._token)
 
             new_model = BertModel.from_pretrained(f"{USER}/test-model")
             for p1, p2 in zip(model.parameters(), new_model.parameters()):
@@ -1626,9 +1647,8 @@ class ModelPushToHubTester(unittest.TestCase):
         model = BertModel(config)
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(
-                tmp_dir,
+                os.path.join(tmp_dir, "test-model-org"),
                 push_to_hub=True,
-                repo_name="test-model-org",
                 use_auth_token=self._token,
                 organization="valid_org",
             )

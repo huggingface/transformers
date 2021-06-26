@@ -38,6 +38,7 @@ if is_torch_available():
         "LongformerForSequenceClassification",
         "LongformerForTokenClassification",
         "LongformerModel",
+        "LongformerPreTrainedModel",
         "LongformerSelfAttention",
     ]
 
@@ -50,6 +51,7 @@ if is_tf_available():
         "TFLongformerForSequenceClassification",
         "TFLongformerForTokenClassification",
         "TFLongformerModel",
+        "TFLongformerPreTrainedModel",
         "TFLongformerSelfAttention",
     ]
 
@@ -70,6 +72,7 @@ if TYPE_CHECKING:
             LongformerForSequenceClassification,
             LongformerForTokenClassification,
             LongformerModel,
+            LongformerPreTrainedModel,
             LongformerSelfAttention,
         )
 
@@ -82,6 +85,7 @@ if TYPE_CHECKING:
             TFLongformerForSequenceClassification,
             TFLongformerForTokenClassification,
             TFLongformerModel,
+            TFLongformerPreTrainedModel,
             TFLongformerSelfAttention,
         )
 

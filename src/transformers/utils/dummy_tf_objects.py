@@ -431,6 +431,15 @@ class TFBlenderbotModel:
         requires_backends(cls, ["tf"])
 
 
+class TFBlenderbotPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
 class TFBlenderbotSmallForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
@@ -441,6 +450,15 @@ class TFBlenderbotSmallForConditionalGeneration:
 
 
 class TFBlenderbotSmallModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFBlenderbotSmallPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
@@ -845,6 +863,15 @@ class TFFlaubertModel:
         requires_backends(cls, ["tf"])
 
 
+class TFFlaubertPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
 class TFFlaubertWithLMHeadModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
@@ -917,6 +944,15 @@ class TFFunnelForTokenClassification:
 
 
 class TFFunnelModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFFunnelPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
@@ -1062,6 +1098,15 @@ class TFLongformerModel:
         requires_backends(cls, ["tf"])
 
 
+class TFLongformerPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
 class TFLongformerSelfAttention:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
@@ -1121,6 +1166,15 @@ class TFMarianMTModel:
         requires_backends(cls, ["tf"])
 
 
+class TFMarianPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
 class TFMBartForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
@@ -1131,6 +1185,15 @@ class TFMBartForConditionalGeneration:
 
 
 class TFMBartModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFMBartPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
@@ -1389,7 +1452,25 @@ class TFPegasusModel:
         requires_backends(cls, ["tf"])
 
 
+class TFPegasusPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
 class TFRagModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFRagPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 

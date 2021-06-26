@@ -12,11 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
 import json
 import os
 import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .debug_utils import DebugOption
@@ -48,6 +50,8 @@ if is_sagemaker_mp_enabled():
 
 
 logger = logging.get_logger(__name__)
+log_levels = logging.get_log_levels_dict().copy()
+trainer_log_levels = dict(**log_levels, passive=-1)
 
 
 def default_logdir() -> str:
@@ -144,9 +148,18 @@ class TrainingArguments:
         warmup_steps (:obj:`int`, `optional`, defaults to 0):
             Number of steps used for a linear warmup from 0 to :obj:`learning_rate`. Overrides any effect of
             :obj:`warmup_ratio`.
+        log_level (:obj:`str`, `optional`, defaults to ``passive``):
+            Logger log level to use on the main process. Possible choices are the log levels as strings: 'debug',
+            'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and lets the
+            application set the level.
+        log_level_replica (:obj:`str`, `optional`, defaults to ``passive``):
+            Logger log level to use on replicas. Same choices as ``log_level``"
+        log_on_each_node (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            In multinode distributed training, whether to log using :obj:`log_level` once per node, or only on the main
+            node.
         logging_dir (:obj:`str`, `optional`):
             `TensorBoard <https://www.tensorflow.org/tensorboard>`__ log directory. Will default to
-            `runs/**CURRENT_DATETIME_HOSTNAME**`.
+            `output_dir/runs/**CURRENT_DATETIME_HOSTNAME**`.
         logging_strategy (:obj:`str` or :class:`~transformers.trainer_utils.IntervalStrategy`, `optional`, defaults to :obj:`"steps"`):
             The logging strategy to adopt during training. Possible values are:
 
@@ -159,12 +172,12 @@ class TrainingArguments:
         logging_steps (:obj:`int`, `optional`, defaults to 500):
             Number of update steps between two logs if :obj:`logging_strategy="steps"`.
         save_strategy (:obj:`str` or :class:`~transformers.trainer_utils.IntervalStrategy`, `optional`, defaults to :obj:`"steps"`):
-            The checkpoint save strategy to adopt during training. Possible values are:
+            The checkpoint save strategy to adopt during training (Note that when :obj:`load_best_model_at_end=True`,
+            this parameter is ignored and the model is saved after each evaluation). Possible values are:
 
                 * :obj:`"no"`: No save is done during training.
                 * :obj:`"epoch"`: Save is done at the end of each epoch.
                 * :obj:`"steps"`: Save is done every :obj:`save_steps`.
-
         save_steps (:obj:`int`, `optional`, defaults to 500):
             Number of updates steps before two checkpoint saves if :obj:`save_strategy="steps"`.
         save_total_limit (:obj:`int`, `optional`):
@@ -307,17 +320,22 @@ class TrainingArguments:
             Whether to skip adding of memory profiler reports to metrics. This is skipped by default because it slows
             down the training and evaluation speed.
         push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to upload the trained model to the hub after training. This argument is not directly used by
-            :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
-            the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
-            details.
+            Whether or not to upload the trained model to the hub after training. If this is activated, and
+            :obj:`output_dir` exists, it needs to be a local clone of the repository to which the
+            :class:`~transformers.Trainer` will be pushed.
         resume_from_checkpoint (:obj:`str`, `optional`):
             The path to a folder with a valid checkpoint for your model. This argument is not directly used by
             :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
             the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
             details.
-        log_on_each_node (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            In multinode distributed training, whether to log once per node, or only on the main node.
+        push_to_hub_model_id (:obj:`str`, `optional`):
+            The name of the repository to which push the :class:`~transformers.Trainer` when :obj:`push_to_hub=True`.
+            Will default to the name of :obj:`output_dir`.
+        push_to_hub_organization (:obj:`str`, `optional`):
+            The name of the organization in with to which push the :class:`~transformers.Trainer`.
+        push_to_hub_token (:obj:`str`, `optional`):
+            The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
+            :obj:`huggingface-cli login`.
     """
 
     output_dir: str = field(
@@ -397,7 +415,27 @@ class TrainingArguments:
     )
     warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
-    logging_dir: Optional[str] = field(default_factory=default_logdir, metadata={"help": "Tensorboard log dir."})
+    log_level: Optional[str] = field(
+        default="passive",
+        metadata={
+            "help": "Logger log level to use on the main node. Possible choices are the log levels as strings: 'debug', 'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and lets the application set the level. Defaults to 'passive'.",
+            "choices": trainer_log_levels.keys(),
+        },
+    )
+    log_level_replica: Optional[str] = field(
+        default="passive",
+        metadata={
+            "help": "Logger log level to use on replica nodes. Same choices and defaults as ``log_level``",
+            "choices": trainer_log_levels.keys(),
+        },
+    )
+    log_on_each_node: bool = field(
+        default=True,
+        metadata={
+            "help": "When doing a multinode distributed training, whether to log once per node or just once on the main node."
+        },
+    )
+    logging_dir: Optional[str] = field(default=None, metadata={"help": "Tensorboard log dir."})
     logging_strategy: IntervalStrategy = field(
         default="steps",
         metadata={"help": "The logging strategy to use."},
@@ -561,12 +599,13 @@ class TrainingArguments:
         default=None,
         metadata={"help": "The path to a folder with a valid checkpoint for your model."},
     )
-    log_on_each_node: bool = field(
-        default=True,
-        metadata={
-            "help": "When doing a multinode distributed training, whether to log once per node or just once on the main node."
-        },
+    push_to_hub_model_id: str = field(
+        default=None, metadata={"help": "The name of the repository to which push the `Trainer`."}
     )
+    push_to_hub_organization: str = field(
+        default=None, metadata={"help": "The name of the organization in with to which push the `Trainer`."}
+    )
+    push_to_hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
     _n_gpu: int = field(init=False, repr=False, default=-1)
     mp_parameters: str = field(
         default="",
@@ -580,11 +619,17 @@ class TrainingArguments:
         if env_local_rank != -1 and env_local_rank != self.local_rank:
             self.local_rank = env_local_rank
 
+        # convert to int
+        self.log_level = trainer_log_levels[self.log_level]
+        self.log_level_replica = trainer_log_levels[self.log_level_replica]
+
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
         #  see https://github.com/huggingface/transformers/issues/10628
         if self.output_dir is not None:
             self.output_dir = os.path.expanduser(self.output_dir)
+        if self.logging_dir is None and self.output_dir is not None:
+            self.logging_dir = os.path.join(self.output_dir, default_logdir())
         if self.logging_dir is not None:
             self.logging_dir = os.path.expanduser(self.logging_dir)
 
@@ -677,6 +722,9 @@ class TrainingArguments:
             # note: leave self.deepspeed unmodified in case a user relies on it not to be modified)
             self.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.deepspeed)
             self.hf_deepspeed_config.trainer_config_process(self)
+
+        if self.push_to_hub_model_id is None:
+            self.push_to_hub_model_id = Path(self.output_dir).name
 
     def __str__(self):
         self_as_dict = asdict(self)
@@ -889,6 +937,24 @@ class TrainingArguments:
             else:
                 return self.process_index == 0
 
+    def get_process_log_level(self):
+        """
+        Returns the log level to be used depending on whether this process is the main process of node 0, main process
+        of node non-0, or a non-main process.
+
+        For the main process the log level defaults to ``logging.INFO`` unless overridden by ``log_level`` argument.
+
+        For the replica processes the log level defaults to ``logging.WARNING`` unless overridden by
+        ``log_level_replica`` argument.
+
+        The choice between the main and replica process settings is made according to the return value of
+        ``should_log``.
+        """
+
+        log_level_main_node = logging.INFO if self.log_level == -1 else self.log_level
+        log_level_replica_node = logging.WARNING if self.log_level_replica == -1 else self.log_level_replica
+        return log_level_main_node if self.should_log else log_level_replica_node
+
     @property
     def place_model_on_device(self):
         """
@@ -902,6 +968,49 @@ class TrainingArguments:
         Whether or not to use no_sync for the gradients when doing gradient accumulation.
         """
         return not (self.deepspeed or is_sagemaker_dp_enabled() or is_sagemaker_mp_enabled())
+
+    @contextlib.contextmanager
+    def main_process_first(self, local=True, desc="work"):
+        """
+            A context manager for torch distributed environment where on needs to do something on the main process,
+            while blocking replicas, and when it's finished releasing the replicas.
+
+            One such use is for ``datasets``'s ``map`` feature which to be efficient should be run once on the main
+            process, which upon completion saves a cached version of results and which then automatically gets loaded
+            by the replicas.
+
+        Args:
+            local (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                if :obj:`True` first means process of rank 0 of each node if :obj:`False` first means process of rank 0
+                of node rank 0 In multi-node environment with a shared filesystem you most likely will want to use
+                ``local=False`` so that only the main process of the first node will do the processing. If however, the
+                filesystem is not shared, then the main process of each node will need to do the processing, which is
+                the default behavior.
+            desc (:obj:`str`, `optional`, defaults to ``"work"``):
+                a work description to be used in debug logs
+
+        """
+        if is_torch_available() and self.world_size > 1:
+            if local:
+                is_main_process = self.local_process_index == 0
+                main_process_desc = "main local process"
+            else:
+                is_main_process = self.process_index == 0
+                main_process_desc = "main process"
+
+            try:
+                if not is_main_process:
+                    # tell all replicas to wait
+                    logger.debug(f"{self.process_index}: waiting for the {main_process_desc} to perform {desc}")
+                    torch.distributed.barrier()
+                yield
+            finally:
+                if is_main_process:
+                    # the wait is over
+                    logger.debug(f"{self.process_index}: {main_process_desc} completed {desc}, releasing all replicas")
+                    torch.distributed.barrier()
+        else:
+            yield
 
     def to_dict(self):
         """
