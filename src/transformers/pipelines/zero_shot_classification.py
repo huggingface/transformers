@@ -19,7 +19,7 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
 
     def _parse_labels(self, labels):
         if isinstance(labels, str):
-            labels = [label.strip() for label in labels.split(",")]
+            labels = [label.strip() for label in labels.lower().split(",")]
         return labels
 
     def __call__(self, sequences, labels, hypothesis_template):
