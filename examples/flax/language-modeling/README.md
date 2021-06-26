@@ -276,7 +276,7 @@ tokenizer.save(f"{model_dir}/tokenizer.json")
 ### Create configuration
 
 Next, we create the model's configuration file. This is as simple 
-as loading and storing [`**t5-base**`](https://huggingface.co/t5-base)
+as loading and storing [`**google/t5-v1_1-base**`](https://huggingface.co/google/t5-v1_1-base)
 in the local model folder:
 
 ```python
@@ -284,7 +284,7 @@ from transformers import T5Config
 
 model_dir = "./norwegian-t5-base"  # ${MODEL_DIR}
 
-config = T5Config.from_pretrained("t5-base")
+config = T5Config.from_pretrained("google/t5-v1_1-base", dropout_rate=0.0)
 config.save_pretrained(model_dir)
 ```
 
@@ -301,13 +301,12 @@ Next we can run the example script to pretrain the model:
     --dataset_name="oscar" \
     --dataset_config_name="unshuffled_deduplicated_no" \
     --max_seq_length="512" \
-    --weight_decay="0.01" \
     --per_device_train_batch_size="16" \
     --per_device_eval_batch_size="16" \
-    --learning_rate="3e-4" \
-    --warmup_steps="1000" \
+    --learning_rate="1e-3" \
+    --warmup_steps="5000" \
     --overwrite_output_dir \
-    --num_train_epochs="18" \
+    --num_train_epochs="10" \
     --adam_beta1="0.9" \
     --adam_beta2="0.98"
 ```
