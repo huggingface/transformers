@@ -22,8 +22,8 @@ from torch.nn.utils.rnn import pad_sequence
 
 from ..file_utils import PaddingStrategy
 from ..modeling_utils import PreTrainedModel
-from ..tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 from ..models.bert import BertTokenizer, BertTokenizerFast
+from ..tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 
 
 InputDataClass = NewType("InputDataClass", Any)
@@ -403,10 +403,9 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
 
     .. note::
 
-        This collator relies on details of the implementation of subword tokenization
-        by :class:`~transformers.BertTokenizer`, specifically that subword tokens are
-        prefixed with `##`. For tokenizers that do not adhere to this scheme, this
-        collator will produce an output that is roughly equivalent to
+        This collator relies on details of the implementation of subword tokenization by
+        :class:`~transformers.BertTokenizer`, specifically that subword tokens are prefixed with `##`. For tokenizers
+        that do not adhere to this scheme, this collator will produce an output that is roughly equivalent to
         :class:`.DataCollatorForLanguageModeling`.
     """
 
@@ -445,8 +444,10 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         Get 0/1 labels for masked tokens with whole word mask proxy
         """
         if not isinstance(self.tokenizer, (BertTokenizer, BertTokenizerFast)):
-            warnings.warn("DataCollatorForWholeWordMask is only suitable for BertTokenizer-like tokenizers."
-                          "Please refer to the documentation for more information.")
+            warnings.warn(
+                "DataCollatorForWholeWordMask is only suitable for BertTokenizer-like tokenizers."
+                "Please refer to the documentation for more information."
+            )
 
         cand_indexes = []
         for (i, token) in enumerate(input_tokens):
