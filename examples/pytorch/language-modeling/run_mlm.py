@@ -381,7 +381,8 @@ def main():
                 # receives the `special_tokens_mask`.
                 return_special_tokens_mask=True,
             )
-        with training_args.main_process_first(desc="dataset map tokenization"): 
+
+        with training_args.main_process_first(desc="dataset map tokenization"):
             tokenized_datasets = raw_datasets.map(
                 tokenize_function,
                 batched=True,
@@ -397,7 +398,7 @@ def main():
         def tokenize_function(examples):
             return tokenizer(examples[text_column_name], return_special_tokens_mask=True)
 
-        with training_args.main_process_first(desc="dataset map tokenization"): 
+        with training_args.main_process_first(desc="dataset map tokenization"):
             tokenized_datasets = raw_datasets.map(
                 tokenize_function,
                 batched=True,

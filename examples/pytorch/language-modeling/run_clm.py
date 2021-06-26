@@ -356,7 +356,7 @@ def main():
             )
         return output
 
-    with training_args.main_process_first(desc="dataset map tokenization"): 
+    with training_args.main_process_first(desc="dataset map tokenization"):
         tokenized_datasets = raw_datasets.map(
             tokenize_function,
             batched=True,
