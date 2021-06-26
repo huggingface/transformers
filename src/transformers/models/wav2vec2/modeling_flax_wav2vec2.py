@@ -26,7 +26,7 @@ from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 
 from ...file_utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_flax_outputs import FlaxBaseModelOutput
+from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel
 from ...utils import logging
 from .configuration_wav2vec2 import Wav2Vec2Config
@@ -41,17 +41,17 @@ class FlaxWav2Vec2BaseModelOutput(ModelOutput):
     Output type of :class:`~transformers.FlaxWav2Vec2BaseModelOutput`, with potential hidden states and attentions.
 
     Args:
-        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+        last_hidden_state (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        extract_features (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, conv_dim[-1])`):
+        extract_features (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length, conv_dim[-1])`):
             Sequence of extracted feature vectors of the last convolutional layer of the model.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+        hidden_states (:obj:`tuple(jnp.ndarray)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`jnp.ndarray` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+        attentions (:obj:`tuple(jnp.ndarray)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`jnp.ndarray` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
@@ -82,13 +82,13 @@ WAV_2_VEC_2_START_DOCSTRING = r"""
 
 WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_values (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
             into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
             soundfile`). To prepare the array into `input_values`, the :class:`~transformers.Wav2Vec2Processor` should
-            be used for padding and conversion into a tensor of type `torch.FloatTensor`. See
+            be used for padding and conversion into a tensor of type `jnp.ndarray`. See
             :meth:`transformers.Wav2Vec2Processor.__call__` for details.
-        attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in ``[0,
             1]``:
 
@@ -155,7 +155,7 @@ class FlaxConvWithWeightNorm(nn.Module):
         )
         weight_shape = (
             self.conv.features,
-            self.conv.kernel_size // self.conv.feature_group_count,
+            self.conv.features // self.conv.feature_group_count,
             self.conv.kernel_size,
         )
         self.weight_v = self.param("weight_v", jax.nn.initializers.he_normal(dtype=self.dtype), weight_shape)
@@ -172,7 +172,7 @@ class FlaxConvWithWeightNorm(nn.Module):
     def __call__(self, hidden_states):
         kernel = self._get_normed_weights()
         hidden_states = jnp.pad(hidden_states, ((0, 0), (self.prev_padding, self.prev_padding), (0, 0)))
-        hidden_states = self.conv.apply({"params": {"kernel": kernel, "bias": self.bias}}, hidden_states)
+        hidden_states = self.conv.apply({"params": {"kernel": kernel.T, "bias": self.bias}}, hidden_states)
         return hidden_states
 
 
@@ -216,7 +216,7 @@ class FlaxConvLayersCollection(nn.Module):
             )
 
     def __call__(self, hidden_states):
-        for conv_layer in self.layers:
+        for i, conv_layer in enumerate(self.layers):
             hidden_states = conv_layer(hidden_states)
         return hidden_states
 
@@ -250,10 +250,10 @@ class FlaxWav2Vec2FeatureProjection(nn.Module):
         self.dropout = nn.Dropout(rate=self.config.feat_proj_dropout)
 
     def __call__(self, hidden_states, deterministic=True):
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.projection(hidden_states)
+        norm_hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.projection(norm_hidden_states)
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
-        return hidden_states
+        return hidden_states, norm_hidden_states
 
 
 class FlaxWav2Vec2Attention(nn.Module):
@@ -483,7 +483,13 @@ class FlaxWav2Vec2StableLayerNormEncoder(nn.Module):
         output_hidden_states=False,
         return_dict=True,
     ):
+
+        if attention_mask is not None:
+            # make sure padded tokens are not attended to
+            hidden_states = jnp.where(jnp.broadcast_to(attention_mask[:, :, None], hidden_states.shape), hidden_states, 0)
+
         position_embeddings = self.pos_conv_embed(hidden_states)
+
         hidden_states = hidden_states + position_embeddings
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
 
@@ -510,10 +516,9 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
-
-    config: Wav2Vec2Config
-    dtype: jnp.dtype = jnp.float32
-    module_class = None
+    config_class = Wav2Vec2Config
+    base_model_prefix: str = "wav2vec2"
+    module_class: nn.Module = None
 
     def __init__(
         self,
@@ -578,7 +583,7 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
 
         return self.module.apply(
             inputs,
-            jnp.array(input_values, dtype="i4"),
+            jnp.array(input_values, dtype="f4"),
             jnp.array(attention_mask, dtype="i4"),
             mask_time_indices,
             not train,
@@ -636,7 +641,7 @@ class FlaxWav2Vec2Module(nn.Module):
             >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
             >>> ds = ds.map(map_to_array)
 
-            >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
+            >>> input_values = processor(ds["speech"][0], return_tensors="np").input_values  # Batch size 1
             >>> hidden_states = model(input_values).last_hidden_state
         """
         extract_features = self.feature_extractor(input_values)
@@ -654,8 +659,7 @@ class FlaxWav2Vec2Module(nn.Module):
             )
             attention_mask = jnp.flip(jnp.flip(attention_mask, -1).cumsum(-1), -1).astype("bool")
 
-        hidden_states = self.feature_projection(extract_features, deterministic=deterministic)
-
+        hidden_states, extract_features = self.feature_projection(extract_features, deterministic=deterministic)
         if mask_time_indices is not None:  # apply SpecAugment along time axis with given indices
             # Patrick(doesn't work yet)
             hidden_states = jax.ops.index_update(
@@ -707,5 +711,93 @@ class FlaxWav2Vec2Model(FlaxWav2Vec2PreTrainedModel):
     module_class = FlaxWav2Vec2Module
 
 
+class FlaxWav2Vec2ForCTCModule(nn.Module):
+    config: Wav2Vec2Config
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.wav2vec2 = FlaxWav2Vec2Module(self.config)
+        self.dropout = nn.Dropout(rate=self.config.final_dropout)
+        self.lm_head = nn.Dense(
+            self.config.vocab_size,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            dtype=self.dtype,
+        )
+
+    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    def __call__(
+        self,
+        input_values,
+        attention_mask=None,
+        mask_time_indices=None,
+        deterministic=True,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        Returns:
+
+        Example::
+
+            >>> import torch
+            >>> from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
+            >>> from datasets import load_dataset
+            >>> import soundfile as sf
+
+            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
+            >>> model = FlaxWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
+
+            >>> def map_to_array(batch):
+            >>>     speech, _ = sf.read(batch["file"])
+            >>>     batch["speech"] = speech
+            >>>     return batch
+
+            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+            >>> ds = ds.map(map_to_array)
+
+            >>> input_values = processor(ds["speech"][0], return_tensors="np").input_values  # Batch size 1
+            >>> logits = model(input_values).logits
+            >>> predicted_ids = torch.argmax(logits, dim=-1)
+
+            >>> transcription = processor.decode(predicted_ids[0])
+
+            >>> # compute loss
+            >>> target_transcription = "A MAN SAID TO THE UNIVERSE SIR I EXIST"
+
+            >>> # wrap processor as target processor to encode labels
+            >>> with processor.as_target_processor():
+            >>>     labels = processor(target_transcription, return_tensors="np").input_ids
+
+            >>> loss = model(input_values, labels=labels).loss
+        """
+
+        outputs = self.wav2vec2(
+            input_values,
+            attention_mask=attention_mask,
+            mask_time_indices=mask_time_indices,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = outputs[0]
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+
+        logits = self.lm_head(hidden_states)
+
+        if not return_dict:
+            return (logits,) + outputs[2:]
+
+        return FlaxCausalLMOutput(
+            logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+        )
+
+
+@add_start_docstrings(
+    "Wav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).",
+    WAV_2_VEC_2_START_DOCSTRING,
+)
 class FlaxWav2Vec2ForCTC(FlaxWav2Vec2PreTrainedModel):
-    pass
+    module_class = FlaxWav2Vec2ForCTCModule

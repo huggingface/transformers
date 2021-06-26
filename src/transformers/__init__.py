@@ -1596,6 +1596,7 @@ if is_flax_available():
         ]
     )
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel"])
+    _import_structure["models.wav2vec2"].extend(["FlaxWav2Vec2Model", "FlaxWav2Vec2ForCTC"])
 else:
     from .utils import dummy_flax_objects
 
@@ -2917,6 +2918,7 @@ if TYPE_CHECKING:
             FlaxRobertaPreTrainedModel,
         )
         from .models.vit import FlaxViTForImageClassification, FlaxViTModel
+        from .models.wav2vec2 import FlaxWav2Vec2ForCTC, FlaxWav2Vec2Model
     else:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.

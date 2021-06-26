@@ -24,7 +24,7 @@ from .test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, rand
 
 
 if is_flax_available():
-    from transformers.models.wav2vec2.modeling_flax_wav2vec2 import FlaxWav2Vec2Model
+    from transformers.models.wav2vec2.modeling_flax_wav2vec2 import FlaxWav2Vec2Model, FlaxWav2Vec2ForCTC
 
 
 class FlaxWav2Vec2ModelTester:
@@ -34,7 +34,7 @@ class FlaxWav2Vec2ModelTester:
         batch_size=13,
         seq_length=1024,  # speech is longer
         is_training=False,
-        hidden_size=16,
+        hidden_size=24,
         feat_extract_norm="layer",
         feat_extract_dropout=0.0,
         feat_extract_activation="gelu",
@@ -124,7 +124,7 @@ class FlaxWav2Vec2ModelTester:
 @require_flax
 class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (FlaxWav2Vec2Model,) if is_flax_available() else ()
+    all_model_classes = (FlaxWav2Vec2Model, FlaxWav2Vec2ForCTC) if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxWav2Vec2ModelTester(self)
