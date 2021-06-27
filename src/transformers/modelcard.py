@@ -565,6 +565,14 @@ class TrainingSummary:
         if model_name is None:
             model_name = Path(trainer.args.output_dir).name
 
+        # Add `generated_from_trainer` to the tags
+        if tags is None:
+            tags = ["generated_from_trainer"]
+        elif isinstance(tags, str) and tags != "generated_from_trainer":
+            tags = [tags, "generated_from_trainer"]
+        elif "generated_from_trainer" not in tags:
+            tags.append("generated_from_trainer")
+
         _, eval_lines, eval_results = parse_log_history(trainer.state.log_history)
         hyperparameters = extract_hyperparameters_from_trainer(trainer)
 
