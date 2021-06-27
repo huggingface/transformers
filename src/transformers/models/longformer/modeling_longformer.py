@@ -1561,7 +1561,7 @@ class LongformerModel(LongformerPreTrainedModel):
                 inputs_embeds = torch.cat([inputs_embeds, inputs_embeds_padding], dim=-2)
 
             attention_mask = nn.functional.pad(
-                attention_mask, (0, padding_len), value=False
+                attention_mask, (0, padding_len), value=0  # 0 = False
             )  # no attention on the padding tokens
             token_type_ids = nn.functional.pad(token_type_ids, (0, padding_len), value=0)  # pad with token_type_id = 0
 
