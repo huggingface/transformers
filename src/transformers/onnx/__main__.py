@@ -24,6 +24,7 @@ from transformers.models.bart import BartOnnxConfig
 from transformers.models.bert import BertOnnxConfig
 from transformers.models.distilbert import DistilBertOnnxConfig
 from transformers.models.gpt2 import GPT2OnnxConfig
+from transformers.models.longformer import LongformerOnnxConfig
 from transformers.models.roberta import RobertaOnnxConfig
 from transformers.models.t5 import T5OnnxConfig
 from transformers.models.xlm_roberta import XLMRobertaOnnxConfig
@@ -64,6 +65,7 @@ SUPPORTED_MODEL_KIND = {
     "bert": {"default": BertOnnxConfig.default},
     "distilbert": {"default": DistilBertOnnxConfig.default},
     "gpt2": {"default": GPT2OnnxConfig.default, "with_past": GPT2OnnxConfig.with_past},
+    "longformer": {"default": LongformerOnnxConfig.default},
     "roberta": {"default": RobertaOnnxConfig},
     "t5": {"default": T5OnnxConfig.default, "with_past": T5OnnxConfig.with_past},
     "xlm-roberta": {"default": XLMRobertaOnnxConfig.default},

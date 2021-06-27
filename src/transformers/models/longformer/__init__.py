@@ -25,6 +25,7 @@ _import_structure = {
     "configuration_longformer": [
         "LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LongformerConfig",
+        "LongformerOnnxConfig"
     ],
     "tokenization_longformer": ["LongformerTokenizer"],
 }
@@ -61,6 +62,11 @@ if is_tf_available():
 
 if TYPE_CHECKING:
     from .configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
+    from .configuration_longformer import (
+        LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LongformerConfig,
+        LongformerOnnxConfig
+    )
     from .tokenization_longformer import LongformerTokenizer
 
     if is_tokenizers_available():

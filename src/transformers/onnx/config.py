@@ -184,8 +184,8 @@ class OnnxConfig(ABC):
         seq_length = compute_effective_axis_dimension(seq_length, fixed_dimension=8, num_token_to_add=token_to_add)
 
         # Generate dummy inputs according to compute batch and sequence
-        dummy_input = [[tokenizer.unk_token] * seq_length] * batch_size
-        return dict(tokenizer(dummy_input, is_split_into_words=True, return_tensors=framework))
+        dummy_input = [" ".join([tokenizer.unk_token]) * seq_length] * batch_size
+        return dict(tokenizer(dummy_input, return_tensors=framework))
 
 
 class OnnxConfigWithPast(OnnxConfig, ABC):
