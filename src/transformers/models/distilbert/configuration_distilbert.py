@@ -139,6 +139,7 @@ class DistilBertConfig(PretrainedConfig):
         return self.n_layers
 
 
+# Copied from transformers.models.bert.configuration_bert.BertOnnxConfig with Roberta->DistilBert
 class DistilBertOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:

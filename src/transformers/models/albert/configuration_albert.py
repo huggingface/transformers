@@ -155,7 +155,7 @@ class AlbertConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
 
 
-# Copied from transformers.models.bert.configuration_bert.BertOnnxConfig with Bert->Albert
+# Copied from transformers.models.bert.configuration_bert.BertOnnxConfig with Roberta->Albert
 class AlbertOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
