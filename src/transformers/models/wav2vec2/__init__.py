@@ -48,6 +48,7 @@ if is_tf_available():
 if is_flax_available():
     _import_structure["modeling_flax_wav2vec2"] = [
         "FlaxWav2Vec2ForCTC",
+        "FlaxWav2Vec2ForPreTraining",
         "FlaxWav2Vec2Model",
         "FlaxWav2Vec2PreTrainedModel",
     ]
@@ -78,7 +79,12 @@ if TYPE_CHECKING:
         )
 
     if is_flax_available():
-        from .modeling_tf_wav2vec2 import FlaxWav2Vec2ForCTC, FlaxWav2Vec2Model, FlaxWav2Vec2PreTrainedModel
+        from .modeling_tf_wav2vec2 import (
+            FlaxWav2Vec2ForCTC,
+            FlaxWav2Vec2ForPreTraining,
+            FlaxWav2Vec2Model,
+            FlaxWav2Vec2PreTrainedModel,
+        )
 
 
 else:

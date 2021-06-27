@@ -17,6 +17,8 @@
 from functools import partial
 from typing import Optional, Tuple, Union
 
+import numpy as np
+
 import flax
 import flax.linen as nn
 import jax
@@ -62,6 +64,145 @@ class FlaxWav2Vec2BaseModelOutput(ModelOutput):
     extract_features: jnp.ndarray = None
     hidden_states: Optional[Tuple[jnp.ndarray]] = None
     attentions: Optional[Tuple[jnp.ndarray]] = None
+
+
+@flax.struct.dataclass
+class FlaxWav2Vec2ForPreTrainingOutput(ModelOutput):
+    """
+    Output type of :class:`~transformers.FlaxWav1Vec2ForPreTrainingOutput`, with potential hidden states and
+    attentions.
+
+    Args:
+        loss (`optional`, returned when model is in train mode, ``jnp.ndarray`` of shape :obj:`(1,)`):
+            Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the `official
+            paper <https://arxiv.org/pdf/2006.11477.pdf>`__ . (classification) loss.
+        projected_states (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length, config.proj_codevector_dim)`):
+            Hidden-states of the model projected to `config.proj_codevector_dim` that can be used to predict the masked
+            projected quantized states.
+        projected_quantized_states (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length, config.proj_codevector_dim)`):
+            Quantized extracted feature vectors projected to `config.proj_codevector_dim` representing the positive
+            target vectors for contrastive loss.
+        hidden_states (:obj:`tuple(jnp.ndarray)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`jnp.ndarray` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(jnp.ndarray)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`jnp.ndarray` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    projected_states: jnp.ndarray = None
+    projected_quantized_states: jnp.ndarray = None
+    codevector_perplexity: jnp.ndarray = None
+    hidden_states: Optional[Tuple[jnp.ndarray]] = None
+    attentions: Optional[Tuple[jnp.ndarray]] = None
+
+
+def _compute_mask_indices(
+    shape: Tuple[int, int],
+    mask_prob: float,
+    mask_length: int,
+    min_masks: int = 0,
+) -> np.ndarray:
+    """
+    Computes random mask spans for a given shape. Used to implement `SpecAugment: A Simple Data Augmentation Method for
+    ASR <https://arxiv.org/abs/1904.08779>`__. Note that this method is not optimized to run on TPU and should be run
+    on CPU as part of the preprocessing during training.
+
+    Args:
+        shape: the the shape for which to compute masks.
+            should be of size 2 where first element is batch size and 2nd is timesteps
+        mask_prob: probability for each token to be chosen as start of the span to be masked. this will be multiplied by
+            number of timesteps divided by length of mask span to mask approximately this percentage of all elements.
+            however due to overlaps, the actual number will be smaller (unless no_overlap is True)
+        mask_length: size of the mask
+        min_masks: minimum number of masked spans
+
+    """
+    batch_size, sequence_length = shape
+
+    if mask_length < 1:
+        raise ValueError("`mask_length` has to be bigger than 0.")
+
+    if mask_length > sequence_length:
+        raise ValueError(
+            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and `sequence_length`: {sequence_length}`"
+        )
+
+    # compute number of masked spans in batch
+    num_masked_spans = int(mask_prob * sequence_length / mask_length + np.random.rand(1).item())
+    num_masked_spans = max(num_masked_spans, min_masks)
+
+    # make sure num masked indices <= sequence_length
+    if num_masked_spans * mask_length > sequence_length:
+        num_masked_spans = sequence_length // mask_length
+
+    # SpecAugment mask to fill
+    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=np.bool)
+
+    # get random indices to mask
+    spec_aug_mask_idxs = np.array(
+        [
+            np.random.choice(np.arange(sequence_length - (mask_length - 1)), num_masked_spans, replace=False)
+            for _ in range(batch_size)
+        ]
+    )
+
+    # expand masked indices to masked spans
+    spec_aug_mask_idxs = np.broadcast_to(spec_aug_mask_idxs[:, :, None], (batch_size, num_masked_spans, mask_length))
+    spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(batch_size, num_masked_spans * mask_length)
+
+    offsets = np.arange(mask_length)[None, None, :]
+    offsets = np.broadcast_to(offsets, (batch_size, num_masked_spans, mask_length)).reshape(
+        batch_size, num_masked_spans * mask_length
+    )
+    spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
+
+    # scatter indices to mask
+    np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
+
+    return spec_aug_mask
+
+
+def _sample_negatives(features: np.ndarray, num_negatives: int):
+    """
+    Sample `num_negatives` vectors from feature vectors.
+    """
+    batch_size, sequence_length, hidden_size = features.shape
+    if sequence_length <= 1:
+        raise ValueError(
+            f"`features should have `sequence_length` > 1, but are of shape (batch_size, sequence_length, hidden_size) = ({batch_size, sequence_length, hidden_size})."
+        )
+
+    # get `num_negatives` random vector indices from the same utterance
+    sampled_negative_indices = np.random.randint(
+        low=0,
+        high=sequence_length - 1,
+        size=(batch_size, num_negatives * sequence_length),
+    )
+
+    # generate indices of the positive vectors themselves, repeat them `num_negatives` times
+    feature_indices = np.broadcast_to(np.arange(sequence_length)[:, None], (sequence_length, num_negatives)).flatten()
+
+    # avoid sampling the same positive vector, but keep the distribution uniform
+    sampled_negative_indices[sampled_negative_indices >= feature_indices] += 1
+
+    # correct for batch size
+    for batch_idx in range(1, batch_size):
+        sampled_negative_indices[batch_idx] += batch_idx * sequence_length
+
+    features = features.reshape(-1, hidden_size)  # BTC => (BxT)C
+    # take negative vectors from sampled indices
+    sampled_negatives = features[sampled_negative_indices.reshape(-1)]
+    sampled_negatives = sampled_negatives.reshape(batch_size, sequence_length, num_negatives, hidden_size).transpose(
+        2, 0, 1, 3
+    )
+
+    return sampled_negatives
 
 
 WAV_2_VEC_2_START_DOCSTRING = r"""
@@ -513,6 +654,92 @@ class FlaxWav2Vec2StableLayerNormEncoder(nn.Module):
         )
 
 
+class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
+    """
+    Vector quantization using gumbel softmax. See `CATEGORICAL REPARAMETERIZATION WITH GUMBEL-SOFTMAX
+    <https://arxiv.org/pdf/1611.01144.pdf>`__ for more information.
+    """
+
+    config: Wav2Vec2Config
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.num_groups = self.config.num_codevector_groups
+        self.num_vars = self.config.num_codevectors_per_group
+
+        if self.config.codevector_dim % self.num_groups != 0:
+            raise ValueError(
+                f"`config.codevector_dim {self.config.codevector_dim} must be divisible by `config.num_codevector_groups` {self.num_groups} for concatenation"
+            )
+
+        # storage for codebook variables (codewords)
+        self.codevectors = self.param(
+            "codevectors",
+            jax.nn.initializers.uniform(),
+            (1, self.num_groups * self.num_vars, self.config.codevector_dim // self.num_groups),
+        )
+        self.weight_proj = nn.Dense(
+            self.num_groups * self.num_vars,
+            kernel_init=jax.nn.initializers.normal(1.0, self.dtype),
+            dtype=self.dtype,
+        )
+
+        # can be decayed for training
+        self.temperature = 1
+
+    def set_temperature(self, temperature: int):
+        self.temperature = temperature
+
+    @staticmethod
+    def _compute_perplexity(probs, mask=None):
+        if mask is not None:
+            mask_extended = jnp.broadcast_to(mask.flatten()[:, None, None], probs.shape)
+            probs = jnp.where(mask_extended, probs, jnp.zeros_like(probs))
+            marginal_probs = probs.sum(axis=0) / mask.sum()
+        else:
+            marginal_probs = probs.mean(axis=0)
+
+        perplexity = jnp.exp(-jnp.sum(marginal_probs * jnp.log(marginal_probs + 1e-7), axis=-1)).sum()
+        return perplexity
+
+    def __call__(self, hidden_states, mask_time_indices=None, deterministic=True):
+        batch_size, sequence_length, hidden_size = hidden_states.shape
+
+        # project to codevector dim
+        hidden_states = self.weight_proj(hidden_states)
+        hidden_states = hidden_states.reshape(batch_size * sequence_length * self.num_groups, -1)
+
+        if not deterministic:
+            # sample code vector probs via gumbel in differentiateable way
+            gumbel_rng = self.make_rng("gumbel")
+            gumbels = jax.random.gumbel(gumbel_rng, hidden_states.shape)
+            codevector_probs = nn.softmax((hidden_states + gumbels) / self.temperature)
+
+            # compute perplexity
+            codevector_soft_dist = nn.softmax(
+                hidden_states.reshape(batch_size * sequence_length, self.num_groups, -1), axis=-1
+            )
+            perplexity = self._compute_perplexity(codevector_soft_dist, mask_time_indices)
+        else:
+            # take argmax in non-differentiable way
+            # comptute hard codevector distribution (one hot)
+            codevector_idx = hidden_states.argmax(axis=-1)
+            codevector_probs = jax.nn.one_hot(codevector_idx, hidden_states.shape[-1]) * 1.0
+            codevector_probs = codevector_probs.reshape(batch_size * sequence_length, self.num_groups, -1)
+            perplexity = self._compute_perplexity(codevector_probs, mask_time_indices)
+
+        codevector_probs = codevector_probs.reshape(batch_size * sequence_length, -1)
+        # use probs to retrieve codevectors
+        codevectors_per_group = jnp.expand_dims(codevector_probs, axis=-1) * self.codevectors
+        codevectors = (
+            codevectors_per_group.reshape(batch_size * sequence_length, self.num_groups, self.num_vars, -1)
+            .sum(-2)
+            .reshape(batch_size, sequence_length, -1)
+        )
+
+        return codevectors, perplexity
+
+
 class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -538,8 +765,8 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         attention_mask = jnp.ones_like(input_ids)
-        params_rng, dropout_rng = jax.random.split(rng)
-        rngs = {"params": params_rng, "dropout": dropout_rng}
+        params_rng, dropout_rng, gumbel_rng = jax.random.split(rng, 3)
+        rngs = {"params": params_rng, "dropout": dropout_rng, "gumbel": gumbel_rng}
 
         return self.module.init(rngs, input_ids, attention_mask, return_dict=False)["params"]
 
@@ -561,6 +788,7 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
         mask_time_indices=None,
         params: dict = None,
         dropout_rng: jax.random.PRNGKey = None,
+        gumbel_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -582,6 +810,9 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
         if dropout_rng is not None:
             rngs["dropout"] = dropout_rng
 
+        if gumbel_rng is not None:
+            rngs["gumbel"] = gumbel_rng
+
         inputs = {"params": params or self.params}
 
         return self.module.apply(
@@ -595,6 +826,9 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
             return_dict,
             rngs=rngs,
         )
+
+    def _get_feat_extract_output_lengths(self, input_lengths: Union[jnp.ndarray, int]):
+        return self.module._get_feat_extract_output_lengths(input_lengths)
 
 
 class FlaxWav2Vec2Module(nn.Module):
@@ -664,9 +898,10 @@ class FlaxWav2Vec2Module(nn.Module):
 
         hidden_states, extract_features = self.feature_projection(extract_features, deterministic=deterministic)
         if mask_time_indices is not None:  # apply SpecAugment along time axis with given indices
-            # Patrick(doesn't work yet)
-            hidden_states = jax.ops.index_update(
-                hidden_states, jax.ops.index[:, mask_time_indices], self.masked_spec_embed.astype(self.dtype)
+            hidden_states = jnp.where(
+                jnp.broadcast_to(mask_time_indices[:, :, None], hidden_states.shape),
+                jnp.broadcast_to(self.masked_spec_embed[None, None, :], hidden_states.shape),
+                hidden_states,
             )
 
         encoder_outputs = self.encoder(
@@ -743,7 +978,7 @@ class FlaxWav2Vec2ForCTCModule(nn.Module):
 
         Example::
 
-            >>> import torch
+            >>> import jax.numpy as jnp
             >>> from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
             >>> from datasets import load_dataset
             >>> import soundfile as sf
@@ -761,7 +996,7 @@ class FlaxWav2Vec2ForCTCModule(nn.Module):
 
             >>> input_values = processor(ds["speech"][0], return_tensors="np").input_values  # Batch size 1
             >>> logits = model(input_values).logits
-            >>> predicted_ids = torch.argmax(logits, dim=-1)
+            >>> predicted_ids = jnp.argmax(logits, dim=-1)
 
             >>> transcription = processor.decode(predicted_ids[0])
 
@@ -795,6 +1030,21 @@ class FlaxWav2Vec2ForCTCModule(nn.Module):
 
         return FlaxCausalLMOutput(logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
 
+    def _get_feat_extract_output_lengths(self, input_lengths: Union[jnp.ndarray, int]):
+        """
+        Computes the output length of the convolutional layers
+        """
+
+        def _conv_out_length(input_length, kernel_size, stride):
+            # 1D convolutional layer output length formula taken
+            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+            return (input_length - kernel_size) // stride + 1
+
+        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
+            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
+
+        return input_lengths
+
 
 @add_start_docstrings(
     "Wav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).",
@@ -802,3 +1052,141 @@ class FlaxWav2Vec2ForCTCModule(nn.Module):
 )
 class FlaxWav2Vec2ForCTC(FlaxWav2Vec2PreTrainedModel):
     module_class = FlaxWav2Vec2ForCTCModule
+
+
+class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
+    config: Wav2Vec2Config
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.wav2vec2 = FlaxWav2Vec2Module(self.config)
+        self.dropout_features = nn.Dropout(self.config.feat_quantizer_dropout)
+
+        self.quantizer = FlaxWav2Vec2GumbelVectorQuantizer(self.config)
+        self.project_q = nn.Dense(
+            self.config.proj_codevector_dim,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            dtype=self.dtype,
+        )
+        self.project_hid = nn.Dense(
+            self.config.proj_codevector_dim,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            dtype=self.dtype,
+        )
+
+    def set_gumbel_temperature(self, temperature: int):
+        """
+        Set the Gumbel softmax temperature to a given value. Only necessary for training
+        """
+        return self.quantizer.set_temperature(temperature)
+
+    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    def __call__(
+        self,
+        input_values,
+        attention_mask=None,
+        mask_time_indices=None,
+        deterministic: bool = True,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        mask_time_indices (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
+            masked extracted features in `config.proj_codevector_dim` space.
+
+        Returns:
+
+        Example::
+
+            >>> import jnp
+            >>> from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForPreTraining
+            >>> from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices
+            >>> from datasets import load_dataset
+            >>> import soundfile as sf
+
+            >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("patrickvonplaten/wav2vec2-base")
+            >>> model = FlaxWav2Vec2ForPreTraining.from_pretrained("patrickvonplaten/wav2vec2-base")
+
+
+            >>> def map_to_array(batch):
+            ...     speech, _ = sf.read(batch["file"])
+            ...     batch["speech"] = speech
+            ...     return batch
+
+
+            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+            >>> ds = ds.map(map_to_array)
+
+            >>> input_values = feature_extractor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
+
+            >>> # compute masked indices
+            >>> batch_size, raw_sequence_length = input_values.shape
+            >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length)
+            >>> mask_time_indices = _compute_mask_indices((batch_size, sequence_length), mask_prob=0.2, mask_length=2, device=model.device)
+
+            >>> outputs = model(input_values, mask_time_indices=mask_time_indices)
+
+            >>> # compute cosine similarity between predicted (=projected_states) and target (=projected_quantized_states)
+            >>> cosine_sim = jnp.cosine_similarity(
+            ...     outputs.projected_states, outputs.projected_quantized_states, dim=-1
+            ... )
+
+            >>> # show that cosine similarity is much higher than random
+            >>> assert cosine_sim[mask_time_indices].mean() > 0.5
+
+            >>> # for contrastive loss training model should be put into train mode
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.wav2vec2(
+            input_values,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            mask_time_indices=mask_time_indices,
+            return_dict=return_dict,
+        )
+
+        # project all transformed features (including masked) to final vq dim
+        transformer_features = self.project_hid(outputs[0])
+
+        # quantize all (unmasked) extracted features and project to final vq dim
+        extract_features = self.dropout_features(outputs[1], deterministic=deterministic)
+        quantized_features, codevector_perplexity = self.quantizer(
+            extract_features, mask_time_indices, deterministic=deterministic
+        )
+        quantized_features = self.project_q(quantized_features)
+
+        if not return_dict:
+            return (transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
+
+        return FlaxWav2Vec2ForPreTrainingOutput(
+            projected_states=transformer_features,
+            projected_quantized_states=quantized_features,
+            codevector_perplexity=codevector_perplexity,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+    def _get_feat_extract_output_lengths(self, input_lengths: Union[jnp.ndarray, int]):
+        """
+        Computes the output length of the convolutional layers
+        """
+
+        def _conv_out_length(input_length, kernel_size, stride):
+            # 1D convolutional layer output length formula taken
+            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+            return (input_length - kernel_size) // stride + 1
+
+        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
+            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
+
+        return input_lengths
+
+
+@add_start_docstrings("""Wav2Vec2 Model with a quantizer and `VQ` head on top. """, WAV_2_VEC_2_START_DOCSTRING)
+class FlaxWav2Vec2ForPreTraining(FlaxWav2Vec2PreTrainedModel):
+    module_class = FlaxWav2Vec2ForPreTrainingModule

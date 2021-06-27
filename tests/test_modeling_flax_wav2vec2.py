@@ -27,8 +27,16 @@ from .test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, rand
 if is_flax_available():
     import jax
     import jax.numpy as jnp
-    from transformers import Wav2Vec2Processor
-    from transformers.models.wav2vec2.modeling_flax_wav2vec2 import FlaxWav2Vec2ForCTC, FlaxWav2Vec2Model
+    import optax
+    from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2Processor
+    from transformers.models.wav2vec2.modeling_flax_wav2vec2 import (
+        FlaxWav2Vec2ForCTC,
+        FlaxWav2Vec2ForPreTraining,
+        FlaxWav2Vec2GumbelVectorQuantizer,
+        FlaxWav2Vec2Model,
+        _compute_mask_indices,
+        _sample_negatives,
+    )
 
 
 class FlaxWav2Vec2ModelTester:
@@ -127,10 +135,44 @@ class FlaxWav2Vec2ModelTester:
 
 @require_flax
 class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
-    all_model_classes = (FlaxWav2Vec2Model, FlaxWav2Vec2ForCTC) if is_flax_available() else ()
+    all_model_classes = (
+        (FlaxWav2Vec2Model, FlaxWav2Vec2ForCTC, FlaxWav2Vec2ForPreTraining) if is_flax_available() else ()
+    )
 
     def setUp(self):
         self.model_tester = FlaxWav2Vec2ModelTester(self)
+
+    def test_train(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        input_values = inputs_dict["input_values"]
+        attention_mask = inputs_dict["attention_mask"]
+
+        model = FlaxWav2Vec2ForPreTraining(config)
+
+        features_shape = (
+            input_values.shape[0],
+            model._get_feat_extract_output_lengths(np.array(input_values.shape[1])),
+        )
+
+        batch_size, sequence_length = features_shape[:2]
+
+        mask_prob = 0.5
+        mask_length = 4
+        mask_time_indices = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+
+        dropout_rng, gumbel_rng = jax.random.split(jax.random.PRNGKey(0))
+
+        output = model(
+            input_values,
+            attention_mask=attention_mask,
+            mask_time_indices=mask_time_indices,
+            train=True,
+            dropout_rng=dropout_rng,
+            gumbel_rng=gumbel_rng,
+        )[0]
+
+        self.assertTrue(output.shape == (batch_size, sequence_length, model.config.proj_codevector_dim))
 
     # overwrite because of `input_values`
     def test_forward_signature(self):
@@ -179,11 +221,70 @@ class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(outputs)
 
 
+class FlaxWav2Vec2UtilsTest(unittest.TestCase):
+    def test_compute_mask_indices(self):
+        batch_size = 4
+        sequence_length = 60
+        mask_prob = 0.5
+        mask_length = 1
+
+        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+
+        self.assertListEqual(mask.sum(axis=-1).tolist(), [mask_prob * sequence_length for _ in range(batch_size)])
+
+    def test_compute_mask_indices_overlap(self):
+        batch_size = 4
+        sequence_length = 80
+        mask_prob = 0.5
+        mask_length = 4
+
+        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+
+        # because of overlap mask don't have to add up exactly to `mask_prob * sequence_length`, but have to be smaller or equal
+        for batch_sum in mask.sum(axis=-1):
+            self.assertTrue(int(batch_sum) <= mask_prob * sequence_length)
+
+    def test_compute_perplexity(self):
+        probs = np.arange(100).reshape(2, 5, 10) / 100
+
+        ppl = FlaxWav2Vec2GumbelVectorQuantizer._compute_perplexity(probs)
+        self.assertTrue(abs(ppl.item() - 141.4291) < 1e-3)
+
+        # mask half of the input
+        mask = np.ones((2,), dtype=np.bool)
+        mask[0] = 0
+
+        ppl = FlaxWav2Vec2GumbelVectorQuantizer._compute_perplexity(probs, mask)
+        self.assertTrue(abs(ppl.item() - 58.6757) < 1e-3)
+
+    def test_sample_negatives(self):
+        batch_size = 2
+        sequence_length = 10
+        hidden_size = 4
+        num_negatives = 3
+
+        features = (np.arange(sequence_length * hidden_size) // hidden_size).reshape(
+            sequence_length, hidden_size
+        )  # each value in vector consits of same value
+        features = np.broadcast_to(features[None, :], (batch_size, sequence_length, hidden_size))
+
+        negatives = _sample_negatives(features, num_negatives)
+
+        self.assertTrue(negatives.shape == (num_negatives, batch_size, sequence_length, hidden_size))
+
+        # make sure no negatively sampled vector is actually a positive one
+        for negative in negatives:
+            self.assertTrue(((negative - features) == 0).sum() == 0.0)
+
+        # make sure that full vectors are sampled and not values of vectors => this means that `unique()` yields a single value for `hidden_size` dim
+        self.assertTrue(np.unique(negatives, axis=-1).shape, (num_negatives, batch_size, sequence_length, 1))
+
+
 @require_flax
 @require_datasets
 @require_soundfile
 @slow
-class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
+class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
@@ -226,3 +327,63 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             "his instant panic was followed by a small sharp blow high on his chest",
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
+
+    def test_inference_pretrained(self):
+        model = FlaxWav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-large-lv60", from_pt=True)
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
+            "facebook/wav2vec2-large-lv60", return_attention_mask=True
+        )
+        input_speech = self._load_datasamples(2)
+
+        inputs_dict = feature_extractor(input_speech, return_tensors="np", padding=True)
+
+        features_shape = (
+            inputs_dict["input_values"].shape[0],
+            model._get_feat_extract_output_lengths(np.array(inputs_dict["input_values"].shape[1])),
+        )
+
+        mask_time_indices = _compute_mask_indices(
+            features_shape,
+            model.config.mask_time_prob,
+            model.config.mask_time_length,
+            min_masks=2,
+        )
+
+        outputs = model(
+            inputs_dict.input_values,
+            attention_mask=inputs_dict.attention_mask,
+            mask_time_indices=mask_time_indices,
+        )
+
+        # compute cosine similarity
+        cosine_sim = optax.cosine_similarity(
+            outputs.projected_states, outputs.projected_quantized_states, epsilon=1e-8
+        )
+
+        # retrieve cosine sim of masked features
+        cosine_sim_masked = cosine_sim[mask_time_indices]
+
+        # ... now compare to randomly initialized model
+
+        config = Wav2Vec2Config.from_pretrained("facebook/wav2vec2-large-lv60")
+        model_rand = FlaxWav2Vec2ForPreTraining(config)
+
+        outputs_rand = model_rand(
+            inputs_dict.input_values,
+            attention_mask=inputs_dict.attention_mask,
+            mask_time_indices=mask_time_indices,
+        )
+
+        # compute cosine similarity
+        cosine_sim_rand = optax.cosine_similarity(
+            outputs_rand.projected_states, outputs_rand.projected_quantized_states, dim=-1
+        )
+
+        # retrieve cosine sim of masked features
+        cosine_sim_masked_rand = cosine_sim_rand[mask_time_indices]
+
+        # a pretrained wav2vec2 model has learned to predict the quantized latent states
+        # => the cosine similarity between quantized states and predicted states > 0.5
+        # a random wav2vec2 model has not learned to predict the quantized latent states
+        # => the cosine similarity between quantized states and predicted states is very likely < 0.1
+        self.assertTrue(cosine_sim_masked.mean().item() - 5 * cosine_sim_masked_rand.mean().item() > 0)
