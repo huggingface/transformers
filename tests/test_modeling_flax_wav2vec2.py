@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 import inspect
+import math
 import unittest
 
 import numpy as np
 
 from transformers import Wav2Vec2Config, is_flax_available
-from transformers.testing_utils import require_flax, slow, require_datasets, require_soundfile
+from transformers.testing_utils import require_datasets, require_flax, require_soundfile, slow
 
 from .test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, random_attention_mask
 
@@ -28,7 +28,7 @@ if is_flax_available():
     import jax
     import jax.numpy as jnp
     from transformers import Wav2Vec2Processor
-    from transformers.models.wav2vec2.modeling_flax_wav2vec2 import FlaxWav2Vec2Model, FlaxWav2Vec2ForCTC
+    from transformers.models.wav2vec2.modeling_flax_wav2vec2 import FlaxWav2Vec2ForCTC, FlaxWav2Vec2Model
 
 
 class FlaxWav2Vec2ModelTester:

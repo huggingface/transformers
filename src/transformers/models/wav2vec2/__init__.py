@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_tf_available, is_torch_available, is_flax_available
+from ...file_utils import _BaseLazyModule, is_flax_available, is_tf_available, is_torch_available
 
 
 _import_structure = {
@@ -78,11 +78,7 @@ if TYPE_CHECKING:
         )
 
     if is_flax_available():
-        from .modeling_tf_wav2vec2 import (
-            FlaxWav2Vec2ForCTC,
-            FlaxWav2Vec2Model,
-            FlaxWav2Vec2PreTrainedModel,
-        )
+        from .modeling_tf_wav2vec2 import FlaxWav2Vec2ForCTC, FlaxWav2Vec2Model, FlaxWav2Vec2PreTrainedModel
 
 
 else:

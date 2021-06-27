@@ -46,13 +46,13 @@ class FlaxWav2Vec2BaseModelOutput(ModelOutput):
         extract_features (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length, conv_dim[-1])`):
             Sequence of extracted feature vectors of the last convolutional layer of the model.
         hidden_states (:obj:`tuple(jnp.ndarray)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`jnp.ndarray` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Tuple of :obj:`jnp.ndarray` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(jnp.ndarray)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`jnp.ndarray` (one for each layer) of shape :obj:`(batch_size, num_heads,
-            sequence_length, sequence_length)`.
+            Tuple of :obj:`jnp.ndarray` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -486,7 +486,9 @@ class FlaxWav2Vec2StableLayerNormEncoder(nn.Module):
 
         if attention_mask is not None:
             # make sure padded tokens are not attended to
-            hidden_states = jnp.where(jnp.broadcast_to(attention_mask[:, :, None], hidden_states.shape), hidden_states, 0)
+            hidden_states = jnp.where(
+                jnp.broadcast_to(attention_mask[:, :, None], hidden_states.shape), hidden_states, 0
+            )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
 
@@ -516,6 +518,7 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
+
     config_class = Wav2Vec2Config
     base_model_prefix: str = "wav2vec2"
     module_class: nn.Module = None
@@ -790,9 +793,7 @@ class FlaxWav2Vec2ForCTCModule(nn.Module):
         if not return_dict:
             return (logits,) + outputs[2:]
 
-        return FlaxCausalLMOutput(
-            logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
-        )
+        return FlaxCausalLMOutput(logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
 
 
 @add_start_docstrings(
