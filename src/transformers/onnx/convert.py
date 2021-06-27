@@ -22,13 +22,7 @@ from packaging.version import Version, parse
 from onnxruntime import GraphOptimizationLevel
 
 from .. import PreTrainedModel, PreTrainedTokenizer, TensorType, TFPreTrainedModel, is_torch_available
-from .config import OnnxConfig, OnnxVariable
-from .interpolate import (
-    evaluate_expr_to_int,
-    expand_repeated_onnx_variables,
-    insert_additional_onnx_value_within_inputs,
-    interpolate_expression,
-)
+from .config import OnnxConfig
 from .utils import flatten_output_collection_property
 
 
@@ -67,7 +61,7 @@ def check_onnxruntime_requirements(minimum_version: Version):
 
 def convert_pytorch(
     tokenizer: PreTrainedTokenizer, model: PreTrainedModel, config: OnnxConfig, opset: int, output: Path
-) -> Tuple[List[OnnxVariable], List[OnnxVariable]]:
+) -> Tuple[List[str], List[str]]:
     """
     Export a PyTorch backed pipeline to ONNX Intermediate Representation (IR
 
@@ -91,15 +85,18 @@ def convert_pytorch(
     torch.set_grad_enabled(False)
     model.config.return_dict = True
 
-    onnx_inputs = expand_repeated_onnx_variables(model, config.inputs)
-    onnx_outputs = expand_repeated_onnx_variables(model, config.outputs)
+    # Check if we need to override certain configuration item
+    if config.values_override is not None:
+        print(f"Overriding {len(config.values_override)} configuration item(s)")
+        for override_config_key, override_config_value in config.values_override.items():
+            print(f"\t- {override_config_key} -> {override_config_value}")
+            setattr(model.config, override_config_key, override_config_value)
 
     # Ensure inputs match
-    # TODO: Sequence length = 4 hard coded, provide this value through CLI would be better
-    model_inputs = tokenizer([tokenizer.unk_token] * 4, is_split_into_words=True, return_tensors=TensorType.PYTORCH)
-    model_inputs = insert_additional_onnx_value_within_inputs(model_inputs, onnx_inputs, TensorType.PYTORCH)
-
-    inputs_match, ordered_onnx_inputs = ensure_model_and_config_inputs_match(model_inputs.keys(), onnx_inputs)
+    # TODO: Check when exporting QA we provide "is_pair=True"
+    model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.PYTORCH)
+    inputs_match, ordered_onnx_inputs = ensure_model_and_config_inputs_match(model_inputs.keys(), config.inputs.keys())
+    onnx_outputs = list(config.outputs.keys())
 
     if not inputs_match:
         raise ValueError("Model and config inputs doesn't match")
@@ -107,23 +104,22 @@ def convert_pytorch(
     # export can works with named args but the dict containing named args as to be last element of the args tuple
     export(
         model,
-        (dict(model_inputs),),
+        (model_inputs, ),
         f=output.as_posix(),
-        input_names=[var.name for var in ordered_onnx_inputs],
-        output_names=[var.name for var in onnx_outputs],
-        dynamic_axes={var.name: var.axes for var in chain(config.inputs, onnx_outputs)},
+        input_names=ordered_onnx_inputs,
+        output_names=onnx_outputs,
+        dynamic_axes={name: axes for name, axes in chain(config.inputs.items(), config.outputs.items())},
         do_constant_folding=True,
-        use_external_data_format=config.use_external_data_format,
+        use_external_data_format=config.use_external_data_format(model.num_parameters()),
         enable_onnx_checker=True,
         opset_version=opset,
     )
 
-    return onnx_inputs, onnx_outputs
+    return ordered_onnx_inputs, onnx_outputs
 
 
 def optimize(
     onnx_model_path: Path,
-    model: Union[PreTrainedModel, TFPreTrainedModel],
     onnx_config: OnnxConfig,
     optimization_level: GraphOptimizationLevel,
     use_gpu: bool,
@@ -134,16 +130,10 @@ def optimize(
 
     # If we have an optimizer in the config, let's optimize offline
     if onnx_config.optimizer is not None:
-        print(f"Optimizing model through dedicated '{onnx_config.optimizer}' tool (the tool's name might not match):")
-
-        # Interpolate addition_args if needed
-        if onnx_config.optimizer_additional_args is not None:
-            additional_args = {
-                arg_name: evaluate_expr_to_int(interpolate_expression(arg_value, model))
-                for arg_name, arg_value in onnx_config.optimizer_additional_args.items()
-            }
-        else:
-            additional_args = {}
+        print(
+            f"Optimizing model through dedicated '{onnx_config.optimizer}' "
+            "tool (tool's name might not match model topology):"
+        )
 
         optimizer_options = BertOptimizationOptions(onnx_config.optimizer)
         if onnx_config.optimizer_features is not None:
@@ -158,7 +148,7 @@ def optimize(
             optimization_options=optimizer_options,
             opt_level=int(optimization_level),
             use_gpu=use_gpu,
-            **additional_args,
+            **onnx_config.optimizer_additional_args
         )
 
         print(f"Optimization statistics: {optimizer.get_fused_operator_statistics()}")
@@ -173,31 +163,18 @@ def optimize(
 
 
 def validate_model_outputs(
+    config: OnnxConfig,
     tokenizer: PreTrainedTokenizer,
     reference_model: Union[PreTrainedModel, TFPreTrainedModel],
     onnx_model: Path,
-    onnx_inputs: List[OnnxVariable],
-    onnx_named_outputs: List[OnnxVariable],
+    onnx_named_outputs: List[str],
     atol: float,
 ):
     from onnxruntime import InferenceSession, SessionOptions
-
     print("Validating ONNX model...")
 
-    # TODO: Sequence length = 4 hard coded, provide this value through CLI would be better
-    reference_tensor_type = (
-        TensorType.PYTORCH if isinstance(reference_model, PreTrainedModel) else TensorType.TENSORFLOW
-    )
-    reference_model_inputs = tokenizer(
-        [tokenizer.unk_token] * 4, is_split_into_words=True, return_tensors=reference_tensor_type
-    )
-    onnx_model_inputs = tokenizer([tokenizer.unk_token] * 4, is_split_into_words=True, return_tensors=TensorType.NUMPY)
-
-    # Check if we need to introduce some more variables
-    reference_model_inputs = insert_additional_onnx_value_within_inputs(
-        reference_model_inputs, onnx_inputs, TensorType.PYTORCH
-    )
-    onnx_model_inputs = insert_additional_onnx_value_within_inputs(onnx_model_inputs, onnx_inputs, TensorType.NUMPY)
+    reference_model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.PYTORCH)
+    onnx_model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.NUMPY)
 
     # Create ONNX Runtime session
     options = SessionOptions()
@@ -216,52 +193,65 @@ def validate_model_outputs(
             ref_outputs_dict[name] = value
 
     # Compute outputs from the ONNX model
-    onnx_outputs_name = [var.name for var in onnx_named_outputs]
-    onnx_outputs = session.run(onnx_outputs_name, dict(onnx_model_inputs))
+    onnx_outputs = session.run(onnx_named_outputs, dict(onnx_model_inputs))
 
     # Check we have a subset of the keys into onnx_outputs against ref_outputs
-    onnx_named_outputs = zip(onnx_outputs_name, onnx_outputs)
-    ref_outputs_set, onnx_outputs_set = set(ref_outputs_dict.keys()), set(onnx_outputs_name)
+    ref_outputs_set, onnx_outputs_set = set(ref_outputs_dict.keys()), set(onnx_named_outputs)
     if not onnx_outputs_set.issubset(ref_outputs_set):
+        print(f"\t-[x] ONNX model outputs' name {onnx_outputs_set} doesn't match reference model {ref_outputs_set}")
+
         raise ValueError(
             "Outputs doesn't match between reference model and ONNX exported model: "
             f"{onnx_outputs_set.difference(ref_outputs_set)}"
         )
+    else:
+        print(f"\t-[✓] ONNX model outputs' name match reference model ({onnx_outputs_set}")
 
     # Check the shape and values match
-    for name, ort_value in onnx_named_outputs:
+    for name, ort_value in zip(onnx_named_outputs, onnx_outputs):
         ref_value = ref_outputs_dict[name].numpy()
+        print(f"\t- Validating ONNX Model output \"{name}\":")
 
         # Shape
-        if not ref_value.shape == ort_value.shape:
+        if not ort_value.shape == ref_value.shape:
+            print(f"\t\t-[x] shape {ort_value.shape} doesn't match {ref_value.shape}")
             raise ValueError(
                 "Outputs shape doesn't match between reference model and ONNX exported model: "
                 f"Got {ref_value.shape} (reference) and {ort_value.shape} (ONNX)"
             )
+        else:
+            print(f"\t\t-[✓] {ort_value.shape} matchs {ref_value.shape}")
 
         # Values
         if not np.allclose(ref_value, ort_value, atol=atol):
+            print(f"\t\t-[x] values not close enough (atol: {atol})")
             raise ValueError(
                 "Outputs values doesn't match between reference model and ONNX exported model: "
                 f"Got max absolute difference of: {np.amax(np.abs(ref_value - ort_value))}"
             )
+        else:
+            print(f"\t\t-[✓] all values close (atol: {atol})")
 
 
 def ensure_model_and_config_inputs_match(
-    model_inputs: Iterable[str], config_inputs: Iterable[OnnxVariable]
-) -> Tuple[bool, List[OnnxVariable]]:
+    model_inputs: Iterable[str], config_inputs: Iterable[str]
+) -> Tuple[bool, List[str]]:
     """
 
     :param model_inputs:
     :param config_inputs:
     :return:
     """
-    model_inputs_set, config_inputs_set = set(model_inputs), set(map(lambda var: var.name, config_inputs))
+    model_inputs_set, config_inputs_set = set(model_inputs), set(config_inputs)
 
     # We are fine if config_inputs has more keys than model_inputs
     is_ok = model_inputs_set.issubset(config_inputs_set)
 
     # Make sure the input order match
     matching_inputs = config_inputs_set.intersection(model_inputs_set)
-    ordered_matching_inputs = [input for input in config_inputs if input.name in matching_inputs]
+    ordered_matching_inputs = [
+        config_input
+        for config_input in config_inputs
+        if config_input in matching_inputs
+    ]
     return is_ok, ordered_matching_inputs

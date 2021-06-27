@@ -11,48 +11,191 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from abc import ABC, abstractmethod
+from typing import Mapping, Optional, Any
 
-from dataclasses import dataclass
-from typing import Any, Dict, List, NamedTuple, Optional, Union
+from transformers import PretrainedConfig, PreTrainedTokenizer, TensorType
+from .utils import compute_serialized_parameters_size, compute_effective_axis_dimension, ParameterFormat
+
+DEFAULT_ONNX_OPSET = 11
+
+# 2 Gb
+EXTERNAL_DATA_FORMAT_SIZE_LIMIT = 2 * 1024 * 1024 * 1024
 
 
-OnnxVariable = NamedTuple(
-    "OnnxVariable",
-    [("name", str), ("axes", Dict[int, str]), ("repeated", Union[int, str]), ("value", Optional[List[int]])],
-)
+DEFAULT_BERT_OPTIMIZER_FEATURES = {
+    "enable_gelu": True,
+    "enable_layer_norm": True,
+    "enable_attention": True,
+    "enable_skip_layer_norm": True,
+    "enable_embed_layer_norm": True,
+    "enable_bias_skip_layer_norm": True,
+    "enable_bias_gelu": True,
+    "enable_gelu_approximation": False,
+}
 
 
-@dataclass
-class OnnxConfig:
+class OnnxConfig(ABC):
     """
     Base class for ONNX exportable model describing metadata on how to export the model through the ONNX format.
     """
+    def __init__(self, config: PretrainedConfig):
+        self._config = config
 
-    # Input mapping of the form "input_name": {axis_id: "axis_name"}
-    # example: {"input_ids": {0: "batch", 1: "sequence"}}
-    # We use a list because the ordering of the items is VERY important
-    inputs: List[OnnxVariable]
 
-    # Output mapping of the form "output_name": {axis_id: "axis_name"}
-    # example: {"last_hidden_layer": {0: "batch", 1: "sequence"}}
-    # We use a list because the ordering of the items is VERY important
-    outputs: List[OnnxVariable]
+    @classmethod
+    def default(cls, config: PretrainedConfig) -> "OnnxConfig":
+        """
+        Instantiate a OnnxConfig for a specific model
+        Args:
+            config: The model's configuration to use when exporting to ONNX
 
-    # Define all the configuration keys we need to override before forwarding through the model
-    runtime_config_overrides: Optional[Dict[str, Any]]
+        Returns:
+            OnnxConfig for this model
+       """
+        return cls(config)
 
-    # Does the model requires using external data format (i.e. model size > 2Gb)
-    use_external_data_format: bool
+    @property
+    @abstractmethod
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        """
+        Mapping containing the axis definition of the input tensors to provide to the model
+        Returns:
+            For each input: its name associated to the axes symbolic name and the axis position within the tensor
+        """
+        raise NotImplementedError()
 
-    # Minimum required ONNX opset
-    minimum_required_onnx_opset: int
+    @property
+    @abstractmethod
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        """
+        Mapping containing the axis definition of the output tensors to provide to the model
+        Returns:
+            For each output: its name associated to the axes symbolic name and the axis position within the tensor
+        """
+        raise NotImplementedError()
 
-    # ONNXRuntime provides model specific optimizer for some topologies
-    # This one indicate which provider (if any) to use
-    optimizer: Optional[str]
+    @property
+    def values_override(self) -> Optional[Mapping[str, Any]]:
+        """
+        Dictionary of keys to override in the model's config before exporting
+        Returns:
+            Dictionary with the keys (and their corresponding values) to override
+        """
+        if hasattr(self._config, "use_cache"):
+            return {"use_cache": False}
 
-    # If optimizer is present, this set indicates which features to enable/disable when optimizing
-    optimizer_features: Optional[Dict[str, bool]]
+        return None
 
-    # Optimizer parameters which can only be known at runtime
-    optimizer_additional_args: Optional[Dict[str, Union[int, str]]]
+    @property
+    def default_onnx_opset(self) -> int:
+        """
+        Which onnx opset to use when exporting the model
+        Returns:
+            Integer ONNX Opset version
+        """
+        return DEFAULT_ONNX_OPSET
+
+    @property
+    def optimizer(self) -> Optional[str]:
+        """
+        Indicate which optimizer (if any) to use when optimizing the model
+        Returns:
+            name of the ONNX Runtime optimizer to use or None if no specific optimizer
+        """
+        return None
+
+    @property
+    def optimizer_features(self) -> Optional[Mapping[str, bool]]:
+        """
+        Specify which optimization(s) to enable through the "optimizer".
+        Some ONNX Runtime optimizer are specific to some models and thus can enable targeted optimizations.
+        Returns:
+            Mapping for each optimizer's parameter name (str) if we should enable (True) or disable (False) it.
+            None if no specific optimizer is setup.
+        """
+        return None
+
+    @property
+    def optimizer_additional_args(self) -> Optional[Mapping[str, Any]]:
+        """
+        Additional kwargs to provide to the ONNX Runtime optimizer.
+        ONNX Runtime optimizers sometimes require additional parameters such as number of heads, hidden size, etc.
+        This property allows to provide such model specific attribute
+        Returns:
+            Mapping with the name of the property as key and the value to pass to the optimizer
+        """
+        return None
+
+    @staticmethod
+    def use_external_data_format(num_parameters: int) -> bool:
+        """
+        Flag indicating if the model requires using external data format
+        Args:
+            num_parameters: Number of parameter on the model
+        Returns:
+            True if model.num_parameters() * size_of(float32) >= 2Gb
+            False otherwise
+        """
+
+        return compute_serialized_parameters_size(
+            num_parameters,
+            ParameterFormat.Float
+        ) >= EXTERNAL_DATA_FORMAT_SIZE_LIMIT
+
+    def generate_dummy_inputs(
+        self,
+        tokenizer: PreTrainedTokenizer,
+        batch_size: int = -1,
+        seq_length: int = -1,
+        is_pair: bool = False,
+        framework: Optional[TensorType] = None
+    ) -> Mapping[str, Any]:
+        """
+        Generate inputs to provide to the ONNX exporter for the specific framework
+        Args:
+            tokenizer: The tokenizer associated with this model configuration
+            batch_size: The batch size (int) to export the model for (-1 means dynamic axis)
+            seq_length: The sequence length (int) to export the model for (-1 means dynamic axis)
+            is_pair: Indicate if the input is a pair (sentence 1, sentence 2)
+            framework: The framework (optional) the tokenizer will generate tensor for
+
+        Returns:
+            Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
+        """
+
+        # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
+        batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=2, num_token_to_add=0)
+
+        # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
+        token_to_add = tokenizer.num_special_tokens_to_add(is_pair)
+        seq_length = compute_effective_axis_dimension(seq_length, fixed_dimension=8, num_token_to_add=token_to_add)
+
+        # Generate dummy inputs according to compute batch and sequence
+        dummy_input = [[tokenizer.unk_token] * seq_length] * batch_size
+        return dict(tokenizer(dummy_input, is_split_into_words=True, return_tensors=framework))
+
+
+class OnnxConfigWithPast(OnnxConfig, ABC):
+    def __init__(self, config: PretrainedConfig, use_past: bool = False):
+        super().__init__(config)
+        self.use_past = use_past
+
+    @classmethod
+    def with_past(cls, config: PretrainedConfig) -> "OnnxConfig":
+        """
+        Instantiate a OnnxConfig with `use_past` attribute set to True
+        Args:
+            config: The underlying model's config to use when exporting to ONNX
+
+        Returns:
+            OnnxConfig with `.use_past = True`
+        """
+        return cls(config, use_past=True)
+
+    @property
+    def config_values_override(self) -> Optional[Mapping[str, Any]]:
+        if hasattr(self._config, "use_cache"):
+            return {"use_cache": self.use_past}
+
+        return None

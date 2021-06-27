@@ -14,9 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ OpenAI GPT-2 configuration """
+from typing import Mapping, Optional, Any
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig, OnnxVariable
+from ...onnx import OnnxConfigWithPast
 from ...utils import logging
 
 
@@ -198,35 +199,35 @@ class GPT2Config(PretrainedConfig):
         return self.n_layer
 
 
-GPT2_ONNX_CONFIG = OnnxConfig(
-    inputs=[
-        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1, value=None),
-        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1, value=None),
-    ],
-    outputs=[
-        OnnxVariable("last_hidden_state", {0: "sequence", 1: "batch"}, repeated=1, value=None),
-    ],
-    runtime_config_overrides={"use_cache": False},
-    use_external_data_format=False,
-    minimum_required_onnx_opset=11,
-    optimizer="gpt2",
-    optimizer_features=None,
-    optimizer_additional_args={"num_heads": "$config.num_attention_heads", "hidden_size": "$config.hidden_size"},
-)
+class GPT2OnnxConfig(OnnxConfigWithPast):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return {
+            "input_ids": {0: "batch", 1: "sequence"},
+            "attention_mask": {0: "batch", 1: "sequence"},
+        }
 
-GPT2_ONNX_CONFIG_WITH_PAST = OnnxConfig(
-    inputs=[
-        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1, value=None),
-        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1, value=None),
-    ],
-    outputs=[
-        OnnxVariable("last_hidden_state", {0: "sequence", 1: "batch"}, repeated=1, value=None),
-        OnnxVariable("past_key_values", {0: "batch", 2: "sequence"}, repeated="$config.n_layer * 2", value=None),
-    ],
-    runtime_config_overrides={"use_cache": True},
-    use_external_data_format=False,
-    minimum_required_onnx_opset=11,
-    optimizer="gpt2",
-    optimizer_features=None,
-    optimizer_additional_args={"num_heads": "$config.num_attention_heads", "hidden_size": "$config.hidden_size"},
-)
+    @property
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        if self.use_past:
+            return {
+                "last_hidden_state": {0: "batch", 1: "sequence"},
+                "past_keys": {0: "batch", 2: "sequence"},
+            }
+        else:
+            return {
+                "last_hidden_state": {0: "batch", 1: "sequence"},
+                "encoder_last_hidden_state": {0: "batch", 1: "sequence"},
+            }
+
+    @property
+    def optimizer(self) -> Optional[str]:
+        return "gpt2"
+
+    @property
+    def optimizer_additinal_args(self) -> Mapping[str, Any]:
+        return {
+            "num_heads": self._config.num_attention_heads,
+            "hidden_size": self._config.hidden_size
+        }
+

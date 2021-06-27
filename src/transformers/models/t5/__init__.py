@@ -29,8 +29,7 @@ from ...file_utils import (
 
 
 _import_structure = {
-    # "configuration_t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5_ONNX_CONFIG", "T5_ONNX_CONFIG_WITH_PAST", "T5Config"],
-    "configuration_t5": ["T5_ONNX_CONFIG", "T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
+    "configuration_t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config", "T5OnnxConfig"],
 }
 
 if is_sentencepiece_available():
@@ -67,8 +66,7 @@ if is_flax_available():
 
 
 if TYPE_CHECKING:
-    # from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5_ONNX_CONFIG, T5_ONNX_CONFIG_WITH_PAST, T5Config
-    from .configuration_t5 import T5_ONNX_CONFIG, T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
+    from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config, T5OnnxConfig
 
     if is_sentencepiece_available():
         from .tokenization_t5 import T5Tokenizer

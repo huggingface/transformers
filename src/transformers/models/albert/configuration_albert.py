@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ ALBERT model configuration """
+from typing import Mapping, Optional, Any
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig, OnnxVariable
-
+from ...onnx import OnnxConfig, DEFAULT_BERT_OPTIMIZER_FEATURES
 
 ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "albert-base-v1": "https://huggingface.co/albert-base-v1/resolve/main/config.json",
@@ -154,29 +154,36 @@ class AlbertConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
 
 
-ALBERT_ONNX_CONFIG = OnnxConfig(
-    inputs=[
-        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1, value=None),
-        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1, value=None),
-        OnnxVariable("token_type_ids", {0: "batch", 1: "sequence"}, repeated=1, value=None),
-    ],
-    outputs=[
-        OnnxVariable("last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1, value=None),
-        OnnxVariable("pooler_output", {0: "batch"}, repeated=1, value=None),
-    ],
-    runtime_config_overrides=None,
-    use_external_data_format=False,
-    minimum_required_onnx_opset=12,
-    optimizer="bert",
-    optimizer_features={
-        "enable_gelu": True,
-        "enable_layer_norm": True,
-        "enable_attention": True,
-        "enable_skip_layer_norm": True,
-        "enable_embed_layer_norm": True,
-        "enable_bias_skip_layer_norm": True,
-        "enable_bias_gelu": True,
-        "enable_gelu_approximation": False,
-    },
-    optimizer_additional_args={"num_heads": "$config.num_attention_heads", "hidden_size": "$config.hidden_size"},
-)
+# Copied from transformers.models.bert.configuration_bert.BertOnnxConfig with Bert->Albert
+class AlbertOnnxConfig(OnnxConfig):
+
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return {
+            "input_ids": {0: "batch", 1: "sequence"},
+            "attention_mask": {0: "batch", 1: "sequence"},
+            "token_type_ids": {0: "batch", 1: "sequence"},
+        }
+
+    @property
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        return {
+            "last_hidden_state": {0: "batch", 1: "sequence"},
+            "pooler_output": {0: "batch"}
+        }
+
+    @property
+    def optimizer(self) -> Optional[str]:
+        return "bert"
+
+    @property
+    def optimizer_features(self) -> Optional[Mapping[str, bool]]:
+        return DEFAULT_BERT_OPTIMIZER_FEATURES
+
+    @property
+    def optimizer_additional_args(self) -> Optional[Mapping[str, Any]]:
+        return {
+            "num_heads": self._config.num_attention_heads,
+            "hidden_size": self._config.hidden_size
+        }
+

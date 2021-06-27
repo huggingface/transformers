@@ -14,21 +14,20 @@
 
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import Tuple, Union
+from typing import Tuple, Union, Callable
 
 from onnxruntime import GraphOptimizationLevel
-from transformers.models.albert import ALBERT_ONNX_CONFIG
+from transformers.models.albert import AlbertOnnxConfig
 from transformers.models.auto import AutoTokenizer
-from transformers.models.bart import BART_ONNX_CONFIG, BART_ONNX_CONFIG_WITH_PAST
-from transformers.models.bert import BERT_ONNX_CONFIG
-from transformers.models.distilbert import DISTILBERT_ONNX_CONFIG, DISTILBERT_TOKEN_CLASSIFICATION_ONNX_CONFIG
-from transformers.models.gpt2 import GPT2_ONNX_CONFIG, GPT2_ONNX_CONFIG_WITH_PAST
-from transformers.models.roberta import ROBERTA_ONNX_CONFIG
-from transformers.models.t5 import T5_ONNX_CONFIG
-from transformers.models.xlm_roberta import XLM_ROBERTA_ONNX_CONFIG
+from transformers.models.bart import BartOnnxConfig
+from transformers.models.bert import BertOnnxConfig
+from transformers.models.distilbert import DistilBertOnnxConfig
+from transformers.models.gpt2 import GPT2OnnxConfig
+from transformers.models.roberta import RobertaOnnxConfig
+from transformers.models.t5 import T5OnnxConfig
+from transformers.models.xlm_roberta import XLMRobertaOnnxConfig
 
 from .. import is_tf_available, is_torch_available
-from .config import OnnxConfig
 from .convert import convert_pytorch, optimize, validate_model_outputs
 from .utils import generate_identified_filename
 
@@ -43,7 +42,7 @@ if is_torch_available():
 
     FEATURES_TO_AUTOMODELS = {
         "default": AutoModel,
-        "with_path": AutoModel,
+        "with_past": AutoModel,
         "token_classification": AutoModelForTokenClassification,
     }
 
@@ -56,26 +55,25 @@ if is_tf_available():
         "token_classification": TFAutoModelForTokenClassification,
     }
 
-# Set of model topologies we support
+# Set of model topologies we support associated to the features supported by each topology and the factory
 SUPPORTED_MODEL_KIND = {
-    "albert": {"default": ALBERT_ONNX_CONFIG},
-    "bart": {"default": BART_ONNX_CONFIG, "with_past": BART_ONNX_CONFIG_WITH_PAST},
-    "bert": {"default": BERT_ONNX_CONFIG},
-    "distilbert": {
-        "default": DISTILBERT_ONNX_CONFIG,
-        "token_classification": DISTILBERT_TOKEN_CLASSIFICATION_ONNX_CONFIG,
+    "albert": {"default": AlbertOnnxConfig.default},
+    "bart": {
+        "default": BartOnnxConfig.default,
+        "with_past": BartOnnxConfig.with_past
     },
-    "gpt2": {"default": GPT2_ONNX_CONFIG, "with_past": GPT2_ONNX_CONFIG_WITH_PAST},
-    # "longformer": {
-    #     "default": LONGFORMER_ONNX_CONFIG,
-    # },
-    "roberta": {
-        "default": ROBERTA_ONNX_CONFIG,
+    "bert": {"default": BertOnnxConfig.default},
+    "distilbert": {"default": DistilBertOnnxConfig.default},
+    "gpt2": {
+        "default": GPT2OnnxConfig.default,
+        "with_past": GPT2OnnxConfig.with_past
     },
+    "roberta": {"default": RobertaOnnxConfig},
     "t5": {
-        "default": T5_ONNX_CONFIG,
+        "default": T5OnnxConfig.default,
+        "with_past": T5OnnxConfig.with_past
     },
-    "xlm-roberta": {"default": XLM_ROBERTA_ONNX_CONFIG},
+    "xlm-roberta": {"default": XLMRobertaOnnxConfig.default},
 }
 
 # ONNX Runtime optimization levels for humans
@@ -118,7 +116,7 @@ def get_model_from_framework_and_features(framework: str, features: str, model: 
 
 def check_supported_model_or_raise(
     model: Union[PreTrainedModel, TFPreTrainedModel], features: str = "default"
-) -> Tuple[str, "OnnxConfig"]:
+) -> Tuple[str, Callable]:
     """
     Check whether or not the model has the requested features
 
@@ -168,9 +166,6 @@ def main():
         "--opset", type=int, default=12, help="ONNX opset version to export the model with (default 12)."
     )
     parser.add_argument(
-        "--optimize", action="store_true", help="Flag indicating if we should try to optimize the model."
-    )
-    parser.add_argument(
         "--use-gpu",
         action="store_true",
         help="Flag indicating if we should try to optimize the model for GPU inference.",
@@ -198,20 +193,14 @@ def main():
     # Allocate the model
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     model = get_model_from_framework_and_features(args.framework, args.features, args.model)
-    model_kind, onnx_config = check_supported_model_or_raise(model, features=args.features)
-
-    # Override model's config if needed
-    if onnx_config.runtime_config_overrides is not None:
-        print("Overriding model's config values:")
-        for config_key, config_value in onnx_config.runtime_config_overrides.items():
-            print(f"\t- {config_key} => {config_value}")
-            setattr(model.config, config_key, config_value)
+    model_kind, model_onnx_config = check_supported_model_or_raise(model, features=args.features)
+    onnx_config = model_onnx_config(model.config)
 
     # Ensure the requested opset is sufficient
-    if args.opset < onnx_config.minimum_required_onnx_opset:
+    if args.opset < onnx_config.default_onnx_opset:
         raise ValueError(
             f"Opset {args.opset} is not sufficient to export {model_kind}. "
-            f"At least  {onnx_config.minimum_required_onnx_opset} is required."
+            f"At least  {onnx_config.default_onnx_opset} is required."
         )
 
     if args.framework == FRAMEWORK_NAME_PT:
@@ -219,18 +208,18 @@ def main():
     else:
         raise NotImplementedError()
 
-    validate_model_outputs(tokenizer, model, args.output, onnx_inputs, onnx_outputs, args.atol)
+    validate_model_outputs(onnx_config, tokenizer, model, args.output, onnx_outputs, args.atol)
     print(f"All good, model saved at: {args.output.as_posix()}")
 
-    if args.optimize and args.optimization_level != "disabled":
+    if args.optimization_level != "disabled":
         print(f"About to optimize model with optimization_level: {args.optimization_level}")
 
         args.opt_model_output = generate_identified_filename(args.output, f"_optimized_{args.optimization_level}")
         args.optimization_level = ONNX_OPTIMIZATION_LEVELS[args.optimization_level]
-        optimize(args.output, model, onnx_config, args.optimization_level, args.use_gpu, args.opt_model_output)
+        optimize(args.output, onnx_config, args.optimization_level, args.use_gpu, args.opt_model_output)
 
         if not args.use_gpu:
-            validate_model_outputs(tokenizer, model, args.opt_model_output, onnx_inputs, onnx_outputs, args.atol)
+            validate_model_outputs(tokenizer, model, args.opt_model_output, onnx_outputs, args.atol)
         else:
             print(
                 "Validating model targeting GPU is not supported yet. "
