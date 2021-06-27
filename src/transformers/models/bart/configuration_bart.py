@@ -14,9 +14,10 @@
 # limitations under the License.
 """ BART model configuration """
 import warnings
+from typing import Mapping, Optional, Any
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig, OnnxVariable
+from ...onnx import OnnxConfigWithPast, DEFAULT_BERT_OPTIMIZER_FEATURES
 from ...utils import logging
 
 
@@ -189,37 +190,40 @@ class BartConfig(PretrainedConfig):
         return self.d_model
 
 
-BART_ONNX_CONFIG = OnnxConfig(
-    inputs=[
-        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1, value=None),
-        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1, value=None),
-    ],
-    outputs=[
-        OnnxVariable("last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1, value=None),
-        OnnxVariable("encoder_last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1, value=None),
-    ],
-    runtime_config_overrides={"use_cache": False},
-    use_external_data_format=False,
-    minimum_required_onnx_opset=11,
-    optimizer="bert",
-    optimizer_features=None,
-    optimizer_additional_args={"num_heads": "$config.decoder_attention_heads", "hidden_size": "$config.d_model"},
-)
+class BartOnnxConfig(OnnxConfigWithPast):
 
-BART_ONNX_CONFIG_WITH_PAST = OnnxConfig(
-    inputs=[
-        OnnxVariable("input_ids", {0: "batch", 1: "sequence"}, repeated=1, value=None),
-        OnnxVariable("attention_mask", {0: "batch", 1: "sequence"}, repeated=1, value=None),
-    ],
-    outputs=[
-        OnnxVariable("last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1, value=None),
-        OnnxVariable("past_keys", {0: "batch", 2: "sequence"}, repeated="$config.decoder_layers * 4", value=None),
-        OnnxVariable("encoder_last_hidden_state", {0: "batch", 1: "sequence"}, repeated=1, value=None),
-    ],
-    runtime_config_overrides={"use_cache": True},
-    use_external_data_format=False,
-    minimum_required_onnx_opset=11,
-    optimizer="bert",
-    optimizer_features=None,
-    optimizer_additional_args={"num_heads": "$config.decoder_attention_heads", "hidden_size": "$config.d_model"},
-)
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return {
+            "input_ids": {0: "batch", 1: "sequence"},
+            "attention_mask": {0: "batch", 1: "sequence"},
+        }
+
+    @property
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        if self.use_past:
+            return {
+                "last_hidden_state": {0: "batch", 1: "sequence"},
+                "past_keys": {0: "batch", 2: "sequence"},
+                "encoder_last_hidden_state": {0: "batch", 1: "sequence"},
+            }
+        else:
+            return {
+                "last_hidden_state": {0: "batch", 1: "sequence"},
+                "encoder_last_hidden_state": {0: "batch", 1: "sequence"},
+            }
+
+    @property
+    def optimizer(self) -> Optional[str]:
+        return "bert"
+
+    @property
+    def optimizer_features(self) -> Optional[Mapping[str, bool]]:
+        return DEFAULT_BERT_OPTIMIZER_FEATURES
+
+    @property
+    def optimizer_additional_args(self) -> Optional[Mapping[str, Any]]:
+        return {
+            "num_heads": self._config.decoder_attention_heads,
+            "hidden_size": self._config.d_model
+        }

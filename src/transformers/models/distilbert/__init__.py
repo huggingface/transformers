@@ -23,10 +23,9 @@ from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_availa
 
 _import_structure = {
     "configuration_distilbert": [
-        "DISTILBERT_ONNX_CONFIG",
         "DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "DISTILBERT_TOKEN_CLASSIFICATION_ONNX_CONFIG",
         "DistilBertConfig",
+        "DistilBertOnnxConfig"
     ],
     "tokenization_distilbert": ["DistilBertTokenizer"],
 }
@@ -62,10 +61,9 @@ if is_tf_available():
 
 if TYPE_CHECKING:
     from .configuration_distilbert import (
-        DISTILBERT_ONNX_CONFIG,
         DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        DISTILBERT_TOKEN_CLASSIFICATION_ONNX_CONFIG,
         DistilBertConfig,
+        DistilBertOnnxConfig
     )
     from .tokenization_distilbert import DistilBertTokenizer
 

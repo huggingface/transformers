@@ -29,10 +29,9 @@ from ...file_utils import (
 
 _import_structure = {
     "configuration_gpt2": [
-        "GPT2_ONNX_CONFIG",
-        "GPT2_ONNX_CONFIG_WITH_PAST",
         "GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GPT2Config",
+        "GPT2OnnxConfig"
     ],
     "tokenization_gpt2": ["GPT2Tokenizer"],
 }
@@ -67,10 +66,9 @@ if is_flax_available():
 
 if TYPE_CHECKING:
     from .configuration_gpt2 import (
-        GPT2_ONNX_CONFIG,
-        GPT2_ONNX_CONFIG_WITH_PAST,
         GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPT2Config,
+        GPT2OnnxConfig
     )
     from .tokenization_gpt2 import GPT2Tokenizer
 
