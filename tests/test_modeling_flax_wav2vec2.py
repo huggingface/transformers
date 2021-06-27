@@ -13,17 +13,21 @@
 # limitations under the License.
 
 import math
+import inspect
 import unittest
 
 import numpy as np
 
 from transformers import Wav2Vec2Config, is_flax_available
-from transformers.testing_utils import require_flax, slow
+from transformers.testing_utils import require_flax, slow, require_datasets, require_soundfile
 
 from .test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, random_attention_mask
 
 
 if is_flax_available():
+    import jax
+    import jax.numpy as jnp
+    from transformers import Wav2Vec2Processor
     from transformers.models.wav2vec2.modeling_flax_wav2vec2 import FlaxWav2Vec2Model, FlaxWav2Vec2ForCTC
 
 
@@ -123,15 +127,102 @@ class FlaxWav2Vec2ModelTester:
 
 @require_flax
 class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlaxWav2Vec2Model, FlaxWav2Vec2ForCTC) if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxWav2Vec2ModelTester(self)
 
+    # overwrite because of `input_values`
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.__call__)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["input_values", "attention_mask"]
+            self.assertListEqual(arg_names[:2], expected_arg_names)
+
+    @slow
+    # overwrite because of `input_values`
+    def test_jit_compilation(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                model = model_class(config)
+
+                @jax.jit
+                def model_jitted(input_values, attention_mask=None, **kwargs):
+                    return model(input_values=input_values, attention_mask=attention_mask, **kwargs)
+
+                with self.subTest("JIT Enabled"):
+                    jitted_outputs = model_jitted(**prepared_inputs_dict).to_tuple()
+
+                with self.subTest("JIT Disabled"):
+                    with jax.disable_jit():
+                        outputs = model_jitted(**prepared_inputs_dict).to_tuple()
+
+                self.assertEqual(len(outputs), len(jitted_outputs))
+                for jitted_output, output in zip(jitted_outputs, outputs):
+
+                    self.assertEqual(jitted_output.shape, output.shape)
+
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("facebook/wav2vec2-large-960h-lv60-self")
-            outputs = model(np.ones((1, 1)))
+            model = model_class_name.from_pretrained("facebook/wav2vec2-large-960h-lv60-self", from_pt=True)
+            outputs = model(np.ones((1, 1024), dtype="f4"))
             self.assertIsNotNone(outputs)
+
+
+@require_flax
+@require_datasets
+@require_soundfile
+@slow
+class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
+    def _load_datasamples(self, num_samples):
+        from datasets import load_dataset
+
+        import soundfile as sf
+
+        ids = [f"1272-141231-000{i}" for i in range(num_samples)]
+
+        # map files to raw
+        def map_to_array(batch):
+            speech, _ = sf.read(batch["file"])
+            batch["speech"] = speech
+            return batch
+
+        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+
+        ds = ds.filter(lambda x: x["id"] in ids).sort("id").map(map_to_array)
+
+        return ds["speech"][:num_samples]
+
+    def test_inference_ctc_robust_batched(self):
+        model = FlaxWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-960h-lv60-self", from_pt=True)
+        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-960h-lv60-self", do_lower_case=True)
+
+        input_speech = self._load_datasamples(4)
+
+        inputs = processor(input_speech, return_tensors="pt", padding=True, truncation=True)
+
+        input_values = inputs.input_values
+        attention_mask = inputs.attention_mask
+
+        logits = model(input_values, attention_mask=attention_mask).logits
+
+        predicted_ids = jnp.argmax(logits, axis=-1)
+        predicted_trans = processor.batch_decode(predicted_ids)
+
+        EXPECTED_TRANSCRIPTIONS = [
+            "a man said to the universe sir i exist",
+            "sweat covered brion's body trickling into the tight loin cloth that was the only garment he wore",
+            "the cut on his chest still dripping blood the ache of his overstrained eyes even the soaring arena around him with the thousands of spectators were trivialities not worth thinking about",
+            "his instant panic was followed by a small sharp blow high on his chest",
+        ]
+        self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
