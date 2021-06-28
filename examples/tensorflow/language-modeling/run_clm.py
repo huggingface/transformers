@@ -466,7 +466,8 @@ def main():
         options = tf.data.Options()
         options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
         tf_train_dataset = (
-            tf.data.Dataset.from_generator(train_generator, output_signature=train_sig).with_options(options)
+            tf.data.Dataset.from_generator(train_generator, output_signature=train_sig)
+            .with_options(options)
             .batch(batch_size=num_replicas * training_args.per_device_train_batch_size, drop_remainder=True)
             .repeat(int(training_args.num_train_epochs))
         )
@@ -478,7 +479,8 @@ def main():
         }
         eval_sig = (eval_signature, eval_signature["labels"])
         tf_eval_dataset = (
-            tf.data.Dataset.from_generator(eval_generator, output_signature=eval_sig).with_options(options)
+            tf.data.Dataset.from_generator(eval_generator, output_signature=eval_sig)
+            .with_options(options)
             .batch(batch_size=num_replicas * training_args.per_device_eval_batch_size, drop_remainder=True)
             .repeat(int(training_args.num_train_epochs))
         )
