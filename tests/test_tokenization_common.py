@@ -57,6 +57,11 @@ if TYPE_CHECKING:
 
 NON_ENGLISH_TAGS = ["chinese", "dutch", "french", "finnish", "german", "multilingual"]
 
+SMALL_TRAINING_CORPUS = [
+    ["This is the first sentence.", "This is the second one."],
+    ["This sentence (contains #) over symbols and numbers 12 3.", "But not this one."],
+]
+
 
 def filter_non_english(_, pretrained_name: str):
     """Filter all the model for non-english language"""
@@ -3147,6 +3152,18 @@ class TokenizerTesterMixin:
                     self.assertEqual(cr_output, r_output)
                     self.assertTrue(special_token_id in p_output)
                     self.assertTrue(special_token_id in cr_output)
+
+    def test_training_new_tokenizer(self):
+        # This feature only exists for fast tokenizers
+        if not self.test_rust_tokenizer:
+            return
+
+        tokenizer = self.get_rust_tokenizer()
+        new_tokenizer = tokenizer.train_new_from_iterator(SMALL_TRAINING_CORPUS, 100)
+
+        # Test we can use the new tokenizer
+        inputs = new_tokenizer(SMALL_TRAINING_CORPUS[1])
+        self.assertEqual(len(inputs["input_ids"]), 2)
 
 
 @is_staging_test

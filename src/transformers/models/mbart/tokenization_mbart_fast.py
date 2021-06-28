@@ -113,10 +113,16 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
     suffix_tokens: List[int] = []
 
     def __init__(
-        self, *args, tokenizer_file=None, src_lang=None, tgt_lang=None, additional_special_tokens=None, **kwargs
+        self,
+        vocab_file=None,
+        tokenizer_file=None,
+        src_lang=None,
+        tgt_lang=None,
+        additional_special_tokens=None,
+        **kwargs
     ):
         super().__init__(
-            *args,
+            vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
             src_lang=src_lang,
             tgt_lang=tgt_lang,

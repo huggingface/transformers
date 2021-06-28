@@ -578,8 +578,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 unk_id = tokenizer_json["model"]["unk_id"]
                 tokenizer_json["model"]["unk_id"] = 0
                 tokenizer_json["model"]["vocab"] = [tokenizer_json["model"]["vocab"][unk_id]]
-        elif tokenizer_json["model"]["type"] == "WordPiece":
+        elif tokenizer_json["model"]["type"] in ["WordLevel", "WordPiece"]:
             tokenizer_json["model"]["vocab"] = {}
+        else:
+            raise ValueError(
+                f"This method does not support this type of tokenizer (found {tokenizer_json['model']['vocab']}) "
+                "only BPE, Unigram, WordLevel and WordPiece."
+            )
 
         tokenizer = TokenizerFast.from_str(json.dumps(tokenizer_json))
 
@@ -587,11 +592,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if special_tokens is None:
             special_tokens = []
             for added_token in added_tokens:
-                if tokenizer_json["model"]["type"] != "Unigram":
-                    special = added_token.pop("special")
-                    if not special:
-                        continue
-                    _ = added_token.pop("id")
+                special = added_token.pop("special", None)
+                _ = added_token.pop("id", None)
+                if tokenizer_json["model"]["type"] != "Unigram" and not special:
+                    continue
                 special_tokens.append(AddedToken(**added_token))
 
         trainer_class = MODEL_TO_TRAINER_MAPPING[tokenizer_json["model"]["type"]]
