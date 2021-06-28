@@ -129,7 +129,7 @@ Once your team is defined, you can start working on the project as soon as possi
 
 At first, it is always useful to get to know each other and to set up a means of communication.
 While we recommend that all technical aspects of work can be discussed directly on the [forum](https://discuss.huggingface.co/c/flax-jax-projects/22) under your project thread, 
-it can be very helpful to have a more direct way of communicating, *e.g.* in a channel or 
+it can be very helpful to have a more direct way of communicating, *e.g.* in a channel. 
 For this we have created a discord that you can access [here](https://discord.com/channels/858019234139602994/858019234139602997). 
 This discord will not be managed by anybody and is just there so that you can communicate more effectively with your team members. 
 Feel free to create a new channel for you and your team where you can discuss everything. If you and your team have already set up other ways of communicating, it is absolutely not required to make use of the discord. However, we do recommend each team to set up some kind 
@@ -184,7 +184,7 @@ As a conclusion, being honest about one's expected involvement is crucial so tha
 the workload can be divided accordingly. If someone doesn't think her/his tasks are feasible - let 
 the team know early on so that someone else can take care of it!
 
-It is recommended that the motivated and experienced team members take the lead in dividing the work and are ready to take over the work of any another team member. 
+It is recommended that the motivated and experienced team members take the lead in dividing the work and are ready to take over the tasks of another team member if necessary. 
 
 The workload can often be divided according to:
 
@@ -205,7 +205,7 @@ It is also very important to stay realistic with the scope of your project. Each
 has access to a TPUv3-8 for only *ca.* 10 days, so it's important to keep the scope of 
 the project reasonable. While we do want each team to work on interesting projects, each 
 team should make sure that the project goals can be achieved within the provided compute 
-time on TPU. *E.g.*, pretraining a 11 billion parameters T5 model is not really a realistic 
+time on TPU. For instance, pretraining a 11 billion parameters T5 model is not really a realistic 
 task with just 10 days of TPUv3-8 compute. 
 Also, it might be difficult to finish a project where the whole modeling, dataset and training code has to be written from scratch.
 
@@ -216,7 +216,7 @@ the project is feasible.
 
 Here is a collection of some more tips:
 
-- We strongly recommend to work as publicly as possible during the week so that other teams 
+- We strongly recommend to work as publicly and collaboratively as possible during the week so that other teams 
 and the organizers can best help you. This includes publishing important discussions on 
 the forum and making use of the [🤗 hub](http://huggingface.co/) to have a version 
 control for your models and training logs.
