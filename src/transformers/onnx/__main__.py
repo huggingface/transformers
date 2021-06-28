@@ -188,7 +188,14 @@ def main():
     if not args.output.parent.exists():
         args.output.parent.mkdir(parents=True)
 
-    print(f"About to export model: {args.model} using framework: {args.framework}")
+    if args.optimization_level != "disabled":
+        if not is_sympy_available() or not is_coloredlogs_available():
+            raise EnvironmentError(
+                "SymPy and coloredlogs must be installed in order to optimize ONNX models: "
+                "pip install sympy coloredlogs"
+            )
+
+    logger.info(f"About to export model: {args.model} using framework: {args.framework}")
 
     # Allocate the model
     tokenizer = AutoTokenizer.from_pretrained(args.model)
@@ -209,25 +216,28 @@ def main():
         raise NotImplementedError()
 
     validate_model_outputs(onnx_config, tokenizer, model, args.output, onnx_outputs, args.atol)
-    print(f"All good, model saved at: {args.output.as_posix()}")
+    logger.info(f"All good, model saved at: {args.output.as_posix()}")
 
     if args.optimization_level != "disabled":
-        print(f"About to optimize model with optimization_level: {args.optimization_level}")
+        logger.info(f"About to optimize model with optimization_level: {args.optimization_level}")
 
         args.opt_model_output = generate_identified_filename(args.output, f"_optimized_{args.optimization_level}")
         args.optimization_level = ONNX_OPTIMIZATION_LEVELS[args.optimization_level]
+
         optimize(args.output, onnx_config, args.optimization_level, args.use_gpu, args.opt_model_output)
 
         if not args.use_gpu:
-            validate_model_outputs(tokenizer, model, args.opt_model_output, onnx_outputs, args.atol)
+            validate_model_outputs(onnx_config, tokenizer, model, args.opt_model_output, onnx_outputs, args.atol)
         else:
-            print(
+            logger.info(
                 "Validating model targeting GPU is not supported yet. "
                 "Please, fill an issue or submit a PR if it's something you need."
             )
 
-        print(f"Optimized model saved at: {args.opt_model_output.as_posix()}")
+        logger.info(f"Optimized model saved at: {args.opt_model_output.as_posix()}")
 
 
 if __name__ == "__main__":
+    logger = logging.get_logger("transformers.onnx")  # pylint: disable=invalid-name
+    logger.setLevel(logging.INFO)
     main()

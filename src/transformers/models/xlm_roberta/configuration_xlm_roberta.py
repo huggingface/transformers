@@ -42,7 +42,7 @@ class XLMRobertaConfig(RobertaConfig):
     model_type = "xlm-roberta"
 
 
-# Copied from transformers.models.bert.configuration_bert.BertOnnxConfig with Bert->XLMRoberta
+# Copied from transformers.models.roberta.configuration_roberta.RobertaOnnxConfig with Roberta->XLMRoberta
 class XLMRobertaOnnxConfig(OnnxConfig):
 
     @property

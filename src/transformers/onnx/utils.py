@@ -42,7 +42,7 @@ def compute_effective_axis_dimension(dimension: int, fixed_dimension: int, num_t
     Returns:
 
     """
-    # < 0 is possible if using a dynamix axis
+    # < 0 is possible if using a dynamic axis
     if dimension <= 0:
         dimension = fixed_dimension
 
