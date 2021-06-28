@@ -198,6 +198,7 @@ _import_structure = {
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
+    "models.glm": ["GLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "GLMConfig", "GLMTokenizer"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
     "models.herbert": ["HerbertTokenizer"],
@@ -330,6 +331,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.glm"].append("GLMTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
@@ -491,6 +493,7 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
+
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -505,7 +508,6 @@ if is_torch_available():
             "load_tf_weights_in_albert",
         ]
     )
-
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_CAUSAL_LM_MAPPING",
@@ -550,6 +552,7 @@ if is_torch_available():
             "PretrainedBartModel",
         ]
     )
+
     _import_structure["models.bert"].extend(
         [
             "BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -761,6 +764,21 @@ if is_torch_available():
             "FunnelModel",
             "FunnelPreTrainedModel",
             "load_tf_weights_in_funnel",
+        ]
+    )
+    _import_structure["models.glm"].extend(
+        [
+            "GLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GLMForCausalLM",
+            "GLMForMaskedLM",
+            "GLMForMultipleChoice",
+            "GLMForQuestionAnswering",
+            "GLMForSequenceClassification",
+            "GLMForTokenClassification",
+            "GLMLayer",
+            "GLMModel",
+            "GLMPreTrainedModel",
+            "load_tf_weights_in_glm",
         ]
     )
     _import_structure["models.gpt2"].extend(
@@ -1784,6 +1802,7 @@ if TYPE_CHECKING:
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
+    from .models.glm import GLM_PRETRAINED_CONFIG_ARCHIVE_MAP, GLMConfig, GLMTokenizer
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
     from .models.herbert import HerbertTokenizer
@@ -1923,6 +1942,7 @@ if TYPE_CHECKING:
         from .models.dpr import DPRContextEncoderTokenizerFast, DPRQuestionEncoderTokenizerFast, DPRReaderTokenizerFast
         from .models.electra import ElectraTokenizerFast
         from .models.funnel import FunnelTokenizerFast
+        from .models.glm import GLMTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
         from .models.herbert import HerbertTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
@@ -1986,6 +2006,7 @@ if TYPE_CHECKING:
         from .utils.dummy_timm_objects import *
 
     if is_torch_available():
+
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -2264,6 +2285,19 @@ if TYPE_CHECKING:
             FunnelModel,
             FunnelPreTrainedModel,
             load_tf_weights_in_funnel,
+        )
+        from .models.glm import (
+            GLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GLMForCausalLM,
+            GLMForMaskedLM,
+            GLMForMultipleChoice,
+            GLMForQuestionAnswering,
+            GLMForSequenceClassification,
+            GLMForTokenClassification,
+            GLMLayer,
+            GLMModel,
+            GLMPreTrainedModel,
+            load_tf_weights_in_glm,
         )
         from .models.gpt2 import (
             GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,

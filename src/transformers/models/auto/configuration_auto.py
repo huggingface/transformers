@@ -47,6 +47,7 @@ from ..encoder_decoder.configuration_encoder_decoder import EncoderDecoderConfig
 from ..flaubert.configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
 from ..fsmt.configuration_fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig
 from ..funnel.configuration_funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig
+from ..glm.configuration_glm import GLM_PRETRAINED_CONFIG_ARCHIVE_MAP, GLMConfig
 from ..gpt2.configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
 from ..gpt_neo.configuration_gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
 from ..hubert.configuration_hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
@@ -95,6 +96,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     (key, value)
     for pretrained_map in [
         # Add archive maps here
+        GLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -154,6 +156,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
+        ("glm", GLMConfig),
         ("visual_bert", VisualBertConfig),
         ("roformer", RoFormerConfig),
         ("clip", CLIPConfig),
@@ -219,6 +222,7 @@ CONFIG_MAPPING = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("glm", "GLM"),
         ("visual_bert", "VisualBert"),
         ("roformer", "RoFormer"),
         ("clip", "CLIP"),

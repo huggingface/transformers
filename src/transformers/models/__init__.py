@@ -45,6 +45,7 @@ from . import (
     flaubert,
     fsmt,
     funnel,
+    glm,
     gpt2,
     gpt_neo,
     herbert,

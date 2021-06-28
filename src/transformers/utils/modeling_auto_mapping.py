@@ -6,6 +6,7 @@ from collections import OrderedDict
 
 MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
+        ("GLMConfig", "GLMForQuestionAnswering"),
         ("RoFormerConfig", "RoFormerForQuestionAnswering"),
         ("BigBirdPegasusConfig", "BigBirdPegasusForQuestionAnswering"),
         ("BigBirdConfig", "BigBirdForQuestionAnswering"),
@@ -40,6 +41,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
+        ("GLMConfig", "GLMForCausalLM"),
         ("RoFormerConfig", "RoFormerForCausalLM"),
         ("BigBirdPegasusConfig", "BigBirdPegasusForCausalLM"),
         ("GPTNeoConfig", "GPTNeoForCausalLM"),
@@ -79,6 +81,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
+        ("GLMConfig", "GLMForMaskedLM"),
         ("RoFormerConfig", "RoFormerForMaskedLM"),
         ("BigBirdConfig", "BigBirdForMaskedLM"),
         ("Wav2Vec2Config", "Wav2Vec2ForMaskedLM"),
@@ -112,6 +115,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
     [
+        ("GLMConfig", "GLMForMultipleChoice"),
         ("RoFormerConfig", "RoFormerForMultipleChoice"),
         ("BigBirdConfig", "BigBirdForMultipleChoice"),
         ("ConvBertConfig", "ConvBertForMultipleChoice"),
@@ -175,6 +179,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
+        ("GLMConfig", "GLMForSequenceClassification"),
         ("RoFormerConfig", "RoFormerForSequenceClassification"),
         ("BigBirdPegasusConfig", "BigBirdPegasusForSequenceClassification"),
         ("BigBirdConfig", "BigBirdForSequenceClassification"),
@@ -222,6 +227,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
+        ("GLMConfig", "GLMForTokenClassification"),
         ("RoFormerConfig", "RoFormerForTokenClassification"),
         ("BigBirdConfig", "BigBirdForTokenClassification"),
         ("ConvBertConfig", "ConvBertForTokenClassification"),
@@ -251,6 +257,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 
 MODEL_MAPPING_NAMES = OrderedDict(
     [
+        ("GLMConfig", "GLMModel"),
         ("VisualBertConfig", "VisualBertModel"),
         ("RoFormerConfig", "RoFormerModel"),
         ("CLIPConfig", "CLIPModel"),
@@ -314,6 +321,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
 
 MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
+        ("GLMConfig", "GLMForMaskedLM"),
         ("RoFormerConfig", "RoFormerForMaskedLM"),
         ("BigBirdPegasusConfig", "BigBirdPegasusForConditionalGeneration"),
         ("GPTNeoConfig", "GPTNeoForCausalLM"),
