@@ -20,6 +20,7 @@ from typing import List, Optional, Tuple
 
 import jieba
 
+
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 from ..bert.tokenization_bert import BasicTokenizer, WordpieceTokenizer, load_vocab
@@ -159,6 +160,14 @@ class RoFormerTokenizer(PreTrainedTokenizer):
                 strip_accents=strip_accents,
             )
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
+        try:
+            import jieba
+        except ImportError:
+            raise ImportError(
+                "You need to install jieba to use RoFormerTokenizer."
+                "See https://pypi.org/project/jieba/ for installation."
+            )
+        self.jieba = jieba
 
     @property
     def do_lower_case(self):
@@ -168,13 +177,29 @@ class RoFormerTokenizer(PreTrainedTokenizer):
     def vocab_size(self):
         return len(self.vocab)
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["jieba"] = None
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+        try:
+            import jieba
+        except ImportError:
+            raise ImportError(
+                "You need to install jieba to use RoFormerTokenizer."
+                "See https://pypi.org/project/jieba/ for installation."
+            )
+        self.jieba = jieba
+
     def get_vocab(self):
         return dict(self.vocab, **self.added_tokens_encoder)
 
     def _tokenize(self, text, use_jieba=True):
         split_tokens = []
         if use_jieba:
-            for wholword in jieba.cut(text, HMM=False):
+            for wholword in self.jieba.cut(text, HMM=False):
                 if wholword in self.vocab:
                     split_tokens.append(wholword)
                 else:
