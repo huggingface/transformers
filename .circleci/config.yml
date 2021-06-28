@@ -419,6 +419,7 @@ jobs:
             - run: python utils/check_dummies.py
             - run: python utils/check_repo.py
             - run: python utils/check_inits.py
+            - run: make deps_table_check_updated
 
     check_repository_consistency:
         working_directory: ~/transformers
