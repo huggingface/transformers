@@ -582,12 +582,12 @@ if __name__ == "__main__":
     # Replicate the train state on each device
     state = jax_utils.replicate(state)
 
-    train_metrics = []
     train_time = 0
     epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
     for epoch in epochs:
         # ======================== Training ================================
         train_start = time.time()
+        train_metrics = []
 
         # Create sampling rng
         rng, input_rng = jax.random.split(rng)

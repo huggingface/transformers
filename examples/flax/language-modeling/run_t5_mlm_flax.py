@@ -14,19 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning the library models for masked language modeling (BERT, ALBERT, RoBERTa...) with whole word masking on a
-text file or a dataset.
+Pretraining the library models for T5-like span-masked language modeling on a text file or a dataset.
 
-Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
-https://huggingface.co/models?filter=masked-lm
+Here is the full list of checkpoints on the hub that can be pretrained by this script:
+https://huggingface.co/models?filter=t5
 """
+# You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
 import logging
 import os
 import sys
 import time
 from dataclasses import dataclass, field
-
-# You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -296,7 +294,8 @@ class FlaxDataCollatorForT5MLM:
 
     def filter_input_ids(self, input_ids, sentinel_ids):
         """
-        Puts sentinel mask on `input_ids` and fuse consecutive mask tokens into a single mask token by deleting. This will reduce the sequence length from `expanded_inputs_length` to `input_length`.
+        Puts sentinel mask on `input_ids` and fuse consecutive mask tokens into a single mask token by deleting.
+        This will reduce the sequence length from `expanded_inputs_length` to `input_length`.
         """
         batch_size = input_ids.shape[0]
 
@@ -445,9 +444,6 @@ if __name__ == "__main__":
     #
     # For CSV/JSON files, this script will use the column called 'text' or the first column if no column called
     # 'text' is found. You can easily tweak this behavior (see below).
-    #
-    # In distributed training, the load_dataset function guarantees that only one local process can concurrently
-    # download the dataset.
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir)
@@ -517,7 +513,8 @@ if __name__ == "__main__":
 
     max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
-    # Otherwise, we tokenize every text, then concatenate them together before splitting them in smaller parts. Since we make sure that all sequences are of the same length, no attention_mask is needed.
+    # Otherwise, we tokenize every text, then concatenate them together before splitting them in smaller parts.
+    # Since we make sure that all sequences are of the same length, no attention_mask is needed.
     def tokenize_function(examples):
         return tokenizer(examples[text_column_name], return_attention_mask=False)
 
@@ -529,7 +526,9 @@ if __name__ == "__main__":
         load_from_cache_file=not data_args.overwrite_cache,
     )
 
-    # T5-like span masked language modeling will fuse consecutively masked tokens to a single sentinel token. To ensure that the input length is `max_seq_length`, we need to increase the maximum length according to `mlm_probability` and `mean_noise_span_length`. We can also define the label length accordingly.
+    # T5-like span masked language modeling will fuse consecutively masked tokens to a single sentinel token.
+    # To ensure that the input length is `max_seq_length`, we need to increase the maximum length
+    # according to `mlm_probability` and `mean_noise_span_length`. We can also define the label length accordingly.
     expanded_inputs_length, targets_length = compute_input_and_target_lengths(
         inputs_length=max_seq_length,
         noise_density=data_args.mlm_probability,
@@ -693,12 +692,12 @@ if __name__ == "__main__":
     # Replicate the train state on each device
     state = jax_utils.replicate(state)
 
-    train_metrics = []
     train_time = 0
     epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
     for epoch in epochs:
         # ======================== Training ================================
         train_start = time.time()
+        train_metrics = []
 
         # Create sampling rng
         rng, input_rng = jax.random.split(rng)
@@ -753,7 +752,7 @@ if __name__ == "__main__":
             cur_step = epoch * (len(tokenized_datasets["train"]) // train_batch_size)
             write_metric(train_metrics, eval_metrics, train_time, cur_step)
 
-        # save last checkpoint
+        # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
             params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
             model.save_pretrained(training_args.output_dir, params=params, push_to_hub=True)
