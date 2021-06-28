@@ -44,8 +44,8 @@ Tips:
 - DistilBERT doesn't have options to select the input positions (:obj:`position_ids` input). This could be added if
   necessary though, just let us know if you need this option.
 
-The original code can be found `here
-<https://github.com/huggingface/transformers/tree/master/examples/distillation>`__.
+This model was contributed by `victorsanh <https://huggingface.co/victorsanh>`__. The original code can be found
+:prefix_link:`here <examples/research-projects/distillation>`.
 
 
 DistilBertConfig

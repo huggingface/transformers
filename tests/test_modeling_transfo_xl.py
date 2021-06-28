@@ -27,6 +27,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 if is_torch_available():
     import torch
+    from torch import nn
 
     from transformers import TransfoXLConfig, TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
     from transformers.models.transfo_xl.modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST
@@ -347,6 +348,31 @@ class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
                 [expected_shape] * len(iter_hidden_states),
             )
+
+    # overwrite from test_modeling_common
+    def _mock_init_weights(self, module):
+        if hasattr(module, "weight") and module.weight is not None:
+            module.weight.data.fill_(3)
+        if hasattr(module, "cluster_weight") and module.cluster_weight is not None:
+            module.cluster_weight.data.fill_(3)
+        if hasattr(module, "bias") and module.bias is not None:
+            module.bias.data.fill_(3)
+        if hasattr(module, "cluster_bias") and module.cluster_bias is not None:
+            module.cluster_bias.data.fill_(3)
+
+        if hasattr(module, "emb_projs"):
+            for i in range(len(module.emb_projs)):
+                if module.emb_projs[i] is not None:
+                    nn.init.constant_(module.emb_projs[i], 0.0003)
+        if hasattr(module, "out_projs"):
+            for i in range(len(module.out_projs)):
+                if module.out_projs[i] is not None:
+                    nn.init.constant_(module.out_projs[i], 0.0003)
+
+        for param in ["r_emb", "r_w_bias", "r_r_bias", "r_bias"]:
+            if hasattr(module, param) and getattr(module, param) is not None:
+                weight = getattr(module, param)
+                weight.data.fill_(3)
 
 
 @require_torch

@@ -28,7 +28,7 @@ ipython
 ipython-genutils==0.2.0
 ipywidgets==7.5.1
 jedi==0.17.2
-Jinja2==2.11.2
+Jinja2>=2.11.3
 joblib==0.16.0
 jsonschema==3.2.0
 jupyter==1.0.0
@@ -56,7 +56,7 @@ parso==0.7.1
 pep517==0.8.2
 pexpect==4.8.0
 pickleshare==0.7.5
-Pillow==7.2.0
+Pillow>=8.1.1
 progress==1.5
 prometheus-client==0.8.0
 prompt-toolkit==3.0.7
@@ -64,13 +64,13 @@ ptyprocess==0.6.0
 pyaml==20.4.0
 pyarrow==1.0.1
 pycparser==2.20
-Pygments==2.6.1
+Pygments>=2.7.4
 pyparsing==2.4.6
 pyrsistent==0.16.0
 python-dateutil==2.8.1
 pytoml==0.1.21
 pytz==2020.1
-PyYAML==5.3.1
+PyYAML>=5.4
 pyzmq==19.0.2
 qtconsole==4.7.7
 QtPy==1.9.0
@@ -90,7 +90,7 @@ tornado==6.0.4
 tqdm==4.48.2
 traitlets
 git+https://github.com/huggingface/transformers.git
-urllib3==1.25.8
+urllib3==1.26.5
 wcwidth==0.2.5
 webencodings==0.5.1
 wget==3.2

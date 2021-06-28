@@ -54,7 +54,16 @@ deploy_doc "3ebb1b3" v3.2.0
 deploy_doc "0613f05" v3.3.1
 deploy_doc "eb0e0ce" v3.4.0
 deploy_doc "818878d" v3.5.1
-deploy_doc "c781171" v4.0.0
+deploy_doc "c781171" v4.0.1
 deploy_doc "bfa4ccf" v4.1.1
-deploy_doc "7d9a9d0" # v4.2.1 Latest stable release
-deploy_doc "4cd22r1" v4.3.0 # Pre-release
+deploy_doc "7d9a9d0" v4.2.2
+deploy_doc "bae0c79" v4.3.3
+deploy_doc "c988db5" v4.4.0
+deploy_doc "c5d6a28" v4.4.1
+deploy_doc "6bc89ed" v4.4.2
+deploy_doc "4906a29" v4.5.0
+deploy_doc "4bae96e" v4.5.1
+deploy_doc "25dee4a" v4.6.0
+deploy_doc "7a6c9fa" v4.7.0
+deploy_doc "9252a51" v4.8.0
+deploy_doc "1366172"  # v4.8.1 Latest stable release

@@ -18,7 +18,7 @@ import unittest
 
 from transformers import (
     DefaultFlowCallback,
-    EvaluationStrategy,
+    IntervalStrategy,
     PrinterCallback,
     ProgressCallback,
     Trainer,
@@ -91,7 +91,7 @@ class TrainerCallbackTest(unittest.TestCase):
         config = RegressionModelConfig(a=a, b=b)
         model = RegressionPreTrainedModel(config)
 
-        args = TrainingArguments(self.output_dir, disable_tqdm=disable_tqdm, **kwargs)
+        args = TrainingArguments(self.output_dir, disable_tqdm=disable_tqdm, report_to=[], **kwargs)
         return Trainer(
             model,
             args,
@@ -129,15 +129,12 @@ class TrainerCallbackTest(unittest.TestCase):
                 expected_events += ["on_step_begin", "on_step_end"]
                 if step % trainer.args.logging_steps == 0:
                     expected_events.append("on_log")
-                if (
-                    trainer.args.evaluation_strategy == EvaluationStrategy.STEPS
-                    and step % trainer.args.eval_steps == 0
-                ):
+                if trainer.args.evaluation_strategy == IntervalStrategy.STEPS and step % trainer.args.eval_steps == 0:
                     expected_events += evaluation_events.copy()
                 if step % trainer.args.save_steps == 0:
                     expected_events.append("on_save")
             expected_events.append("on_epoch_end")
-            if trainer.args.evaluation_strategy == EvaluationStrategy.EPOCH:
+            if trainer.args.evaluation_strategy == IntervalStrategy.EPOCH:
                 expected_events += evaluation_events.copy()
         expected_events += ["on_log", "on_train_end"]
         return expected_events
@@ -237,7 +234,7 @@ class TrainerCallbackTest(unittest.TestCase):
         self.assertEqual(events, self.get_expected_events(trainer))
 
         # warning should be emitted for duplicated callbacks
-        with unittest.mock.patch("transformers.trainer_callback.logger.warn") as warn_mock:
+        with unittest.mock.patch("transformers.trainer_callback.logger.warning") as warn_mock:
             trainer = self.get_trainer(
                 callbacks=[MyTestTrainerCallback, MyTestTrainerCallback],
             )

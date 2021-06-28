@@ -60,6 +60,7 @@ def prepare_marian_inputs_dict(
     decoder_attention_mask=None,
     head_mask=None,
     decoder_head_mask=None,
+    cross_attn_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.ne(config.pad_token_id)
@@ -69,6 +70,8 @@ def prepare_marian_inputs_dict(
         head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
     if decoder_head_mask is None:
         decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+    if cross_attn_head_mask is None:
+        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
@@ -76,6 +79,7 @@ def prepare_marian_inputs_dict(
         "decoder_attention_mask": attention_mask,
         "head_mask": head_mask,
         "decoder_head_mask": decoder_head_mask,
+        "cross_attn_head_mask": cross_attn_head_mask,
     }
 
 
@@ -354,9 +358,9 @@ class MarianIntegrationTest(unittest.TestCase):
         self.assertListEqual(self.expected_text, generated_words)
 
     def translate_src_text(self, **tokenizer_kwargs):
-        model_inputs = self.tokenizer.prepare_seq2seq_batch(
-            src_texts=self.src_text, return_tensors="pt", **tokenizer_kwargs
-        ).to(torch_device)
+        model_inputs = self.tokenizer(self.src_text, padding=True, return_tensors="pt", **tokenizer_kwargs).to(
+            torch_device
+        )
         self.assertEqual(self.model.device, model_inputs.input_ids.device)
         generated_ids = self.model.generate(
             model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2, max_length=128
@@ -373,9 +377,10 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
         src, tgt = ["I am a small frog"], ["Ich bin ein kleiner Frosch."]
         expected_ids = [38, 121, 14, 697, 38848, 0]
 
-        model_inputs: dict = self.tokenizer.prepare_seq2seq_batch(src, tgt_texts=tgt, return_tensors="pt").to(
-            torch_device
-        )
+        model_inputs = self.tokenizer(src, return_tensors="pt").to(torch_device)
+        with self.tokenizer.as_target_tokenizer():
+            targets = self.tokenizer(tgt, return_tensors="pt")
+        model_inputs["labels"] = targets["input_ids"].to(torch_device)
 
         self.assertListEqual(expected_ids, model_inputs.input_ids[0].tolist())
 
@@ -397,16 +402,12 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
 
     def test_unk_support(self):
         t = self.tokenizer
-        ids = t.prepare_seq2seq_batch(["||"], return_tensors="pt").to(torch_device).input_ids[0].tolist()
+        ids = t(["||"], return_tensors="pt").to(torch_device).input_ids[0].tolist()
         expected = [t.unk_token_id, t.unk_token_id, t.eos_token_id]
         self.assertEqual(expected, ids)
 
     def test_pad_not_split(self):
-        input_ids_w_pad = (
-            self.tokenizer.prepare_seq2seq_batch(["I am a small frog <pad>"], return_tensors="pt")
-            .input_ids[0]
-            .tolist()
-        )
+        input_ids_w_pad = self.tokenizer(["I am a small frog <pad>"], return_tensors="pt").input_ids[0].tolist()
         expected_w_pad = [38, 121, 14, 697, 38848, self.tokenizer.pad_token_id, 0]  # pad
         self.assertListEqual(expected_w_pad, input_ids_w_pad)
 

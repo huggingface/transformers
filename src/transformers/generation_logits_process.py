@@ -22,6 +22,10 @@ import numpy as np
 import torch
 
 from .file_utils import add_start_docstrings
+from .utils.logging import get_logger
+
+
+logger = get_logger(__name__)
 
 
 LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
@@ -35,8 +39,8 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
 
             `What are input IDs? <../glossary.html#input-ids>`__
         scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.vocab_size)`):
-            Prediction scores of a language modeling head. These can be scores for each vocabulary token before SoftMax
-            or scores for each vocabulary token after SoftMax.
+            Prediction scores of a language modeling head. These can be logits for each vocabulary when not using beam
+            search or log softmax for each vocabulary token when using beam search
         kwargs:
             Additional logits processor specific kwargs.
 
@@ -73,7 +77,7 @@ class LogitsProcessorList(list):
     This class can be used to create a list of :class:`~transformers.LogitsProcessor` or
     :class:`~transformers.LogitsWarper` to subsequently process a :obj:`scores` input tensor. This class inherits from
     list and adds a specific `__call__` method to apply each :class:`~transformers.LogitsProcessor` or
-    :class:`~transformers.LogitsProcessor` to the inputs.
+    :class:`~transformers.LogitsWarper` to the inputs.
     """
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -367,9 +371,7 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
         self.bad_words_ids = list(filter(lambda bad_token_seq: bad_token_seq != [eos_token_id], bad_words_ids))
 
         for banned_token_seq in self.bad_words_ids:
-            assert len(banned_token_seq) > 0, "Banned words token sequences {} cannot have an empty list".format(
-                bad_words_ids
-            )
+            assert len(banned_token_seq) > 0, f"Banned words token sequences {bad_words_ids} cannot have an empty list"
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         banned_tokens = self._calc_banned_bad_words_ids(input_ids)
@@ -417,7 +419,14 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
         banned_mask_list = []
         for idx, batch_banned_tokens in enumerate(banned_tokens):
             for token in batch_banned_tokens:
-                banned_mask_list.append([idx, token])
+                # Eliminates invalid bad word IDs that are over the vocabulary size.
+                if token <= scores.shape[1]:
+                    banned_mask_list.append([idx, token])
+                else:
+                    logger.error(
+                        f"An invalid bad word ID is defined: {token}. This ID is not contained in the"
+                        f"vocabulary, and is therefore ignored."
+                    )
         if not banned_mask_list:
             return scores
 
@@ -437,7 +446,7 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
 
 class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     r"""
-    :class:`transformers.LogitsProcessor` that enforces contrained generation and is useful for prefix-conditioned
+    :class:`transformers.LogitsProcessor` that enforces constrained generation and is useful for prefix-conditioned
     constrained generation. See `Autoregressive Entity Retrieval <https://arxiv.org/abs/2010.00904>`__ for more
     information.
 
@@ -465,7 +474,7 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
 class HammingDiversityLogitsProcessor(LogitsProcessor):
     r"""
     :class:`transformers.LogitsProcessor` that enforces diverse beam search. Note that this logits processor is only
-    effective for :meth:`transformers.PretrainedModel.group_beam_search`. See `Diverse Beam Search: Decoding Diverse
+    effective for :meth:`transformers.PreTrainedModel.group_beam_search`. See `Diverse Beam Search: Decoding Diverse
     Solutions from Neural Sequence Models <https://arxiv.org/pdf/1610.02424.pdf>`__ for more details.
 
     Args:
@@ -518,5 +527,68 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
             ]
             token_frequency = torch.bincount(previous_group_tokens, minlength=vocab_size).to(scores.device)
             scores[batch_idx * group_size : (batch_idx + 1) * group_size] -= self._diversity_penalty * token_frequency
+
+        return scores
+
+
+class ForcedBOSTokenLogitsProcessor(LogitsProcessor):
+    r"""
+    :class:`~transformers.LogitsProcessor` that enforces the specified token as the first generated token.
+
+    Args:
+        bos_token_id (:obj:`int`):
+            The id of the token to force as the first generated token.
+    """
+
+    def __init__(self, bos_token_id: int):
+        self.bos_token_id = bos_token_id
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        cur_len = input_ids.shape[-1]
+        if cur_len == 1:
+            num_tokens = scores.shape[1]
+            scores[:, [i for i in range(num_tokens) if i != self.bos_token_id]] = -float("inf")
+            scores[:, self.bos_token_id] = 0
+        return scores
+
+
+class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
+    r"""
+    :class:`~transformers.LogitsProcessor` that enforces the specified token as the last generated token when
+    :obj:`max_length` is reached.
+
+    Args:
+        max_length (:obj:`int`):
+            The maximum length of the sequence to be generated.
+        eos_token_id (:obj:`int`):
+            The id of the token to force as the last generated token when :obj:`max_length` is reached.
+    """
+
+    def __init__(self, max_length: int, eos_token_id: int):
+        self.max_length = max_length
+        self.eos_token_id = eos_token_id
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        cur_len = input_ids.shape[-1]
+        if cur_len == self.max_length - 1:
+            num_tokens = scores.shape[1]
+            scores[:, [i for i in range(num_tokens) if i != self.eos_token_id]] = -float("inf")
+            scores[:, self.eos_token_id] = 0
+        return scores
+
+
+class InfNanRemoveLogitsProcessor(LogitsProcessor):
+    r"""
+    :class:`~transformers.LogitsProcessor` that removes all :obj:`nan` and :obj:`inf` values to avoid the generation
+    method to fail. Note that using the logits processor should only be used if necessary since it can slow down the
+    generation method. :obj:`max_length` is reached.
+    """
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        # set all nan values to 0.0
+        scores[scores != scores] = 0.0
+
+        # set all inf values to max possible value
+        scores[scores == float("inf")] = torch.finfo(scores.dtype).max
 
         return scores

@@ -17,9 +17,13 @@ import unittest
 import pytest
 
 from transformers import pipeline
-from transformers.testing_utils import is_pipeline_test, require_torch, slow
+from transformers.testing_utils import is_pipeline_test, is_torch_available, require_torch, slow
 
 from .test_pipelines_common import MonoInputPipelineCommonMixin
+
+
+if is_torch_available():
+    from transformers.models.mbart import MBart50TokenizerFast, MBartForConditionalGeneration
 
 
 class TranslationEnToDePipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
@@ -48,19 +52,47 @@ class TranslationNewFormatPipelineTests(unittest.TestCase):
             pipeline(task="translation_cn_to_ar")
 
         # but we do for this one
-        pipeline(task="translation_en_to_de")
+        translator = pipeline(task="translation_en_to_de")
+        self.assertEquals(translator.src_lang, "en")
+        self.assertEquals(translator.tgt_lang, "de")
+
+    @require_torch
+    @slow
+    def test_multilingual_translation(self):
+        model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
+        tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
+
+        translator = pipeline(task="translation", model=model, tokenizer=tokenizer)
+        # Missing src_lang, tgt_lang
+        with self.assertRaises(ValueError):
+            translator("This is a test")
+
+        outputs = translator("This is a test", src_lang="en_XX", tgt_lang="ar_AR")
+        self.assertEqual(outputs, [{"translation_text": "هذا إختبار"}])
+
+        outputs = translator("This is a test", src_lang="en_XX", tgt_lang="hi_IN")
+        self.assertEqual(outputs, [{"translation_text": "यह एक परीक्षण है"}])
+
+        # src_lang, tgt_lang can be defined at pipeline call time
+        translator = pipeline(task="translation", model=model, tokenizer=tokenizer, src_lang="en_XX", tgt_lang="ar_AR")
+        outputs = translator("This is a test")
+        self.assertEqual(outputs, [{"translation_text": "هذا إختبار"}])
 
     @require_torch
     def test_translation_on_odd_language(self):
         model = "patrickvonplaten/t5-tiny-random"
-        pipeline(task="translation_cn_to_ar", model=model)
+        translator = pipeline(task="translation_cn_to_ar", model=model)
+        self.assertEquals(translator.src_lang, "cn")
+        self.assertEquals(translator.tgt_lang, "ar")
 
     @require_torch
     def test_translation_default_language_selection(self):
         model = "patrickvonplaten/t5-tiny-random"
         with pytest.warns(UserWarning, match=r".*translation_en_to_de.*"):
-            nlp = pipeline(task="translation", model=model)
-        self.assertEqual(nlp.task, "translation_en_to_de")
+            translator = pipeline(task="translation", model=model)
+        self.assertEqual(translator.task, "translation_en_to_de")
+        self.assertEquals(translator.src_lang, "en")
+        self.assertEquals(translator.tgt_lang, "de")
 
     @require_torch
     def test_translation_with_no_language_no_model_fails(self):

@@ -15,10 +15,11 @@
 # limitations under the License.
 """ TF 2.0 ALBERT model. """
 
-
+import math
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 
+import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
@@ -41,6 +42,7 @@ from ...modeling_tf_outputs import (
 )
 from ...modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
+    TFModelInputType,
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
@@ -57,6 +59,7 @@ from .configuration_albert import AlbertConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "albert-base-v2"
 _CONFIG_FOR_DOC = "AlbertConfig"
 _TOKENIZER_FOR_DOC = "AlbertTokenizer"
 
@@ -73,157 +76,87 @@ TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertWordEmbeddings
-class TFAlbertWordEmbeddings(tf.keras.layers.Layer):
-    def __init__(self, vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
-        super().__init__(**kwargs)
+class TFAlbertPreTrainingLoss:
+    """
+    Loss function suitable for ALBERT pretraining, that is, the task of pretraining a language model by combining SOP +
+    MLM. .. note:: Any label of -100 will be ignored (along with the corresponding logits) in the loss computation.
+    """
 
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-
-    def build(self, input_shape: tf.TensorShape):
-        self.weight = self.add_weight(
-            name="weight",
-            shape=[self.vocab_size, self.hidden_size],
-            initializer=get_initializer(self.initializer_range),
+    def compute_loss(self, labels: tf.Tensor, logits: tf.Tensor) -> tf.Tensor:
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
-
-        super().build(input_shape)
-
-    def get_config(self) -> Dict[str, Any]:
-        config = {
-            "vocab_size": self.vocab_size,
-            "hidden_size": self.hidden_size,
-            "initializer_range": self.initializer_range,
-        }
-        base_config = super().get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
-    def call(self, input_ids: tf.Tensor) -> tf.Tensor:
-        flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
-        embeddings = tf.gather(params=self.weight, indices=flat_input_ids)
-        embeddings = tf.reshape(
-            tensor=embeddings, shape=tf.concat(values=[shape_list(input_ids), [self.hidden_size]], axis=0)
+        # make sure only labels that are not equal to -100
+        # are taken into account as loss
+        masked_lm_active_loss = tf.not_equal(tf.reshape(tensor=labels["labels"], shape=(-1,)), -100)
+        masked_lm_reduced_logits = tf.boolean_mask(
+            tensor=tf.reshape(tensor=logits[0], shape=(-1, shape_list(logits[0])[2])),
+            mask=masked_lm_active_loss,
         )
-
-        embeddings.set_shape(input_ids.shape.as_list() + [self.hidden_size])
-
-        return embeddings
-
-
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertTokenTypeEmbeddings
-class TFAlbertTokenTypeEmbeddings(tf.keras.layers.Layer):
-    def __init__(self, type_vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
-        super().__init__(**kwargs)
-
-        self.type_vocab_size = type_vocab_size
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-
-    def build(self, input_shape: tf.TensorShape):
-        self.token_type_embeddings = self.add_weight(
-            name="embeddings",
-            shape=[self.type_vocab_size, self.hidden_size],
-            initializer=get_initializer(self.initializer_range),
+        masked_lm_labels = tf.boolean_mask(
+            tensor=tf.reshape(tensor=labels["labels"], shape=(-1,)), mask=masked_lm_active_loss
         )
-
-        super().build(input_shape)
-
-    def get_config(self) -> Dict[str, Any]:
-        config = {
-            "type_vocab_size": self.type_vocab_size,
-            "hidden_size": self.hidden_size,
-            "initializer_range": self.initializer_range,
-        }
-        base_config = super().get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
-    def call(self, token_type_ids: tf.Tensor) -> tf.Tensor:
-        flat_token_type_ids = tf.reshape(tensor=token_type_ids, shape=[-1])
-        one_hot_data = tf.one_hot(indices=flat_token_type_ids, depth=self.type_vocab_size, dtype=self._compute_dtype)
-        embeddings = tf.matmul(a=one_hot_data, b=self.token_type_embeddings)
-        embeddings = tf.reshape(
-            tensor=embeddings, shape=tf.concat(values=[shape_list(token_type_ids), [self.hidden_size]], axis=0)
+        sentence_order_active_loss = tf.not_equal(tf.reshape(tensor=labels["sentence_order_label"], shape=(-1,)), -100)
+        sentence_order_reduced_logits = tf.boolean_mask(
+            tensor=tf.reshape(tensor=logits[1], shape=(-1, 2)), mask=sentence_order_active_loss
         )
-
-        embeddings.set_shape(token_type_ids.shape.as_list() + [self.hidden_size])
-
-        return embeddings
-
-
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertPositionEmbeddings
-class TFAlbertPositionEmbeddings(tf.keras.layers.Layer):
-    def __init__(self, max_position_embeddings: int, hidden_size: int, initializer_range: float, **kwargs):
-        super().__init__(**kwargs)
-
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-
-    def build(self, input_shape: tf.TensorShape):
-        self.position_embeddings = self.add_weight(
-            name="embeddings",
-            shape=[self.max_position_embeddings, self.hidden_size],
-            initializer=get_initializer(self.initializer_range),
+        sentence_order_label = tf.boolean_mask(
+            tensor=tf.reshape(tensor=labels["sentence_order_label"], shape=(-1,)), mask=sentence_order_active_loss
         )
+        masked_lm_loss = loss_fn(y_true=masked_lm_labels, y_pred=masked_lm_reduced_logits)
+        sentence_order_loss = loss_fn(y_true=sentence_order_label, y_pred=sentence_order_reduced_logits)
+        masked_lm_loss = tf.reshape(tensor=masked_lm_loss, shape=(-1, shape_list(sentence_order_loss)[0]))
+        masked_lm_loss = tf.reduce_mean(input_tensor=masked_lm_loss, axis=0)
 
-        super().build(input_shape)
-
-    def get_config(self) -> Dict[str, Any]:
-        config = {
-            "max_position_embeddings": self.max_position_embeddings,
-            "hidden_size": self.hidden_size,
-            "initializer_range": self.initializer_range,
-        }
-        base_config = super().get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
-    def call(self, position_ids: tf.Tensor) -> tf.Tensor:
-        input_shape = shape_list(position_ids)
-        position_embeddings = self.position_embeddings[: input_shape[1], :]
-
-        return tf.broadcast_to(input=position_embeddings, shape=input_shape)
+        return masked_lm_loss + sentence_order_loss
 
 
 class TFAlbertEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: AlbertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.word_embeddings = TFAlbertWordEmbeddings(
-            vocab_size=config.vocab_size,
-            hidden_size=config.embedding_size,
-            initializer_range=config.initializer_range,
-            name="word_embeddings",
-        )
-        self.position_embeddings = TFAlbertPositionEmbeddings(
-            max_position_embeddings=config.max_position_embeddings,
-            hidden_size=config.embedding_size,
-            initializer_range=config.initializer_range,
-            name="position_embeddings",
-        )
-        self.token_type_embeddings = TFAlbertTokenTypeEmbeddings(
-            type_vocab_size=config.type_vocab_size,
-            hidden_size=config.embedding_size,
-            initializer_range=config.initializer_range,
-            name="token_type_embeddings",
-        )
+        self.vocab_size = config.vocab_size
+        self.type_vocab_size = config.type_vocab_size
+        self.embedding_size = config.embedding_size
+        self.max_position_embeddings = config.max_position_embeddings
+        self.initializer_range = config.initializer_range
         self.embeddings_sum = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
+    def build(self, input_shape: tf.TensorShape):
+        with tf.name_scope("word_embeddings"):
+            self.weight = self.add_weight(
+                name="weight",
+                shape=[self.vocab_size, self.embedding_size],
+                initializer=get_initializer(self.initializer_range),
+            )
+
+        with tf.name_scope("token_type_embeddings"):
+            self.token_type_embeddings = self.add_weight(
+                name="embeddings",
+                shape=[self.type_vocab_size, self.embedding_size],
+                initializer=get_initializer(self.initializer_range),
+            )
+
+        with tf.name_scope("position_embeddings"):
+            self.position_embeddings = self.add_weight(
+                name="embeddings",
+                shape=[self.max_position_embeddings, self.embedding_size],
+                initializer=get_initializer(self.initializer_range),
+            )
+
+        super().build(input_shape)
+
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings.call
     def call(
         self,
-        input_ids: tf.Tensor,
-        position_ids: tf.Tensor,
-        token_type_ids: tf.Tensor,
-        inputs_embeds: tf.Tensor,
+        input_ids: tf.Tensor = None,
+        position_ids: tf.Tensor = None,
+        token_type_ids: tf.Tensor = None,
+        inputs_embeds: tf.Tensor = None,
         training: bool = False,
     ) -> tf.Tensor:
         """
@@ -235,18 +168,19 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
         assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
-            inputs_embeds = self.word_embeddings(input_ids=input_ids)
+            inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
+
+        input_shape = shape_list(inputs_embeds)[:-1]
 
         if token_type_ids is None:
-            input_shape = shape_list(tensor=inputs_embeds)[:-1]
             token_type_ids = tf.fill(dims=input_shape, value=0)
 
         if position_ids is None:
-            position_embeds = self.position_embeddings(position_ids=inputs_embeds)
-        else:
-            position_embeds = self.position_embeddings(position_ids=position_ids)
+            position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
 
-        token_type_embeds = self.token_type_embeddings(token_type_ids=token_type_ids)
+        position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
+        position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
+        token_type_embeds = tf.gather(params=self.token_type_embeddings, indices=token_type_ids)
         final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds, token_type_embeds])
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
         final_embeddings = self.dropout(inputs=final_embeddings, training=training)
@@ -254,66 +188,60 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
         return final_embeddings
 
 
-class TFAlbertSelfOutput(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
-        super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(
-            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
-        )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
-
-    def call(self, hidden_states, input_tensor, training=False):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states, training=training)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
-
-
 class TFAlbertAttention(tf.keras.layers.Layer):
-    """ Contains the complete attention sublayer, including both dropouts and layer norm. """
+    """Contains the complete attention sublayer, including both dropouts and layer norm."""
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: AlbertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.hidden_size = config.hidden_size
-        self.output_attentions = config.output_attentions
+        if config.hidden_size % config.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number "
+                f"of attention heads ({config.num_attention_heads})"
+            )
+
         self.num_attention_heads = config.num_attention_heads
-        assert config.hidden_size % config.num_attention_heads == 0
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
+        self.output_attentions = config.output_attentions
+
         self.query = tf.keras.layers.Dense(
-            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
+            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
         self.key = tf.keras.layers.Dense(
-            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
+            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
         )
         self.value = tf.keras.layers.Dense(
-            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
+            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
         self.dense = tf.keras.layers.Dense(
-            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.pruned_heads = set()
         # Two different dropout probabilities; see https://github.com/google-research/albert/blob/master/modeling.py#L971-L993
-        self.attention_dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
-        self.output_dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.attention_dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
+        self.output_dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def transpose_for_scores(self, x, batch_size):
-        x = tf.reshape(x, (batch_size, -1, self.num_attention_heads, self.attention_head_size))
+    def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
+        # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
+        tensor = tf.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
 
-        return tf.transpose(x, perm=[0, 2, 1, 3])
+        # Transpose the tensor from [batch_size, seq_length, num_attention_heads, attention_head_size] to [batch_size, num_attention_heads, seq_length, attention_head_size]
+        return tf.transpose(tensor, perm=[0, 2, 1, 3])
 
-    def prune_heads(self, heads):
-        raise NotImplementedError
-
-    def call(self, input_tensor, attention_mask, head_mask, output_attentions, training=False):
+    def call(
+        self,
+        input_tensor: tf.Tensor,
+        attention_mask: tf.Tensor,
+        head_mask: tf.Tensor,
+        output_attentions: bool,
+        training: bool = False,
+    ) -> Tuple[tf.Tensor]:
         batch_size = shape_list(input_tensor)[0]
-        mixed_query_layer = self.query(input_tensor)
-        mixed_key_layer = self.key(input_tensor)
-        mixed_value_layer = self.value(input_tensor)
-
+        mixed_query_layer = self.query(inputs=input_tensor)
+        mixed_key_layer = self.key(inputs=input_tensor)
+        mixed_value_layer = self.value(inputs=input_tensor)
         query_layer = self.transpose_for_scores(mixed_query_layer, batch_size)
         key_layer = self.transpose_for_scores(mixed_key_layer, batch_size)
         value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
@@ -321,39 +249,34 @@ class TFAlbertAttention(tf.keras.layers.Layer):
         # Take the dot product between "query" and "key" to get the raw attention scores.
         # (batch size, num_heads, seq_len_q, seq_len_k)
         attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
-        # scale attention_scores
-        dk = tf.cast(shape_list(key_layer)[-1], tf.float32)
-        attention_scores = attention_scores / tf.math.sqrt(dk)
+        dk = tf.cast(self.sqrt_att_head_size, dtype=attention_scores.dtype)
+        attention_scores = tf.divide(attention_scores, dk)
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)
-            attention_scores = attention_scores + attention_mask
+            # Apply the attention mask is (precomputed for all layers in TFAlbertModel call() function)
+            attention_scores = tf.add(attention_scores, attention_mask)
 
         # Normalize the attention scores to probabilities.
-        attention_probs = tf.nn.softmax(attention_scores, axis=-1)
+        attention_probs = tf.nn.softmax(logits=attention_scores, axis=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.attention_dropout(attention_probs, training=training)
+        attention_probs = self.attention_dropout(inputs=attention_probs, training=training)
 
         # Mask heads if we want to
         if head_mask is not None:
-            attention_probs = attention_probs * head_mask
+            attention_probs = tf.multiply(attention_probs, head_mask)
 
         context_layer = tf.matmul(attention_probs, value_layer)
-
         context_layer = tf.transpose(context_layer, perm=[0, 2, 1, 3])
-        context_layer = tf.reshape(
-            context_layer, (batch_size, -1, self.all_head_size)
-        )  # (batch_size, seq_len_q, all_head_size)
 
+        # (batch_size, seq_len_q, all_head_size)
+        context_layer = tf.reshape(tensor=context_layer, shape=(batch_size, -1, self.all_head_size))
         self_outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
         hidden_states = self_outputs[0]
-
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.output_dropout(hidden_states, training=training)
-        attention_output = self.LayerNorm(hidden_states + input_tensor)
+        hidden_states = self.dense(inputs=hidden_states)
+        hidden_states = self.output_dropout(inputs=hidden_states, training=training)
+        attention_output = self.LayerNorm(inputs=hidden_states + input_tensor)
 
         # add attentions if we output them
         outputs = (attention_output,) + self_outputs[1:]
@@ -362,12 +285,12 @@ class TFAlbertAttention(tf.keras.layers.Layer):
 
 
 class TFAlbertLayer(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: AlbertConfig, **kwargs):
         super().__init__(**kwargs)
-        self.attention = TFAlbertAttention(config, name="attention")
 
+        self.attention = TFAlbertAttention(config, name="attention")
         self.ffn = tf.keras.layers.Dense(
-            config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="ffn"
+            units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="ffn"
         )
 
         if isinstance(config.hidden_act, str):
@@ -376,107 +299,123 @@ class TFAlbertLayer(tf.keras.layers.Layer):
             self.activation = config.hidden_act
 
         self.ffn_output = tf.keras.layers.Dense(
-            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="ffn_output"
+            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="ffn_output"
         )
         self.full_layer_layer_norm = tf.keras.layers.LayerNormalization(
             epsilon=config.layer_norm_eps, name="full_layer_layer_norm"
         )
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def call(self, hidden_states, attention_mask, head_mask, output_attentions, training=False):
+    def call(
+        self,
+        hidden_states: tf.Tensor,
+        attention_mask: tf.Tensor,
+        head_mask: tf.Tensor,
+        output_attentions: bool,
+        training: bool = False,
+    ) -> Tuple[tf.Tensor]:
         attention_outputs = self.attention(
-            hidden_states, attention_mask, head_mask, output_attentions, training=training
+            input_tensor=hidden_states,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            training=training,
         )
-        ffn_output = self.ffn(attention_outputs[0])
+        ffn_output = self.ffn(inputs=attention_outputs[0])
         ffn_output = self.activation(ffn_output)
-        ffn_output = self.ffn_output(ffn_output)
-        ffn_output = self.dropout(ffn_output, training=training)
-
-        hidden_states = self.full_layer_layer_norm(ffn_output + attention_outputs[0])
+        ffn_output = self.ffn_output(inputs=ffn_output)
+        ffn_output = self.dropout(inputs=ffn_output, training=training)
+        hidden_states = self.full_layer_layer_norm(inputs=ffn_output + attention_outputs[0])
 
         # add attentions if we output them
         outputs = (hidden_states,) + attention_outputs[1:]
+
         return outputs
 
 
 class TFAlbertLayerGroup(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: AlbertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
         self.albert_layers = [
-            TFAlbertLayer(config, name="albert_layers_._{}".format(i)) for i in range(config.inner_group_num)
+            TFAlbertLayer(config, name=f"albert_layers_._{i}") for i in range(config.inner_group_num)
         ]
 
-    def call(self, hidden_states, attention_mask, head_mask, output_attentions, output_hidden_states, training=False):
-        layer_hidden_states = ()
-        layer_attentions = ()
+    def call(
+        self,
+        hidden_states: tf.Tensor,
+        attention_mask: tf.Tensor,
+        head_mask: tf.Tensor,
+        output_attentions: bool,
+        output_hidden_states: bool,
+        training: bool = False,
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+        layer_hidden_states = () if output_hidden_states else None
+        layer_attentions = () if output_attentions else None
 
         for layer_index, albert_layer in enumerate(self.albert_layers):
+            if output_hidden_states:
+                layer_hidden_states = layer_hidden_states + (hidden_states,)
+
             layer_output = albert_layer(
-                hidden_states, attention_mask, head_mask[layer_index], output_attentions, training=training
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                head_mask=head_mask[layer_index],
+                output_attentions=output_attentions,
+                training=training,
             )
             hidden_states = layer_output[0]
 
             if output_attentions:
                 layer_attentions = layer_attentions + (layer_output[1],)
 
-            if output_hidden_states:
-                layer_hidden_states = layer_hidden_states + (hidden_states,)
-
-        outputs = (hidden_states,)
+        # Add last layer
         if output_hidden_states:
-            outputs = outputs + (layer_hidden_states,)
-        if output_attentions:
-            outputs = outputs + (layer_attentions,)
-        # last-layer hidden state, (layer hidden states), (layer attentions)
-        return outputs
+            layer_hidden_states = layer_hidden_states + (hidden_states,)
+
+        return tuple(v for v in [hidden_states, layer_hidden_states, layer_attentions] if v is not None)
 
 
 class TFAlbertTransformer(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: AlbertConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.num_hidden_layers = config.num_hidden_layers
         self.num_hidden_groups = config.num_hidden_groups
+        # Number of layers in a hidden group
+        self.layers_per_group = int(config.num_hidden_layers / config.num_hidden_groups)
         self.embedding_hidden_mapping_in = tf.keras.layers.Dense(
-            config.hidden_size,
+            units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="embedding_hidden_mapping_in",
         )
         self.albert_layer_groups = [
-            TFAlbertLayerGroup(config, name="albert_layer_groups_._{}".format(i))
-            for i in range(config.num_hidden_groups)
+            TFAlbertLayerGroup(config, name=f"albert_layer_groups_._{i}") for i in range(config.num_hidden_groups)
         ]
 
     def call(
         self,
-        hidden_states,
-        attention_mask,
-        head_mask,
-        output_attentions,
-        output_hidden_states,
-        return_dict,
-        training=False,
-    ):
-        hidden_states = self.embedding_hidden_mapping_in(hidden_states)
+        hidden_states: tf.Tensor,
+        attention_mask: tf.Tensor,
+        head_mask: tf.Tensor,
+        output_attentions: bool,
+        output_hidden_states: bool,
+        return_dict: bool,
+        training: bool = False,
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+        hidden_states = self.embedding_hidden_mapping_in(inputs=hidden_states)
         all_attentions = () if output_attentions else None
         all_hidden_states = (hidden_states,) if output_hidden_states else None
 
         for i in range(self.num_hidden_layers):
-            # Number of layers in a hidden group
-            layers_per_group = int(self.num_hidden_layers / self.num_hidden_groups)
-
             # Index of the hidden group
             group_idx = int(i / (self.num_hidden_layers / self.num_hidden_groups))
-
             layer_group_output = self.albert_layer_groups[group_idx](
-                hidden_states,
-                attention_mask,
-                head_mask[group_idx * layers_per_group : (group_idx + 1) * layers_per_group],
-                output_attentions,
-                output_hidden_states,
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                head_mask=head_mask[group_idx * self.layers_per_group : (group_idx + 1) * self.layers_per_group],
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
                 training=training,
             )
             hidden_states = layer_group_output[0]
@@ -489,6 +428,7 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+
         return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
@@ -505,7 +445,7 @@ class TFAlbertPreTrainedModel(TFPreTrainedModel):
 
 
 class TFAlbertMLMHead(tf.keras.layers.Layer):
-    def __init__(self, config, input_embeddings, **kwargs):
+    def __init__(self, config: AlbertConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
         self.vocab_size = config.vocab_size
@@ -524,7 +464,7 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
         # an output-only bias for each token.
         self.decoder = input_embeddings
 
-    def build(self, input_shape):
+    def build(self, input_shape: tf.TensorShape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
         self.decoder_bias = self.add_weight(
             shape=(self.vocab_size,), initializer="zeros", trainable=True, name="decoder/bias"
@@ -532,22 +472,22 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> tf.keras.layers.Layer:
         return self.decoder
 
-    def set_output_embeddings(self, value):
+    def set_output_embeddings(self, value: tf.Variable):
         self.decoder.weight = value
         self.decoder.vocab_size = shape_list(value)[0]
 
-    def get_bias(self):
+    def get_bias(self) -> Dict[str, tf.Variable]:
         return {"bias": self.bias, "decoder_bias": self.decoder_bias}
 
-    def set_bias(self, value):
+    def set_bias(self, value: tf.Variable):
         self.bias = value["bias"]
         self.decoder_bias = value["decoder_bias"]
         self.vocab_size = shape_list(value["bias"])[0]
 
-    def call(self, hidden_states):
+    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.activation(hidden_states)
         hidden_states = self.LayerNorm(inputs=hidden_states)
@@ -564,16 +504,16 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
 class TFAlbertMainLayer(tf.keras.layers.Layer):
     config_class = AlbertConfig
 
-    def __init__(self, config, add_pooling_layer=True, **kwargs):
+    def __init__(self, config: AlbertConfig, add_pooling_layer: bool = True, **kwargs):
         super().__init__(**kwargs)
-        self.num_hidden_layers = config.num_hidden_layers
+
         self.config = config
 
         self.embeddings = TFAlbertEmbeddings(config, name="embeddings")
         self.encoder = TFAlbertTransformer(config, name="encoder")
         self.pooler = (
             tf.keras.layers.Dense(
-                config.hidden_size,
+                units=config.hidden_size,
                 kernel_initializer=get_initializer(config.initializer_range),
                 activation="tanh",
                 name="pooler",
@@ -582,12 +522,12 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
             else None
         )
 
-    def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
+    def get_input_embeddings(self) -> tf.keras.layers.Layer:
+        return self.embeddings
 
-    def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings.weight = value
-        self.embeddings.word_embeddings.vocab_size = shape_list(value)[0]
+    def set_input_embeddings(self, value: tf.Variable):
+        self.embeddings.weight = value
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -598,18 +538,18 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
 
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
         **kwargs,
-    ):
+    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -636,26 +576,35 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs["attention_mask"] is None:
-            inputs["attention_mask"] = tf.fill(input_shape, 1)
+            inputs["attention_mask"] = tf.fill(dims=input_shape, value=1)
 
         if inputs["token_type_ids"] is None:
-            inputs["token_type_ids"] = tf.fill(input_shape, 0)
+            inputs["token_type_ids"] = tf.fill(dims=input_shape, value=0)
+
+        embedding_output = self.embeddings(
+            input_ids=inputs["input_ids"],
+            position_ids=inputs["position_ids"],
+            token_type_ids=inputs["token_type_ids"],
+            inputs_embeds=inputs["inputs_embeds"],
+            training=inputs["training"],
+        )
 
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-        extended_attention_mask = inputs["attention_mask"][:, tf.newaxis, tf.newaxis, :]
+        extended_attention_mask = tf.reshape(inputs["attention_mask"], (input_shape[0], 1, 1, input_shape[1]))
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-
-        extended_attention_mask = tf.cast(extended_attention_mask, tf.float32)
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        extended_attention_mask = tf.cast(extended_attention_mask, dtype=embedding_output.dtype)
+        one_cst = tf.constant(1.0, dtype=embedding_output.dtype)
+        ten_thousand_cst = tf.constant(-10000.0, dtype=embedding_output.dtype)
+        extended_attention_mask = tf.multiply(tf.subtract(one_cst, extended_attention_mask), ten_thousand_cst)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -665,27 +614,20 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
         if inputs["head_mask"] is not None:
             raise NotImplementedError
         else:
-            inputs["head_mask"] = [None] * self.num_hidden_layers
+            inputs["head_mask"] = [None] * self.config.num_hidden_layers
 
-        embedding_output = self.embeddings(
-            inputs["input_ids"],
-            inputs["position_ids"],
-            inputs["token_type_ids"],
-            inputs["inputs_embeds"],
-            training=inputs["training"],
-        )
         encoder_outputs = self.encoder(
-            embedding_output,
-            extended_attention_mask,
-            inputs["head_mask"],
-            inputs["output_attentions"],
-            inputs["output_hidden_states"],
-            inputs["return_dict"],
+            hidden_states=embedding_output,
+            attention_mask=extended_attention_mask,
+            head_mask=inputs["head_mask"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
 
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output[:, 0]) if self.pooler is not None else None
+        pooled_output = self.pooler(inputs=sequence_output[:, 0]) if self.pooler is not None else None
 
         if not inputs["return_dict"]:
             return (
@@ -725,6 +667,7 @@ class TFAlbertForPreTrainingOutput(ModelOutput):
             heads.
     """
 
+    loss: tf.Tensor = None
     prediction_logits: tf.Tensor = None
     sop_logits: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
@@ -829,31 +772,32 @@ ALBERT_INPUTS_DOCSTRING = r"""
     ALBERT_START_DOCSTRING,
 )
 class TFAlbertModel(TFAlbertPreTrainedModel):
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: AlbertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
+
         self.albert = TFAlbertMainLayer(config, name="albert")
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="albert-base-v2",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
         **kwargs,
-    ):
+    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -869,9 +813,8 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
-
         outputs = self.albert(
-            inputs["input_ids"],
+            input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             token_type_ids=inputs["token_type_ids"],
             position_ids=inputs["position_ids"],
@@ -905,37 +848,40 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
     """,
     ALBERT_START_DOCSTRING,
 )
-class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
+class TFAlbertForPreTraining(TFAlbertPreTrainedModel, TFAlbertPreTrainingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"predictions.decoder.weight"]
 
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: AlbertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
+
         self.num_labels = config.num_labels
 
         self.albert = TFAlbertMainLayer(config, name="albert")
-        self.predictions = TFAlbertMLMHead(config, self.albert.embeddings.word_embeddings, name="predictions")
+        self.predictions = TFAlbertMLMHead(config, input_embeddings=self.albert.embeddings, name="predictions")
         self.sop_classifier = TFAlbertSOPHead(config, name="sop_classifier")
 
-    def get_lm_head(self):
+    def get_lm_head(self) -> tf.keras.layers.Layer:
         return self.predictions
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFAlbertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        sentence_order_label: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
         **kwargs,
-    ):
+    ) -> Union[TFAlbertForPreTrainingOutput, Tuple[tf.Tensor]]:
         r"""
         Return:
 
@@ -966,12 +912,13 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            labels=labels,
+            sentence_order_label=sentence_order_label,
             training=training,
             kwargs_call=kwargs,
         )
-
         outputs = self.albert(
-            inputs["input_ids"],
+            input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             token_type_ids=inputs["token_type_ids"],
             position_ids=inputs["position_ids"],
@@ -979,24 +926,32 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         sequence_output, pooled_output = outputs[:2]
-        prediction_scores = self.predictions(sequence_output)
-        sop_scores = self.sop_classifier(pooled_output, training=inputs["training"])
+        prediction_scores = self.predictions(hidden_states=sequence_output)
+        sop_scores = self.sop_classifier(pooled_output=pooled_output, training=inputs["training"])
+        total_loss = None
+
+        if inputs["labels"] is not None and inputs["sentence_order_label"] is not None:
+            d_labels = {"labels": inputs["labels"]}
+            d_labels["sentence_order_label"] = inputs["sentence_order_label"]
+            total_loss = self.compute_loss(labels=d_labels, logits=(prediction_scores, sop_scores))
 
         if not inputs["return_dict"]:
-            return (prediction_scores, sop_scores) + outputs[2:]
+            output = (prediction_scores, sop_scores) + outputs[2:]
+            return ((total_loss,) + output) if total_loss is not None else output
 
         return TFAlbertForPreTrainingOutput(
+            loss=total_loss,
             prediction_logits=prediction_scores,
             sop_logits=sop_scores,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
-    def serving_output(self, output):
+    def serving_output(self, output: TFAlbertForPreTrainingOutput) -> TFAlbertForPreTrainingOutput:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
@@ -1009,19 +964,20 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
 
 
 class TFAlbertSOPHead(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: AlbertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dropout = tf.keras.layers.Dropout(config.classifier_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(rate=config.classifier_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
-            config.num_labels,
+            units=config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
             name="classifier",
         )
 
-    def call(self, pooled_output, training: bool):
-        dropout_pooled_output = self.dropout(pooled_output, training=training)
-        logits = self.classifier(dropout_pooled_output)
+    def call(self, pooled_output: tf.Tensor, training: bool) -> tf.Tensor:
+        dropout_pooled_output = self.dropout(inputs=pooled_output, training=training)
+        logits = self.classifier(inputs=dropout_pooled_output)
+
         return logits
 
 
@@ -1030,37 +986,37 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"predictions.decoder.weight"]
 
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: AlbertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.albert = TFAlbertMainLayer(config, add_pooling_layer=False, name="albert")
-        self.predictions = TFAlbertMLMHead(config, self.albert.embeddings.word_embeddings, name="predictions")
+        self.predictions = TFAlbertMLMHead(config, input_embeddings=self.albert.embeddings, name="predictions")
 
-    def get_lm_head(self):
+    def get_lm_head(self) -> tf.keras.layers.Layer:
         return self.predictions
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="albert-base-v2",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
         **kwargs,
-    ):
+    ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
@@ -1084,7 +1040,7 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
             kwargs_call=kwargs,
         )
         outputs = self.albert(
-            inputs["input_ids"],
+            input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             token_type_ids=inputs["token_type_ids"],
             position_ids=inputs["position_ids"],
@@ -1092,12 +1048,14 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         sequence_output = outputs[0]
-        prediction_scores = self.predictions(sequence_output, training=inputs["training"])
-        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], prediction_scores)
+        prediction_scores = self.predictions(hidden_states=sequence_output, training=inputs["training"])
+        loss = (
+            None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=prediction_scores)
+        )
 
         if not inputs["return_dict"]:
             output = (prediction_scores,) + outputs[2:]
@@ -1131,38 +1089,39 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
     _keys_to_ignore_on_load_unexpected = [r"predictions"]
     _keys_to_ignore_on_load_missing = [r"dropout"]
 
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: AlbertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
+
         self.num_labels = config.num_labels
 
         self.albert = TFAlbertMainLayer(config, name="albert")
-        self.dropout = tf.keras.layers.Dropout(config.classifier_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(rate=config.classifier_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
-            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
+            units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="albert-base-v2",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
         **kwargs,
-    ):
+    ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the sequence classification/regression loss. Indices should be in ``[0, ...,
@@ -1186,7 +1145,7 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
             kwargs_call=kwargs,
         )
         outputs = self.albert(
-            inputs["input_ids"],
+            input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             token_type_ids=inputs["token_type_ids"],
             position_ids=inputs["position_ids"],
@@ -1194,13 +1153,13 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         pooled_output = outputs[1]
-        pooled_output = self.dropout(pooled_output, training=inputs["training"])
-        logits = self.classifier(pooled_output)
-        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
+        pooled_output = self.dropout(inputs=pooled_output, training=inputs["training"])
+        logits = self.classifier(inputs=pooled_output)
+        loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
@@ -1234,38 +1193,39 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"predictions"]
     _keys_to_ignore_on_load_missing = [r"dropout"]
 
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: AlbertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
+
         self.num_labels = config.num_labels
 
         self.albert = TFAlbertMainLayer(config, add_pooling_layer=False, name="albert")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
-            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
+            units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="albert-base-v2",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
         **kwargs,
-    ):
+    ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
@@ -1288,7 +1248,7 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
             kwargs_call=kwargs,
         )
         outputs = self.albert(
-            inputs["input_ids"],
+            input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             token_type_ids=inputs["token_type_ids"],
             position_ids=inputs["position_ids"],
@@ -1300,9 +1260,9 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
             training=inputs["training"],
         )
         sequence_output = outputs[0]
-        sequence_output = self.dropout(sequence_output, training=inputs["training"])
-        logits = self.classifier(sequence_output)
-        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
+        sequence_output = self.dropout(inputs=sequence_output, training=inputs["training"])
+        logits = self.classifier(inputs=sequence_output)
+        loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
@@ -1335,38 +1295,39 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"predictions"]
 
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: AlbertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
+
         self.num_labels = config.num_labels
 
         self.albert = TFAlbertMainLayer(config, add_pooling_layer=False, name="albert")
         self.qa_outputs = tf.keras.layers.Dense(
-            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
+            units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="albert-base-v2",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        start_positions=None,
-        end_positions=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        start_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        end_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
         **kwargs,
-    ):
+    ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
         r"""
         start_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1395,7 +1356,7 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
             kwargs_call=kwargs,
         )
         outputs = self.albert(
-            inputs["input_ids"],
+            input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             token_type_ids=inputs["token_type_ids"],
             position_ids=inputs["position_ids"],
@@ -1403,20 +1364,20 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         sequence_output = outputs[0]
-        logits = self.qa_outputs(sequence_output)
-        start_logits, end_logits = tf.split(logits, 2, axis=-1)
-        start_logits = tf.squeeze(start_logits, axis=-1)
-        end_logits = tf.squeeze(end_logits, axis=-1)
+        logits = self.qa_outputs(inputs=sequence_output)
+        start_logits, end_logits = tf.split(value=logits, num_or_size_splits=2, axis=-1)
+        start_logits = tf.squeeze(input=start_logits, axis=-1)
+        end_logits = tf.squeeze(input=end_logits, axis=-1)
         loss = None
 
         if inputs["start_positions"] is not None and inputs["end_positions"] is not None:
             labels = {"start_position": inputs["start_positions"]}
             labels["end_position"] = inputs["end_positions"]
-            loss = self.compute_loss(labels, (start_logits, end_logits))
+            loss = self.compute_loss(labels=labels, logits=(start_logits, end_logits))
 
         if not inputs["return_dict"]:
             output = (start_logits, end_logits) + outputs[2:]
@@ -1453,13 +1414,13 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"predictions"]
     _keys_to_ignore_on_load_missing = [r"dropout"]
 
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: AlbertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.albert = TFAlbertMainLayer(config, name="albert")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
-            1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
+            units=1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
     @property
@@ -1475,25 +1436,25 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="albert-base-v2",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
         **kwargs,
-    ):
+    ) -> Union[TFMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
@@ -1526,38 +1487,40 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
 
         flat_input_ids = tf.reshape(inputs["input_ids"], (-1, seq_length)) if inputs["input_ids"] is not None else None
         flat_attention_mask = (
-            tf.reshape(inputs["attention_mask"], (-1, seq_length)) if inputs["attention_mask"] is not None else None
+            tf.reshape(tensor=inputs["attention_mask"], shape=(-1, seq_length))
+            if inputs["attention_mask"] is not None
+            else None
         )
         flat_token_type_ids = (
-            tf.reshape(inputs["token_type_ids"], (-1, seq_length)) if inputs["token_type_ids"] is not None else None
+            tf.reshape(tensor=inputs["token_type_ids"], shape=(-1, seq_length))
+            if inputs["token_type_ids"] is not None
+            else None
         )
-        flat_position_ids = tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
+        flat_position_ids = (
+            tf.reshape(tensor=position_ids, shape=(-1, seq_length)) if position_ids is not None else None
+        )
         flat_inputs_embeds = (
-            tf.reshape(inputs["inputs_embeds"], (-1, seq_length, shape_list(inputs["inputs_embeds"])[3]))
+            tf.reshape(tensor=inputs["inputs_embeds"], shape=(-1, seq_length, shape_list(inputs["inputs_embeds"])[3]))
             if inputs["inputs_embeds"] is not None
             else None
         )
-
         outputs = self.albert(
-            flat_input_ids,
-            flat_attention_mask,
-            flat_token_type_ids,
-            flat_position_ids,
-            inputs["head_mask"],
-            flat_inputs_embeds,
-            inputs["output_attentions"],
-            inputs["output_hidden_states"],
+            input_ids=flat_input_ids,
+            attention_mask=flat_attention_mask,
+            token_type_ids=flat_token_type_ids,
+            position_ids=flat_position_ids,
+            head_mask=inputs["head_mask"],
+            inputs_embeds=flat_inputs_embeds,
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-
         pooled_output = outputs[1]
-
-        pooled_output = self.dropout(pooled_output, training=inputs["training"])
-        logits = self.classifier(pooled_output)
-        reshaped_logits = tf.reshape(logits, (-1, num_choices))
-
-        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], reshaped_logits)
+        pooled_output = self.dropout(inputs=pooled_output, training=inputs["training"])
+        logits = self.classifier(inputs=pooled_output)
+        reshaped_logits = tf.reshape(tensor=logits, shape=(-1, num_choices))
+        loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=reshaped_logits)
 
         if not inputs["return_dict"]:
             output = (reshaped_logits,) + outputs[2:]
@@ -1580,7 +1543,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
         ]
     )
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving
-    def serving(self, inputs: Dict[str, tf.Tensor]):
+    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFMultipleChoiceModelOutput:
         output = self.call(input_ids=inputs)
 
         return self.serving_output(output)

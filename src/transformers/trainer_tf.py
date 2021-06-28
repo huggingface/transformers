@@ -33,7 +33,7 @@ from tensorflow.python.distribute.values import PerReplica
 
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, EvaluationStrategy, PredictionOutput, set_seed
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, IntervalStrategy, PredictionOutput, set_seed
 from .training_args_tf import TFTrainingArguments
 from .utils import logging
 
@@ -115,7 +115,7 @@ class TFTrainer:
         elif os.getenv("WANDB_DISABLED", "").upper() not in ENV_VARS_TRUE_VALUES:
             logger.info(
                 "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
-                "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
+                "run `pip install wandb && wandb login` see https://docs.wandb.com/huggingface."
             )
 
         if is_comet_available():
@@ -218,10 +218,16 @@ class TFTrainer:
         TFTrainer's init through :obj:`optimizers`, or subclass and override this method.
         """
         if not self.optimizer and not self.lr_scheduler:
+            warmup_steps = (
+                self.args.warmup_steps
+                if self.args.warmup_steps > 0
+                else math.ceil(num_training_steps * self.args.warmup_ratio)
+            )
+
             self.optimizer, self.lr_scheduler = create_optimizer(
                 self.args.learning_rate,
                 num_training_steps,
-                self.args.warmup_steps,
+                warmup_steps,
                 adam_beta1=self.args.adam_beta1,
                 adam_beta2=self.args.adam_beta2,
                 adam_epsilon=self.args.adam_epsilon,
@@ -297,11 +303,11 @@ class TFTrainer:
             prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
         )
 
-        logger.info("***** Running %s *****", description)
-        logger.info("  Num examples in dataset = %d", num_examples)
+        logger.info(f"***** Running {description} *****")
+        logger.info(f"  Num examples in dataset = {num_examples}")
         if description == "Evaluation":
-            logger.info("  Num examples in used in evaluation = %d", self.args.eval_batch_size * steps)
-        logger.info("  Batch size = %d", self.args.eval_batch_size)
+            logger.info(f"  Num examples in used in evaluation = {self.args.eval_batch_size * steps}")
+        logger.info(f"  Batch size = {self.args.eval_batch_size}")
 
         label_ids: np.ndarray = None
         preds: np.ndarray = None
@@ -498,7 +504,7 @@ class TFTrainer:
             if self.model.ckpt_manager.latest_checkpoint:
 
                 logger.info(
-                    "Checkpoint file %s found and restoring from checkpoint", self.model.ckpt_manager.latest_checkpoint
+                    f"Checkpoint file {self.model.ckpt_manager.latest_checkpoint} found and restoring from checkpoint"
                 )
                 ckpt.restore(self.model.ckpt_manager.latest_checkpoint).expect_partial()
 
@@ -508,9 +514,9 @@ class TFTrainer:
                 steps_trained_in_current_epoch = self.global_step % self.steps_per_epoch
 
                 logger.info("  Continuing training from checkpoint, will skip to saved global_step")
-                logger.info("  Continuing training from epoch %d", epochs_trained)
-                logger.info("  Continuing training from global step %d", self.global_step)
-                logger.info("  Will skip the first %d steps in the first epoch", steps_trained_in_current_epoch)
+                logger.info(f"  Continuing training from epoch {epochs_trained}")
+                logger.info(f"  Continuing training from global step {self.global_step}")
+                logger.info(f"  Will skip the first {steps_trained_in_current_epoch} steps in the first epoch")
 
             tf.summary.experimental.set_step(self.global_step)
 
@@ -520,16 +526,16 @@ class TFTrainer:
             self.tb_writer.flush()
 
             logger.info("***** Running training *****")
-            logger.info("  Num examples = %d", self.num_train_examples)
+            logger.info(f"  Num examples = {self.num_train_examples}")
             # TODO: We might want to print a more precise ``epochs`` if self.args.max_steps > 0 ?
-            logger.info("  Num Epochs = %d", epochs)
-            logger.info("  Instantaneous batch size per device = %d", self.args.per_device_train_batch_size)
+            logger.info(f"  Num Epochs = {epochs}")
+            logger.info(f"  Instantaneous batch size per device = {self.args.per_device_train_batch_size}")
             logger.info(
-                "  Total train batch size (w. parallel, distributed & accumulation) = %d", self.total_train_batch_size
+                f"  Total train batch size (w. parallel, distributed & accumulation) = {self.total_train_batch_size}"
             )
-            logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
-            logger.info("  Steps per epoch = %d", self.steps_per_epoch)
-            logger.info("  Total optimization steps = %d", t_total)
+            logger.info(f"  Gradient Accumulation steps = {self.args.gradient_accumulation_steps}")
+            logger.info(f"  Steps per epoch = {self.steps_per_epoch}")
+            logger.info(f"  Total optimization steps = {t_total}")
 
             self.train_loss = tf.keras.metrics.Sum()
             start_time = datetime.datetime.now()
@@ -568,7 +574,7 @@ class TFTrainer:
 
                     if (
                         self.args.eval_steps > 0
-                        and self.args.evaluation_strategy == EvaluationStrategy.STEPS
+                        and self.args.evaluation_strategy == IntervalStrategy.STEPS
                         and self.global_step % self.args.eval_steps == 0
                     ):
                         self.evaluate()
@@ -586,7 +592,7 @@ class TFTrainer:
                     if self.args.save_steps > 0 and self.global_step % self.args.save_steps == 0:
                         ckpt_save_path = self.model.ckpt_manager.save()
 
-                        logger.info("Saving checkpoint for step {} at {}".format(self.global_step, ckpt_save_path))
+                        logger.info(f"Saving checkpoint for step {self.global_step} at {ckpt_save_path}")
 
                     if self.args.max_steps > 0 and self.global_step >= t_total:
                         break
@@ -601,7 +607,7 @@ class TFTrainer:
 
             end_time = datetime.datetime.now()
 
-            logger.info("Training took: {}".format(str(end_time - start_time)))
+            logger.info(f"Training took: {str(end_time - start_time)}")
 
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of training
@@ -776,7 +782,7 @@ class TFTrainer:
         """
         output_dir = output_dir if output_dir is not None else self.args.output_dir
 
-        logger.info("Saving model in {}".format(output_dir))
+        logger.info(f"Saving model in {output_dir}")
 
         if not isinstance(self.model, TFPreTrainedModel):
             raise ValueError("Trainer.model appears to not be a PreTrainedModel")

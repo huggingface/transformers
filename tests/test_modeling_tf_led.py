@@ -78,7 +78,7 @@ class TFLEDModelTester:
         # [num_attention_heads, encoder_seq_length, encoder_key_length], but TFLongformerSelfAttention
         # returns attention of shape [num_attention_heads, encoder_seq_length, self.attention_window + 1]
         # because its local attention only attends to `self.attention_window` and one before and one after
-        self.key_length = self.attention_window + 1
+        self.key_length = self.attention_window + 2
 
         # because of padding `encoder_seq_length`, is different from `seq_length`. Relevant for
         # the `test_attention_outputs` and `test_hidden_states_output` tests
@@ -162,6 +162,8 @@ def prepare_led_inputs_dict(
     decoder_input_ids,
     attention_mask=None,
     decoder_attention_mask=None,
+    head_mask=None,
+    decoder_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
@@ -173,11 +175,17 @@ def prepare_led_inputs_dict(
             ],
             axis=-1,
         )
+    if head_mask is None:
+        head_mask = tf.ones((config.encoder_layers, config.encoder_attention_heads))
+    if decoder_head_mask is None:
+        decoder_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
     return {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
         "decoder_input_ids": decoder_input_ids,
         "decoder_attention_mask": decoder_attention_mask,
+        "head_mask": head_mask,
+        "decoder_head_mask": decoder_head_mask,
     }
 
 
@@ -188,6 +196,7 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFLEDModelTester(self)
@@ -353,28 +362,16 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertEqual(model.config.output_hidden_states, True)
             check_encoder_attentions_output(outputs)
 
-    def test_saved_model_creation(self):
-        # This test is too long (>30sec) and makes fail the CI
-        pass
-
-    def test_mixed_precision(self):
-        # TODO JP: Make LED float16 compliant
-        pass
-
     def test_xla_mode(self):
         # TODO JP: Make LED XLA compliant
         pass
 
-    def test_saved_model_with_attentions_output(self):
-        # This test don't pass because of the error:
-        # condition [13,8,4,5], then [13,8,4,5], and else [13,8,4,6] must be broadcastable
-        # This occurs line 323 in modeling_tf_led.py because the condition line 255
-        # returns a tensor of shape
-        # [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + 2]
-        # if is_global_attn is True and a tensor of shape
-        # [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + 1]
-        # This is due to the tf.concat call line 703 that adds one dimension
-        # Need to check with PVP how to properly fix this
+    def test_saved_model_creation(self):
+        # This test is too long (>30sec) and makes fail the CI
+        pass
+
+    def test_generate_with_headmasking(self):
+        # TODO: Head-masking not yet implement
         pass
 
 
@@ -387,10 +384,9 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
             return True
         raise
     except Exception:
-        msg = "{} != {}".format(a, b)
-        if prefix:
-            msg = prefix + ": " + msg
-        raise AssertionError(msg)
+        if len(prefix) > 0:
+            prefix = f"{prefix}: "
+        raise AssertionError(f"{prefix}{a} != {b}")
 
 
 def _long_tensor(tok_lst):

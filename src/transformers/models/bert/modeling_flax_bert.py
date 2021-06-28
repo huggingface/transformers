@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google Flax Team Authors and The HuggingFace Inc. team.
+# Copyright 2021 The Google Flax Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,26 +13,76 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Dict, Tuple
+from typing import Callable, Optional, Tuple
 
 import numpy as np
 
+import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import jaxlib.xla_extension as jax_xla
 from flax.core.frozen_dict import FrozenDict
-from jax.random import PRNGKey
+from flax.linen.attention import dot_product_attention_weights
+from jax import lax
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel
+from ...file_utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...modeling_flax_outputs import (
+    FlaxBaseModelOutput,
+    FlaxBaseModelOutputWithPooling,
+    FlaxMaskedLMOutput,
+    FlaxMultipleChoiceModelOutput,
+    FlaxNextSentencePredictorOutput,
+    FlaxQuestionAnsweringModelOutput,
+    FlaxSequenceClassifierOutput,
+    FlaxTokenClassifierOutput,
+)
+from ...modeling_flax_utils import (
+    ACT2FN,
+    FlaxPreTrainedModel,
+    append_call_sample_docstring,
+    append_replace_return_docstrings,
+    overwrite_call_docstring,
+)
 from ...utils import logging
 from .configuration_bert import BertConfig
 
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "bert-base-uncased"
 _CONFIG_FOR_DOC = "BertConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
+
+
+@flax.struct.dataclass
+class FlaxBertForPreTrainingOutput(ModelOutput):
+    """
+    Output type of :class:`~transformers.BertForPreTraining`.
+
+    Args:
+        prediction_logits (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        seq_relationship_logits (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, 2)`):
+            Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
+            before SoftMax).
+        hidden_states (:obj:`tuple(jax_xla.DeviceArray)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`jax_xla.DeviceArray` (one for the output of the embeddings + one for the output of each
+            layer) of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(jax_xla.DeviceArray)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`jax_xla.DeviceArray` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    prediction_logits: jax_xla.DeviceArray = None
+    seq_relationship_logits: jax_xla.DeviceArray = None
+    hidden_states: Optional[Tuple[jax_xla.DeviceArray]] = None
+    attentions: Optional[Tuple[jax_xla.DeviceArray]] = None
 
 
 BERT_START_DOCSTRING = r"""
@@ -41,9 +91,9 @@ BERT_START_DOCSTRING = r"""
     generic methods the library implements for all its model (such as downloading, saving and converting weights from
     PyTorch models)
 
-    This model is also a Flax Linen `flax.nn.Module
-    <https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html>`__ subclass. Use it as a regular Flax
-    Module and refer to the Flax documentation for all matter related to general usage and behavior.
+    This model is also a Flax Linen `flax.linen.Module
+    <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`__ subclass. Use it as a regular Flax linen Module
+    and refer to the Flax documentation for all matter related to general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
 
@@ -55,8 +105,8 @@ BERT_START_DOCSTRING = r"""
     Parameters:
         config (:class:`~transformers.BertConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
+            model weights.
 """
 
 BERT_INPUTS_DOCSTRING = r"""
@@ -89,332 +139,398 @@ BERT_INPUTS_DOCSTRING = r"""
             config.max_position_embeddings - 1]``.
         return_dict (:obj:`bool`, `optional`):
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+
 """
-
-
-class FlaxBertLayerNorm(nn.Module):
-    """
-    Layer normalization (https://arxiv.org/abs/1607.06450). Operates on the last axis of the input data.
-    """
-
-    epsilon: float = 1e-6
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    bias: bool = True  # If True, bias (beta) is added.
-    scale: bool = True  # If True, multiply by scale (gamma). When the next layer is linear
-    # (also e.g. nn.relu), this can be disabled since the scaling will be
-    # done by the next layer.
-    scale_init: Callable[..., np.ndarray] = jax.nn.initializers.ones
-    bias_init: Callable[..., np.ndarray] = jax.nn.initializers.zeros
-
-    @nn.compact
-    def __call__(self, x):
-        """
-        Applies layer normalization on the input. It normalizes the activations of the layer for each given example in
-        a batch independently, rather than across a batch like Batch Normalization. i.e. applies a transformation that
-        maintains the mean activation within each example close to 0 and the activation standard deviation close to 1
-
-        Args:
-          x: the inputs
-
-        Returns:
-          Normalized inputs (the same shape as inputs).
-        """
-        features = x.shape[-1]
-        mean = jnp.mean(x, axis=-1, keepdims=True)
-        mean2 = jnp.mean(jax.lax.square(x), axis=-1, keepdims=True)
-        var = mean2 - jax.lax.square(mean)
-        mul = jax.lax.rsqrt(var + self.epsilon)
-
-        if self.scale:
-            mul = mul * jnp.asarray(self.param("gamma", self.scale_init, (features,)))
-        y = (x - mean) * mul
-
-        if self.bias:
-            y = y + jnp.asarray(self.param("beta", self.bias_init, (features,)))
-        return y
-
-
-class FlaxBertEmbedding(nn.Module):
-    """
-    Specify a new class for doing the embedding stuff as Flax's one use 'embedding' for the parameter name and PyTorch
-    use 'weight'
-    """
-
-    vocab_size: int
-    hidden_size: int
-    kernel_init_scale: float = 0.2
-    emb_init: Callable[..., np.ndarray] = jax.nn.initializers.normal(stddev=kernel_init_scale)
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-
-    @nn.compact
-    def __call__(self, inputs):
-        embedding = self.param("weight", self.emb_init, (self.vocab_size, self.hidden_size))
-        return jnp.take(embedding, inputs, axis=0)
 
 
 class FlaxBertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
-    vocab_size: int
-    hidden_size: int
-    type_vocab_size: int
-    max_length: int
-    kernel_init_scale: float = 0.2
-    dropout_rate: float = 0.0
+    config: BertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    @nn.compact
-    def __call__(self, input_ids, token_type_ids, position_ids, attention_mask, deterministic: bool = True):
+    def setup(self):
+        self.word_embeddings = nn.Embed(
+            self.config.vocab_size,
+            self.config.hidden_size,
+            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            dtype=self.dtype,
+        )
+        self.position_embeddings = nn.Embed(
+            self.config.max_position_embeddings,
+            self.config.hidden_size,
+            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            dtype=self.dtype,
+        )
+        self.token_type_embeddings = nn.Embed(
+            self.config.type_vocab_size,
+            self.config.hidden_size,
+            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            dtype=self.dtype,
+        )
+        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
+    def __call__(self, input_ids, token_type_ids, position_ids, attention_mask, deterministic: bool = True):
         # Embed
-        w_emb = FlaxBertEmbedding(
-            self.vocab_size,
-            self.hidden_size,
-            kernel_init_scale=self.kernel_init_scale,
-            name="word_embeddings",
-            dtype=self.dtype,
-        )(jnp.atleast_2d(input_ids.astype("i4")))
-        p_emb = FlaxBertEmbedding(
-            self.max_length,
-            self.hidden_size,
-            kernel_init_scale=self.kernel_init_scale,
-            name="position_embeddings",
-            dtype=self.dtype,
-        )(jnp.atleast_2d(position_ids.astype("i4")))
-        t_emb = FlaxBertEmbedding(
-            self.type_vocab_size,
-            self.hidden_size,
-            kernel_init_scale=self.kernel_init_scale,
-            name="token_type_embeddings",
-            dtype=self.dtype,
-        )(jnp.atleast_2d(token_type_ids.astype("i4")))
+        inputs_embeds = self.word_embeddings(input_ids.astype("i4"))
+        position_embeds = self.position_embeddings(position_ids.astype("i4"))
+        token_type_embeddings = self.token_type_embeddings(token_type_ids.astype("i4"))
 
         # Sum all embeddings
-        summed_emb = w_emb + jnp.broadcast_to(p_emb, w_emb.shape) + t_emb
+        hidden_states = inputs_embeds + token_type_embeddings + position_embeds
 
         # Layer Norm
-        layer_norm = FlaxBertLayerNorm(name="layer_norm", dtype=self.dtype)(summed_emb)
-        embeddings = nn.Dropout(rate=self.dropout_rate)(layer_norm, deterministic=deterministic)
-        return embeddings
+        hidden_states = self.LayerNorm(hidden_states)
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        return hidden_states
+
+
+class FlaxBertSelfAttention(nn.Module):
+    config: BertConfig
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        if self.config.hidden_size % self.config.num_attention_heads != 0:
+            raise ValueError(
+                "`config.hidden_size`: {self.config.hidden_size} has to be a multiple of `config.num_attention_heads`\
+                    : {self.config.num_attention_heads}"
+            )
+
+        self.query = nn.Dense(
+            self.config.hidden_size,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+        )
+        self.key = nn.Dense(
+            self.config.hidden_size,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+        )
+        self.value = nn.Dense(
+            self.config.hidden_size,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+        )
+
+    def __call__(self, hidden_states, attention_mask, deterministic=True, output_attentions: bool = False):
+        head_dim = self.config.hidden_size // self.config.num_attention_heads
+
+        query_states = self.query(hidden_states).reshape(
+            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
+        )
+        value_states = self.value(hidden_states).reshape(
+            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
+        )
+        key_states = self.key(hidden_states).reshape(
+            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
+        )
+
+        # Convert the boolean attention mask to an attention bias.
+        if attention_mask is not None:
+            # attention mask in the form of attention bias
+            attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
+            attention_bias = lax.select(
+                attention_mask > 0,
+                jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
+                jnp.full(attention_mask.shape, -1e10).astype(self.dtype),
+            )
+        else:
+            attention_bias = None
+
+        dropout_rng = None
+        if not deterministic and self.config.attention_probs_dropout_prob > 0.0:
+            dropout_rng = self.make_rng("dropout")
+
+        attn_weights = dot_product_attention_weights(
+            query_states,
+            key_states,
+            bias=attention_bias,
+            dropout_rng=dropout_rng,
+            dropout_rate=self.config.attention_probs_dropout_prob,
+            broadcast_dropout=True,
+            deterministic=deterministic,
+            dtype=self.dtype,
+            precision=None,
+        )
+
+        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
+        attn_output = attn_output.reshape(attn_output.shape[:2] + (-1,))
+
+        outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
+        return outputs
+
+
+class FlaxBertSelfOutput(nn.Module):
+    config: BertConfig
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        self.dense = nn.Dense(
+            self.config.hidden_size,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            dtype=self.dtype,
+        )
+        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+
+    def __call__(self, hidden_states, input_tensor, deterministic: bool = True):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        return hidden_states
 
 
 class FlaxBertAttention(nn.Module):
-    num_heads: int
-    head_size: int
-    dropout_rate: float = 0.0
-    kernel_init_scale: float = 0.2
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    config: BertConfig
+    dtype: jnp.dtype = jnp.float32
 
-    @nn.compact
-    def __call__(self, hidden_states, attention_mask, deterministic: bool = True):
+    def setup(self):
+        self.self = FlaxBertSelfAttention(self.config, dtype=self.dtype)
+        self.output = FlaxBertSelfOutput(self.config, dtype=self.dtype)
+
+    def __call__(self, hidden_states, attention_mask, deterministic=True, output_attentions: bool = False):
         # Attention mask comes in as attention_mask.shape == (*batch_sizes, kv_length)
         # FLAX expects: attention_mask.shape == (*batch_sizes, 1, 1, kv_length) such that it is broadcastable
         # with attn_weights.shape == (*batch_sizes, num_heads, q_length, kv_length)
-        attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
-        self_att = nn.attention.SelfAttention(
-            num_heads=self.num_heads,
-            qkv_features=self.head_size,
-            dropout_rate=self.dropout_rate,
-            deterministic=deterministic,
-            kernel_init=jax.nn.initializers.normal(self.kernel_init_scale, self.dtype),
-            bias_init=jax.nn.initializers.zeros,
-            name="self",
-            dtype=self.dtype,
-        )(hidden_states, attention_mask)
+        attn_outputs = self.self(
+            hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
+        )
+        attn_output = attn_outputs[0]
+        hidden_states = self.output(attn_output, hidden_states, deterministic=deterministic)
 
-        layer_norm = FlaxBertLayerNorm(name="layer_norm", dtype=self.dtype)(self_att + hidden_states)
-        return layer_norm
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_outputs[1],)
+
+        return outputs
 
 
 class FlaxBertIntermediate(nn.Module):
-    output_size: int
-    hidden_act: str = "gelu"
-    kernel_init_scale: float = 0.2
+    config: BertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    @nn.compact
-    def __call__(self, hidden_states):
-        hidden_states = nn.Dense(
-            features=self.output_size,
-            kernel_init=jax.nn.initializers.normal(self.kernel_init_scale, self.dtype),
-            name="dense",
+    def setup(self):
+        self.dense = nn.Dense(
+            self.config.intermediate_size,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
             dtype=self.dtype,
-        )(hidden_states)
-        hidden_states = ACT2FN[self.hidden_act](hidden_states)
+        )
+        self.activation = ACT2FN[self.config.hidden_act]
+
+    def __call__(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.activation(hidden_states)
         return hidden_states
 
 
 class FlaxBertOutput(nn.Module):
-    dropout_rate: float = 0.0
-    kernel_init_scale: float = 0.2
+    config: BertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    @nn.compact
-    def __call__(self, intermediate_output, attention_output, deterministic: bool = True):
-        hidden_states = nn.Dense(
-            attention_output.shape[-1],
-            kernel_init=jax.nn.initializers.normal(self.kernel_init_scale, self.dtype),
-            name="dense",
+    def setup(self):
+        self.dense = nn.Dense(
+            self.config.hidden_size,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
             dtype=self.dtype,
-        )(intermediate_output)
-        hidden_states = nn.Dropout(rate=self.dropout_rate)(hidden_states, deterministic=deterministic)
-        hidden_states = FlaxBertLayerNorm(name="layer_norm", dtype=self.dtype)(hidden_states + attention_output)
+        )
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+
+    def __call__(self, hidden_states, attention_output, deterministic: bool = True):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        hidden_states = self.LayerNorm(hidden_states + attention_output)
         return hidden_states
 
 
 class FlaxBertLayer(nn.Module):
-    num_heads: int
-    head_size: int
-    intermediate_size: int
-    hidden_act: str = "gelu"
-    dropout_rate: float = 0.0
-    kernel_init_scale: float = 0.2
+    config: BertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    @nn.compact
-    def __call__(self, hidden_states, attention_mask, deterministic: bool = True):
-        attention = FlaxBertAttention(
-            self.num_heads,
-            self.head_size,
-            kernel_init_scale=self.kernel_init_scale,
-            dropout_rate=self.dropout_rate,
-            name="attention",
-            dtype=self.dtype,
-        )(hidden_states, attention_mask, deterministic=deterministic)
-        intermediate = FlaxBertIntermediate(
-            self.intermediate_size,
-            kernel_init_scale=self.kernel_init_scale,
-            hidden_act=self.hidden_act,
-            name="intermediate",
-            dtype=self.dtype,
-        )(attention)
-        output = FlaxBertOutput(
-            kernel_init_scale=self.kernel_init_scale, dropout_rate=self.dropout_rate, name="output", dtype=self.dtype
-        )(intermediate, attention, deterministic=deterministic)
+    def setup(self):
+        self.attention = FlaxBertAttention(self.config, dtype=self.dtype)
+        self.intermediate = FlaxBertIntermediate(self.config, dtype=self.dtype)
+        self.output = FlaxBertOutput(self.config, dtype=self.dtype)
 
-        return output
+    def __call__(self, hidden_states, attention_mask, deterministic: bool = True, output_attentions: bool = False):
+        attention_outputs = self.attention(
+            hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
+        )
+        attention_output = attention_outputs[0]
+
+        hidden_states = self.intermediate(attention_output)
+        hidden_states = self.output(hidden_states, attention_output, deterministic=deterministic)
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attention_outputs[1],)
+        return outputs
 
 
 class FlaxBertLayerCollection(nn.Module):
-    """
-    Stores N BertLayer(s)
-    """
-
-    num_layers: int
-    num_heads: int
-    head_size: int
-    intermediate_size: int
-    hidden_act: str = "gelu"
-    dropout_rate: float = 0.0
-    kernel_init_scale: float = 0.2
+    config: BertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    @nn.compact
-    def __call__(self, inputs, attention_mask, deterministic: bool = True):
-        assert self.num_layers > 0, f"num_layers should be >= 1, got ({self.num_layers})"
+    def setup(self):
+        self.layers = [
+            FlaxBertLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
+        ]
 
-        # Initialize input / output
-        input_i = inputs
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        all_attentions = () if output_attentions else None
+        all_hidden_states = () if output_hidden_states else None
 
-        # Forward over all encoders
-        for i in range(self.num_layers):
-            layer = FlaxBertLayer(
-                self.num_heads,
-                self.head_size,
-                self.intermediate_size,
-                kernel_init_scale=self.kernel_init_scale,
-                dropout_rate=self.dropout_rate,
-                hidden_act=self.hidden_act,
-                name=f"{i}",
-                dtype=self.dtype,
+        for i, layer in enumerate(self.layers):
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            layer_outputs = layer(
+                hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
             )
-            input_i = layer(input_i, attention_mask, deterministic=deterministic)
-        return input_i
+
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_attentions += (layer_outputs[1],)
+
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        outputs = (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in outputs if v is not None)
+
+        return FlaxBaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        )
 
 
 class FlaxBertEncoder(nn.Module):
-    num_layers: int
-    num_heads: int
-    head_size: int
-    intermediate_size: int
-    hidden_act: str = "gelu"
-    dropout_rate: float = 0.0
-    kernel_init_scale: float = 0.2
+    config: BertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    @nn.compact
-    def __call__(self, hidden_states, attention_mask, deterministic: bool = True):
-        layer = FlaxBertLayerCollection(
-            self.num_layers,
-            self.num_heads,
-            self.head_size,
-            self.intermediate_size,
-            hidden_act=self.hidden_act,
-            kernel_init_scale=self.kernel_init_scale,
-            dropout_rate=self.dropout_rate,
-            name="layer",
-            dtype=self.dtype,
-        )(hidden_states, attention_mask, deterministic=deterministic)
-        return layer
+    def setup(self):
+        self.layer = FlaxBertLayerCollection(self.config, dtype=self.dtype)
+
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        return self.layer(
+            hidden_states,
+            attention_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
 
 class FlaxBertPooler(nn.Module):
-    kernel_init_scale: float = 0.2
+    config: BertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    @nn.compact
-    def __call__(self, hidden_states):
-        cls_token = hidden_states[:, 0]
-        out = nn.Dense(
-            hidden_states.shape[-1],
-            kernel_init=jax.nn.initializers.normal(self.kernel_init_scale, self.dtype),
-            name="dense",
+    def setup(self):
+        self.dense = nn.Dense(
+            self.config.hidden_size,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
             dtype=self.dtype,
-        )(cls_token)
-        return nn.tanh(out)
+        )
+
+    def __call__(self, hidden_states):
+        cls_hidden_state = hidden_states[:, 0]
+        cls_hidden_state = self.dense(cls_hidden_state)
+        return nn.tanh(cls_hidden_state)
 
 
 class FlaxBertPredictionHeadTransform(nn.Module):
-    hidden_act: str = "gelu"
+    config: BertConfig
     dtype: jnp.dtype = jnp.float32
 
-    @nn.compact
+    def setup(self):
+        self.dense = nn.Dense(self.config.hidden_size, dtype=self.dtype)
+        self.activation = ACT2FN[self.config.hidden_act]
+        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+
     def __call__(self, hidden_states):
-        hidden_states = nn.Dense(hidden_states.shape[-1], name="dense", dtype=self.dtype)(hidden_states)
-        hidden_states = ACT2FN[self.hidden_act](hidden_states)
-        return FlaxBertLayerNorm(name="layer_norm", dtype=self.dtype)(hidden_states)
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        return self.LayerNorm(hidden_states)
 
 
 class FlaxBertLMPredictionHead(nn.Module):
-    vocab_size: int
-    hidden_act: str = "gelu"
+    config: BertConfig
     dtype: jnp.dtype = jnp.float32
+    bias_init: Callable[..., np.ndarray] = jax.nn.initializers.zeros
 
-    @nn.compact
-    def __call__(self, hidden_states):
-        # TODO: The output weights are the same as the input embeddings, but there is
-        #   an output-only bias for each token.
-        #   Need a link between the two variables so that the bias is correctly
-        #   resized with `resize_token_embeddings`
+    def setup(self):
+        self.transform = FlaxBertPredictionHeadTransform(self.config, dtype=self.dtype)
+        self.decoder = nn.Dense(self.config.vocab_size, dtype=self.dtype, use_bias=False)
+        self.bias = self.param("bias", self.bias_init, (self.config.vocab_size,))
 
-        hidden_states = FlaxBertPredictionHeadTransform(
-            name="transform", hidden_act=self.hidden_act, dtype=self.dtype
-        )(hidden_states)
-        hidden_states = nn.Dense(self.vocab_size, name="decoder", dtype=self.dtype)(hidden_states)
+    def __call__(self, hidden_states, shared_embedding=None):
+        hidden_states = self.transform(hidden_states)
+
+        if shared_embedding is not None:
+            hidden_states = self.decoder.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
+        else:
+            hidden_states = self.decoder(hidden_states)
+
+        hidden_states += self.bias
         return hidden_states
 
 
 class FlaxBertOnlyMLMHead(nn.Module):
-    vocab_size: int
-    hidden_act: str = "gelu"
+    config: BertConfig
     dtype: jnp.dtype = jnp.float32
 
-    @nn.compact
-    def __call__(self, hidden_states):
-        hidden_states = FlaxBertLMPredictionHead(
-            vocab_size=self.vocab_size, hidden_act=self.hidden_act, name="predictions", dtype=self.dtype
-        )(hidden_states)
+    def setup(self):
+        self.predictions = FlaxBertLMPredictionHead(self.config, dtype=self.dtype)
+
+    def __call__(self, hidden_states, shared_embedding=None):
+        hidden_states = self.predictions(hidden_states, shared_embedding=shared_embedding)
         return hidden_states
+
+
+class FlaxBertOnlyNSPHead(nn.Module):
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.seq_relationship = nn.Dense(2, dtype=self.dtype)
+
+    def __call__(self, pooled_output):
+        return self.seq_relationship(pooled_output)
+
+
+class FlaxBertPreTrainingHeads(nn.Module):
+    config: BertConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.predictions = FlaxBertLMPredictionHead(self.config, dtype=self.dtype)
+        self.seq_relationship = nn.Dense(2, dtype=self.dtype)
+
+    def __call__(self, hidden_states, pooled_output, shared_embedding=None):
+        prediction_scores = self.predictions(hidden_states, shared_embedding=shared_embedding)
+        seq_relationship_score = self.seq_relationship(pooled_output)
+        return prediction_scores, seq_relationship_score
 
 
 class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
@@ -425,140 +541,27 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
 
     config_class = BertConfig
     base_model_prefix = "bert"
-
-    def _check_inputs(self, input_ids, attention_mask, token_type_ids, position_ids):
-        if token_type_ids is None:
-            token_type_ids = jnp.ones_like(input_ids)
-
-        if position_ids is None:
-            position_ids = jnp.arange(jnp.atleast_2d(input_ids).shape[-1])
-
-        if attention_mask is None:
-            attention_mask = jnp.ones_like(input_ids)
-
-        return input_ids, attention_mask, token_type_ids, position_ids
-
-    def init(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
-        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
-            jnp.zeros(input_shape, dtype="i4"), None, None, None
-        )
-
-        params_rng, dropout_rng = jax.random.split(rng)
-        rngs = {"params": params_rng, "dropout": dropout_rng}
-
-        return self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids)["params"]
-
-    @staticmethod
-    def convert_from_pytorch(pt_state: Dict, config: BertConfig) -> Dict:
-        jax_state = dict(pt_state)
-
-        # Need to change some parameters name to match Flax names so that we don't have to fork any layer
-        for key, tensor in pt_state.items():
-            # Key parts
-            key_parts = set(key.split("."))
-
-            # Every dense layer has "kernel" parameters instead of "weight"
-            if "dense.weight" in key:
-                del jax_state[key]
-                key = key.replace("weight", "kernel")
-                jax_state[key] = tensor
-
-            if "decoder.weight" in key:
-                del jax_state[key]
-                key = key.replace("weight", "kernel")
-                jax_state[key] = tensor.T
-
-            # SelfAttention needs also to replace "weight" by "kernel"
-            if {"query", "key", "value"} & key_parts:
-
-                # Flax SelfAttention decomposes the heads (num_head, size // num_heads)
-                if "bias" in key:
-                    jax_state[key] = tensor.reshape((config.num_attention_heads, -1))
-                elif "weight":
-                    del jax_state[key]
-                    key = key.replace("weight", "kernel")
-                    tensor = tensor.reshape((config.num_attention_heads, -1, config.hidden_size)).transpose((2, 0, 1))
-                    jax_state[key] = tensor
-
-            # SelfAttention output is not a separate layer, remove one nesting
-            if "attention.output.dense" in key:
-                del jax_state[key]
-                key = key.replace("attention.output.dense", "attention.self.out")
-                jax_state[key] = tensor
-
-            # SelfAttention output is not a separate layer, remove nesting on layer norm
-            if "attention.output.LayerNorm" in key:
-                del jax_state[key]
-                key = key.replace("attention.output.LayerNorm", "attention.LayerNorm")
-                jax_state[key] = tensor
-
-            # There are some transposed parameters w.r.t their PyTorch counterpart
-            if "intermediate.dense.kernel" in key or "output.dense.kernel" in key or "transform.dense.kernel" in key:
-                jax_state[key] = tensor.T
-
-            # Self Attention output projection needs to be transposed
-            if "out.kernel" in key:
-                jax_state[key] = tensor.reshape((config.hidden_size, config.num_attention_heads, -1)).transpose(
-                    1, 2, 0
-                )
-
-            # Pooler needs to transpose its kernel
-            if "pooler.dense.kernel" in key:
-                jax_state[key] = tensor.T
-
-            # Hack to correctly load some pytorch models
-            if "predictions.bias" in key:
-                del jax_state[key]
-                jax_state[".".join(key.split(".")[:2]) + ".decoder.bias"] = tensor
-
-            # Handle LayerNorm conversion
-            if "LayerNorm" in key:
-                del jax_state[key]
-
-                # Replace LayerNorm by layer_norm
-                new_key = key.replace("LayerNorm", "layer_norm")
-
-                if "weight" in key:
-                    new_key = new_key.replace("weight", "gamma")
-                elif "bias" in key:
-                    new_key = new_key.replace("bias", "beta")
-
-                jax_state[new_key] = tensor
-
-        return jax_state
-
-
-@add_start_docstrings(
-    "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
-    BERT_START_DOCSTRING,
-)
-class FlaxBertModel(FlaxBertPreTrainedModel):
-    """
-    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
-    cross-attention is added between the self-attention layers, following the architecture described in `Attention is
-    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
-    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
-    """
+    module_class: nn.Module = None
 
     def __init__(
         self, config: BertConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
     ):
-        module = FlaxBertModule(
-            vocab_size=config.vocab_size,
-            hidden_size=config.hidden_size,
-            type_vocab_size=config.type_vocab_size,
-            max_length=config.max_position_embeddings,
-            num_encoder_layers=config.num_hidden_layers,
-            num_heads=config.num_attention_heads,
-            head_size=config.hidden_size,
-            intermediate_size=config.intermediate_size,
-            dropout_rate=config.hidden_dropout_prob,
-            hidden_act=config.hidden_act,
-            dtype=dtype,
-            **kwargs,
-        )
-
+        module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+        # init input tensors
+        input_ids = jnp.zeros(input_shape, dtype="i4")
+        token_type_ids = jnp.zeros_like(input_ids)
+        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape)
+        attention_mask = jnp.ones_like(input_ids)
+
+        params_rng, dropout_rng = jax.random.split(rng)
+        rngs = {"params": params_rng, "dropout": dropout_rng}
+
+        return self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids, return_dict=False)[
+            "params"
+        ]
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
@@ -568,12 +571,27 @@ class FlaxBertModel(FlaxBertPreTrainedModel):
         token_type_ids=None,
         position_ids=None,
         params: dict = None,
-        dropout_rng: PRNGKey = None,
+        dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
-        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
-            input_ids, attention_mask, token_type_ids, position_ids
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        # init input tensors if not passed
+        if token_type_ids is None:
+            token_type_ids = jnp.zeros_like(input_ids)
+
+        if position_ids is None:
+            position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+
+        if attention_mask is None:
+            attention_mask = jnp.ones_like(input_ids)
 
         # Handle any PRNG if needed
         rngs = {}
@@ -587,147 +605,578 @@ class FlaxBertModel(FlaxBertPreTrainedModel):
             jnp.array(token_type_ids, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
             not train,
+            output_attentions,
+            output_hidden_states,
+            return_dict,
             rngs=rngs,
         )
 
 
 class FlaxBertModule(nn.Module):
-    vocab_size: int
-    hidden_size: int
-    type_vocab_size: int
-    max_length: int
-    num_encoder_layers: int
-    num_heads: int
-    head_size: int
-    intermediate_size: int
-    hidden_act: str = "gelu"
-    dropout_rate: float = 0.0
-    kernel_init_scale: float = 0.2
+    config: BertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
     add_pooling_layer: bool = True
 
-    @nn.compact
-    def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True):
-
-        # Embedding
-        embeddings = FlaxBertEmbeddings(
-            self.vocab_size,
-            self.hidden_size,
-            self.type_vocab_size,
-            self.max_length,
-            kernel_init_scale=self.kernel_init_scale,
-            dropout_rate=self.dropout_rate,
-            name="embeddings",
-            dtype=self.dtype,
-        )(input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic)
-
-        # N stacked encoding layers
-        encoder = FlaxBertEncoder(
-            self.num_encoder_layers,
-            self.num_heads,
-            self.head_size,
-            self.intermediate_size,
-            kernel_init_scale=self.kernel_init_scale,
-            dropout_rate=self.dropout_rate,
-            hidden_act=self.hidden_act,
-            name="encoder",
-            dtype=self.dtype,
-        )(embeddings, attention_mask, deterministic=deterministic)
-
-        if not self.add_pooling_layer:
-            return encoder
-
-        pooled = FlaxBertPooler(kernel_init_scale=self.kernel_init_scale, name="pooler", dtype=self.dtype)(encoder)
-        return encoder, pooled
-
-
-class FlaxBertForMaskedLM(FlaxBertPreTrainedModel):
-    def __init__(
-        self, config: BertConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
-    ):
-        module = FlaxBertForMaskedLMModule(
-            vocab_size=config.vocab_size,
-            type_vocab_size=config.type_vocab_size,
-            hidden_size=config.hidden_size,
-            intermediate_size=config.intermediate_size,
-            head_size=config.hidden_size,
-            num_heads=config.num_attention_heads,
-            num_encoder_layers=config.num_hidden_layers,
-            max_length=config.max_position_embeddings,
-            hidden_act=config.hidden_act,
-            **kwargs,
-        )
-
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+    def setup(self):
+        self.embeddings = FlaxBertEmbeddings(self.config, dtype=self.dtype)
+        self.encoder = FlaxBertEncoder(self.config, dtype=self.dtype)
+        self.pooler = FlaxBertPooler(self.config, dtype=self.dtype)
 
     def __call__(
         self,
         input_ids,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        params: dict = None,
-        dropout_rng: PRNGKey = None,
-        train: bool = False,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ):
-        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
-            input_ids, attention_mask, token_type_ids, position_ids
+        hidden_states = self.embeddings(
+            input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic
+        )
+        outputs = self.encoder(
+            hidden_states,
+            attention_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        hidden_states = outputs[0]
+        pooled = self.pooler(hidden_states) if self.add_pooling_layer else None
+
+        if not return_dict:
+            # if pooled is None, don't return it
+            if pooled is None:
+                return (hidden_states,) + outputs[1:]
+            return (hidden_states, pooled) + outputs[1:]
+
+        return FlaxBaseModelOutputWithPooling(
+            last_hidden_state=hidden_states,
+            pooler_output=pooled,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
-        # Handle any PRNG if needed
-        rngs = {}
-        if dropout_rng is not None:
-            rngs["dropout"] = dropout_rng
 
-        return self.module.apply(
-            {"params": params or self.params},
-            jnp.array(input_ids, dtype="i4"),
-            jnp.array(attention_mask, dtype="i4"),
-            jnp.array(token_type_ids, dtype="i4"),
-            jnp.array(position_ids, dtype="i4"),
-            not train,
-            rngs=rngs,
+@add_start_docstrings(
+    "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
+    BERT_START_DOCSTRING,
+)
+class FlaxBertModel(FlaxBertPreTrainedModel):
+    module_class = FlaxBertModule
+
+
+append_call_sample_docstring(
+    FlaxBertModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
+)
+
+
+class FlaxBertForPreTrainingModule(nn.Module):
+    config: BertConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.bert = FlaxBertModule(config=self.config, dtype=self.dtype)
+        self.cls = FlaxBertPreTrainingHeads(config=self.config, dtype=self.dtype)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+
+        # Model
+        outputs = self.bert(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
+
+        if self.config.tie_word_embeddings:
+            shared_embedding = self.bert.variables["params"]["embeddings"]["word_embeddings"]["embedding"]
+        else:
+            shared_embedding = None
+
+        hidden_states = outputs[0]
+        pooled_output = outputs[1]
+
+        prediction_scores, seq_relationship_score = self.cls(
+            hidden_states, pooled_output, shared_embedding=shared_embedding
+        )
+
+        if not return_dict:
+            return (prediction_scores, seq_relationship_score) + outputs[2:]
+
+        return FlaxBertForPreTrainingOutput(
+            prediction_logits=prediction_scores,
+            seq_relationship_logits=seq_relationship_score,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    Bert Model with two heads on top as done during the pretraining: a `masked language modeling` head and a `next
+    sentence prediction (classification)` head.
+    """,
+    BERT_START_DOCSTRING,
+)
+class FlaxBertForPreTraining(FlaxBertPreTrainedModel):
+    module_class = FlaxBertForPreTrainingModule
+
+
+FLAX_BERT_FOR_PRETRAINING_DOCSTRING = """
+    Returns:
+
+    Example::
+
+        >>> from transformers import BertTokenizer, FlaxBertForPreTraining
+
+        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        >>> model = FlaxBertForPreTraining.from_pretrained('bert-base-uncased')
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
+        >>> outputs = model(**inputs)
+
+        >>> prediction_logits = outputs.prediction_logits
+        >>> seq_relationship_logits = outputs.seq_relationship_logits
+"""
+
+overwrite_call_docstring(
+    FlaxBertForPreTraining,
+    BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length") + FLAX_BERT_FOR_PRETRAINING_DOCSTRING,
+)
+append_replace_return_docstrings(
+    FlaxBertForPreTraining, output_type=FlaxBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC
+)
 
 
 class FlaxBertForMaskedLMModule(nn.Module):
-    vocab_size: int
-    hidden_size: int
-    intermediate_size: int
-    head_size: int
-    num_heads: int
-    num_encoder_layers: int
-    type_vocab_size: int
-    max_length: int
-    hidden_act: str
-    dropout_rate: float = 0.0
+    config: BertConfig
     dtype: jnp.dtype = jnp.float32
 
-    @nn.compact
+    def setup(self):
+        self.bert = FlaxBertModule(config=self.config, add_pooling_layer=False, dtype=self.dtype)
+        self.cls = FlaxBertOnlyMLMHead(config=self.config, dtype=self.dtype)
+
     def __call__(
-        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ):
         # Model
-        encoder = FlaxBertModule(
-            vocab_size=self.vocab_size,
-            type_vocab_size=self.type_vocab_size,
-            hidden_size=self.hidden_size,
-            intermediate_size=self.intermediate_size,
-            head_size=self.hidden_size,
-            num_heads=self.num_heads,
-            num_encoder_layers=self.num_encoder_layers,
-            max_length=self.max_length,
-            dropout_rate=self.dropout_rate,
-            hidden_act=self.hidden_act,
-            dtype=self.dtype,
-            add_pooling_layer=False,
-            name="bert",
-        )(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic)
+        outputs = self.bert(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = outputs[0]
+        if self.config.tie_word_embeddings:
+            shared_embedding = self.bert.variables["params"]["embeddings"]["word_embeddings"]["embedding"]
+        else:
+            shared_embedding = None
 
         # Compute the prediction scores
-        encoder = nn.Dropout(rate=self.dropout_rate)(encoder, deterministic=deterministic)
-        logits = FlaxBertOnlyMLMHead(
-            vocab_size=self.vocab_size, hidden_act=self.hidden_act, name="cls", dtype=self.dtype
-        )(encoder)
+        logits = self.cls(hidden_states, shared_embedding=shared_embedding)
 
-        return (logits,)
+        if not return_dict:
+            return (logits,) + outputs[1:]
+
+        return FlaxMaskedLMOutput(
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings("""Bert Model with a `language modeling` head on top. """, BERT_START_DOCSTRING)
+class FlaxBertForMaskedLM(FlaxBertPreTrainedModel):
+    module_class = FlaxBertForMaskedLMModule
+
+
+append_call_sample_docstring(
+    FlaxBertForMaskedLM, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
+)
+
+
+class FlaxBertForNextSentencePredictionModule(nn.Module):
+    config: BertConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.bert = FlaxBertModule(config=self.config, dtype=self.dtype)
+        self.cls = FlaxBertOnlyNSPHead(dtype=self.dtype)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        # Model
+        outputs = self.bert(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        pooled_output = outputs[1]
+        seq_relationship_scores = self.cls(pooled_output)
+
+        if not return_dict:
+            return (seq_relationship_scores,) + outputs[2:]
+
+        return FlaxNextSentencePredictorOutput(
+            logits=seq_relationship_scores,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """Bert Model with a `next sentence prediction (classification)` head on top. """,
+    BERT_START_DOCSTRING,
+)
+class FlaxBertForNextSentencePrediction(FlaxBertPreTrainedModel):
+    module_class = FlaxBertForNextSentencePredictionModule
+
+
+FLAX_BERT_FOR_NEXT_SENT_PRED_DOCSTRING = """
+    Returns:
+
+    Example::
+
+        >>> from transformers import BertTokenizer, FlaxBertForNextSentencePrediction
+
+        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        >>> model = FlaxBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
+
+        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
+        >>> encoding = tokenizer(prompt, next_sentence, return_tensors='jax')
+
+        >>> outputs = model(**encoding)
+        >>> logits = outputs.logits
+        >>> assert logits[0, 0] < logits[0, 1] # next sentence was random
+"""
+
+
+overwrite_call_docstring(
+    FlaxBertForNextSentencePrediction,
+    BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length") + FLAX_BERT_FOR_NEXT_SENT_PRED_DOCSTRING,
+)
+append_replace_return_docstrings(
+    FlaxBertForNextSentencePrediction, output_type=FlaxNextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC
+)
+
+
+class FlaxBertForSequenceClassificationModule(nn.Module):
+    config: BertConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.bert = FlaxBertModule(config=self.config, dtype=self.dtype)
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+        self.classifier = nn.Dense(
+            self.config.num_labels,
+            dtype=self.dtype,
+        )
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        # Model
+        outputs = self.bert(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        pooled_output = outputs[1]
+        pooled_output = self.dropout(pooled_output, deterministic=deterministic)
+        logits = self.classifier(pooled_output)
+
+        if not return_dict:
+            return (logits,) + outputs[2:]
+
+        return FlaxSequenceClassifierOutput(
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    Bert Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    output) e.g. for GLUE tasks.
+    """,
+    BERT_START_DOCSTRING,
+)
+class FlaxBertForSequenceClassification(FlaxBertPreTrainedModel):
+    module_class = FlaxBertForSequenceClassificationModule
+
+
+append_call_sample_docstring(
+    FlaxBertForSequenceClassification,
+    _TOKENIZER_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
+    FlaxSequenceClassifierOutput,
+    _CONFIG_FOR_DOC,
+)
+
+
+class FlaxBertForMultipleChoiceModule(nn.Module):
+    config: BertConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.bert = FlaxBertModule(config=self.config, dtype=self.dtype)
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+        self.classifier = nn.Dense(1, dtype=self.dtype)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        num_choices = input_ids.shape[1]
+        input_ids = input_ids.reshape(-1, input_ids.shape[-1]) if input_ids is not None else None
+        attention_mask = attention_mask.reshape(-1, attention_mask.shape[-1]) if attention_mask is not None else None
+        token_type_ids = token_type_ids.reshape(-1, token_type_ids.shape[-1]) if token_type_ids is not None else None
+        position_ids = position_ids.reshape(-1, position_ids.shape[-1]) if position_ids is not None else None
+
+        # Model
+        outputs = self.bert(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        pooled_output = outputs[1]
+        pooled_output = self.dropout(pooled_output, deterministic=deterministic)
+        logits = self.classifier(pooled_output)
+
+        reshaped_logits = logits.reshape(-1, num_choices)
+
+        if not return_dict:
+            return (reshaped_logits,) + outputs[2:]
+
+        return FlaxMultipleChoiceModelOutput(
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    Bert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    softmax) e.g. for RocStories/SWAG tasks.
+    """,
+    BERT_START_DOCSTRING,
+)
+class FlaxBertForMultipleChoice(FlaxBertPreTrainedModel):
+    module_class = FlaxBertForMultipleChoiceModule
+
+
+overwrite_call_docstring(
+    FlaxBertForMultipleChoice, BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+)
+append_call_sample_docstring(
+    FlaxBertForMultipleChoice, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxMultipleChoiceModelOutput, _CONFIG_FOR_DOC
+)
+
+
+class FlaxBertForTokenClassificationModule(nn.Module):
+    config: BertConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.bert = FlaxBertModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+        self.classifier = nn.Dense(self.config.num_labels, dtype=self.dtype)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        # Model
+        outputs = self.bert(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = outputs[0]
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        logits = self.classifier(hidden_states)
+
+        if not return_dict:
+            return (logits,) + outputs[1:]
+
+        return FlaxTokenClassifierOutput(
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    Bert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """,
+    BERT_START_DOCSTRING,
+)
+class FlaxBertForTokenClassification(FlaxBertPreTrainedModel):
+    module_class = FlaxBertForTokenClassificationModule
+
+
+append_call_sample_docstring(
+    FlaxBertForTokenClassification, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxTokenClassifierOutput, _CONFIG_FOR_DOC
+)
+
+
+class FlaxBertForQuestionAnsweringModule(nn.Module):
+    config: BertConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.bert = FlaxBertModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
+        self.qa_outputs = nn.Dense(self.config.num_labels, dtype=self.dtype)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        # Model
+        outputs = self.bert(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = outputs[0]
+
+        logits = self.qa_outputs(hidden_states)
+        start_logits, end_logits = logits.split(self.config.num_labels, axis=-1)
+        start_logits = start_logits.squeeze(-1)
+        end_logits = end_logits.squeeze(-1)
+
+        if not return_dict:
+            return (start_logits, end_logits) + outputs[1:]
+
+        return FlaxQuestionAnsweringModelOutput(
+            start_logits=start_logits,
+            end_logits=end_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    Bert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
+    BERT_START_DOCSTRING,
+)
+class FlaxBertForQuestionAnswering(FlaxBertPreTrainedModel):
+    module_class = FlaxBertForQuestionAnsweringModule
+
+
+append_call_sample_docstring(
+    FlaxBertForQuestionAnswering,
+    _TOKENIZER_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
+    FlaxQuestionAnsweringModelOutput,
+    _CONFIG_FOR_DOC,
+)

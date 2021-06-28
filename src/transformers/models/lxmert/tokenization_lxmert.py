@@ -16,33 +16,18 @@
 from ..bert.tokenization_bert import BertTokenizer
 
 
-####################################################
-# Mapping from the keyword arguments names of Tokenizer `__init__`
-# to file names for serializing Tokenizer instances
-####################################################
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
-####################################################
-# Mapping from the keyword arguments names of Tokenizer `__init__`
-# to pretrained vocabulary URL for all the model ids.
-####################################################
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "unc-nlp/lxmert-base-uncased": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
+        "unc-nlp/lxmert-base-uncased": "https://huggingface.co/unc-nlp/lxmert-base-uncased/resolve/main/vocab.txt",
     }
 }
 
-####################################################
-# Mapping from model ids to max length of inputs
-####################################################
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "unc-nlp/lxmert-base-uncased": 512,
 }
-####################################################
-# Mapping from model ids to a dictionary of additional
-# keyword arguments for Tokenizer `__init__`.
-# To be used for checkpoint specific configurations.
-####################################################
+
 PRETRAINED_INIT_CONFIGURATION = {
     "unc-nlp/lxmert-base-uncased": {"do_lower_case": True},
 }

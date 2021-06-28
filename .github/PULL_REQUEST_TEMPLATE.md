@@ -30,7 +30,7 @@ Fixes # (issue)
 ## Who can review?
 
 Anyone in the community is free to review the PR once the tests have passed. Feel free to tag
-members/contributors which may be interested in your PR.
+members/contributors who may be interested in your PR.
 
 <!-- Your PR will be replied to more quickly if you can figure out the right person to tag with @
 
@@ -46,7 +46,7 @@ Models:
 - funnel: @sgugger
 - gpt2: @patrickvonplaten, @LysandreJik
 - rag: @patrickvonplaten, @lhoestq
-- tensorflow: @jplu
+- tensorflow: @LysandreJik
 
 Library:
 
@@ -62,7 +62,7 @@ Documentation: @sgugger
 
 HF projects:
 
-- nlp datasets: [different repo](https://github.com/huggingface/nlp)
+- datasets: [different repo](https://github.com/huggingface/datasets)
 - rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
 
 Examples:

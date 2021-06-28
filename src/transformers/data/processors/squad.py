@@ -115,7 +115,7 @@ def squad_convert_example_to_features(
         actual_text = " ".join(example.doc_tokens[start_position : (end_position + 1)])
         cleaned_answer_text = " ".join(whitespace_tokenize(example.answer_text))
         if actual_text.find(cleaned_answer_text) == -1:
-            logger.warning("Could not find answer: '%s' vs. '%s'", actual_text, cleaned_answer_text)
+            logger.warning(f"Could not find answer: '{actual_text}' vs. '{cleaned_answer_text}'")
             return []
 
     tok_to_orig_index = []
@@ -244,7 +244,7 @@ def squad_convert_example_to_features(
         cls_index = span["input_ids"].index(tokenizer.cls_token_id)
 
         # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
-        # Original TF implem also keep the classification token (set to 0)
+        # Original TF implementation also keep the classification token (set to 0)
         p_mask = np.ones_like(span["token_type_ids"])
         if tokenizer.padding_side == "right":
             p_mask[len(truncated_query) + sequence_added_tokens :] = 0
@@ -779,7 +779,7 @@ class SquadFeatures:
         token_to_orig_map: mapping between the tokens and the original text, needed in order to identify the answer.
         start_position: start of the answer token index
         end_position: end of the answer token index
-        encoding: optionally store the BatchEncoding with the fast-tokenizer alignement methods.
+        encoding: optionally store the BatchEncoding with the fast-tokenizer alignment methods.
     """
 
     def __init__(

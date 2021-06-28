@@ -31,11 +31,13 @@ from . import (
     ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
     TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
     WEIGHTS_NAME,
     XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
     XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -50,6 +52,7 @@ from . import (
     ElectraConfig,
     FlaubertConfig,
     GPT2Config,
+    LayoutLMConfig,
     LxmertConfig,
     OpenAIGPTConfig,
     RobertaConfig,
@@ -69,6 +72,7 @@ from . import (
     TFElectraForPreTraining,
     TFFlaubertWithLMHeadModel,
     TFGPT2LMHeadModel,
+    TFLayoutLMForMaskedLM,
     TFLxmertForPreTraining,
     TFLxmertVisualFeatureEncoder,
     TFOpenAIGPTLMHeadModel,
@@ -76,10 +80,13 @@ from . import (
     TFRobertaForSequenceClassification,
     TFT5ForConditionalGeneration,
     TFTransfoXLLMHeadModel,
+    TFWav2Vec2Model,
     TFXLMRobertaForMaskedLM,
     TFXLMWithLMHeadModel,
     TFXLNetLMHeadModel,
     TransfoXLConfig,
+    Wav2Vec2Config,
+    Wav2Vec2Model,
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
@@ -111,6 +118,7 @@ if is_torch_available():
         ElectraForPreTraining,
         FlaubertWithLMHeadModel,
         GPT2LMHeadModel,
+        LayoutLMForMaskedLM,
         LxmertForPreTraining,
         LxmertVisualFeatureEncoder,
         OpenAIGPTLMHeadModel,
@@ -211,6 +219,12 @@ MODEL_CLASSES = {
         RobertaForMaskedLM,
         ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
+    "layoutlm": (
+        LayoutLMConfig,
+        TFLayoutLMForMaskedLM,
+        LayoutLMForMaskedLM,
+        LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+    ),
     "roberta-large-mnli": (
         RobertaConfig,
         TFRobertaForSequenceClassification,
@@ -277,6 +291,12 @@ MODEL_CLASSES = {
         ElectraForPreTraining,
         ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
+    "wav2vec2": (
+        Wav2Vec2Config,
+        TFWav2Vec2Model,
+        Wav2Vec2Model,
+        WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
 }
 
 
@@ -284,7 +304,7 @@ def convert_pt_checkpoint_to_tf(
     model_type, pytorch_checkpoint_path, config_file, tf_dump_path, compare_with_pt_model=False, use_cached_models=True
 ):
     if model_type not in MODEL_CLASSES:
-        raise ValueError("Unrecognized model type, should be one of {}.".format(list(MODEL_CLASSES.keys())))
+        raise ValueError(f"Unrecognized model type, should be one of {list(MODEL_CLASSES.keys())}.")
 
     config_class, model_class, pt_model_class, aws_config_map = MODEL_CLASSES[model_type]
 
@@ -294,7 +314,7 @@ def convert_pt_checkpoint_to_tf(
     config = config_class.from_json_file(config_file)
     config.output_hidden_states = True
     config.output_attentions = True
-    print("Building TensorFlow model from configuration: {}".format(str(config)))
+    print(f"Building TensorFlow model from configuration: {config}")
     tf_model = model_class(config)
 
     # Load weights from tf checkpoint
@@ -318,11 +338,11 @@ def convert_pt_checkpoint_to_tf(
         np_pt = pto[0].numpy()
         np_tf = tfo[0].numpy()
         diff = np.amax(np.abs(np_pt - np_tf))
-        print("Max absolute difference between models outputs {}".format(diff))
-        assert diff <= 2e-2, "Error, model absolute difference is >2e-2: {}".format(diff)
+        print(f"Max absolute difference between models outputs {diff}")
+        assert diff <= 2e-2, f"Error, model absolute difference is >2e-2: {diff}"
 
     # Save pytorch-model
-    print("Save TensorFlow model to {}".format(tf_dump_path))
+    print(f"Save TensorFlow model to {tf_dump_path}")
     tf_model.save_weights(tf_dump_path, save_format="h5")
 
 
@@ -344,12 +364,10 @@ def convert_all_pt_checkpoints_to_tf(
 
     for j, model_type in enumerate(model_types, start=1):
         print("=" * 100)
-        print(" Converting model type {}/{}: {}".format(j, len(model_types), model_type))
+        print(f" Converting model type {j}/{len(model_types)}: {model_type}")
         print("=" * 100)
         if model_type not in MODEL_CLASSES:
-            raise ValueError(
-                "Unrecognized model type {}, should be one of {}.".format(model_type, list(MODEL_CLASSES.keys()))
-            )
+            raise ValueError(f"Unrecognized model type {model_type}, should be one of {list(MODEL_CLASSES.keys())}.")
 
         config_class, model_class, pt_model_class, aws_model_maps, aws_config_map = MODEL_CLASSES[model_type]
 
@@ -364,16 +382,14 @@ def convert_all_pt_checkpoints_to_tf(
             print("-" * 100)
             if "-squad" in model_shortcut_name or "-mrpc" in model_shortcut_name or "-mnli" in model_shortcut_name:
                 if not only_convert_finetuned_models:
-                    print("    Skipping finetuned checkpoint {}".format(model_shortcut_name))
+                    print(f"    Skipping finetuned checkpoint {model_shortcut_name}")
                     continue
                 model_type = model_shortcut_name
             elif only_convert_finetuned_models:
-                print("    Skipping not finetuned checkpoint {}".format(model_shortcut_name))
+                print(f"    Skipping not finetuned checkpoint {model_shortcut_name}")
                 continue
             print(
-                "    Converting checkpoint {}/{}: {} - model_type {}".format(
-                    i, len(aws_config_map), model_shortcut_name, model_type
-                )
+                f"    Converting checkpoint {i}/{len(aws_config_map)}: {model_shortcut_name} - model_type {model_type}"
             )
             print("-" * 100)
 
@@ -412,9 +428,8 @@ if __name__ == "__main__":
         "--model_type",
         default=None,
         type=str,
-        help="Model type selected in the list of {}. If not given, will download and convert all the models from AWS.".format(
-            list(MODEL_CLASSES.keys())
-        ),
+        help=f"Model type selected in the list of {list(MODEL_CLASSES.keys())}. If not given, will download and "
+        "convert all the models from AWS.",
     )
     parser.add_argument(
         "--pytorch_checkpoint_path",

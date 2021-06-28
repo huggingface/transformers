@@ -146,6 +146,7 @@ def prepare_blenderbot_small_inputs_dict(
     decoder_attention_mask=None,
     head_mask=None,
     decoder_head_mask=None,
+    cross_attn_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
@@ -161,6 +162,8 @@ def prepare_blenderbot_small_inputs_dict(
         head_mask = tf.ones((config.encoder_layers, config.encoder_attention_heads))
     if decoder_head_mask is None:
         decoder_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
+    if cross_attn_head_mask is None:
+        cross_attn_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
@@ -168,6 +171,7 @@ def prepare_blenderbot_small_inputs_dict(
         "decoder_attention_mask": decoder_attention_mask,
         "head_mask": head_mask,
         "decoder_head_mask": decoder_head_mask,
+        "cross_attn_head_mask": cross_attn_head_mask,
     }
 
 
@@ -179,6 +183,7 @@ class TFBlenderbotSmallModelTest(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (TFBlenderbotSmallForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFBlenderbotSmallModelTester(self)
@@ -278,14 +283,6 @@ class TFBlenderbotSmallModelTest(TFModelTesterMixin, unittest.TestCase):
         # This test is too long (>30sec) and makes fail the CI
         pass
 
-    def test_mixed_precision(self):
-        # TODO JP: Make Blenderbot Small float16 compliant
-        pass
-
-    def test_xla_mode(self):
-        # TODO JP: Make Blenderbot Small XLA compliant
-        pass
-
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
     """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
@@ -296,10 +293,9 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
             return True
         raise
     except Exception:
-        msg = "{} != {}".format(a, b)
-        if prefix:
-            msg = prefix + ": " + msg
-        raise AssertionError(msg)
+        if len(prefix) > 0:
+            prefix = f"{prefix}: "
+        raise AssertionError(f"{prefix}{a} != {b}")
 
 
 def _long_tensor(tok_lst):

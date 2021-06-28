@@ -51,6 +51,7 @@ from .configuration_convbert import ConvBertConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "YituTech/conv-bert-base"
 _CONFIG_FOR_DOC = "ConvBertConfig"
 _TOKENIZER_FOR_DOC = "ConvBertTokenizer"
 
@@ -62,148 +63,55 @@ TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class TFConvBertWordEmbeddings(tf.keras.layers.Layer):
-    def __init__(self, vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
-        super().__init__(**kwargs)
-
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-
-    def build(self, input_shape):
-        self.weight = self.add_weight(
-            name="weight",
-            shape=[self.vocab_size, self.hidden_size],
-            initializer=get_initializer(initializer_range=self.initializer_range),
-        )
-
-        super().build(input_shape=input_shape)
-
-    def get_config(self):
-        config = {
-            "vocab_size": self.vocab_size,
-            "hidden_size": self.hidden_size,
-            "initializer_range": self.initializer_range,
-        }
-        base_config = super().get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
-    def call(self, input_ids):
-        flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
-        embeddings = tf.gather(params=self.weight, indices=flat_input_ids)
-        embeddings = tf.reshape(
-            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=input_ids), [self.hidden_size]], axis=0)
-        )
-
-        embeddings.set_shape(shape=input_ids.shape.as_list() + [self.hidden_size])
-
-        return embeddings
-
-
-class TFConvBertTokenTypeEmbeddings(tf.keras.layers.Layer):
-    def __init__(self, type_vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
-        super().__init__(**kwargs)
-
-        self.type_vocab_size = type_vocab_size
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-
-    def build(self, input_shape):
-        self.token_type_embeddings = self.add_weight(
-            name="embeddings",
-            shape=[self.type_vocab_size, self.hidden_size],
-            initializer=get_initializer(initializer_range=self.initializer_range),
-        )
-
-        super().build(input_shape=input_shape)
-
-    def get_config(self):
-        config = {
-            "type_vocab_size": self.type_vocab_size,
-            "hidden_size": self.hidden_size,
-            "initializer_range": self.initializer_range,
-        }
-        base_config = super().get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
-    def call(self, token_type_ids):
-        flat_token_type_ids = tf.reshape(tensor=token_type_ids, shape=[-1])
-        one_hot_data = tf.one_hot(indices=flat_token_type_ids, depth=self.type_vocab_size, dtype=self._compute_dtype)
-        embeddings = tf.matmul(a=one_hot_data, b=self.token_type_embeddings)
-        embeddings = tf.reshape(
-            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=token_type_ids), [self.hidden_size]], axis=0)
-        )
-
-        embeddings.set_shape(shape=token_type_ids.shape.as_list() + [self.hidden_size])
-
-        return embeddings
-
-
-class TFConvBertPositionEmbeddings(tf.keras.layers.Layer):
-    def __init__(self, max_position_embeddings: int, hidden_size: int, initializer_range: float, **kwargs):
-        super().__init__(**kwargs)
-
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-
-    def build(self, input_shape):
-        self.position_embeddings = self.add_weight(
-            name="embeddings",
-            shape=[self.max_position_embeddings, self.hidden_size],
-            initializer=get_initializer(initializer_range=self.initializer_range),
-        )
-
-        super().build(input_shape)
-
-    def get_config(self):
-        config = {
-            "max_position_embeddings": self.max_position_embeddings,
-            "hidden_size": self.hidden_size,
-            "initializer_range": self.initializer_range,
-        }
-        base_config = super().get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
-    def call(self, position_ids):
-        input_shape = shape_list(tensor=position_ids)
-        position_embeddings = self.position_embeddings[: input_shape[1], :]
-
-        return tf.broadcast_to(input=position_embeddings, shape=input_shape)
-
-
+# Copied from transformers.models.albert.modeling_tf_albert.TFAlbertEmbeddings with Albert->ConvBert
 class TFConvBertEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: ConvBertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.word_embeddings = TFConvBertWordEmbeddings(
-            vocab_size=config.vocab_size,
-            hidden_size=config.embedding_size,
-            initializer_range=config.initializer_range,
-            name="word_embeddings",
-        )
-        self.position_embeddings = TFConvBertPositionEmbeddings(
-            max_position_embeddings=config.max_position_embeddings,
-            hidden_size=config.embedding_size,
-            initializer_range=config.initializer_range,
-            name="position_embeddings",
-        )
-        self.token_type_embeddings = TFConvBertTokenTypeEmbeddings(
-            type_vocab_size=config.type_vocab_size,
-            hidden_size=config.embedding_size,
-            initializer_range=config.initializer_range,
-            name="token_type_embeddings",
-        )
+        self.vocab_size = config.vocab_size
+        self.type_vocab_size = config.type_vocab_size
+        self.embedding_size = config.embedding_size
+        self.max_position_embeddings = config.max_position_embeddings
+        self.initializer_range = config.initializer_range
         self.embeddings_sum = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def call(self, input_ids=None, position_ids=None, token_type_ids=None, inputs_embeds=None, training=False):
+    def build(self, input_shape: tf.TensorShape):
+        with tf.name_scope("word_embeddings"):
+            self.weight = self.add_weight(
+                name="weight",
+                shape=[self.vocab_size, self.embedding_size],
+                initializer=get_initializer(self.initializer_range),
+            )
+
+        with tf.name_scope("token_type_embeddings"):
+            self.token_type_embeddings = self.add_weight(
+                name="embeddings",
+                shape=[self.type_vocab_size, self.embedding_size],
+                initializer=get_initializer(self.initializer_range),
+            )
+
+        with tf.name_scope("position_embeddings"):
+            self.position_embeddings = self.add_weight(
+                name="embeddings",
+                shape=[self.max_position_embeddings, self.embedding_size],
+                initializer=get_initializer(self.initializer_range),
+            )
+
+        super().build(input_shape)
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings.call
+    def call(
+        self,
+        input_ids: tf.Tensor = None,
+        position_ids: tf.Tensor = None,
+        token_type_ids: tf.Tensor = None,
+        inputs_embeds: tf.Tensor = None,
+        training: bool = False,
+    ) -> tf.Tensor:
         """
         Applies embedding based on inputs tensor.
 
@@ -213,18 +121,19 @@ class TFConvBertEmbeddings(tf.keras.layers.Layer):
         assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
-            inputs_embeds = self.word_embeddings(input_ids=input_ids)
+            inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
+
+        input_shape = shape_list(inputs_embeds)[:-1]
 
         if token_type_ids is None:
-            input_shape = shape_list(tensor=inputs_embeds)[:-1]
             token_type_ids = tf.fill(dims=input_shape, value=0)
 
         if position_ids is None:
-            position_embeds = self.position_embeddings(position_ids=inputs_embeds)
-        else:
-            position_embeds = self.position_embeddings(position_ids=position_ids)
+            position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
 
-        token_type_embeds = self.token_type_embeddings(token_type_ids=token_type_ids)
+        position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
+        position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
+        token_type_embeds = tf.gather(params=self.token_type_embeddings, indices=token_type_ids)
         final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds, token_type_embeds])
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
         final_embeddings = self.dropout(inputs=final_embeddings, training=training)
@@ -238,8 +147,8 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
 
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
             )
 
         new_num_attention_heads = int(config.num_attention_heads / config.head_ratio)
@@ -296,6 +205,7 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x, batch_size):
+        # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
         x = tf.reshape(x, (batch_size, -1, self.num_attention_heads, self.attention_head_size))
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
@@ -315,18 +225,27 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         conv_kernel_layer = tf.reshape(conv_kernel_layer, [-1, self.conv_kernel_size, 1])
         conv_kernel_layer = tf.nn.softmax(conv_kernel_layer, axis=1)
 
+        paddings = tf.constant(
+            [
+                [
+                    0,
+                    0,
+                ],
+                [int((self.conv_kernel_size - 1) / 2), int((self.conv_kernel_size - 1) / 2)],
+                [0, 0],
+            ]
+        )
+
         conv_out_layer = self.conv_out_layer(hidden_states)
         conv_out_layer = tf.reshape(conv_out_layer, [batch_size, -1, self.all_head_size])
+        conv_out_layer = tf.pad(conv_out_layer, paddings, "CONSTANT")
 
-        conv_out_layer = tf.reshape(
-            conv_out_layer, [batch_size, shape_list(mixed_query_layer)[1], self.all_head_size, 1]
-        )
-        unfold_conv_out_layer = tf.image.extract_patches(
-            images=conv_out_layer,
-            sizes=[1, self.conv_kernel_size, 1, 1],
-            strides=[1, 1, 1, 1],
-            rates=[1, 1, 1, 1],
-            padding="SAME",
+        unfold_conv_out_layer = tf.stack(
+            [
+                tf.slice(conv_out_layer, [0, i, 0], [batch_size, shape_list(mixed_query_layer)[1], self.all_head_size])
+                for i in range(self.conv_kernel_size)
+            ],
+            axis=-1,
         )
 
         conv_out_layer = tf.reshape(unfold_conv_out_layer, [-1, self.attention_head_size, self.conv_kernel_size])
@@ -425,7 +344,7 @@ class GroupedLinearLayer(tf.keras.layers.Layer):
     def build(self, input_shape):
         self.kernel = self.add_weight(
             "kernel",
-            shape=[self.num_groups, self.group_in_dim, self.group_out_dim],
+            shape=[self.group_out_dim, self.group_in_dim, self.num_groups],
             initializer=self.kernel_initializer,
             trainable=True,
         )
@@ -437,7 +356,7 @@ class GroupedLinearLayer(tf.keras.layers.Layer):
     def call(self, hidden_states):
         batch_size = shape_list(hidden_states)[0]
         x = tf.transpose(tf.reshape(hidden_states, [-1, self.num_groups, self.group_in_dim]), [1, 0, 2])
-        x = tf.matmul(x, self.kernel)
+        x = tf.matmul(x, tf.transpose(self.kernel, [2, 1, 0]))
         x = tf.transpose(x, [1, 0, 2])
         x = tf.reshape(x, [batch_size, -1, self.output_size])
         x = tf.nn.bias_add(value=x, bias=self.bias)
@@ -523,7 +442,7 @@ class TFConvBertEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.layer = [TFConvBertLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
+        self.layer = [TFConvBertLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
 
     def call(
         self,
@@ -601,11 +520,11 @@ class TFConvBertMainLayer(tf.keras.layers.Layer):
         self.config = config
 
     def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
+        return self.embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings.weight = value
-        self.embeddings.word_embeddings.vocab_size = value.shape[0]
+        self.embeddings.weight = value
+        self.embeddings.vocab_size = value.shape[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -623,7 +542,7 @@ class TFConvBertMainLayer(tf.keras.layers.Layer):
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-        extended_attention_mask = attention_mask[:, tf.newaxis, tf.newaxis, :]
+        extended_attention_mask = tf.reshape(attention_mask, (input_shape[0], 1, 1, input_shape[1]))
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
@@ -776,7 +695,7 @@ CONVBERT_INPUTS_DOCSTRING = r"""
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **maked**.
+            - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
@@ -820,7 +739,7 @@ CONVBERT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare ConvBERT Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare ConvBERT Model transformer outputting raw hidden-states without any specific head on top.",
     CONVBERT_START_DOCSTRING,
 )
 class TFConvBertModel(TFConvBertPreTrainedModel):
@@ -832,7 +751,7 @@ class TFConvBertModel(TFConvBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="YituTech/conv-bert-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -953,9 +872,7 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
         else:
             self.activation = config.hidden_act
 
-        self.generator_lm_head = TFConvBertMaskedLMHead(
-            config, self.convbert.embeddings.word_embeddings, name="generator_lm_head"
-        )
+        self.generator_lm_head = TFConvBertMaskedLMHead(config, self.convbert.embeddings, name="generator_lm_head")
 
     def get_lm_head(self):
         return self.generator_lm_head
@@ -966,7 +883,7 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
     @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="YituTech/conv-bert-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1087,7 +1004,7 @@ class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceC
     @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="YituTech/conv-bert-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1196,7 +1113,7 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
     )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="YituTech/conv-bert-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1331,7 +1248,7 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
     @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="YituTech/conv-bert-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1426,7 +1343,7 @@ class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnswer
     @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="YituTech/conv-bert-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

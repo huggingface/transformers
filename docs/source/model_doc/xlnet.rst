@@ -41,10 +41,11 @@ Tips:
   using only a sub-set of the output tokens as target which are selected with the :obj:`target_mapping` input.
 - To use XLNet for sequential decoding (i.e. not in fully bi-directional setting), use the :obj:`perm_mask` and
   :obj:`target_mapping` inputs to control the attention span and outputs (see examples in
-  `examples/text-generation/run_generation.py`)
+  `examples/pytorch/text-generation/run_generation.py`)
 - XLNet is one of the few models that has no sequence length limit.
 
-The original code can be found `here <https://github.com/zihangdai/xlnet/>`__.
+This model was contributed by `thomwolf <https://huggingface.co/thomwolf>`__. The original code can be found `here
+<https://github.com/zihangdai/xlnet/>`__.
 
 
 XLNetConfig

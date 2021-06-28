@@ -17,19 +17,19 @@ Simple check list from AllenNLP repo: https://github.com/allenai/allennlp/blob/m
 
 To create the package for pypi.
 
-1. Change the version in __init__.py, setup.py as well as docs/source/conf.py. Remove the master from the links in
-   the new models of the README:
-   (https://huggingface.co/transformers/master/model_doc/ -> https://huggingface.co/transformers/model_doc/)
-   then run `make fix-copies` to fix the index of the documentation.
+1. Run `make pre-release` (or `make pre-patch` for a patch release) then run `make fix-copies` to fix the index of the
+   documentation.
 
-2. Unpin specific versions from setup.py that use a git install.
+2. Run Tests for Amazon Sagemaker. The documentation is located in `./tests/sagemaker/README.md`, otherwise @philschmid.
 
-2. Commit these changes with the message: "Release: VERSION"
+3. Unpin specific versions from setup.py that use a git install.
 
-3. Add a tag in git to mark the release: "git tag VERSION -m 'Adds tag VERSION for pypi' "
+4. Commit these changes with the message: "Release: VERSION"
+
+5. Add a tag in git to mark the release: "git tag VERSION -m 'Adds tag VERSION for pypi' "
    Push the tag to git: git push --tags origin master
 
-4. Build both the sources and the wheel. Do not change anything in setup.py between
+6. Build both the sources and the wheel. Do not change anything in setup.py between
    creating the wheel and the source distribution (obviously).
 
    For the wheel, run: "python setup.py bdist_wheel" in the top level directory.
@@ -38,7 +38,7 @@ To create the package for pypi.
    For the sources, run: "python setup.py sdist"
    You should now have a /dist directory with both .whl and .tar.gz source versions.
 
-5. Check that everything looks correct by uploading the package to the pypi test server:
+7. Check that everything looks correct by uploading the package to the pypi test server:
 
    twine upload dist/* -r pypitest
    (pypi suggest using twine as other methods upload files via plaintext.)
@@ -48,16 +48,12 @@ To create the package for pypi.
    Check that you can install it in a virtualenv by running:
    pip install -i https://testpypi.python.org/pypi transformers
 
-6. Upload the final version to actual pypi:
+8. Upload the final version to actual pypi:
    twine upload dist/* -r pypi
 
-7. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
+9. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 
-8. Add the release version to docs/source/_static/js/custom.js and .circleci/deploy.sh
-
-9. Update README.md to redirect to correct documentation.
-
-10. Update the version in __init__.py, setup.py to the new version "-dev" and push to master.
+10. Run `make post-release` (or `make post-patch` for a patch release).
 """
 
 import os
@@ -89,38 +85,54 @@ if stale_egg_info.exists():
 # 1. all dependencies should be listed here with their version requirements if any
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
-    "black>=20.8b1",
+    "Pillow",
+    "black==21.4b0",
+    "codecarbon==1.2.0",
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
+    "deepspeed>=0.4.0",
+    "docutils==0.16.0",
+    "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
     "filelock",
     "flake8>=3.8.3",
-    "flax>=0.2.2",
+    "flax>=0.3.4",
     "fugashi>=1.0",
+    "huggingface-hub==0.0.12",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
-    "jax>=0.2.0",
-    "jaxlib>=0.1.59",
+    "jax>=0.2.8",
+    "jaxlib>=0.1.65",
+    "jieba",
     "keras2onnx",
+    "nltk",
     "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
+    "optuna",
+    "optax>=0.0.8",
     "packaging",
     "parameterized",
     "protobuf",
     "psutil",
+    "pyyaml",
     "pydantic",
     "pytest",
+    "pytest-sugar",
     "pytest-xdist",
     "python>=3.6.0",
+    "ray[tune]",
     "recommonmark",
     "regex!=2019.12.17",
     "requests",
+    "rouge-score",
+    "sacrebleu>=1.4.12",
     "sacremoses",
+    "sagemaker>=2.31.0",
     "scikit-learn",
     "sentencepiece==0.1.91",
     "soundfile",
@@ -128,12 +140,15 @@ _deps = [
     "sphinx-markdown-tables",
     "sphinx-rtd-theme==0.4.3",  # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
     "sphinx==3.2.1",
+    "sphinxext-opengraph==0.4.1",
     "starlette",
     "tensorflow-cpu>=2.3",
     "tensorflow>=2.3",
     "timeout-decorator",
-    "tokenizers==0.10.1rc1",
+    "timm",
+    "tokenizers>=0.10.1,<0.11",
     "torch>=1.0",
+    "torchaudio",
     "tqdm>=4.27",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
@@ -220,39 +235,76 @@ if os.name == "nt":  # windows
     extras["flax"] = []  # jax is not supported on windows
 else:
     extras["retrieval"] = deps_list("faiss-cpu", "datasets")
-    extras["flax"] = deps_list("jax", "jaxlib", "flax")
+    extras["flax"] = deps_list("jax", "jaxlib", "flax", "optax")
 
 extras["tokenizers"] = deps_list("tokenizers")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
+extras["onnx"] = deps_list("onnxconverter-common", "keras2onnx") + extras["onnxruntime"]
 extras["modelcreation"] = deps_list("cookiecutter")
 
+extras["sagemaker"] = deps_list("sagemaker")
+extras["deepspeed"] = deps_list("deepspeed")
+extras["fairscale"] = deps_list("fairscale")
+extras["optuna"] = deps_list("optuna")
+extras["ray"] = deps_list("ray[tune]")
+
+extras["integrations"] = extras["optuna"] + extras["ray"]
+
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-extras["speech"] = deps_list("soundfile")
+extras["speech"] = deps_list("soundfile", "torchaudio")
+extras["vision"] = deps_list("Pillow")
+extras["timm"] = deps_list("timm")
+extras["codecarbon"] = deps_list("codecarbon")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
-    deps_list("pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets")
+    deps_list(
+        "pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets", "pytest-sugar", "black", "sacrebleu", "rouge-score", "nltk"
+    )
     + extras["retrieval"]
     + extras["modelcreation"]
-    + extras["speech"]
 )
-extras["docs"] = deps_list("recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme", "sphinx-copybutton")
+
 extras["quality"] = deps_list("black", "isort", "flake8")
 
-extras["all"] = extras["tf"] + extras["torch"] + extras["flax"] + extras["sentencepiece"] + extras["tokenizers"]
+extras["all"] = (
+    extras["tf"]
+    + extras["torch"]
+    + extras["flax"]
+    + extras["sentencepiece"]
+    + extras["tokenizers"]
+    + extras["speech"]
+    + extras["vision"]
+    + extras["integrations"]
+    + extras["timm"]
+    + extras["codecarbon"]
+)
+
+extras["docs_specific"] = deps_list(
+    "docutils",
+    "recommonmark",
+    "sphinx",
+    "sphinx-markdown-tables",
+    "sphinx-rtd-theme",
+    "sphinx-copybutton",
+    "sphinxext-opengraph",
+)
+# "docs" needs "all" to resolve all the references
+extras["docs"] = extras["all"] + extras["docs_specific"]
 
 extras["dev"] = (
     extras["all"]
     + extras["testing"]
     + extras["quality"]
     + extras["ja"]
-    + extras["docs"]
+    + extras["docs_specific"]
     + extras["sklearn"]
     + extras["modelcreation"]
 )
 
 extras["torchhub"] = deps_list(
     "filelock",
+    "huggingface-hub",
     "importlib_metadata",
     "numpy",
     "packaging",
@@ -271,8 +323,10 @@ install_requires = [
     deps["dataclasses"] + ";python_version<'3.7'",  # dataclasses for Python versions that don't have it
     deps["importlib_metadata"] + ";python_version<'3.8'",  # importlib_metadata for Python versions that don't have it
     deps["filelock"],  # filesystem locks, e.g., to prevent parallel downloads
+    deps["huggingface-hub"],
     deps["numpy"],
     deps["packaging"],  # utilities from PyPA to e.g., compare versions
+    deps["pyyaml"],  # used for the model cards metadata
     deps["regex"],  # for OpenAI GPT
     deps["requests"],  # for downloading models over HTTPS
     deps["sacremoses"],  # for XLM
@@ -282,8 +336,8 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.4.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
-    author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
+    version="4.9.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Suraj Patil, Stas Bekman, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
     long_description=open("README.md", "r", encoding="utf-8").read(),

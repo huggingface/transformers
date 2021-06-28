@@ -24,8 +24,7 @@ from typing import Optional, Tuple
 import numpy as np
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
-from torch.nn import functional as F
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import gelu
 from ...file_utils import (
@@ -57,6 +56,7 @@ from .configuration_xlm import XLMConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "xlm-mlm-en-2048"
 _CONFIG_FOR_DOC = "XLMConfig"
 _TOKENIZER_FOR_DOC = "XLMTokenizer"
 
@@ -152,17 +152,17 @@ class MultiHeadAttention(nn.Module):
             klen = qlen if cache is None else cache["slen"] + qlen
         else:
             klen = kv.size(1)
-        # assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
+        # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'
         n_heads = self.n_heads
         dim_per_head = self.dim // n_heads
         mask_reshape = (bs, 1, qlen, klen) if mask.dim() == 3 else (bs, 1, 1, klen)
 
         def shape(x):
-            """  projection """
+            """projection"""
             return x.view(bs, -1, self.n_heads, dim_per_head).transpose(1, 2)
 
         def unshape(x):
-            """  compute context """
+            """compute context"""
             return x.transpose(1, 2).contiguous().view(bs, -1, self.n_heads * dim_per_head)
 
         q = shape(self.q_lin(input))  # (bs, n_heads, qlen, dim_per_head)
@@ -189,8 +189,8 @@ class MultiHeadAttention(nn.Module):
         mask = (mask == 0).view(mask_reshape).expand_as(scores)  # (bs, n_heads, qlen, klen)
         scores.masked_fill_(mask, -float("inf"))  # (bs, n_heads, qlen, klen)
 
-        weights = F.softmax(scores.float(), dim=-1).type_as(scores)  # (bs, n_heads, qlen, klen)
-        weights = F.dropout(weights, p=self.dropout, training=self.training)  # (bs, n_heads, qlen, klen)
+        weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)  # (bs, n_heads, qlen, klen)
+        weights = nn.functional.dropout(weights, p=self.dropout, training=self.training)  # (bs, n_heads, qlen, klen)
 
         # Mask heads if we want to
         if head_mask is not None:
@@ -211,7 +211,7 @@ class TransformerFFN(nn.Module):
         self.dropout = config.dropout
         self.lin1 = nn.Linear(in_dim, dim_hidden)
         self.lin2 = nn.Linear(dim_hidden, out_dim)
-        self.act = gelu if config.gelu_activation else F.relu
+        self.act = gelu if config.gelu_activation else nn.functional.relu
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
 
@@ -222,7 +222,7 @@ class TransformerFFN(nn.Module):
         x = self.lin1(input)
         x = self.act(x)
         x = self.lin2(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         return x
 
 
@@ -250,14 +250,16 @@ class XLMPreTrainedModel(PreTrainedModel):
         return {"input_ids": inputs_list, "attention_mask": attns_list, "langs": langs_list}
 
     def _init_weights(self, module):
-        """ Initialize the weights. """
+        """Initialize the weights."""
         if isinstance(module, nn.Embedding):
             if self.config is not None and self.config.embed_init_std is not None:
                 nn.init.normal_(module.weight, mean=0, std=self.config.embed_init_std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
         if isinstance(module, nn.Linear):
             if self.config is not None and self.config.init_std is not None:
                 nn.init.normal_(module.weight, mean=0, std=self.config.init_std)
-                if hasattr(module, "bias") and module.bias is not None:
+                if module.bias is not None:
                     nn.init.constant_(module.bias, 0.0)
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
@@ -345,7 +347,7 @@ XLM_INPUTS_DOCSTRING = r"""
             A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
             languages ids which can be obtained from the language names by using two conversion mappings provided in
             the configuration of the model (only provided for multilingual models). More precisely, the `language name
-            to language id` mapping is in :obj:`model.config.lang2id` (which is a dictionary strring to int) and the
+            to language id` mapping is in :obj:`model.config.lang2id` (which is a dictionary string to int) and the
             `language id to language name` mapping is in :obj:`model.config.id2lang` (dictionary int to string).
 
             See usage examples detailed in the :doc:`multilingual documentation <../multilingual>`.
@@ -487,7 +489,7 @@ class XLMModel(XLMPreTrainedModel):
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xlm-mlm-en-2048",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -575,7 +577,7 @@ class XLMModel(XLMPreTrainedModel):
         if token_type_ids is not None:
             tensor = tensor + self.embeddings(token_type_ids)
         tensor = self.layer_norm_emb(tensor)
-        tensor = F.dropout(tensor, p=self.dropout, training=self.training)
+        tensor = nn.functional.dropout(tensor, p=self.dropout, training=self.training)
         tensor *= mask.unsqueeze(-1).to(tensor.dtype)
 
         # transformer layers
@@ -596,14 +598,14 @@ class XLMModel(XLMPreTrainedModel):
             attn = attn_outputs[0]
             if output_attentions:
                 attentions = attentions + (attn_outputs[1],)
-            attn = F.dropout(attn, p=self.dropout, training=self.training)
+            attn = nn.functional.dropout(attn, p=self.dropout, training=self.training)
             tensor = tensor + attn
             tensor = self.layer_norm1[i](tensor)
 
             # encoder attention (for decoder only)
             # if self.is_decoder and src_enc is not None:
             #     attn = self.encoder_attn[i](tensor, src_mask, kv=src_enc, cache=cache)
-            #     attn = F.dropout(attn, p=self.dropout, training=self.training)
+            #     attn = nn.functional.dropout(attn, p=self.dropout, training=self.training)
             #     tensor = tensor + attn
             #     tensor = self.layer_norm15[i](tensor)
 
@@ -658,7 +660,9 @@ class XLMPredLayer(nn.Module):
             scores = self.proj(x)
             outputs = (scores,) + outputs
             if y is not None:
-                loss = F.cross_entropy(scores.view(-1, self.n_words), y.view(-1), reduction="elementwise_mean")
+                loss = nn.functional.cross_entropy(
+                    scores.view(-1, self.n_words), y.view(-1), reduction="elementwise_mean"
+                )
                 outputs = (loss,) + outputs
         else:
             scores = self.proj.log_prob(x)
@@ -707,7 +711,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xlm-mlm-en-2048",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
         mask="<special1>",
@@ -776,6 +780,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
+        self.config = config
 
         self.transformer = XLMModel(config)
         self.sequence_summary = SequenceSummary(config)
@@ -785,7 +790,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xlm-mlm-en-2048",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -833,13 +838,26 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
 
         if not return_dict:
             output = (logits,) + transformer_outputs[1:]
@@ -872,7 +890,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xlm-mlm-en-2048",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -924,8 +942,8 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
+        start_logits = start_logits.squeeze(-1).contiguous()
+        end_logits = end_logits.squeeze(-1).contiguous()
 
         total_loss = None
         if start_positions is not None and end_positions is not None:
@@ -936,8 +954,8 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
                 end_positions = end_positions.squeeze(-1)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
+            start_positions = start_positions.clamp(0, ignored_index)
+            end_positions = end_positions.clamp(0, ignored_index)
 
             loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
             start_loss = loss_fct(start_logits, start_positions)
@@ -1095,7 +1113,7 @@ class XLMForTokenClassification(XLMPreTrainedModel):
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xlm-mlm-en-2048",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1185,10 +1203,10 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, num_choicec, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xlm-mlm-en-2048",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1229,7 +1247,7 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
         )
 
         if lengths is not None:
-            logger.warn(
+            logger.warning(
                 "The `lengths` parameter cannot be used with the XLM multiple choice models. Please use the "
                 "attention mask instead."
             )

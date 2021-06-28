@@ -18,11 +18,13 @@ import math
 from typing import Callable, Iterable, Optional, Tuple, Union
 
 import torch
+from torch import nn
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
 
 from .trainer_utils import SchedulerType
 from .utils import logging
+from .utils.versions import require_version
 
 
 logger = logging.get_logger(__name__)
@@ -272,7 +274,7 @@ class AdamW(Optimizer):
     <https://arxiv.org/abs/1711.05101>`__.
 
     Parameters:
-        params (:obj:`Iterable[torch.nn.parameter.Parameter]`):
+        params (:obj:`Iterable[nn.parameter.Parameter]`):
             Iterable of parameters to optimize or dictionaries defining parameter groups.
         lr (:obj:`float`, `optional`, defaults to 1e-3):
             The learning rate to use.
@@ -283,26 +285,27 @@ class AdamW(Optimizer):
         weight_decay (:obj:`float`, `optional`, defaults to 0):
             Decoupled weight decay to apply.
         correct_bias (:obj:`bool`, `optional`, defaults to `True`):
-            Whether ot not to correct bias in Adam (for instance, in Bert TF repository they use :obj:`False`).
+            Whether or not to correct bias in Adam (for instance, in Bert TF repository they use :obj:`False`).
     """
 
     def __init__(
         self,
-        params: Iterable[torch.nn.parameter.Parameter],
+        params: Iterable[nn.parameter.Parameter],
         lr: float = 1e-3,
         betas: Tuple[float, float] = (0.9, 0.999),
         eps: float = 1e-6,
         weight_decay: float = 0.0,
         correct_bias: bool = True,
     ):
+        require_version("torch>=1.5.0")  # add_ with alpha
         if lr < 0.0:
-            raise ValueError("Invalid learning rate: {} - should be >= 0.0".format(lr))
+            raise ValueError(f"Invalid learning rate: {lr} - should be >= 0.0")
         if not 0.0 <= betas[0] < 1.0:
-            raise ValueError("Invalid beta parameter: {} - should be in [0.0, 1.0[".format(betas[0]))
+            raise ValueError(f"Invalid beta parameter: {betas[0]} - should be in [0.0, 1.0[")
         if not 0.0 <= betas[1] < 1.0:
-            raise ValueError("Invalid beta parameter: {} - should be in [0.0, 1.0[".format(betas[1]))
+            raise ValueError(f"Invalid beta parameter: {betas[1]} - should be in [0.0, 1.0[")
         if not 0.0 <= eps:
-            raise ValueError("Invalid epsilon value: {} - should be >= 0.0".format(eps))
+            raise ValueError(f"Invalid epsilon value: {eps} - should be >= 0.0")
         defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, correct_bias=correct_bias)
         super().__init__(params, defaults)
 
@@ -342,7 +345,7 @@ class AdamW(Optimizer):
 
                 # Decay the first and second moment running average coefficient
                 # In-place operations to update the averages at the same time
-                exp_avg.mul_(beta1).add_(grad, alpha=1.0 - beta1)
+                exp_avg.mul_(beta1).add_(grad, alpha=(1.0 - beta1))
                 exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1.0 - beta2)
                 denom = exp_avg_sq.sqrt().add_(group["eps"])
 
@@ -363,7 +366,7 @@ class AdamW(Optimizer):
                 # of the weights to the loss with plain (non-momentum) SGD.
                 # Add weight decay at the end (fixed version)
                 if group["weight_decay"] > 0.0:
-                    p.data.add_(p.data, alpha=-group["lr"] * group["weight_decay"])
+                    p.data.add_(p.data, alpha=(-group["lr"] * group["weight_decay"]))
 
         return loss
 
@@ -379,7 +382,7 @@ class Adafactor(Optimizer):
     `relative_step=False`.
 
     Arguments:
-        params (:obj:`Iterable[torch.nn.parameter.Parameter]`):
+        params (:obj:`Iterable[nn.parameter.Parameter]`):
             Iterable of parameters to optimize or dictionaries defining parameter groups.
         lr (:obj:`float`, `optional`):
             The external learning rate.
@@ -402,19 +405,30 @@ class Adafactor(Optimizer):
 
     This implementation handles low-precision (FP16, bfloat) values, but we have not thoroughly tested.
 
-    Recommended T5 finetuning settings:
+    Recommended T5 finetuning settings (https://discuss.huggingface.co/t/t5-finetuning-tips/684/3):
 
-        - Scheduled LR warm-up to fixed LR
-        - disable relative updates
-        - use clip threshold: https://arxiv.org/abs/2004.14546
+        - Training without LR warmup or clip_threshold is not recommended.
+
+           * use scheduled LR warm-up to fixed LR
+           * use clip_threshold=1.0 (https://arxiv.org/abs/1804.04235)
+        - Disable relative updates
+        - Use scale_parameter=False
+        - Additional optimizer operations like gradient clipping should not be used alongside Adafactor
 
         Example::
 
-            Adafactor(model.parameters(), lr=1e-3, relative_step=False, warmup_init=True)
+            Adafactor(model.parameters(), scale_parameter=False, relative_step=False, warmup_init=False, lr=1e-3)
 
-        - Alternatively, relative_step with warmup_init can be used.
-        - Training without LR warmup or clip threshold is not recommended. Additional optimizer operations like
-          gradient clipping should not be used alongside Adafactor.
+        Others reported the following combination to work well::
+
+            Adafactor(model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None)
+
+        When using ``lr=None`` with :class:`~transformers.Trainer` you will most likely need to use :class:`~transformers.optimization.AdafactorSchedule` scheduler as following::
+
+            from transformers.optimization import Adafactor, AdafactorSchedule
+            optimizer = Adafactor(model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None)
+            lr_scheduler = AdafactorSchedule(optimizer)
+            trainer = Trainer(..., optimizers=(optimizer, lr_scheduler))
 
     Usage::
 
@@ -446,10 +460,11 @@ class Adafactor(Optimizer):
         relative_step=True,
         warmup_init=False,
     ):
+        require_version("torch>=1.5.0")  # add_ with alpha
         if lr is not None and relative_step:
-            raise ValueError("Cannot combine manual lr and relative_step options")
+            raise ValueError("Cannot combine manual `lr` and `relative_step=True` options")
         if warmup_init and not relative_step:
-            raise ValueError("warmup_init requires relative_step=True")
+            raise ValueError("`warmup_init=True` requires `relative_step=True`")
 
         defaults = dict(
             lr=lr,
@@ -554,8 +569,8 @@ class Adafactor(Optimizer):
                     exp_avg_sq_row = state["exp_avg_sq_row"]
                     exp_avg_sq_col = state["exp_avg_sq_col"]
 
-                    exp_avg_sq_row.mul_(beta2t).add_(1.0 - beta2t, update.mean(dim=-1))
-                    exp_avg_sq_col.mul_(beta2t).add_(1.0 - beta2t, update.mean(dim=-2))
+                    exp_avg_sq_row.mul_(beta2t).add_(update.mean(dim=-1), alpha=(1.0 - beta2t))
+                    exp_avg_sq_col.mul_(beta2t).add_(update.mean(dim=-2), alpha=(1.0 - beta2t))
 
                     # Approximation of exponential moving average of square of gradient
                     update = self._approx_sq_grad(exp_avg_sq_row, exp_avg_sq_col)
@@ -563,7 +578,7 @@ class Adafactor(Optimizer):
                 else:
                     exp_avg_sq = state["exp_avg_sq"]
 
-                    exp_avg_sq.mul_(beta2t).add_(1.0 - beta2t, update)
+                    exp_avg_sq.mul_(beta2t).add_(update, alpha=(1.0 - beta2t))
                     update = exp_avg_sq.rsqrt().mul_(grad)
 
                 update.div_((self._rms(update) / group["clip_threshold"]).clamp_(min=1.0))
@@ -571,11 +586,11 @@ class Adafactor(Optimizer):
 
                 if use_first_moment:
                     exp_avg = state["exp_avg"]
-                    exp_avg.mul_(group["beta1"]).add_(1 - group["beta1"], update)
+                    exp_avg.mul_(group["beta1"]).add_(update, alpha=(1 - group["beta1"]))
                     update = exp_avg
 
                 if group["weight_decay"] != 0:
-                    p_data_fp32.add_(-group["weight_decay"] * lr, p_data_fp32)
+                    p_data_fp32.add_(p_data_fp32, alpha=(-group["weight_decay"] * lr))
 
                 p_data_fp32.add_(-update)
 
@@ -583,3 +598,52 @@ class Adafactor(Optimizer):
                     p.data.copy_(p_data_fp32)
 
         return loss
+
+
+class AdafactorSchedule(LambdaLR):
+    """
+    Since :class:`~transformers.optimization.Adafactor` performs its own scheduling, if the training loop relies on a
+    scheduler (e.g., for logging), this class creates a proxy object that retrieves the current lr values from the
+    optimizer.
+
+    It returns ``initial_lr`` during startup and the actual ``lr`` during stepping.
+    """
+
+    def __init__(self, optimizer, initial_lr=0.0):
+        def lr_lambda(_):
+            return initial_lr
+
+        for group in optimizer.param_groups:
+            group["initial_lr"] = initial_lr
+        super().__init__(optimizer, lr_lambda)
+        for group in optimizer.param_groups:
+            del group["initial_lr"]
+
+    def get_lr(self):
+        opt = self.optimizer
+        lrs = [
+            opt._get_lr(group, opt.state[group["params"][0]])
+            for group in opt.param_groups
+            if group["params"][0].grad is not None
+        ]
+        if len(lrs) == 0:
+            lrs = self.base_lrs  # if called before stepping
+        return lrs
+
+
+def get_adafactor_schedule(optimizer, initial_lr=0.0):
+    """
+    Get a proxy schedule for :class:`~transformers.optimization.Adafactor`
+
+    Args:
+        optimizer (:class:`~torch.optim.Optimizer`):
+            The optimizer for which to schedule the learning rate.
+        initial_lr (:obj:`float`, `optional`, defaults to 0.0):
+            Initial lr
+
+    Return:
+        :class:`~transformers.optimization.Adafactor` proxy schedule object.
+
+
+    """
+    return AdafactorSchedule(optimizer, initial_lr)

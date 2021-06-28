@@ -17,7 +17,6 @@
 """
 
 import warnings
-from typing import Any, Dict
 
 import tensorflow as tf
 
@@ -54,6 +53,7 @@ from .configuration_distilbert import DistilBertConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "distilbert-base-uncased"
 _CONFIG_FOR_DOC = "DistilBertConfig"
 _TOKENIZER_FOR_DOC = "DistilBertTokenizer"
 
@@ -68,81 +68,6 @@ TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertWordEmbeddings
-class TFDistilBertWordEmbeddings(tf.keras.layers.Layer):
-    def __init__(self, vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
-        super().__init__(**kwargs)
-
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-
-    def build(self, input_shape: tf.TensorShape):
-        self.weight = self.add_weight(
-            name="weight",
-            shape=[self.vocab_size, self.hidden_size],
-            initializer=get_initializer(self.initializer_range),
-        )
-
-        super().build(input_shape)
-
-    def get_config(self) -> Dict[str, Any]:
-        config = {
-            "vocab_size": self.vocab_size,
-            "hidden_size": self.hidden_size,
-            "initializer_range": self.initializer_range,
-        }
-        base_config = super().get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
-    def call(self, input_ids: tf.Tensor) -> tf.Tensor:
-        flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
-        embeddings = tf.gather(params=self.weight, indices=flat_input_ids)
-        embeddings = tf.reshape(
-            tensor=embeddings, shape=tf.concat(values=[shape_list(input_ids), [self.hidden_size]], axis=0)
-        )
-
-        embeddings.set_shape(input_ids.shape.as_list() + [self.hidden_size])
-
-        return embeddings
-
-
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertPositionEmbeddings
-class TFDistilBertPositionEmbeddings(tf.keras.layers.Layer):
-    def __init__(self, max_position_embeddings: int, hidden_size: int, initializer_range: float, **kwargs):
-        super().__init__(**kwargs)
-
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-
-    def build(self, input_shape: tf.TensorShape):
-        self.position_embeddings = self.add_weight(
-            name="embeddings",
-            shape=[self.max_position_embeddings, self.hidden_size],
-            initializer=get_initializer(self.initializer_range),
-        )
-
-        super().build(input_shape)
-
-    def get_config(self) -> Dict[str, Any]:
-        config = {
-            "max_position_embeddings": self.max_position_embeddings,
-            "hidden_size": self.hidden_size,
-            "initializer_range": self.initializer_range,
-        }
-        base_config = super().get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
-    def call(self, position_ids: tf.Tensor) -> tf.Tensor:
-        input_shape = shape_list(position_ids)
-        position_embeddings = self.position_embeddings[: input_shape[1], :]
-
-        return tf.broadcast_to(input=position_embeddings, shape=input_shape)
-
-
 class TFEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -151,22 +76,28 @@ class TFEmbeddings(tf.keras.layers.Layer):
         self.vocab_size = config.vocab_size
         self.dim = config.dim
         self.initializer_range = config.initializer_range
+        self.max_position_embeddings = config.max_position_embeddings
 
-        self.word_embeddings = TFDistilBertWordEmbeddings(
-            vocab_size=config.vocab_size,
-            hidden_size=config.dim,
-            initializer_range=config.initializer_range,
-            name="word_embeddings",
-        )
-        self.position_embeddings = TFDistilBertPositionEmbeddings(
-            max_position_embeddings=config.max_position_embeddings,
-            hidden_size=config.dim,
-            initializer_range=config.initializer_range,
-            name="position_embeddings",
-        )
         self.embeddings_sum = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.dropout)
+
+    def build(self, input_shape: tf.TensorShape):
+        with tf.name_scope("word_embeddings"):
+            self.weight = self.add_weight(
+                name="weight",
+                shape=[self.vocab_size, self.dim],
+                initializer=get_initializer(initializer_range=self.initializer_range),
+            )
+
+        with tf.name_scope("position_embeddings"):
+            self.position_embeddings = self.add_weight(
+                name="embeddings",
+                shape=[self.max_position_embeddings, self.dim],
+                initializer=get_initializer(initializer_range=self.initializer_range),
+            )
+
+        super().build(input_shape)
 
     def call(self, input_ids=None, position_ids=None, inputs_embeds=None, training=False):
         """
@@ -178,13 +109,15 @@ class TFEmbeddings(tf.keras.layers.Layer):
         assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
-            inputs_embeds = self.word_embeddings(input_ids=input_ids)
+            inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
+
+        input_shape = shape_list(inputs_embeds)[:-1]
 
         if position_ids is None:
-            position_embeds = self.position_embeddings(position_ids=inputs_embeds)
-        else:
-            position_embeds = self.position_embeddings(position_ids=position_ids)
+            position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
 
+        position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
+        position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
         final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds])
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
         final_embeddings = self.dropout(inputs=final_embeddings, training=training)
@@ -235,18 +168,18 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         """
         bs, q_length, dim = shape_list(query)
         k_length = shape_list(key)[1]
-        # assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
+        # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'
         # assert key.size() == value.size()
         dim_per_head = tf.math.divide(self.dim, self.n_heads)
         dim_per_head = tf.cast(dim_per_head, dtype=tf.int32)
         mask_reshape = [bs, 1, 1, k_length]
 
         def shape(x):
-            """ separate heads """
+            """separate heads"""
             return tf.transpose(tf.reshape(x, (bs, -1, self.n_heads, dim_per_head)), perm=(0, 2, 1, 3))
 
         def unshape(x):
-            """ group heads """
+            """group heads"""
             return tf.reshape(tf.transpose(x, perm=(0, 2, 1, 3)), (bs, -1, self.n_heads * dim_per_head))
 
         q = shape(self.q_lin(query))  # (bs, n_heads, q_length, dim_per_head)
@@ -288,9 +221,7 @@ class TFFFN(tf.keras.layers.Layer):
         self.lin2 = tf.keras.layers.Dense(
             config.dim, kernel_initializer=get_initializer(config.initializer_range), name="lin2"
         )
-        assert config.activation in ["relu", "gelu"], "activation ({}) must be in ['relu', 'gelu']".format(
-            config.activation
-        )
+        assert config.activation in ["relu", "gelu"], f"activation ({config.activation}) must be in ['relu', 'gelu']"
         self.activation = get_tf_activation(config.activation)
 
     def call(self, input, training=False):
@@ -357,7 +288,7 @@ class TFTransformer(tf.keras.layers.Layer):
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
 
-        self.layer = [TFTransformerBlock(config, name="layer_._{}".format(i)) for i in range(config.n_layers)]
+        self.layer = [TFTransformerBlock(config, name=f"layer_._{i}") for i in range(config.n_layers)]
 
     def call(self, x, attn_mask, head_mask, output_attentions, output_hidden_states, return_dict, training=False):
         # docstyle-ignore
@@ -422,11 +353,11 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
         self.transformer = TFTransformer(config, name="transformer")  # Encoder
 
     def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
+        return self.embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings.weight = value
-        self.embeddings.word_embeddings.vocab_size = value.shape[0]
+        self.embeddings.weight = value
+        self.embeddings.vocab_size = value.shape[0]
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
@@ -613,7 +544,7 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="distilbert-base-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -716,9 +647,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         )
         self.act = get_tf_activation("gelu")
         self.vocab_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="vocab_layer_norm")
-        self.vocab_projector = TFDistilBertLMHead(
-            config, self.distilbert.embeddings.word_embeddings, name="vocab_projector"
-        )
+        self.vocab_projector = TFDistilBertLMHead(config, self.distilbert.embeddings, name="vocab_projector")
 
     def get_lm_head(self):
         return self.vocab_projector
@@ -730,7 +659,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="distilbert-base-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -831,7 +760,7 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="distilbert-base-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -926,7 +855,7 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="distilbert-base-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1034,7 +963,7 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
     )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="distilbert-base-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1160,7 +1089,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="distilbert-base-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

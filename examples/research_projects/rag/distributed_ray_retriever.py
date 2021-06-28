@@ -3,7 +3,6 @@ import random
 
 import ray
 from transformers import RagConfig, RagRetriever, RagTokenizer
-from transformers.file_utils import requires_datasets, requires_faiss
 from transformers.models.rag.retrieval_rag import CustomHFIndex
 
 
@@ -50,10 +49,10 @@ class RagRayDistributedRetriever(RagRetriever):
     Args:
         config (:class:`~transformers.RagConfig`):
             The configuration of the RAG model this Retriever is used with. Contains parameters indicating which ``Index`` to build.
-        question_encoder_tokenizer (:class:`~transformers.PretrainedTokenizer`):
+        question_encoder_tokenizer (:class:`~transformers.PreTrainedTokenizer`):
             The tokenizer that was used to tokenize the question.
             It is used to decode the question and then use the generator_tokenizer.
-        generator_tokenizer (:class:`~transformers.PretrainedTokenizer`):
+        generator_tokenizer (:class:`~transformers.PreTrainedTokenizer`):
             The tokenizer used for the generator part of the RagModel.
         retrieval_workers (:obj:`List[ray.ActorClass(RayRetriever)]`): A list of already initialized `RayRetriever` actors.
             These actor classes run on remote processes and are responsible for performing the index lookup.
@@ -134,8 +133,6 @@ class RagRayDistributedRetriever(RagRetriever):
 
     @classmethod
     def from_pretrained(cls, retriever_name_or_path, actor_handles, indexed_dataset=None, **kwargs):
-        requires_datasets(cls)
-        requires_faiss(cls)
         config = kwargs.pop("config", None) or RagConfig.from_pretrained(retriever_name_or_path, **kwargs)
         rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path, config=config)
         question_encoder_tokenizer = rag_tokenizer.question_encoder

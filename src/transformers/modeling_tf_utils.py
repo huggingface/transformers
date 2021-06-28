@@ -34,8 +34,10 @@ from .file_utils import (
     TF2_WEIGHTS_NAME,
     WEIGHTS_NAME,
     ModelOutput,
+    PushToHubMixin,
     cached_path,
     hf_bucket_url,
+    is_offline_mode,
     is_remote_url,
 )
 from .generation_tf_utils import TFGenerationMixin
@@ -283,14 +285,13 @@ def booleans_processing(config, **kwargs):
 
         if "use_cache" in kwargs:
             final_booleans["use_cache"] = kwargs["use_cache"] if kwargs["use_cache"] is not None else config.use_cache
-
     else:
         if (
             kwargs["output_attentions"] is not None
             or kwargs["output_hidden_states"] is not None
             or ("use_cache" in kwargs and kwargs["use_cache"] is not None)
         ):
-            tf_logger.warn(
+            tf_logger.warning(
                 "The parameters `output_attentions`, `output_hidden_states` and `use_cache` cannot be updated when calling a model."
                 "They have to be set to True/False in the config object (i.e.: `config=XConfig.from_pretrained('name', output_attentions=True)`)."
             )
@@ -299,7 +300,9 @@ def booleans_processing(config, **kwargs):
         final_booleans["output_hidden_states"] = config.output_hidden_states
 
         if kwargs["return_dict"] is not None:
-            tf_logger.warn("The parameter `return_dict` cannot be set in graph mode and will always be set to `True`.")
+            tf_logger.warning(
+                "The parameter `return_dict` cannot be set in graph mode and will always be set to `True`."
+            )
         final_booleans["return_dict"] = True
 
         if "use_cache" in kwargs:
@@ -398,7 +401,7 @@ def input_processing(func, config, input_ids, **kwargs):
             if isinstance(v, allowed_types) or v is None:
                 output[k] = v
             elif k not in parameter_names and "args" not in parameter_names:
-                logger.warn(
+                logger.warning(
                     f"The parameter {k} does not belongs to the parameter list {parameter_names} and will be ignored."
                 )
                 continue
@@ -447,7 +450,7 @@ def input_processing(func, config, input_ids, **kwargs):
     return output
 
 
-def load_tf_weights(model, resolved_archive_file):
+def load_tf_weights(model, resolved_archive_file, _prefix=None):
     """
     Detect missing and unexpected layers and load the TF weights accordingly to their names and shapes.
 
@@ -493,6 +496,10 @@ def load_tf_weights(model, resolved_archive_file):
                 for weight_name in hdf5_format.load_attributes_from_hdf5_group(h5_layer_object, "weight_names"):
                     # TF names always start with the model name so we ignore it
                     name = "/".join(weight_name.split("/")[1:])
+
+                    if _prefix is not None:
+                        name = _prefix + "/" + name
+
                     saved_weights[name] = np.asarray(h5_layer_object[weight_name])
 
                     # Add the updated name to the final list for computing missing/unexpected values
@@ -501,7 +508,14 @@ def load_tf_weights(model, resolved_archive_file):
                 # Loop over each weights from the instantiated model and compare with the weights from the H5 file
                 for symbolic_weight in symbolic_weights:
                     # TF names always start with the model name so we ignore it
-                    symbolic_weight_name = "/".join(symbolic_weight.name.split("/")[1:])
+                    if _prefix is not None:
+                        delimeter = len(_prefix.split("/"))
+                        symbolic_weight_name = "/".join(
+                            symbolic_weight.name.split("/")[:delimeter]
+                            + symbolic_weight.name.split("/")[delimeter + 1 :]
+                        )
+                    else:
+                        symbolic_weight_name = "/".join(symbolic_weight.name.split("/")[1:])
 
                     # here we check if the current weight is among the weights from the H5 file
                     # If yes, get the weight_value of the corresponding weight from the H5 file
@@ -578,7 +592,7 @@ def init_copy_embeddings(old_embeddings, new_num_tokens):
     return mask, current_weights
 
 
-class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
+class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushToHubMixin):
     r"""
     Base class for all TF models.
 
@@ -603,6 +617,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
     # a list of re pattern of tensor names to ignore from the weights when loading the model weights
     # (and avoid unnecessary warnings).
     _keys_to_ignore_on_load_unexpected = None
+    _requires_load_weight_prefix = False
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
@@ -620,11 +635,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         super().__init__(*inputs, **kwargs)
         if not isinstance(config, PretrainedConfig):
             raise ValueError(
-                "Parameter config in `{}(config)` should be an instance of class `PretrainedConfig`. "
-                "To create a model from a pretrained model use "
-                "`model = {}.from_pretrained(PRETRAINED_MODEL_NAME)`".format(
-                    self.__class__.__name__, self.__class__.__name__
-                )
+                f"Parameter config in `{self.__class__.__name__}(config)` should be an instance of class "
+                "`PretrainedConfig`. To create a model from a pretrained model use "
+                f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         # Save config and origin of the pretrained weights if given in model
         self.config = config
@@ -645,7 +658,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
         Args:
             inputs (:obj:`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionnary of tensors.
+                The input of the saved model as a dictionary of tensors.
         """
         output = self.call(inputs)
 
@@ -741,10 +754,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
     def get_prefix_bias_name(self) -> Union[None, str]:
         """
-        Get the concatenated prefix name of the bias from the model name to the parent layer
+        Get the concatenated _prefix name of the bias from the model name to the parent layer
 
         Return:
-            :obj:`str`: The prefix name of the bias.
+            :obj:`str`: The _prefix name of the bias.
         """
         warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return None
@@ -930,7 +943,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 vectors from the end. If not provided or :obj:`None`, just returns None
 
         Return:
-            :obj:`tf.Variable`: Pointer to the resized decoder or None if the output embeddings are differents of the
+            :obj:`tf.Variable`: Pointer to the resized decoder or None if the output embeddings are different from the
             input ones.
         """
         new_lm_head_decoder = old_lm_head_decoder
@@ -999,7 +1012,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         """
         raise NotImplementedError
 
-    def save_pretrained(self, save_directory, saved_model=False, version=1):
+    def save_pretrained(self, save_directory, saved_model=False, version=1, push_to_hub=False, **kwargs):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
         :func:`~transformers.TFPreTrainedModel.from_pretrained` class method.
@@ -1013,10 +1026,28 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 The version of the saved model. A saved model needs to be versioned in order to be properly loaded by
                 TensorFlow Serving as detailed in the official documentation
                 https://www.tensorflow.org/tfx/serving/serving_basic
+            push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to push your model to the Hugging Face model hub after saving it.
+
+                .. warning::
+
+                    Using :obj:`push_to_hub=True` will synchronize the repository you are pushing to with
+                    :obj:`save_directory`, which requires :obj:`save_directory` to be a local clone of the repo you are
+                    pushing to if it's an existing folder. Pass along :obj:`temp_dir=True` to use a temporary directory
+                    instead.
+
+            kwargs:
+                Additional key word arguments passed along to the
+                :meth:`~transformers.file_utils.PushToHubMixin.push_to_hub` method.
         """
         if os.path.isfile(save_directory):
-            logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
+            logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
+
+        if push_to_hub:
+            commit_message = kwargs.pop("commit_message", None)
+            repo = self._create_or_get_repo(save_directory, **kwargs)
+
         os.makedirs(save_directory, exist_ok=True)
 
         if saved_model:
@@ -1025,12 +1056,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             logger.info(f"Saved model created in {saved_model_dir}")
 
         # Save configuration file
+        self.config.architectures = [self.__class__.__name__[2:]]
         self.config.save_pretrained(save_directory)
 
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, TF2_WEIGHTS_NAME)
         self.save_weights(output_model_file)
-        logger.info("Model weights saved in {}".format(output_model_file))
+        logger.info(f"Model weights saved in {output_model_file}")
+
+        if push_to_hub:
+            url = self._push_to_hub(repo, commit_message=commit_message)
+            logger.info(f"Model pushed to the hub in this commit: {url}")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -1052,7 +1088,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                       Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
                       a user or organization name, like ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing model weights saved using
-                      :func:`~transformersTF.PreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
+                      :func:`~transformers.TFPreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
                     - A path or url to a `PyTorch state_dict save file` (e.g, ``./pt_model/pytorch_model.bin``). In
                       this case, ``from_pt`` should be set to :obj:`True` and a configuration object should be provided
                       as ``config`` argument. This loading path is slower than converting the PyTorch model in a
@@ -1103,7 +1139,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
                 identifier allowed by git.
-            mirror(:obj:`str`, `optional`, defaults to :obj:`None`):
+            mirror(:obj:`str`, `optional`):
                 Mirror source to accelerate downloads in China. If you are from China and have an accessibility
                 problem, you can set this option to resolve it. Note that we do not guarantee the timeliness or safety.
                 Please refer to the mirror site for more information.
@@ -1151,6 +1187,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
         mirror = kwargs.pop("mirror", None)
+        load_weight_prefix = kwargs.pop("load_weight_prefix", None)
+        from_pipeline = kwargs.pop("_from_pipeline", None)
+        from_auto_class = kwargs.pop("_from_auto", False)
+
+        user_agent = {"file_type": "model", "framework": "tensorflow", "from_auto_class": from_auto_class}
+        if from_pipeline is not None:
+            user_agent["using_pipeline"] = from_pipeline
+
+        if is_offline_mode() and not local_files_only:
+            logger.info("Offline mode: forcing local_files_only=True")
+            local_files_only = True
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
@@ -1166,6 +1213,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 local_files_only=local_files_only,
                 use_auth_token=use_auth_token,
                 revision=revision,
+                _from_auto=from_auto_class,
+                _from_pipeline=from_pipeline,
                 **kwargs,
             )
         else:
@@ -1182,9 +1231,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                     archive_file = os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)
                 else:
                     raise EnvironmentError(
-                        "Error no file named {} found in directory {} or `from_pt` set to False".format(
-                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME], pretrained_model_name_or_path
-                        )
+                        f"Error no file named {[WEIGHTS_NAME, TF2_WEIGHTS_NAME]} found in directory "
+                        f"{pretrained_model_name_or_path} or `from_pt` set to False"
                     )
             elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
@@ -1208,6 +1256,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                     resume_download=resume_download,
                     local_files_only=local_files_only,
                     use_auth_token=use_auth_token,
+                    user_agent=user_agent,
                 )
             except EnvironmentError as err:
                 logger.error(err)
@@ -1218,13 +1267,18 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 )
                 raise EnvironmentError(msg)
             if resolved_archive_file == archive_file:
-                logger.info("loading weights file {}".format(archive_file))
+                logger.info(f"loading weights file {archive_file}")
             else:
-                logger.info("loading weights file {} from cache at {}".format(archive_file, resolved_archive_file))
+                logger.info(f"loading weights file {archive_file} from cache at {resolved_archive_file}")
         else:
             resolved_archive_file = None
 
         config.name_or_path = pretrained_model_name_or_path
+
+        # composed models, *e.g.* TFRag, require special treatment when it comes to loading
+        # pre-trained weights.
+        if cls._requires_load_weight_prefix and model_kwargs.get("name") is not None:
+            model_kwargs["load_weight_prefix"] = load_weight_prefix + "/" + model_kwargs.get("name")
 
         # Instantiate model.
         model = cls(config, *model_args, **model_kwargs)
@@ -1235,13 +1289,18 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             # Load from a PyTorch checkpoint
             return load_pytorch_checkpoint_in_tf2_model(model, resolved_archive_file, allow_missing_keys=True)
 
-        model(model.dummy_inputs)  # build the network with dummy inputs
+        # we might need to extend the variable scope for composite models
+        if load_weight_prefix is not None:
+            with tf.compat.v1.variable_scope(load_weight_prefix):
+                model(model.dummy_inputs)  # build the network with dummy inputs
+        else:
+            model(model.dummy_inputs)  # build the network with dummy inputs
 
-        assert os.path.isfile(resolved_archive_file), "Error retrieving file {}".format(resolved_archive_file)
+        assert os.path.isfile(resolved_archive_file), f"Error retrieving file {resolved_archive_file}"
         # 'by_name' allow us to do transfer learning by skipping/adding layers
         # see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1339-L1357
         try:
-            missing_keys, unexpected_keys = load_tf_weights(model, resolved_archive_file)
+            missing_keys, unexpected_keys = load_tf_weights(model, resolved_archive_file, load_weight_prefix)
         except OSError:
             raise OSError(
                 "Unable to load weights from h5 file. "
@@ -1331,119 +1390,6 @@ class TFConv1D(tf.keras.layers.Layer):
         return x
 
 
-class WordEmbeddings(tf.keras.layers.Layer):
-    def __init__(self, vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
-        super().__init__(**kwargs)
-
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-
-    def build(self, input_shape):
-        self.word_embeddings = self.add_weight(
-            name="weight",
-            shape=[self.vocab_size, self.hidden_size],
-            initializer=get_initializer(initializer_range=self.initializer_range),
-        )
-
-        super().build(input_shape=input_shape)
-
-    def get_config(self):
-        config = {
-            "vocab_size": self.vocab_size,
-            "hidden_size": self.hidden_size,
-            "initializer_range": self.initializer_range,
-        }
-        base_config = super().get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
-    def call(self, input_ids):
-        flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
-        embeddings = tf.gather(params=self.word_embeddings, indices=flat_input_ids)
-        embeddings = tf.reshape(
-            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=input_ids), [self.hidden_size]], axis=0)
-        )
-
-        embeddings.set_shape(shape=input_ids.shape.as_list() + [self.hidden_size])
-
-        return embeddings
-
-
-class TokenTypeEmbeddings(tf.keras.layers.Layer):
-    def __init__(self, type_vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
-        super().__init__(**kwargs)
-
-        self.type_vocab_size = type_vocab_size
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-
-    def build(self, input_shape):
-        self.token_type_embeddings = self.add_weight(
-            name="embeddings",
-            shape=[self.type_vocab_size, self.hidden_size],
-            initializer=get_initializer(initializer_range=self.initializer_range),
-        )
-
-        super().build(input_shape=input_shape)
-
-    def get_config(self):
-        config = {
-            "type_vocab_size": self.type_vocab_size,
-            "hidden_size": self.hidden_size,
-            "initializer_range": self.initializer_range,
-        }
-        base_config = super().get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
-    def call(self, token_type_ids):
-        flat_token_type_ids = tf.reshape(tensor=token_type_ids, shape=[-1])
-        one_hot_data = tf.one_hot(indices=flat_token_type_ids, depth=self.type_vocab_size, dtype=self._compute_dtype)
-        embeddings = tf.matmul(a=one_hot_data, b=self.token_type_embeddings)
-        embeddings = tf.reshape(
-            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=token_type_ids), [self.hidden_size]], axis=0)
-        )
-
-        embeddings.set_shape(shape=token_type_ids.shape.as_list() + [self.hidden_size])
-
-        return embeddings
-
-
-class PositionEmbeddings(tf.keras.layers.Layer):
-    def __init__(self, max_position_embeddings: int, hidden_size: int, initializer_range: float, **kwargs):
-        super().__init__(**kwargs)
-
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-
-    def build(self, input_shape):
-        self.position_embeddings = self.add_weight(
-            name="embeddings",
-            shape=[self.max_position_embeddings, self.hidden_size],
-            initializer=get_initializer(initializer_range=self.initializer_range),
-        )
-
-        super().build(input_shape)
-
-    def get_config(self):
-        config = {
-            "max_position_embeddings": self.max_position_embeddings,
-            "hidden_size": self.hidden_size,
-            "initializer_range": self.initializer_range,
-        }
-        base_config = super().get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
-    def call(self, position_ids):
-        input_shape = shape_list(tensor=position_ids)
-        position_embeddings = self.position_embeddings[: input_shape[1], :]
-
-        return tf.broadcast_to(input=position_embeddings, shape=input_shape)
-
-
 class TFSharedEmbeddings(tf.keras.layers.Layer):
     r"""
     Construct shared token embeddings.
@@ -1519,7 +1465,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         elif mode == "linear":
             return self._linear(inputs)
         else:
-            raise ValueError("mode {} is not valid.".format(mode))
+            raise ValueError(f"mode {mode} is not valid.")
 
     def _embedding(self, input_ids):
         """Applies embedding based on inputs tensor."""
@@ -1631,7 +1577,7 @@ class TFSequenceSummary(tf.keras.layers.Layer):
                 )  # A tensor full of shape [batch] or [batch, num choices] full of sequence length
             cls_shape = shape_list(cls_index)
             if len(cls_shape) <= len(hidden_shape) - 2:
-                cls_index = cls_index[..., tf.newaxis]
+                cls_index = tf.expand_dims(cls_index, axis=-1)
             # else:
             # cls_index = cls_index[..., tf.newaxis]
             # cls_index = cls_index.expand((-1,) * (cls_index.dim()-1) + (hidden_states.size(-1),))

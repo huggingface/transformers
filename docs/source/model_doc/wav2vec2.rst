@@ -34,7 +34,9 @@ Tips:
 
 - Wav2Vec2 is a speech model that accepts a float array corresponding to the raw waveform of the speech signal.
 - Wav2Vec2 model was trained using connectionist temporal classification (CTC) so the model output has to be decoded
-  using :class:`~transformers.Wav2Vec2Tokenizer`.
+  using :class:`~transformers.Wav2Vec2CTCTokenizer`.
+
+This model was contributed by `patrickvonplaten <https://huggingface.co/patrickvonplaten>`__.
 
 
 Wav2Vec2Config
@@ -44,11 +46,25 @@ Wav2Vec2Config
     :members:
 
 
-Wav2Vec2Tokenizer
+Wav2Vec2CTCTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.Wav2Vec2Tokenizer
+.. autoclass:: transformers.Wav2Vec2CTCTokenizer
     :members: __call__, save_vocabulary
+
+
+Wav2Vec2FeatureExtractor
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Wav2Vec2FeatureExtractor
+    :members: __call__
+
+
+Wav2Vec2Processor
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Wav2Vec2Processor
+    :members: __call__, pad, from_pretrained, save_pretrained, batch_decode, decode, as_target_processor
 
 
 Wav2Vec2Model
@@ -58,8 +74,28 @@ Wav2Vec2Model
     :members: forward
 
 
-Wav2Vec2ForMaskedLM
+Wav2Vec2ForCTC
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.Wav2Vec2ForMaskedLM
+.. autoclass:: transformers.Wav2Vec2ForCTC
     :members: forward
+
+Wav2Vec2ForPreTraining
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Wav2Vec2ForPreTraining
+    :members: forward
+
+
+TFWav2Vec2Model
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFWav2Vec2Model
+    :members: call
+
+
+TFWav2Vec2ForCTC
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFWav2Vec2ForCTC
+    :members: call

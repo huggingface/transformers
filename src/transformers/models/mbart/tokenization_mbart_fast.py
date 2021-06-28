@@ -32,9 +32,24 @@ else:
 
 logger = logging.get_logger(__name__)
 
-_all_mbart_models = ["facebook/mbart-large-en-ro", "facebook/mbart-large-cc25"]
-SPM_URL = "https://huggingface.co/facebook/mbart-large-en-ro/resolve/main/sentence.bpe.model"
-tokenizer_URL = "https://huggingface.co/facebook/mbart-large-en-ro/resolve/main/tokenizer.json"
+
+VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
+
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "facebook/mbart-large-en-ro": "https://huggingface.co/facebook/mbart-large-en-ro/resolve/main/sentencepiece.bpe.model",
+        "facebook/mbart-large-cc25": "https://huggingface.co/facebook/mbart-large-cc25/resolve/main/sentencepiece.bpe.model",
+    },
+    "tokenizer_file": {
+        "facebook/mbart-large-en-ro": "https://huggingface.co/facebook/mbart-large-en-ro/resolve/main/tokenizer.json",
+        "facebook/mbart-large-cc25": "https://huggingface.co/facebook/mbart-large-cc25/resolve/main/tokenizer.json",
+    },
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "facebook/mbart-large-en-ro": 1024,
+    "facebook/mbart-large-cc25": 1024,
+}
 
 FAIRSEQ_LANGUAGE_CODES = [
     "ar_AR",
@@ -70,15 +85,9 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
     Construct a "fast" MBART tokenizer (backed by HuggingFace's `tokenizers` library). Based on `BPE
     <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models>`__.
 
-    :class:`~transformers.MBartTokenizerFast` is a subclass of :class:`~transformers.XLMRobertaTokenizerFast` and adds
-    a new :meth:`~transformers.MBartTokenizerFast.prepare_seq2seq_batch`.
-
-    Refer to superclass :class:`~transformers.XLMRobertaTokenizerFast` for usage examples and documentation concerning
-    the initialization parameters and other methods.
-
-    .. warning::
-        ``prepare_seq2seq_batch`` should be used to encode inputs. Other tokenizer methods like ``encode`` do not work
-        properly.
+    :class:`~transformers.MBartTokenizerFast` is a subclass of :class:`~transformers.XLMRobertaTokenizerFast`. Refer to
+    superclass :class:`~transformers.XLMRobertaTokenizerFast` for usage examples and documentation concerning the
+    initialization parameters and other methods.
 
     The tokenization method is ``<tokens> <eos> <language code>`` for source language documents, and ``<language code>
     <tokens> <eos>``` for target language documents.
@@ -86,61 +95,55 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
     Examples::
 
         >>> from transformers import MBartTokenizerFast
-        >>> tokenizer = MBartTokenizerFast.from_pretrained('facebook/mbart-large-en-ro')
+        >>> tokenizer = MBartTokenizerFast.from_pretrained('facebook/mbart-large-en-ro', src_lang="en_XX", tgt_lang="ro_RO")
         >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
         >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
-        >>> batch: dict = tokenizer.prepare_seq2seq_batch(
-        ...     example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian, return_tensors="pt"
-        ... )
+        >>> inputs = tokenizer(example_english_phrase, return_tensors="pt)
+        >>> with tokenizer.as_target_tokenizer():
+        ...     labels = tokenizer(expected_translation_romanian, return_tensors="pt")
+        >>> inputs["labels"] = labels["input_ids"]
     """
 
-    vocab_files_names = {"vocab_file": "sentencepiece.bpe.model"}
-    max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
-    pretrained_vocab_files_map = {"vocab_file": {m: SPM_URL for m in _all_mbart_models}}
+    vocab_files_names = VOCAB_FILES_NAMES
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     slow_tokenizer_class = MBartTokenizer
 
     prefix_tokens: List[int] = []
     suffix_tokens: List[int] = []
 
-    def __init__(self, *args, tokenizer_file=None, **kwargs):
-        super().__init__(*args, tokenizer_file=tokenizer_file, **kwargs)
+    def __init__(
+        self, *args, tokenizer_file=None, src_lang=None, tgt_lang=None, additional_special_tokens=None, **kwargs
+    ):
+        super().__init__(
+            *args,
+            tokenizer_file=tokenizer_file,
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
+            additional_special_tokens=additional_special_tokens,
+            **kwargs,
+        )
 
-        self.cur_lang_code = self.convert_tokens_to_ids("en_XX")
-        self.set_src_lang_special_tokens(kwargs.get("src_lang", "en_XX"))
+        _additional_special_tokens = FAIRSEQ_LANGUAGE_CODES.copy()
 
-        self.add_special_tokens({"additional_special_tokens": FAIRSEQ_LANGUAGE_CODES})
+        if additional_special_tokens is not None:
+            _additional_special_tokens.extend(additional_special_tokens)
 
-    def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
-        """
-        Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` method.
+        self.add_special_tokens({"additional_special_tokens": _additional_special_tokens})
 
-        Args:
-            token_ids_0 (:obj:`List[int]`):
-                List of ids.
-            token_ids_1 (:obj:`List[int]`, `optional`):
-                Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the token list is already formatted with special tokens for the model.
+        self._src_lang = src_lang if src_lang is not None else "en_XX"
+        self.cur_lang_code = self.convert_tokens_to_ids(self._src_lang)
+        self.tgt_lang = tgt_lang
+        self.set_src_lang_special_tokens(self._src_lang)
 
-        Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
-        """
+    @property
+    def src_lang(self) -> str:
+        return self._src_lang
 
-        if already_has_special_tokens:
-            if token_ids_1 is not None:
-                raise ValueError(
-                    "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formatted with special tokens for the model."
-                )
-            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
-        prefix_ones = [1] * len(self.prefix_tokens)
-        suffix_ones = [1] * len(self.suffix_tokens)
-        if token_ids_1 is None:
-            return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
-        return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
+    @src_lang.setter
+    def src_lang(self, new_src_lang: str) -> None:
+        self._src_lang = new_src_lang
+        self.set_src_lang_special_tokens(self._src_lang)
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -171,6 +174,16 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
 
+    def _build_translation_inputs(self, raw_inputs, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs):
+        """Used by translation pipeline, to prepare inputs for the generate function"""
+        if src_lang is None or tgt_lang is None:
+            raise ValueError("Translation requires a `src_lang` and a `tgt_lang` for this model")
+        self.src_lang = src_lang
+        inputs = self(raw_inputs, add_special_tokens=True, return_tensors="pt", **extra_kwargs)
+        tgt_lang_id = self.convert_tokens_to_ids(tgt_lang)
+        inputs["forced_bos_token_id"] = tgt_lang_id
+        return inputs
+
     def prepare_seq2seq_batch(
         self,
         src_texts: List[str],
@@ -181,7 +194,6 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
     ) -> BatchEncoding:
         self.src_lang = src_lang
         self.tgt_lang = tgt_lang
-        self.set_src_lang_special_tokens(self.src_lang)
         return super().prepare_seq2seq_batch(src_texts, tgt_texts, **kwargs)
 
     @contextmanager

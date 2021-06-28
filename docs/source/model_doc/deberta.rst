@@ -38,7 +38,8 @@ the training data performs consistently better on a wide range of NLP tasks, ach
 pre-trained models will be made publicly available at https://github.com/microsoft/DeBERTa.*
 
 
-The original code can be found `here <https://github.com/microsoft/DeBERTa>`__.
+This model was contributed by `DeBERTa <https://huggingface.co/DeBERTa>`__. The original code can be found `here
+<https://github.com/microsoft/DeBERTa>`__.
 
 
 DebertaConfig
@@ -55,12 +56,18 @@ DebertaTokenizer
     :members: build_inputs_with_special_tokens, get_special_tokens_mask,
         create_token_type_ids_from_sequences, save_vocabulary
 
+DebertaTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.DebertaTokenizerFast
+    :members: build_inputs_with_special_tokens, create_token_type_ids_from_sequences
+
 
 DebertaModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.DebertaModel
-    :members:
+    :members: forward
 
 
 DebertaPreTrainedModel
@@ -74,25 +81,25 @@ DebertaForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.DebertaForMaskedLM
-    :members:
+    :members: forward
 
 
 DebertaForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.DebertaForSequenceClassification
-    :members:
+    :members: forward
 
 
 DebertaForTokenClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.DebertaForTokenClassification
-    :members:
+    :members: forward
 
 
 DebertaForQuestionAnswering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.DebertaForQuestionAnswering
-    :members:
+    :members: forward

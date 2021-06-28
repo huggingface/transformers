@@ -9,8 +9,7 @@ __pycache__/
 *.so
 
 # tests and logs
-tests/fixtures/*
-!tests/fixtures/sample_text_no_unicode.txt
+tests/fixtures/cached_*_text.txt
 logs/
 lightning_logs/
 lang_code_data/

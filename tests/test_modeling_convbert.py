@@ -19,6 +19,7 @@ import unittest
 
 from tests.test_modeling_common import floats_tensor
 from transformers import is_torch_available
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -259,6 +260,7 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_head_masking = False
+    test_sequence_classification_problem_types = True
 
     def setUp(self):
         self.model_tester = ConvBertModelTester(self)
@@ -352,7 +354,7 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
                 if "labels" in inputs_dict:
                     correct_outlen += 1  # loss is added to beginning
                 # Question Answering model returns start_logits and end_logits
-                if model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
+                if model_class in get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING):
                     correct_outlen += 1  # start_logits and end_logits instead of only 1 output
                 if "past_key_values" in outputs:
                     correct_outlen += 1  # past_key_values have been returned
@@ -416,18 +418,16 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class ConvBertModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_inference_masked_lm(self):
+    def test_inference_no_head(self):
         model = ConvBertModel.from_pretrained("YituTech/conv-bert-base")
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
+        input_ids = torch.tensor([[1, 2, 3, 4, 5, 6]])
         output = model(input_ids)[0]
-        print(output[:, :3, :3])
 
         expected_shape = torch.Size((1, 6, 768))
         self.assertEqual(output.shape, expected_shape)
 
-        # TODO Replace values below with what was printed above.
         expected_slice = torch.tensor(
-            [[[-0.0348, -0.4686, -0.3064], [0.2264, -0.2699, -0.7423], [0.1032, -0.4501, -0.5828]]]
+            [[[-0.0864, -0.4898, -0.3677], [0.1434, -0.2952, -0.7640], [-0.0112, -0.4432, -0.5432]]]
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))

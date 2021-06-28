@@ -71,7 +71,7 @@ tiny_model = FSMTForConditionalGeneration(config)
 print(f"num of params {tiny_model.num_parameters()}")
 
 # Test
-batch = tokenizer.prepare_seq2seq_batch(["Making tiny model"], return_tensors="pt")
+batch = tokenizer(["Making tiny model"], return_tensors="pt")
 outputs = tiny_model(**batch)
 
 print("test output:", len(outputs.logits[0]))

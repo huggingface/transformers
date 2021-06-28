@@ -16,7 +16,7 @@ BARThez
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The BARThez model was proposed in `BARThez: a Skilled Pretrained French Sequence-to-Sequence Model`
+The BARThez model was proposed in `BARThez: a Skilled Pretrained French Sequence-to-Sequence Model
 <https://arxiv.org/abs/2010.12321>`__ by Moussa Kamal Eddine, Antoine J.-P. Tixier, Michalis Vazirgiannis on 23 Oct,
 2020.
 
@@ -35,14 +35,15 @@ summarization dataset, OrangeSum, that we release with this paper. We also conti
 pretrained multilingual BART on BARThez's corpus, and we show that the resulting model, which we call mBARTHez,
 provides a significant boost over vanilla BARThez, and is on par with or outperforms CamemBERT and FlauBERT.*
 
-The Authors' code can be found `here <https://github.com/moussaKam/BARThez>`__.
+This model was contributed by `moussakam <https://huggingface.co/moussakam>`__. The Authors' code can be found `here
+<https://github.com/moussaKam/BARThez>`__.
 
 
 Examples
 _______________________________________________________________________________________________________________________
 
 - BARThez can be fine-tuned on sequence-to-sequence tasks in a similar way as BART, check:
-  :prefix_link:`examples/seq2seq/ <examples/seq2seq/README.md>`.
+  :prefix_link:`examples/pytorch/summarization/ <examples/pytorch/summarization/README.md>`.
 
 
 BarthezTokenizer

@@ -107,7 +107,7 @@ This command performs a magical link between the folder you cloned the repositor
 ```
 now this editable install will reside where you clone the folder to, e.g. `~/transformers/` and python will search it too.
 
-Do note that you have to keep that `transformers` folder around and not delete it to continue using the  `transfomers` library.
+Do note that you have to keep that `transformers` folder around and not delete it to continue using the  `transformers` library.
 
 Now, let's get to the real benefit of this installation approach. Say, you saw some new feature has been just committed into `master`. If you have already performed all the steps above, to update your transformers to include all the latest commits, all you need to do is to `cd` into that cloned repository folder and update the clone to the latest version:
 
@@ -149,11 +149,42 @@ So if you don't have any specific environment variable set, the cache directory 
 (``PYTORCH_TRANSFORMERS_CACHE`` or ``PYTORCH_PRETRAINED_BERT_CACHE``), those will be used if there is no shell
 environment variable for ``TRANSFORMERS_CACHE``.
 
-### Note on model downloads (Continuous Integration or large-scale deployments)
+### Offline mode
 
-If you expect to be downloading large volumes of models (more than 1,000) from our hosted bucket (for instance through
-your CI setup, or a large-scale production deployment), please cache the model files on your end. It will be way
-faster, and cheaper. Feel free to contact us privately if you need any help.
+It's possible to run 🤗 Transformers in a firewalled or a no-network environment.
+
+Setting environment variable `TRANSFORMERS_OFFLINE=1` will tell 🤗 Transformers to use local files only and will not try to look things up.
+
+Most likely you may want to couple this with `HF_DATASETS_OFFLINE=1` that performs the same for 🤗 Datasets if you're using the latter.
+
+Here is an example of how this can be used on a filesystem that is shared between a normally networked and a firewalled to the external world instances.
+
+On the instance with the normal network run your program which will download and cache models (and optionally datasets if you use 🤗 Datasets). For example:
+
+```
+python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
+```
+
+and then with the same filesystem you can now run the same program on a firewalled instance:
+```
+HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
+```
+and it should succeed without any hanging waiting to timeout.
+
+#### Fetching models and tokenizers to use offline
+
+When running a script the first time like mentioned above, the downloaded files will be cached for future reuse. 
+However, it is also possible to download files and point to their local path instead.
+
+Downloading files can be done through the Web Interface by clicking on the "Download" button, but it can also be handled
+programmatically using the `huggingface_hub` library that is a dependency to `transformers`:
+
+- Using `snapshot_download` to download an entire repository
+- Using `hf_hub_download` to download a specific file
+
+See the reference for these methods in the huggingface_hub
+[documentation](https://github.com/huggingface/huggingface_hub/tree/main/src/huggingface_hub).
 
 ## Do you want to run a Transformer model on a mobile device?
 

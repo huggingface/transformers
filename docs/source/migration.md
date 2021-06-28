@@ -23,7 +23,7 @@ expected changes:
 
 #### 1. AutoTokenizers and pipelines now use fast (rust) tokenizers by default.
 
-The python and rust tokenizers have roughly the same API, but the rust tokenizers have a more complete feature set. 
+The python and rust tokenizers have roughly the same API, but the rust tokenizers have a more complete feature set.
 
 This introduces two breaking changes:
 - The handling of overflowing tokens between the python and rust tokenizers is different.
@@ -85,7 +85,7 @@ This is a breaking change as importing intermediary layers using a model's modul
 
 ##### How to obtain the same behavior as v3.x in v4.x
 
-In order to obtain the same behavior as version `v3.x`, you should update the path used to access the layers. 
+In order to obtain the same behavior as version `v3.x`, you should update the path used to access the layers.
 
 In version `v3.x`:
 ```bash
@@ -169,8 +169,8 @@ Regarding the `TFTrainer` class:
 - The `TFTrainer` method `_setup_wandb` is deprecated in favor of `setup_wandb`.
 - The `TFTrainer` method `_run_model` is deprecated in favor of `run_model`.
 
-Regarding the `TrainerArgument` class:
-- The `TrainerArgument` argument `evaluate_during_training` is deprecated in favor of `evaluation_strategy`.
+Regarding the `TrainingArguments` class:
+- The `TrainingArguments` argument `evaluate_during_training` is deprecated in favor of `evaluation_strategy`.
 
 Regarding the Transfo-XL model:
 - The Transfo-XL configuration attribute `tie_weight` becomes `tie_words_embeddings`.

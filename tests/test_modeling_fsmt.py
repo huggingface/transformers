@@ -30,6 +30,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 if is_torch_available():
     import torch
+    from torch import nn
 
     from transformers import FSMTConfig, FSMTForConditionalGeneration, FSMTModel, FSMTTokenizer
     from transformers.models.fsmt.modeling_fsmt import (
@@ -113,6 +114,7 @@ def prepare_fsmt_inputs_dict(
     attention_mask=None,
     head_mask=None,
     decoder_head_mask=None,
+    cross_attn_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.ne(config.pad_token_id)
@@ -120,6 +122,8 @@ def prepare_fsmt_inputs_dict(
         head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
     if decoder_head_mask is None:
         decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+    if cross_attn_head_mask is None:
+        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
     return {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
@@ -157,10 +161,10 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (torch.nn.Embedding))
-            model.set_input_embeddings(torch.nn.Embedding(10, 10))
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Embedding))
+            model.set_input_embeddings(nn.Embedding(10, 10))
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, torch.nn.modules.sparse.Embedding))
+            self.assertTrue(x is None or isinstance(x, nn.modules.sparse.Embedding))
 
     def test_initialization_more(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
@@ -221,6 +225,7 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
 
+    @unittest.skip("Test has a segmentation fault on torch 1.8.0")
     def test_export_to_onnx(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         model = FSMTModel(config).to(torch_device)
@@ -301,7 +306,7 @@ class FSMTHeadTests(unittest.TestCase):
         return config, input_ids, batch_size
 
     def test_generate_beam_search(self):
-        input_ids = torch.Tensor([[71, 82, 2], [68, 34, 2]]).long().to(torch_device)
+        input_ids = torch.tensor([[71, 82, 2], [68, 34, 2]], dtype=torch.long, device=torch_device)
         config = self._get_config()
         lm_model = FSMTForConditionalGeneration(config).to(torch_device)
         lm_model.eval()
@@ -318,7 +323,7 @@ class FSMTHeadTests(unittest.TestCase):
         self.assertEqual(new_input_ids.shape, (input_ids.shape[0], max_length))
 
     def test_shift_tokens_right(self):
-        input_ids = torch.Tensor([[71, 82, 18, 33, 2, 1, 1], [68, 34, 26, 58, 30, 82, 2]]).long()
+        input_ids = torch.tensor([[71, 82, 18, 33, 2, 1, 1], [68, 34, 26, 58, 30, 82, 2]], dtype=torch.long)
         shifted = shift_tokens_right(input_ids, 1)
         n_pad_before = input_ids.eq(1).float().sum()
         n_pad_after = shifted.eq(1).float().sum()
@@ -364,10 +369,9 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
             return True
         raise
     except Exception:
-        msg = "{} != {}".format(a, b)
-        if prefix:
-            msg = prefix + ": " + msg
-        raise AssertionError(msg)
+        if len(prefix) > 0:
+            prefix = f"{prefix}: "
+        raise AssertionError(f"{prefix}{a} != {b}")
 
 
 def _long_tensor(tok_lst):

@@ -32,16 +32,8 @@ else:
 
 logger = logging.get_logger(__name__)
 
-####################################################
-# Mapping from the keyword arguments names of Tokenizer `__init__`
-# to file names for serializing Tokenizer instances
-####################################################
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
-####################################################
-# Mapping from the keyword arguments names of Tokenizer `__init__`
-# to pretrained vocabulary URL for all the model ids.
-####################################################
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "t5-small": "https://huggingface.co/t5-small/resolve/main/spiece.model",
@@ -59,9 +51,6 @@ PRETRAINED_VOCAB_FILES_MAP = {
     },
 }
 
-####################################################
-# Mapping from model ids to max length of inputs
-####################################################
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "t5-small": 512,
     "t5-base": 512,
@@ -126,10 +115,10 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
     ):
         # Add extra_ids to the special token list
         if extra_ids > 0 and additional_special_tokens is None:
-            additional_special_tokens = ["<extra_id_{}>".format(i) for i in range(extra_ids)]
+            additional_special_tokens = [f"<extra_id_{i}>" for i in range(extra_ids)]
         elif extra_ids > 0 and additional_special_tokens is not None:
             # Check that we have the right number of extra special tokens
-            extra_tokens = len(set(filter(lambda x: bool("extra_id_" in x), additional_special_tokens)))
+            extra_tokens = len(set(filter(lambda x: bool("extra_id_" in str(x)), additional_special_tokens)))
             if extra_tokens != extra_ids:
                 raise ValueError(
                     f"Both extra_ids ({extra_ids}) and additional_special_tokens ({additional_special_tokens}) are provided to T5Tokenizer. "
@@ -152,7 +141,7 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
-            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         out_vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
@@ -160,6 +149,7 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
+            logger.info(f"Copy vocab file to {out_vocab_file}")
 
         return (out_vocab_file,)
 

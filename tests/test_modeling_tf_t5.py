@@ -26,7 +26,7 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import T5Tokenizer, TFT5EncoderModel, TFT5ForConditionalGeneration, TFT5Model
+    from transformers import ByT5Tokenizer, T5Tokenizer, TFT5EncoderModel, TFT5ForConditionalGeneration, TFT5Model
 
 
 class TFT5ModelTester:
@@ -237,7 +237,6 @@ class TFT5ModelTester:
             "input_ids": input_ids,
             "decoder_input_ids": input_ids,
             "decoder_attention_mask": input_mask,
-            "use_cache": False,
         }
         return config, inputs_dict
 
@@ -248,7 +247,7 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     all_model_classes = (TFT5Model, TFT5ForConditionalGeneration) if is_tf_available() else ()
     all_generative_model_classes = (TFT5ForConditionalGeneration,) if is_tf_available() else ()
-    test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFT5ModelTester(self)
@@ -306,18 +305,14 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         # This test is too long (>30sec) and makes fail the CI
         pass
 
-    def test_mixed_precision(self):
-        # TODO JP: Make T5 float16 compliant
-        pass
-
-    def test_xla_mode(self):
-        # TODO JP: Make T5 XLA compliant
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model = TFT5Model.from_pretrained("t5-small")
         self.assertIsNotNone(model)
+
+    def test_generate_with_headmasking(self):
+        # TODO: Fix head-masking according to PyTorch T5 model
+        pass
 
 
 class TFT5EncoderOnlyModelTester:
@@ -426,7 +421,7 @@ class TFT5EncoderOnlyModelTester:
 class TFT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
     all_model_classes = (TFT5EncoderModel,) if is_tf_available() else ()
-    test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFT5EncoderOnlyModelTester(self)
@@ -441,14 +436,6 @@ class TFT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
 
     # is not able to be part of a pipeline
     def test_train_pipeline_custom_model(self):
-        pass
-
-    def test_mixed_precision(self):
-        # TODO JP: Make T5 float16 compliant
-        pass
-
-    def test_xla_mode(self):
-        # TODO JP: Make T5 XLA compliant
         pass
 
 
@@ -510,6 +497,30 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         mtf_score = -tf.math.reduce_sum(loss).numpy()
 
         EXPECTED_SCORE = -59.0293
+        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
+
+    @slow
+    def test_small_byt5_integration_test(self):
+        """
+        For comparision run:
+        >>> import t5  # pip install t5==0.9.1
+
+        >>> path_to_byt5_small_checkpoint = '<fill_in>'
+        >>> t5_model = t5.models.MtfModel(model_dir=path_to_tf_checkpoint, batch_size=1, tpu=None)
+        >>> vocab = t5.data.ByteVocabulary()
+        >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
+        """
+
+        model = TFT5ForConditionalGeneration.from_pretrained("google/byt5-small")
+        tokenizer = ByT5Tokenizer.from_pretrained("google/byt5-small")
+
+        input_ids = tokenizer("Hello there", return_tensors="tf").input_ids
+        labels = tokenizer("Hi I am", return_tensors="tf").input_ids
+
+        loss = model(input_ids, labels=labels).loss
+        mtf_score = -tf.math.reduce_sum(loss).numpy()
+
+        EXPECTED_SCORE = -60.7397
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow

@@ -31,7 +31,7 @@ from ...file_utils import (
 )
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
-    TFBaseModelOutputWithPast,
+    TFBaseModelOutputWithPastAndCrossAttentions,
     TFSeq2SeqLMOutput,
     TFSeq2SeqModelOutput,
 )
@@ -53,6 +53,7 @@ from .configuration_marian import MarianConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "Helsinki-NLP/opus-mt-en-de"
 _CONFIG_FOR_DOC = "MarianConfig"
 _TOKENIZER_FOR_DOC = "MarianTokenizer"
 
@@ -62,8 +63,7 @@ LARGE_NEGATIVE = -1e8
 
 # Copied from transformers.models.bart.modeling_tf_bart.shift_tokens_right
 def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
-    shifted_input_ids = tf.cast(input_ids, tf.int32)
-    shifted_input_ids = tf.roll(shifted_input_ids, 1, axis=-1)
+    shifted_input_ids = tf.roll(input_ids, 1, axis=-1)
     start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), decoder_start_token_id)
     shifted_input_ids = tf.concat([start_tokens, shifted_input_ids[:, 1:]], -1)
     # replace possible -100 values in labels by `pad_token_id`
@@ -71,12 +71,13 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_to
         shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
     )
 
-    # "Verify that `labels` has only positive values and -100"
-    assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.cast(0, tf.int32))
+    if tf.executing_eagerly():
+        # "Verify that `labels` has only positive values and -100"
+        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0))
 
-    # Make sure the assertion op is called by wrapping the result in an identity no-op
-    with tf.control_dependencies([assert_gte0]):
-        shifted_input_ids = tf.identity(shifted_input_ids)
+        # Make sure the assertion op is called by wrapping the result in an identity no-op
+        with tf.control_dependencies([assert_gte0]):
+            shifted_input_ids = tf.identity(shifted_input_ids)
 
     return shifted_input_ids
 
@@ -87,15 +88,15 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = tf.ones((tgt_len, tgt_len), dtype=tf.float32) * LARGE_NEGATIVE
+    mask = tf.ones((tgt_len, tgt_len)) * LARGE_NEGATIVE
     mask_cond = tf.range(shape_list(mask)[-1])
 
     mask = tf.where(mask_cond < tf.reshape(mask_cond + 1, (shape_list(mask)[-1], 1)), 0.0, mask)
-    mask = tf.cast(mask, tf.float32)
 
     if past_key_values_length > 0:
-        mask = tf.concat([tf.zeros((tgt_len, past_key_values_length), dtype=tf.float32), mask], axis=-1)
-    return tf.broadcast_to(mask[None, None, :, :], (bsz, 1, tgt_len, tgt_len + past_key_values_length))
+        mask = tf.concat([tf.zeros((tgt_len, past_key_values_length)), mask], axis=-1)
+
+    return tf.tile(mask[None, None, :, :], (bsz, 1, 1, 1))
 
 
 # Copied from transformers.models.bart.modeling_tf_bart._expand_mask
@@ -103,35 +104,44 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
-    bsz, src_len = shape_list(mask)
+    src_len = shape_list(mask)[1]
     tgt_len = tgt_len if tgt_len is not None else src_len
+    one_cst = tf.constant(1.0)
+    mask = tf.cast(mask, dtype=one_cst.dtype)
+    expanded_mask = tf.tile(mask[:, None, None, :], (1, 1, tgt_len, 1))
 
-    expanded_mask = tf.cast(tf.broadcast_to(mask[:, None, None, :], (bsz, 1, tgt_len, src_len)), tf.float32)
-
-    return (1.0 - expanded_mask) * LARGE_NEGATIVE
+    return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
 
-class TFMarianSinusoidalPositionalEmbedding(tf.keras.layers.Embedding):
+class TFMarianSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
     """This module produces sinusoidal positional embeddings of any length."""
 
     def __init__(self, num_positions: int, embedding_dim: int, **kwargs):
+        super().__init__(**kwargs)
 
         if embedding_dim % 2 != 0:
             raise NotImplementedError(f"odd embedding_dim {embedding_dim} not supported")
-        super().__init__(
-            num_positions,
-            embedding_dim,
-            **kwargs,
-        )
+
+        self.embedding_dim = embedding_dim
+        self.num_positions = num_positions
 
     def build(self, input_shape: tf.TensorShape):
         """
         Build shared token embedding layer Shared weights logic adapted from
         https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
-        super().build(input_shape)  # Instantiates self.weight so it can be loaded
-        weight: np.ndarray = self._init_weight(self.input_dim, self.output_dim)
-        self.set_weights([weight])  # overwrite self.weight to correct value
+
+        weight = self._init_weight(self.num_positions, self.embedding_dim)
+
+        self.weight = self.add_weight(
+            name="embeddings",
+            shape=[self.num_positions, self.embedding_dim],
+        )
+        weight = tf.cast(weight, dtype=self.weight.dtype)
+
+        self.weight.assign(weight)
+
+        super().build(input_shape)
 
     @staticmethod
     def _init_weight(n_pos: int, dim: int):
@@ -146,7 +156,7 @@ class TFMarianSinusoidalPositionalEmbedding(tf.keras.layers.Embedding):
         position_enc[:, 0 : dim // 2] = np.sin(position_enc[:, 0::2])
         position_enc[:, dim // 2 :] = np.cos(position_enc[:, 1::2])
         # convert to tensor
-        table = tf.convert_to_tensor(position_enc, dtype=tf.float32)
+        table = tf.convert_to_tensor(position_enc)
         tf.stop_gradient(table)
         return table
 
@@ -154,10 +164,8 @@ class TFMarianSinusoidalPositionalEmbedding(tf.keras.layers.Embedding):
         """Input is expected to be of size [bsz x seqlen]."""
         bsz, seq_len = input_shape[:2]
 
-        positions = tf.range(
-            past_key_values_length, seq_len + past_key_values_length, delta=1, dtype=tf.int32, name="range"
-        )
-        return super().call(positions)
+        positions = tf.range(past_key_values_length, seq_len + past_key_values_length, delta=1, name="range")
+        return tf.gather(self.weight, positions)
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->Marian
@@ -247,43 +255,57 @@ class TFMarianAttention(tf.keras.layers.Layer):
         src_len = shape_list(key_states)[1]
         attn_weights = tf.matmul(query_states, key_states, transpose_b=True)
 
-        tf.debugging.assert_equal(
-            shape_list(attn_weights),
-            [bsz * self.num_heads, tgt_len, src_len],
-            message=f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {shape_list(attn_weights)}",
-        )
+        # The tf.debugging asserts are not compliant with XLA then they
+        # have to be disabled in other modes than eager.
+        if tf.executing_eagerly():
+            tf.debugging.assert_equal(
+                shape_list(attn_weights),
+                [bsz * self.num_heads, tgt_len, src_len],
+                message=f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {shape_list(attn_weights)}",
+            )
 
         if attention_mask is not None:
-            tf.debugging.assert_equal(
-                shape_list(attention_mask),
-                [bsz, 1, tgt_len, src_len],
-                message=f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {shape_list(attention_mask)}",
-            )
+            # The tf.debugging asserts are not compliant with XLA then they
+            # have to be disabled in other modes than eager.
+            if tf.executing_eagerly():
+                tf.debugging.assert_equal(
+                    shape_list(attention_mask),
+                    [bsz, 1, tgt_len, src_len],
+                    message=f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {shape_list(attention_mask)}",
+                )
+
+            attention_mask = tf.cast(attention_mask, dtype=attn_weights.dtype)
             attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attention_mask
             attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
 
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
 
         if layer_head_mask is not None:
-            tf.debugging.assert_equal(
-                shape_list(layer_head_mask),
-                [self.num_heads],
-                message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
-            )
+            # The tf.debugging asserts are not compliant with XLA then they
+            # have to be disabled in other modes than eager.
+            if tf.executing_eagerly():
+                tf.debugging.assert_equal(
+                    shape_list(layer_head_mask),
+                    [self.num_heads],
+                    message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
+                )
+
             attn_weights = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
                 attn_weights, (bsz, self.num_heads, tgt_len, src_len)
             )
             attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
 
         attn_probs = self.dropout(attn_weights, training=training)
-
         attn_output = tf.matmul(attn_probs, value_states)
 
-        tf.debugging.assert_equal(
-            shape_list(attn_output),
-            [bsz * self.num_heads, tgt_len, self.head_dim],
-            message=f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {shape_list(attn_output)}",
-        )
+        # The tf.debugging asserts are not compliant with XLA then they
+        # have to be disabled in other modes than eager.
+        if tf.executing_eagerly():
+            tf.debugging.assert_equal(
+                shape_list(attn_output),
+                [bsz * self.num_heads, tgt_len, self.head_dim],
+                message=f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {shape_list(attn_output)}",
+            )
 
         attn_output = tf.transpose(
             tf.reshape(attn_output, (bsz, self.num_heads, tgt_len, self.head_dim)), (0, 2, 1, 3)
@@ -325,11 +347,16 @@ class TFMarianEncoderLayer(tf.keras.layers.Layer):
         hidden_states, self_attn_weights, _ = self.self_attn(
             hidden_states=hidden_states, attention_mask=attention_mask, layer_head_mask=layer_head_mask
         )
-        tf.debugging.assert_equal(
-            shape_list(hidden_states),
-            shape_list(residual),
-            message=f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(hidden_states)}",
-        )
+
+        # The tf.debugging asserts are not compliant with XLA then they
+        # have to be disabled in other modes than eager.
+        if tf.executing_eagerly():
+            tf.debugging.assert_equal(
+                shape_list(hidden_states),
+                shape_list(residual),
+                message=f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(hidden_states)}",
+            )
+
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
@@ -381,7 +408,7 @@ class TFMarianDecoderLayer(tf.keras.layers.Layer):
         encoder_hidden_states: Optional[tf.Tensor] = None,
         encoder_attention_mask: Optional[tf.Tensor] = None,
         layer_head_mask: Optional[tf.Tensor] = None,
-        encoder_layer_head_mask: Optional[tf.Tensor] = None,
+        cross_attn_layer_head_mask: Optional[tf.Tensor] = None,
         past_key_value: Optional[Tuple[tf.Tensor]] = None,
         training=False,
     ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
@@ -395,8 +422,8 @@ class TFMarianDecoderLayer(tf.keras.layers.Layer):
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (:obj:`tf.Tensor`): mask for attention heads in a given layer of size
                 `(decoder_attention_heads,)`
-            encoder_layer_head_mask (:obj:`tf.Tensor`): mask for encoder attention heads in a given layer of size
-                `(encoder_attention_heads,)`
+            cross_attn_layer_head_mask (:obj:`tf.Tensor`): mask for heads of the cross-attention module.
+                `(decoder_attention_heads,)`
             past_key_value (:obj:`Tuple(tf.Tensor)`): cached past key and value projection states
         """
         residual = hidden_states
@@ -417,16 +444,17 @@ class TFMarianDecoderLayer(tf.keras.layers.Layer):
 
         # Cross-Attention Block
         cross_attn_present_key_value = None
+        cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
 
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
-            hidden_states, _, cross_attn_present_key_value = self.encoder_attn(
+            hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                layer_head_mask=encoder_layer_head_mask,
+                layer_head_mask=cross_attn_layer_head_mask,
                 past_key_value=cross_attn_past_key_value,
             )
             hidden_states = self.dropout(hidden_states, training=training)
@@ -448,6 +476,7 @@ class TFMarianDecoderLayer(tf.keras.layers.Layer):
         return (
             hidden_states,
             self_attn_weights,
+            cross_attn_weights,
             present_key_value,
         )
 
@@ -531,13 +560,14 @@ MARIAN_GENERATION_EXAMPLE = r"""
             >>> src = 'fr'  # source language
             >>> trg = 'en'  # target language
             >>> sample_text = "où est l'arrêt de bus ?"
-            >>> mname = f'Helsinki-NLP/opus-mt-{src}-{trg}'
+            >>> model_name = f'Helsinki-NLP/opus-mt-{src}-{trg}'
 
-            >>> model = MarianMTModel.from_pretrained(mname)
-            >>> tok = MarianTokenizer.from_pretrained(mname)
-            >>> batch = tok.prepare_seq2seq_batch(src_texts=[sample_text], return_tensors="tf")  # don't need tgt_text for inference
+            >>> model = TFMarianMTModel.from_pretrained(model_name)
+            >>> tokenizer = MarianTokenizer.from_pretrained(model_name)
+            >>> batch = tokenizer([sample_text], return_tensors="tf")
             >>> gen = model.generate(**batch)
-            >>> words: List[str] = tok.batch_decode(gen, skip_special_tokens=True)  # returns "Where is the bus stop ?"
+            >>> tokenizer.batch_decode(gen, skip_special_tokens=True)
+            "Where is the bus stop ?"
 """
 
 MARIAN_INPUTS_DOCSTRING = r"""
@@ -564,7 +594,7 @@ MARIAN_INPUTS_DOCSTRING = r"""
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
+            `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
 
             Marian uses the :obj:`pad_token_id` as the starting token for :obj:`decoder_input_ids` generation. If
             :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
@@ -575,10 +605,16 @@ MARIAN_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
-            - 0 indicates the heas is **masked**.
+            - 0 indicates the head is **masked**.
 
         decoder_head_mask (:obj:`tf.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
             Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        cross_attn_head_mask (:obj:`tf.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
+            Mask to nullify selected heads of the cross-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -679,7 +715,7 @@ class TFMarianEncoder(tf.keras.layers.Layer):
                 Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
 
                 - 1 indicates the head is **not masked**,
-                - 0 indicates the heas is **masked**.
+                - 0 indicates the head is **masked**.
 
             inputs_embeds (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
                 Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
@@ -741,12 +777,15 @@ class TFMarianEncoder(tf.keras.layers.Layer):
         all_attentions = () if inputs["output_attentions"] else None
 
         # check if head_mask has a correct number of layers specified if desired
-        if inputs["head_mask"] is not None:
+        # The tf.debugging asserts are not compliant with XLA then they
+        # have to be disabled in other modes than eager.
+        if inputs["head_mask"] is not None and tf.executing_eagerly():
             tf.debugging.assert_equal(
                 shape_list(inputs["head_mask"])[0],
                 len(self.layers),
                 message=f"The head_mask should be specified for {len(self.layers)} layers, but it is for {shape_list(inputs['head_mask'])[0]}.",
             )
+
         # encoder layers
         for idx, encoder_layer in enumerate(self.layers):
 
@@ -817,7 +856,7 @@ class TFMarianDecoder(tf.keras.layers.Layer):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         head_mask=None,
-        encoder_head_mask=None,
+        cross_attn_head_mask=None,
         past_key_values=None,
         use_cache=None,
         output_attentions=None,
@@ -859,14 +898,13 @@ class TFMarianDecoder(tf.keras.layers.Layer):
                 Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
 
                 - 1 indicates the head is **not masked**,
-                - 0 indicates the heas is **masked**.
+                - 0 indicates the head is **masked**.
 
-            encoder_head_mask (:obj:`tf.Tensor` of shape :obj:`(encoder_layers, encoder_attention_heads)`, `optional`):
-                Mask to nullify selected heads of the attention modules in encoder to avoid performing cross-attention
-                on hidden heads. Mask values selected in ``[0, 1]``:
+            cross_attn_head_mask (:obj:`tf.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
+                Mask to nullify selected heads of the cross-attention modules. Mask values selected in ``[0, 1]``:
 
                 - 1 indicates the head is **not masked**,
-                - 0 indicates the heas is **masked**.
+                - 0 indicates the head is **masked**.
 
             past_key_values (:obj:`Tuple[Tuple[tf.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
                 Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
@@ -903,7 +941,7 @@ class TFMarianDecoder(tf.keras.layers.Layer):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             head_mask=head_mask,
-            encoder_head_mask=encoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
             inputs_embeds=inputs_embeds,
             past_key_values=past_key_values,
             use_cache=use_cache,
@@ -955,17 +993,22 @@ class TFMarianDecoder(tf.keras.layers.Layer):
         hidden_states = self.dropout(hidden_states + positions, training=inputs["training"])
 
         # decoder layers
-        all_hidden_states = ()
-        all_self_attns = ()
-        present_key_values = ()
+        all_hidden_states = () if inputs["output_hidden_states"] else None
+        all_self_attns = () if inputs["output_attentions"] else None
+        all_cross_attns = () if (inputs["output_attentions"] and inputs["encoder_hidden_states"] is not None) else None
+        present_key_values = () if inputs["use_cache"] else None
 
-        # check if head_mask has a correct number of layers specified if desired
-        if inputs["head_mask"] is not None:
-            tf.debugging.assert_equal(
-                shape_list(inputs["head_mask"])[0],
-                len(self.layers),
-                message=f"The head_mask should be specified for {len(self.layers)} layers, but it is for {shape_list(inputs['head_mask'])[0]}.",
-            )
+        # check if head_mask and cross_attn_head_mask have a correct number of layers specified if desired
+        # The tf.debugging asserts are not compliant with XLA then they
+        # have to be disabled in other modes than eager.
+        for attn_mask in ["head_mask", "cross_attn_head_mask"]:
+            if inputs[attn_mask] is not None and tf.executing_eagerly():
+                tf.debugging.assert_equal(
+                    shape_list(inputs[attn_mask])[0],
+                    len(self.layers),
+                    message=f"The {attn_mask} should be specified for {len(self.layers)} layers, but it is for {shape_list(inputs[attn_mask])[0]}.",
+                )
+
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if inputs["output_hidden_states"]:
@@ -977,14 +1020,14 @@ class TFMarianDecoder(tf.keras.layers.Layer):
 
             past_key_value = inputs["past_key_values"][idx] if inputs["past_key_values"] is not None else None
 
-            hidden_states, layer_self_attn, present_key_value = decoder_layer(
+            hidden_states, layer_self_attn, layer_cross_attn, present_key_value = decoder_layer(
                 hidden_states,
                 attention_mask=combined_attention_mask,
                 encoder_hidden_states=inputs["encoder_hidden_states"],
                 encoder_attention_mask=inputs["encoder_attention_mask"],
                 layer_head_mask=inputs["head_mask"][idx] if inputs["head_mask"] is not None else None,
-                encoder_layer_head_mask=inputs["encoder_head_mask"][idx]
-                if inputs["encoder_head_mask"] is not None
+                cross_attn_layer_head_mask=inputs["cross_attn_head_mask"][idx]
+                if inputs["cross_attn_head_mask"] is not None
                 else None,
                 past_key_value=past_key_value,
             )
@@ -995,23 +1038,30 @@ class TFMarianDecoder(tf.keras.layers.Layer):
             if inputs["output_attentions"]:
                 all_self_attns += (layer_self_attn,)
 
+                if inputs["encoder_hidden_states"] is not None:
+                    all_cross_attns += (layer_cross_attn,)
+
         if inputs["output_hidden_states"]:
             all_hidden_states += (hidden_states,)
-        else:
-            all_hidden_states = None
 
-        all_self_attns = list(all_self_attns) if inputs["output_attentions"] else None
+        if inputs["output_attentions"]:
+            all_self_attns = list(all_self_attns)
 
-        present_key_values = (encoder_hidden_states, present_key_values) if inputs["use_cache"] else None
+            if inputs["encoder_hidden_states"] is not None:
+                all_cross_attns = list(all_cross_attns)
+
+        if inputs["use_cache"]:
+            present_key_values = (inputs["encoder_hidden_states"], present_key_values)
 
         if not inputs["return_dict"]:
-            return hidden_states, present_key_values, all_hidden_states, all_self_attns
+            return hidden_states, present_key_values, all_hidden_states, all_self_attns, all_cross_attns
         else:
-            return TFBaseModelOutputWithPast(
+            return TFBaseModelOutputWithPastAndCrossAttentions(
                 last_hidden_state=hidden_states,
                 past_key_values=present_key_values,
                 hidden_states=all_hidden_states,
                 attentions=all_self_attns,
+                cross_attentions=all_cross_attns,
             )
 
 
@@ -1058,6 +1108,7 @@ class TFMarianMainLayer(tf.keras.layers.Layer):
         decoder_attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
+        cross_attn_head_mask=None,
         encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
         past_key_values=None,
         inputs_embeds=None,
@@ -1078,6 +1129,7 @@ class TFMarianMainLayer(tf.keras.layers.Layer):
             decoder_attention_mask=decoder_attention_mask,
             head_mask=head_mask,
             decoder_head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -1127,7 +1179,7 @@ class TFMarianMainLayer(tf.keras.layers.Layer):
             encoder_hidden_states=inputs["encoder_outputs"][0],
             encoder_attention_mask=inputs["attention_mask"],
             head_mask=inputs["decoder_head_mask"],
-            encoder_head_mask=inputs["head_mask"],
+            cross_attn_head_mask=inputs["cross_attn_head_mask"],
             past_key_values=inputs["past_key_values"],
             inputs_embeds=inputs["decoder_inputs_embeds"],
             use_cache=inputs["use_cache"],
@@ -1145,6 +1197,7 @@ class TFMarianMainLayer(tf.keras.layers.Layer):
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
             encoder_last_hidden_state=inputs["encoder_outputs"].last_hidden_state,
             encoder_hidden_states=inputs["encoder_outputs"].hidden_states,
             encoder_attentions=inputs["encoder_outputs"].attentions,
@@ -1170,7 +1223,7 @@ class TFMarianModel(TFMarianPreTrainedModel):
     @add_start_docstrings_to_model_forward(MARIAN_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="Helsinki-NLP/opus-mt-en-de",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSeq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1182,6 +1235,7 @@ class TFMarianModel(TFMarianPreTrainedModel):
         decoder_attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
+        cross_attn_head_mask=None,
         encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
         past_key_values=None,
         inputs_embeds=None,
@@ -1201,6 +1255,7 @@ class TFMarianModel(TFMarianPreTrainedModel):
             decoder_input_ids=decoder_input_ids,
             head_mask=head_mask,
             decoder_head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
             decoder_attention_mask=decoder_attention_mask,
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
@@ -1221,6 +1276,7 @@ class TFMarianModel(TFMarianPreTrainedModel):
             decoder_attention_mask=inputs["decoder_attention_mask"],
             head_mask=inputs["head_mask"],
             decoder_head_mask=inputs["decoder_head_mask"],
+            cross_attn_head_mask=inputs["cross_attn_head_mask"],
             encoder_outputs=inputs["encoder_outputs"],
             past_key_values=inputs["past_key_values"],
             inputs_embeds=inputs["inputs_embeds"],
@@ -1239,6 +1295,7 @@ class TFMarianModel(TFMarianPreTrainedModel):
         pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
+        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
         enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
 
@@ -1247,6 +1304,7 @@ class TFMarianModel(TFMarianPreTrainedModel):
             past_key_values=pkv,
             decoder_hidden_states=dec_hs,
             decoder_attentions=dec_attns,
+            cross_attentions=cross_attns,
             encoder_last_hidden_state=output.encoder_last_hidden_state,
             encoder_hidden_states=enc_hs,
             encoder_attentions=enc_attns,
@@ -1301,6 +1359,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         decoder_attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
+        cross_attn_head_mask=None,
         encoder_outputs: Optional[TFBaseModelOutput] = None,
         past_key_values=None,
         inputs_embeds=None,
@@ -1331,6 +1390,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
             decoder_attention_mask=decoder_attention_mask,
             head_mask=head_mask,
             decoder_head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -1364,6 +1424,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
             decoder_attention_mask=inputs["decoder_attention_mask"],
             head_mask=inputs["head_mask"],
             decoder_head_mask=inputs["decoder_head_mask"],
+            cross_attn_head_mask=inputs["cross_attn_head_mask"],
             past_key_values=inputs["past_key_values"],
             inputs_embeds=inputs["inputs_embeds"],
             decoder_inputs_embeds=inputs["decoder_inputs_embeds"],
@@ -1386,6 +1447,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
             past_key_values=outputs.past_key_values,  # index 1 of d outputs
             decoder_hidden_states=outputs.decoder_hidden_states,  # index 2 of d outputs
             decoder_attentions=outputs.decoder_attentions,  # index 3 of d outputs
+            cross_attentions=outputs.cross_attentions,  # index 4 of d outputs
             encoder_last_hidden_state=outputs.last_hidden_state,  # index 0 of encoder outputs
             encoder_hidden_states=outputs.encoder_hidden_states,  # 1 of e out
             encoder_attentions=outputs.encoder_attentions,  # 2 of e out
@@ -1396,6 +1458,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
+        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
         enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
 
@@ -1404,6 +1467,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
             past_key_values=pkv,
             decoder_hidden_states=dec_hs,
             decoder_attentions=dec_attns,
+            cross_attentions=cross_attns,
             encoder_last_hidden_state=output.encoder_last_hidden_state,
             encoder_hidden_states=enc_hs,
             encoder_attentions=enc_attns,
@@ -1416,6 +1480,8 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         past,
         attention_mask,
         head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
         use_cache=None,
         **kwargs,
     ) -> Dict:
@@ -1451,6 +1517,8 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
+            "decoder_head_mask": decoder_head_mask,
+            "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
@@ -1470,10 +1538,17 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
             )
         return (past[0], reordered_past)
 
-    def adjust_logits_during_generation(self, logits, cur_len, max_length):
+    def adjust_logits_during_generation(
+        self, logits, cur_len, max_length, forced_bos_token_id, forced_eos_token_id, **kwargs
+    ):
         """Never predict pad_token_id. Predict </s> when max_length is reached."""
         vocab_range = tf.constant(range(self.config.vocab_size))
         logits = tf.where(vocab_range == self.config.pad_token_id, LARGE_NEGATIVE, logits)
-        if cur_len == max_length - 1:
-            logits = tf.where(vocab_range != self.config.eos_token_id, LARGE_NEGATIVE, logits)
-        return logits
+        if cur_len == 1 and forced_bos_token_id is not None:
+            vocab_range = tf.constant(range(self.config.vocab_size))
+            return tf.where(vocab_range != forced_bos_token_id, LARGE_NEGATIVE, logits)
+        elif cur_len == max_length - 1 and forced_eos_token_id is not None:
+            vocab_range = tf.constant(range(self.config.vocab_size))
+            return tf.where(vocab_range != forced_eos_token_id, LARGE_NEGATIVE, logits)
+        else:
+            return logits

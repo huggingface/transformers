@@ -23,8 +23,20 @@ from ..xlm_roberta.tokenization_xlm_roberta import XLMRobertaTokenizer
 
 logger = logging.get_logger(__name__)
 
-_all_mbart_models = ["facebook/mbart-large-en-ro", "facebook/mbart-large-cc25"]
-SPM_URL = "https://huggingface.co/facebook/mbart-large-en-ro/resolve/main/sentence.bpe.model"
+
+VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
+
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "facebook/mbart-large-en-ro": "https://huggingface.co/facebook/mbart-large-en-ro/resolve/main/sentencepiece.bpe.model",
+        "facebook/mbart-large-cc25": "https://huggingface.co/facebook/mbart-large-cc25/resolve/main/sentencepiece.bpe.model",
+    }
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "facebook/mbart-large-en-ro": 1024,
+    "facebook/mbart-large-cc25": 1024,
+}
 
 FAIRSEQ_LANGUAGE_CODES = [
     "ar_AR",
@@ -59,16 +71,9 @@ class MBartTokenizer(XLMRobertaTokenizer):
     """
     Construct an MBART tokenizer.
 
-    :class:`~transformers.MBartTokenizer` is a subclass of :class:`~transformers.XLMRobertaTokenizer` and adds a new
-    :meth:`~transformers.MBartTokenizer.prepare_seq2seq_batch`
-
-    Refer to superclass :class:`~transformers.XLMRobertaTokenizer` for usage examples and documentation concerning the
+    :class:`~transformers.MBartTokenizer` is a subclass of :class:`~transformers.XLMRobertaTokenizer`. Refer to
+    superclass :class:`~transformers.XLMRobertaTokenizer` for usage examples and documentation concerning the
     initialization parameters and other methods.
-
-    .. warning::
-
-        ``prepare_seq2seq_batch`` should be used to encode inputs. Other tokenizer methods like ``encode`` do not work
-        properly.
 
     The tokenization method is ``<tokens> <eos> <language code>`` for source language documents, and ``<language code>
     <tokens> <eos>``` for target language documents.
@@ -76,41 +81,65 @@ class MBartTokenizer(XLMRobertaTokenizer):
     Examples::
 
         >>> from transformers import MBartTokenizer
-        >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-en-ro')
+        >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-en-ro', src_lang="en_XX", tgt_lang="ro_RO")
         >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
         >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
-        >>> batch: dict = tokenizer.prepare_seq2seq_batch(
-        ...     example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian, return_tensors="pt"
-        ... )
-
+        >>> inputs = tokenizer(example_english_phrase, return_tensors="pt)
+        >>> with tokenizer.as_target_tokenizer():
+        ...     labels = tokenizer(expected_translation_romanian, return_tensors="pt")
+        >>> inputs["labels"] = labels["input_ids"]
     """
 
-    vocab_files_names = {"vocab_file": "sentencepiece.bpe.model"}
-    max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
-    pretrained_vocab_files_map = {"vocab_file": {m: SPM_URL for m in _all_mbart_models}}
+    vocab_files_names = VOCAB_FILES_NAMES
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
 
     prefix_tokens: List[int] = []
     suffix_tokens: List[int] = []
 
-    def __init__(self, *args, tokenizer_file=None, **kwargs):
-        super().__init__(*args, tokenizer_file=tokenizer_file, **kwargs)
+    def __init__(
+        self, *args, tokenizer_file=None, src_lang=None, tgt_lang=None, additional_special_tokens=None, **kwargs
+    ):
+        super().__init__(
+            *args,
+            tokenizer_file=tokenizer_file,
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
+            additional_special_tokens=additional_special_tokens,
+            **kwargs,
+        )
 
         self.sp_model_size = len(self.sp_model)
         self.lang_code_to_id = {
             code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(FAIRSEQ_LANGUAGE_CODES)
         }
         self.id_to_lang_code = {v: k for k, v in self.lang_code_to_id.items()}
-        self.cur_lang_code = self.lang_code_to_id["en_XX"]
         self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset
 
         self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
         self._additional_special_tokens = list(self.lang_code_to_id.keys())
-        self.set_src_lang_special_tokens(kwargs.get("src_lang", "en_XX"))
+
+        if additional_special_tokens is not None:
+            self._additional_special_tokens.extend(additional_special_tokens)
+
+        self._src_lang = src_lang if src_lang is not None else "en_XX"
+        self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
+        self.tgt_lang = tgt_lang
+        self.set_src_lang_special_tokens(self._src_lang)
 
     @property
     def vocab_size(self):
         return len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset + 1  # Plus 1 for the mask token
+
+    @property
+    def src_lang(self) -> str:
+        return self._src_lang
+
+    @src_lang.setter
+    def src_lang(self, new_src_lang: str) -> None:
+        self._src_lang = new_src_lang
+        self.set_src_lang_special_tokens(self._src_lang)
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
@@ -132,12 +161,10 @@ class MBartTokenizer(XLMRobertaTokenizer):
         """
 
         if already_has_special_tokens:
-            if token_ids_1 is not None:
-                raise ValueError(
-                    "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formatted with special tokens for the model."
-                )
-            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
+            return super().get_special_tokens_mask(
+                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+            )
+
         prefix_ones = [1] * len(self.prefix_tokens)
         suffix_ones = [1] * len(self.suffix_tokens)
         if token_ids_1 is None:
@@ -171,6 +198,16 @@ class MBartTokenizer(XLMRobertaTokenizer):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
 
+    def _build_translation_inputs(self, raw_inputs, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs):
+        """Used by translation pipeline, to prepare inputs for the generate function"""
+        if src_lang is None or tgt_lang is None:
+            raise ValueError("Translation requires a `src_lang` and a `tgt_lang` for this model")
+        self.src_lang = src_lang
+        inputs = self(raw_inputs, add_special_tokens=True, return_tensors="pt", **extra_kwargs)
+        tgt_lang_id = self.convert_tokens_to_ids(tgt_lang)
+        inputs["forced_bos_token_id"] = tgt_lang_id
+        return inputs
+
     def prepare_seq2seq_batch(
         self,
         src_texts: List[str],
@@ -181,7 +218,6 @@ class MBartTokenizer(XLMRobertaTokenizer):
     ) -> BatchEncoding:
         self.src_lang = src_lang
         self.tgt_lang = tgt_lang
-        self.set_src_lang_special_tokens(self.src_lang)
         return super().prepare_seq2seq_batch(src_texts, tgt_texts, **kwargs)
 
     @contextmanager

@@ -104,7 +104,7 @@ class TrainCommand(BaseTransformersCLICommand):
         self.column_text = args.column_text
         self.column_id = args.column_id
 
-        self.logger.info("Loading {} pipeline for {}".format(args.task, args.model))
+        self.logger.info(f"Loading {args.task} pipeline for {args.model}")
         if args.task == "text_classification":
             self.pipeline = TextClassificationPipeline.from_pretrained(args.model)
         elif args.task == "token_classification":
@@ -112,7 +112,7 @@ class TrainCommand(BaseTransformersCLICommand):
         elif args.task == "question_answering":
             raise NotImplementedError
 
-        self.logger.info("Loading dataset from {}".format(args.train_data))
+        self.logger.info(f"Loading dataset from {args.train_data}")
         self.train_dataset = Processor.create_from_csv(
             args.train_data,
             column_label=args.column_label,
@@ -122,7 +122,7 @@ class TrainCommand(BaseTransformersCLICommand):
         )
         self.valid_dataset = None
         if args.validation_data:
-            self.logger.info("Loading validation dataset from {}".format(args.validation_data))
+            self.logger.info(f"Loading validation dataset from {args.validation_data}")
             self.valid_dataset = Processor.create_from_csv(
                 args.validation_data,
                 column_label=args.column_label,

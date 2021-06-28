@@ -18,7 +18,6 @@ import math
 from collections.abc import Sequence
 
 import torch
-from packaging import version
 from torch import _softmax_backward_data, nn
 from torch.nn import CrossEntropyLoss
 
@@ -40,10 +39,15 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DebertaConfig"
 _TOKENIZER_FOR_DOC = "DebertaTokenizer"
+_CHECKPOINT_FOR_DOC = "microsoft/deberta-base"
 
 DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/deberta-base",
     "microsoft/deberta-large",
+    "microsoft/deberta-xlarge",
+    "microsoft/deberta-base-mnli",
+    "microsoft/deberta-large-mnli",
+    "microsoft/deberta-xlarge-mnli",
 ]
 
 
@@ -54,7 +58,7 @@ class ContextPooler(nn.Module):
         self.dropout = StableDropout(config.pooler_dropout)
         self.config = config
 
-    def forward(self, hidden_states, mask=None):
+    def forward(self, hidden_states):
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
 
@@ -74,27 +78,28 @@ class XSoftmax(torch.autograd.Function):
     Masked Softmax which is optimized for saving memory
 
     Args:
-      input (:obj:`torch.tensor`): The input tensor that will apply softmax.
-      mask (:obj:`torch.IntTensor`): The mask matrix where 0 indicate that element will be ignored in the softmax calculation.
-      dim (int): The dimension that will apply softmax
+        input (:obj:`torch.tensor`): The input tensor that will apply softmax.
+        mask (:obj:`torch.IntTensor`): The mask matrix where 0 indicate that element will be ignored in the softmax calculation.
+        dim (int): The dimension that will apply softmax
 
     Example::
-      import torch
-      from transformers.models.deberta import XSoftmax
-      # Make a tensor
-      x = torch.randn([4,20,100])
-      # Create a mask
-      mask = (x>0).int()
-      y = XSoftmax.apply(x, mask, dim=-1)
+
+          >>> import torch
+          >>> from transformers.models.deberta.modeling_deberta import XSoftmax
+
+          >>> # Make a tensor
+          >>> x = torch.randn([4,20,100])
+
+          >>> # Create a mask
+          >>> mask = (x>0).int()
+
+          >>> y = XSoftmax.apply(x, mask, dim=-1)
     """
 
     @staticmethod
     def forward(self, input, mask, dim):
         self.dim = dim
-        if version.Version(torch.__version__) >= version.Version("1.2.0a"):
-            rmask = ~(mask.bool())
-        else:
-            rmask = (1 - mask).byte()  # This line is not supported by Onnx tracing.
+        rmask = ~(mask.bool())
 
         output = input.masked_fill(rmask, float("-inf"))
         output = torch.softmax(output, self.dim)
@@ -127,10 +132,7 @@ def get_mask(input, local_context):
         mask = local_context.mask if local_context.reuse_mask else None
 
     if dropout > 0 and mask is None:
-        if version.Version(torch.__version__) >= version.Version("1.2.0a"):
-            mask = (1 - torch.empty_like(input).bernoulli_(1 - dropout)).bool()
-        else:
-            mask = (1 - torch.empty_like(input).bernoulli_(1 - dropout)).byte()
+        mask = (1 - torch.empty_like(input).bernoulli_(1 - dropout)).bool()
 
     if isinstance(local_context, DropoutContext):
         if local_context.mask is None:
@@ -161,14 +163,12 @@ class XDropout(torch.autograd.Function):
             return grad_output, None
 
 
-class StableDropout(torch.nn.Module):
+class StableDropout(nn.Module):
     """
     Optimized dropout module for stabilizing the training
 
     Args:
-
         drop_prob (float): the dropout probabilities
-
     """
 
     def __init__(self, drop_prob):
@@ -183,8 +183,6 @@ class StableDropout(torch.nn.Module):
 
         Args:
             x (:obj:`torch.tensor`): The input tensor to apply dropout
-
-
         """
         if self.training and self.drop_prob > 0:
             return XDropout.apply(x, self.get_context())
@@ -302,7 +300,7 @@ class DebertaIntermediate(nn.Module):
 
 class DebertaOutput(nn.Module):
     def __init__(self, config):
-        super(DebertaOutput, self).__init__()
+        super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = DebertaLayerNorm(config.hidden_size, config.layer_norm_eps)
         self.dropout = StableDropout(config.hidden_dropout_prob)
@@ -317,7 +315,7 @@ class DebertaOutput(nn.Module):
 
 class DebertaLayer(nn.Module):
     def __init__(self, config):
-        super(DebertaLayer, self).__init__()
+        super().__init__()
         self.attention = DebertaAttention(config)
         self.intermediate = DebertaIntermediate(config)
         self.output = DebertaOutput(config)
@@ -479,7 +477,7 @@ def pos_dynamic_expand(pos_index, p2c_att, key_layer):
     return pos_index.expand(p2c_att.size()[:2] + (pos_index.size(-2), key_layer.size(-2)))
 
 
-class DisentangledSelfAttention(torch.nn.Module):
+class DisentangledSelfAttention(nn.Module):
     """
     Disentangled self-attention module
 
@@ -494,25 +492,23 @@ class DisentangledSelfAttention(torch.nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
             )
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.in_proj = torch.nn.Linear(config.hidden_size, self.all_head_size * 3, bias=False)
-        self.q_bias = torch.nn.Parameter(torch.zeros((self.all_head_size), dtype=torch.float))
-        self.v_bias = torch.nn.Parameter(torch.zeros((self.all_head_size), dtype=torch.float))
+        self.in_proj = nn.Linear(config.hidden_size, self.all_head_size * 3, bias=False)
+        self.q_bias = nn.Parameter(torch.zeros((self.all_head_size), dtype=torch.float))
+        self.v_bias = nn.Parameter(torch.zeros((self.all_head_size), dtype=torch.float))
         self.pos_att_type = config.pos_att_type if config.pos_att_type is not None else []
 
         self.relative_attention = getattr(config, "relative_attention", False)
         self.talking_head = getattr(config, "talking_head", False)
 
         if self.talking_head:
-            self.head_logits_proj = torch.nn.Linear(config.num_attention_heads, config.num_attention_heads, bias=False)
-            self.head_weights_proj = torch.nn.Linear(
-                config.num_attention_heads, config.num_attention_heads, bias=False
-            )
+            self.head_logits_proj = nn.Linear(config.num_attention_heads, config.num_attention_heads, bias=False)
+            self.head_weights_proj = nn.Linear(config.num_attention_heads, config.num_attention_heads, bias=False)
 
         if self.relative_attention:
             self.max_relative_positions = getattr(config, "max_relative_positions", -1)
@@ -521,9 +517,9 @@ class DisentangledSelfAttention(torch.nn.Module):
             self.pos_dropout = StableDropout(config.hidden_dropout_prob)
 
             if "c2p" in self.pos_att_type or "p2p" in self.pos_att_type:
-                self.pos_proj = torch.nn.Linear(config.hidden_size, self.all_head_size, bias=False)
+                self.pos_proj = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
             if "p2c" in self.pos_att_type or "p2p" in self.pos_att_type:
-                self.pos_q_proj = torch.nn.Linear(config.hidden_size, self.all_head_size)
+                self.pos_q_proj = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = StableDropout(config.attention_probs_dropout_prob)
 
@@ -701,7 +697,6 @@ class DebertaEmbeddings(nn.Module):
             self.embed_proj = nn.Linear(self.embedding_size, config.hidden_size, bias=False)
         self.LayerNorm = DebertaLayerNorm(config.hidden_size, config.layer_norm_eps)
         self.dropout = StableDropout(config.hidden_dropout_prob)
-        self.output_to_half = False
         self.config = config
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
@@ -763,15 +758,43 @@ class DebertaPreTrainedModel(PreTrainedModel):
     config_class = DebertaConfig
     base_model_prefix = "deberta"
     _keys_to_ignore_on_load_missing = ["position_ids"]
+    _keys_to_ignore_on_load_unexpected = ["position_embeddings"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self._register_load_state_dict_pre_hook(self._pre_load_hook)
 
     def _init_weights(self, module):
-        """ Initialize the weights """
-        if isinstance(module, (nn.Linear, nn.Embedding)):
+        """Initialize the weights."""
+        if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+    def _pre_load_hook(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+        """
+        Removes the classifier if it doesn't have the correct number of labels.
+        """
+        self_state = self.state_dict()
+        if (
+            ("classifier.weight" in self_state)
+            and ("classifier.weight" in state_dict)
+            and self_state["classifier.weight"].size() != state_dict["classifier.weight"].size()
+        ):
+            logger.warning(
+                f"The checkpoint classifier head has a shape {state_dict['classifier.weight'].size()} and this model "
+                f"classifier head has a shape {self_state['classifier.weight'].size()}. Ignoring the checkpoint "
+                f"weights. You should train your model on new data."
+            )
+            del state_dict["classifier.weight"]
+            if "classifier.bias" in state_dict:
+                del state_dict["classifier.bias"]
 
 
 DEBERTA_START_DOCSTRING = r"""
@@ -867,7 +890,7 @@ class DebertaModel(DebertaPreTrainedModel):
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="microsoft/deberta-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -953,7 +976,6 @@ class DebertaModel(DebertaPreTrainedModel):
 
 @add_start_docstrings("""DeBERTa Model with a `language modeling` head on top. """, DEBERTA_START_DOCSTRING)
 class DebertaForMaskedLM(DebertaPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
@@ -974,7 +996,7 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="microsoft/deberta-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1098,7 +1120,7 @@ class DebertaForSequenceClassification(DebertaPreTrainedModel):
         self.pooler = ContextPooler(config)
         output_dim = self.pooler.output_dim
 
-        self.classifier = torch.nn.Linear(output_dim, num_labels)
+        self.classifier = nn.Linear(output_dim, num_labels)
         drop_out = getattr(config, "cls_dropout", None)
         drop_out = self.config.hidden_dropout_prob if drop_out is None else drop_out
         self.dropout = StableDropout(drop_out)
@@ -1114,7 +1136,7 @@ class DebertaForSequenceClassification(DebertaPreTrainedModel):
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="microsoft/deberta-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1158,7 +1180,7 @@ class DebertaForSequenceClassification(DebertaPreTrainedModel):
         if labels is not None:
             if self.num_labels == 1:
                 # regression task
-                loss_fn = torch.nn.MSELoss()
+                loss_fn = nn.MSELoss()
                 logits = logits.view(-1).to(labels.dtype)
                 loss = loss_fn(logits, labels.view(-1))
             elif labels.dim() == 1 or labels.size(-1) == 1:
@@ -1172,7 +1194,7 @@ class DebertaForSequenceClassification(DebertaPreTrainedModel):
                 else:
                     loss = torch.tensor(0).to(logits)
             else:
-                log_softmax = torch.nn.LogSoftmax(-1)
+                log_softmax = nn.LogSoftmax(-1)
                 loss = -((log_softmax(logits) * labels).sum(-1)).mean()
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1194,7 +1216,6 @@ class DebertaForSequenceClassification(DebertaPreTrainedModel):
     DEBERTA_START_DOCSTRING,
 )
 class DebertaForTokenClassification(DebertaPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
@@ -1210,7 +1231,7 @@ class DebertaForTokenClassification(DebertaPreTrainedModel):
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="microsoft/deberta-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1283,7 +1304,6 @@ class DebertaForTokenClassification(DebertaPreTrainedModel):
     DEBERTA_START_DOCSTRING,
 )
 class DebertaForQuestionAnswering(DebertaPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
@@ -1298,7 +1318,7 @@ class DebertaForQuestionAnswering(DebertaPreTrainedModel):
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="microsoft/deberta-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1342,8 +1362,8 @@ class DebertaForQuestionAnswering(DebertaPreTrainedModel):
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
+        start_logits = start_logits.squeeze(-1).contiguous()
+        end_logits = end_logits.squeeze(-1).contiguous()
 
         total_loss = None
         if start_positions is not None and end_positions is not None:
@@ -1354,8 +1374,8 @@ class DebertaForQuestionAnswering(DebertaPreTrainedModel):
                 end_positions = end_positions.squeeze(-1)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
+            start_positions = start_positions.clamp(0, ignored_index)
+            end_positions = end_positions.clamp(0, ignored_index)
 
             loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
             start_loss = loss_fct(start_logits, start_positions)

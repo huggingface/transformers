@@ -34,8 +34,10 @@ ConvBERT significantly outperforms BERT and its variants in various downstream t
 fewer model parameters. Remarkably, ConvBERTbase model achieves 86.4 GLUE score, 0.7 higher than ELECTRAbase, while
 using less than 1/4 training cost. Code and pre-trained models will be released.*
 
-ConvBERT training tips are similar to those of BERT. The original implementation can be found here:
-https://github.com/yitu-opensource/ConvBert
+ConvBERT training tips are similar to those of BERT.
+
+This model was contributed by `abhishek <https://huggingface.co/abhishek>`__. The original implementation can be found
+here: https://github.com/yitu-opensource/ConvBert
 
 ConvBertConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -56,8 +58,7 @@ ConvBertTokenizerFast
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.ConvBertTokenizerFast
-    :members: build_inputs_with_special_tokens, get_special_tokens_mask,
-        create_token_type_ids_from_sequences, save_vocabulary
+    :members:
 
 
 ConvBertModel

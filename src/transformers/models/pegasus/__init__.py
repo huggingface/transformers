@@ -39,14 +39,18 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_pegasus"] = [
         "PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "PegasusForCausalLM",
         "PegasusForConditionalGeneration",
         "PegasusModel",
         "PegasusPreTrainedModel",
-        "PegasusForCausalLM",
     ]
 
 if is_tf_available():
-    _import_structure["modeling_tf_pegasus"] = ["TFPegasusForConditionalGeneration", "TFPegasusModel"]
+    _import_structure["modeling_tf_pegasus"] = [
+        "TFPegasusForConditionalGeneration",
+        "TFPegasusModel",
+        "TFPegasusPreTrainedModel",
+    ]
 
 
 if TYPE_CHECKING:
@@ -68,7 +72,7 @@ if TYPE_CHECKING:
         )
 
     if is_tf_available():
-        from .modeling_tf_pegasus import TFPegasusForConditionalGeneration, TFPegasusModel
+        from .modeling_tf_pegasus import TFPegasusForConditionalGeneration, TFPegasusModel, TFPegasusPreTrainedModel
 
 else:
     import importlib
