@@ -148,7 +148,7 @@ done in order to achieve the goal. A well-defined project:
 - has defined the desired outcome of the project
 - has defined the workflows
 
-By "has defined" it's not meant that the corresponding code is already written and ready 
+By "has defined" we don't meant that the corresponding code already has to be written and ready 
 to be used, but that everybody in team is on the same page on what type of model, data and training script should be used.
 
 To give an example, a well-defined project would be the following:
@@ -209,7 +209,7 @@ time on TPU. For instance, pretraining a 11 billion parameters T5 model is not r
 task with just 10 days of TPUv3-8 compute. 
 Also, it might be difficult to finish a project where the whole modeling, dataset and training code has to be written from scratch.
 
-Before, officially defining your project we will try to help your team to make sure that 
+Having defined your project, feel free to reach out on Slack or the forum for feedback from the organizers. We can surely give you our opinion on whether the project is feasible and what can be done to improve it.
 the project is feasible.
 
 ### Other tips
