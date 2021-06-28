@@ -383,7 +383,7 @@ class ConvBertSelfAttention(nn.Module):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = torch.nn.functional.softmax(attention_scores, dim=-1)
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -473,8 +473,8 @@ class GroupedLinearLayer(nn.Module):
         self.num_groups = num_groups
         self.group_in_dim = self.input_size // self.num_groups
         self.group_out_dim = self.output_size // self.num_groups
-        self.weight = nn.Parameter(torch.Tensor(self.num_groups, self.group_in_dim, self.group_out_dim))
-        self.bias = nn.Parameter(torch.Tensor(output_size))
+        self.weight = nn.Parameter(torch.empty(self.num_groups, self.group_in_dim, self.group_out_dim))
+        self.bias = nn.Parameter(torch.empty(output_size))
 
     def forward(self, hidden_states):
         batch_size = list(hidden_states.size())[0]
@@ -1293,8 +1293,8 @@ class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
+        start_logits = start_logits.squeeze(-1).contiguous()
+        end_logits = end_logits.squeeze(-1).contiguous()
 
         total_loss = None
         if start_positions is not None and end_positions is not None:
@@ -1305,8 +1305,8 @@ class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
                 end_positions = end_positions.squeeze(-1)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
+            start_positions = start_positions.clamp(0, ignored_index)
+            end_positions = end_positions.clamp(0, ignored_index)
 
             loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
             start_loss = loss_fct(start_logits, start_positions)

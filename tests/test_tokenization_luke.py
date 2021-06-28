@@ -24,6 +24,7 @@ from .test_tokenization_common import TokenizerTesterMixin
 
 class Luke(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = LukeTokenizer
+    test_rust_tokenizer = False
     from_pretrained_kwargs = {"cls_token": "<s>"}
 
     def setUp(self):

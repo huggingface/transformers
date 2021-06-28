@@ -48,9 +48,12 @@ from transformers import (
     set_seed,
 )
 from transformers.file_utils import is_offline_mode
+from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)
+require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/summarization/requirements.txt")
+
 # You should update this to your particular problem to have better documentation of `model_type`
 MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
@@ -290,7 +293,7 @@ def main():
     accelerator = Accelerator()
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )
@@ -419,7 +422,11 @@ def main():
         return model_inputs
 
     processed_datasets = raw_datasets.map(
-        preprocess_function, batched=True, remove_columns=column_names, load_from_cache_file=not args.overwrite_cache
+        preprocess_function,
+        batched=True,
+        remove_columns=column_names,
+        load_from_cache_file=not args.overwrite_cache,
+        desc="Running tokenizer on dataset",
     )
 
     train_dataset = processed_datasets["train"]

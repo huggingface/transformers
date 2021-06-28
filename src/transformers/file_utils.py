@@ -24,6 +24,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -31,7 +32,6 @@ import types
 from collections import OrderedDict, UserDict
 from contextlib import contextmanager
 from dataclasses import fields
-from distutils.dir_util import copy_tree
 from enum import Enum
 from functools import partial, wraps
 from hashlib import sha256
@@ -174,6 +174,14 @@ except importlib_metadata.PackageNotFoundError:
     _soundfile_available = False
 
 
+_timm_available = importlib.util.find_spec("timm") is not None
+try:
+    _timm_version = importlib_metadata.version("timm")
+    logger.debug(f"Successfully imported timm version {_timm_version}")
+except importlib_metadata.PackageNotFoundError:
+    _timm_available = False
+
+
 _torchaudio_available = importlib.util.find_spec("torchaudio") is not None
 try:
     _torchaudio_version = importlib_metadata.version("torchaudio")
@@ -244,6 +252,8 @@ PRESET_MIRROR_DICT = {
     "bfsu": "https://mirrors.bfsu.edu.cn/hugging-face-models",
 }
 
+# This is the version of torch required to run torch.fx features.
+TORCH_FX_REQUIRED_VERSION = version.parse("1.8")
 
 _is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0").upper() in ENV_VARS_TRUE_VALUES else False
 
@@ -267,7 +277,11 @@ def is_torch_cuda_available():
 
 _torch_fx_available = False
 if _torch_available:
-    _torch_fx_available = version.parse(_torch_version) >= version.parse("1.8")
+    torch_version = version.parse(importlib_metadata.version("torch"))
+    _torch_fx_available = (torch_version.major, torch_version.minor) == (
+        TORCH_FX_REQUIRED_VERSION.major,
+        TORCH_FX_REQUIRED_VERSION.minor,
+    )
 
 
 def is_torch_fx_available():
@@ -317,12 +331,14 @@ def is_faiss_available():
     return _faiss_available
 
 
+def is_scipy_available():
+    return importlib.util.find_spec("scipy") is not None
+
+
 def is_sklearn_available():
     if importlib.util.find_spec("sklearn") is None:
         return False
-    if importlib.util.find_spec("scipy") is None:
-        return False
-    return importlib.util.find_spec("sklearn.metrics") and importlib.util.find_spec("scipy.stats")
+    return is_scipy_available() and importlib.util.find_spec("sklearn.metrics")
 
 
 def is_sentencepiece_available():
@@ -409,6 +425,10 @@ def is_training_run_on_sagemaker():
 
 def is_soundfile_availble():
     return _soundfile_available
+
+
+def is_timm_available():
+    return _timm_available
 
 
 def is_torchaudio_available():
@@ -537,11 +557,23 @@ explained here: https://pandas.pydata.org/pandas-docs/stable/getting_started/ins
 
 
 # docstyle-ignore
+SCIPY_IMPORT_ERROR = """
+{0} requires the scipy library but it was not found in your environment. You can install it with pip:
+`pip install scipy`
+"""
+
+
+# docstyle-ignore
 SPEECH_IMPORT_ERROR = """
 {0} requires the torchaudio library but it was not found in your environment. You can install it with pip:
 `pip install torchaudio`
 """
 
+# docstyle-ignore
+TIMM_IMPORT_ERROR = """
+{0} requires the timm library but it was not found in your environment. You can install it with pip:
+`pip install timm`
+"""
 
 # docstyle-ignore
 VISION_IMPORT_ERROR = """
@@ -562,9 +594,11 @@ BACKENDS_MAPPING = OrderedDict(
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
         ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
         ("tf", (is_tf_available, TENSORFLOW_IMPORT_ERROR)),
+        ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
+        ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
     ]
 )
 
@@ -613,18 +647,18 @@ def add_end_docstrings(*docstr):
 
 PT_RETURN_INTRODUCTION = r"""
     Returns:
-        :class:`~{full_output_type}` or :obj:`tuple(torch.FloatTensor)`: A :class:`~{full_output_type}` (if
-        ``return_dict=True`` is passed or when ``config.return_dict=True``) or a tuple of :obj:`torch.FloatTensor`
-        comprising various elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
+        :class:`~{full_output_type}` or :obj:`tuple(torch.FloatTensor)`: A :class:`~{full_output_type}` or a tuple of
+        :obj:`torch.FloatTensor` (if ``return_dict=False`` is passed or when ``config.return_dict=False``) comprising
+        various elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
 
 """
 
 
 TF_RETURN_INTRODUCTION = r"""
     Returns:
-        :class:`~{full_output_type}` or :obj:`tuple(tf.Tensor)`: A :class:`~{full_output_type}` (if
-        ``return_dict=True`` is passed or when ``config.return_dict=True``) or a tuple of :obj:`tf.Tensor` comprising
-        various elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
+        :class:`~{full_output_type}` or :obj:`tuple(tf.Tensor)`: A :class:`~{full_output_type}` or a tuple of
+        :obj:`tf.Tensor` (if ``return_dict=False`` is passed or when ``config.return_dict=False``) comprising various
+        elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
 
 """
 
@@ -782,7 +816,7 @@ PT_MULTIPLE_CHOICE_SAMPLE = r"""
         >>> choice1 = "It is eaten while held in the hand."
         >>> labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
 
-        >>> encoding = tokenizer([[prompt, prompt], [choice0, choice1]], return_tensors='pt', padding=True)
+        >>> encoding = tokenizer([prompt, prompt], [choice0, choice1], return_tensors='pt', padding=True)
         >>> outputs = model(**{{k: v.unsqueeze(0) for k,v in encoding.items()}}, labels=labels)  # batch size is 1
 
         >>> # the linear classifier still needs to be trained
@@ -1873,6 +1907,30 @@ def copy_func(f):
     return g
 
 
+def is_local_clone(repo_path, repo_url):
+    """
+    Checks if the folder in `repo_path` is a local clone of `repo_url`.
+    """
+    # First double-check that `repo_path` is a git repo
+    if not os.path.exists(os.path.join(repo_path, ".git")):
+        return False
+    test_git = subprocess.run("git branch".split(), cwd=repo_path)
+    if test_git.returncode != 0:
+        return False
+
+    # Then look at its remotes
+    remotes = subprocess.run(
+        "git remote -v".split(),
+        stderr=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        check=True,
+        encoding="utf-8",
+        cwd=repo_path,
+    ).stdout
+
+    return repo_url in remotes.split()
+
+
 class PushToHubMixin:
     """
     A Mixin containing the functionality to push a model or tokenizer to the hub.
@@ -1880,24 +1938,31 @@ class PushToHubMixin:
 
     def push_to_hub(
         self,
-        repo_name: Optional[str] = None,
+        repo_path_or_name: Optional[str] = None,
         repo_url: Optional[str] = None,
+        use_temp_dir: bool = False,
         commit_message: Optional[str] = None,
         organization: Optional[str] = None,
-        private: bool = None,
+        private: Optional[bool] = None,
         use_auth_token: Optional[Union[bool, str]] = None,
     ) -> str:
         """
-        Upload model checkpoint or tokenizer files to the 🤗 model hub.
+        Upload model checkpoint or tokenizer files to the 🤗 Model Hub while synchronizing a local clone of the repo in
+        :obj:`repo_path_or_name`.
 
         Parameters:
-            repo_name (:obj:`str`, `optional`):
-                Repository name for your model or tokenizer in the hub. If not specified, the repository name will be
-                the stem of :obj:`save_directory`.
+            repo_path_or_name (:obj:`str`, `optional`):
+                Can either be a repository name for your model or tokenizer in the Hub or a path to a local folder (in
+                which case the repository will have the name of that local folder). If not specified, will default to
+                the name given by :obj:`repo_url` and a local directory with that name will be created.
             repo_url (:obj:`str`, `optional`):
                 Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
                 repository will be created in your namespace (unless you specify an :obj:`organization`) with
                 :obj:`repo_name`.
+            use_temp_dir (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to clone the distant repo in a temporary directory or in :obj:`repo_path_or_name` inside
+                the current working directory. This will slow things down if you are making changes in an existing repo
+                since you will need to clone the repo before every push.
             commit_message (:obj:`str`, `optional`):
                 Message to commit while pushing. Will default to :obj:`"add config"`, :obj:`"add tokenizer"` or
                 :obj:`"add model"` depending on the type of the class.
@@ -1914,42 +1979,66 @@ class PushToHubMixin:
 
         Returns:
             The url of the commit of your model in the given repository.
-        """
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            self.save_pretrained(tmp_dir)
-            self._push_to_hub(
-                save_directory=tmp_dir,
-                repo_name=repo_name,
-                repo_url=repo_url,
-                commit_message=commit_message,
-                organization=organization,
-                private=private,
-                use_auth_token=use_auth_token,
-            )
 
-    @classmethod
-    def _push_to_hub(
-        cls,
-        save_directory: Optional[str] = None,
-        save_files: Optional[List[str]] = None,
-        repo_name: Optional[str] = None,
-        repo_url: Optional[str] = None,
-        commit_message: Optional[str] = None,
+        Examples::
+
+            # Upload a model to the Hub:
+            from transformers import AutoModel
+
+            model = BertModel.from_pretrained("bert-base-cased")
+            # Fine-tuning code
+
+            # Push the model to your namespace with the name "my-finetuned-bert" and have a local clone in the
+            # `my-finetuned-bert` folder.
+            model.push_to_hub("my-finetuned-bert")
+
+            # Push the model to your namespace with the name "my-finetuned-bert" with no local clone.
+            model.push_to_hub("my-finetuned-bert", use_temp_dir=True)
+
+            # Push the model to an organization with the name "my-finetuned-bert" and have a local clone in the
+            # `my-finetuned-bert` folder.
+            model.push_to_hub("my-finetuned-bert", organization="huggingface")
+
+            # Make a change to an existing repo that has been cloned locally in `my-finetuned-bert`.
+            model.push_to_hub("my-finetuned-bert", repo_url="https://huggingface.co/sgugger/my-finetuned-bert")
+        """
+        if use_temp_dir:
+            # Make sure we use the right `repo_name` for the `repo_url` before replacing it.
+            if repo_url is None:
+                if use_auth_token is None:
+                    use_auth_token = True
+                repo_name = Path(repo_path_or_name).name
+                repo_url = self._get_repo_url_from_name(
+                    repo_name, organization=organization, private=private, use_auth_token=use_auth_token
+                )
+            repo_path_or_name = tempfile.mkdtemp()
+
+        # Create or clone the repo. If the repo is already cloned, this just retrieves the path to the repo.
+        repo = self._create_or_get_repo(
+            repo_path_or_name=repo_path_or_name,
+            repo_url=repo_url,
+            organization=organization,
+            private=private,
+            use_auth_token=use_auth_token,
+        )
+        # Save the files in the cloned repo
+        self.save_pretrained(repo_path_or_name)
+        # Commit and push!
+        url = self._push_to_hub(repo, commit_message=commit_message)
+
+        # Clean up! Clean up! Everybody everywhere!
+        if use_temp_dir:
+            shutil.rmtree(repo_path_or_name)
+
+        return url
+
+    @staticmethod
+    def _get_repo_url_from_name(
+        repo_name: str,
         organization: Optional[str] = None,
         private: bool = None,
         use_auth_token: Optional[Union[bool, str]] = None,
     ) -> str:
-        # Private version of push_to_hub, that either accepts a folder to push or a list of files.
-        if save_directory is None and save_files is None:
-            raise ValueError("_push_to_hub requires either a `save_directory` or a list of `save_files`.")
-        if repo_name is None and repo_url is None and save_directory is None:
-            raise ValueError("Need either a `repo_name` or `repo_url` to know where to push!")
-
-        if repo_name is None and repo_url is None and save_files is None:
-            repo_name = Path(save_directory).name
-        if use_auth_token is None and repo_url is None:
-            use_auth_token = True
-
         if isinstance(use_auth_token, str):
             token = use_auth_token
         elif use_auth_token:
@@ -1963,33 +2052,56 @@ class PushToHubMixin:
         else:
             token = None
 
-        if repo_url is None:
-            # Special provision for the test endpoint (CI)
-            repo_url = HfApi(endpoint=HUGGINGFACE_CO_RESOLVE_ENDPOINT).create_repo(
-                token,
-                repo_name,
-                organization=organization,
-                private=private,
-                repo_type=None,
-                exist_ok=True,
+        # Special provision for the test endpoint (CI)
+        return HfApi(endpoint=HUGGINGFACE_CO_RESOLVE_ENDPOINT).create_repo(
+            token,
+            repo_name,
+            organization=organization,
+            private=private,
+            repo_type=None,
+            exist_ok=True,
+        )
+
+    @classmethod
+    def _create_or_get_repo(
+        cls,
+        repo_path_or_name: Optional[str] = None,
+        repo_url: Optional[str] = None,
+        organization: Optional[str] = None,
+        private: bool = None,
+        use_auth_token: Optional[Union[bool, str]] = None,
+    ) -> Repository:
+        if repo_path_or_name is None and repo_url is None:
+            raise ValueError("You need to specify a `repo_path_or_name` or a `repo_url`.")
+
+        if use_auth_token is None and repo_url is None:
+            use_auth_token = True
+
+        if repo_path_or_name is None:
+            repo_path_or_name = repo_url.split("/")[-1]
+
+        if repo_url is None and not os.path.exists(repo_path_or_name):
+            repo_name = Path(repo_path_or_name).name
+            repo_url = cls._get_repo_url_from_name(
+                repo_name, organization=organization, private=private, use_auth_token=use_auth_token
             )
 
+        # Create a working directory if it does not exist.
+        if not os.path.exists(repo_path_or_name):
+            os.makedirs(repo_path_or_name)
+
+        repo = Repository(repo_path_or_name, clone_from=repo_url, use_auth_token=use_auth_token)
+        repo.git_pull()
+        return repo
+
+    @classmethod
+    def _push_to_hub(cls, repo: Repository, commit_message: Optional[str] = None) -> str:
         if commit_message is None:
             if "Tokenizer" in cls.__name__:
                 commit_message = "add tokenizer"
-            if "Config" in cls.__name__:
+            elif "Config" in cls.__name__:
                 commit_message = "add config"
             else:
                 commit_message = "add model"
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            # First create the repo (and clone its content if it's nonempty), then add the files (otherwise there is
-            # no diff so nothing is pushed).
-            repo = Repository(tmp_dir, clone_from=repo_url, use_auth_token=use_auth_token)
-            if save_directory is None:
-                for filename in save_files:
-                    shutil.copy(filename, Path(tmp_dir) / Path(filename).name)
-            else:
-                copy_tree(save_directory, tmp_dir)
-
-            return repo.push_to_hub(commit_message=commit_message)
+        return repo.push_to_hub(commit_message=commit_message)
