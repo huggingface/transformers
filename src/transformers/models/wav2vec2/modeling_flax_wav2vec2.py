@@ -69,7 +69,7 @@ class FlaxWav2Vec2BaseModelOutput(ModelOutput):
 @flax.struct.dataclass
 class FlaxWav2Vec2ForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.FlaxWav1Vec2ForPreTrainingOutput`, with potential hidden states and
+    Output type of :class:`~transformers.FlaxWav2Vec2ForPreTrainingOutput`, with potential hidden states and
     attentions.
 
     Args:
@@ -246,6 +246,7 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
+
             `What are attention masks? <../glossary.html#attention-mask>`__ .. warning:: :obj:`attention_mask` should
             only be passed if the corresponding processor has ``config.return_attention_mask == True``. For all models
             whose processor has ``config.return_attention_mask == False``, such as `wav2vec2-base
@@ -253,6 +254,9 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
             avoid degraded performance when doing batched inference. For such models :obj:`input_values` should simply
             be padded with 0 and passed without :obj:`attention_mask`. Be aware that these models also yield slightly
             different results depending on whether :obj:`input_values` is padded or not.
+        mask_time_indices (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
+            masked extracted features in `config.proj_codevector_dim` space.
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
@@ -891,6 +895,7 @@ class FlaxWav2Vec2Module(nn.Module):
 
             >>> input_values = processor(ds["speech"][0], return_tensors="np").input_values  # Batch size 1
             >>> hidden_states = model(input_values).last_hidden_state
+
         """
         extract_features = self.feature_extractor(input_values)
 
@@ -973,7 +978,6 @@ class FlaxWav2Vec2ForCTCModule(nn.Module):
             dtype=self.dtype,
         )
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_values,
@@ -1011,6 +1015,7 @@ class FlaxWav2Vec2ForCTCModule(nn.Module):
 
             >>> transcription = processor.decode(predicted_ids[0])
             >>> # should give:  "A MAN SAID TO THE UNIVERSE SIR I EXIST"
+
         """
 
         outputs = self.wav2vec2(
@@ -1083,7 +1088,6 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
         """
         return self.quantizer.set_temperature(temperature)
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_values,
@@ -1095,10 +1099,6 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
         return_dict=None,
     ):
         r"""
-        mask_time_indices (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
-            masked extracted features in `config.proj_codevector_dim` space.
-
         Returns:
 
         Example::
@@ -1140,6 +1140,7 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
 
             >>> # show that cosine similarity is much higher than random
             >>> assert np.asarray(cosine_sim)[mask_time_indices].mean() > 0.5
+
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
