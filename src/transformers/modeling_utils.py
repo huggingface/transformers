@@ -471,8 +471,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         All context managers that the model should be initialized under go here.
         """
 
+        torch_dtype = kwargs.pop("torch_dtype", None)
+
         # override default dtype if needed
-        dtype_orig = cls._set_default_dtype(config.torch_dtype)
+        dtype_orig = None
+        if torch_dtype is not None:
+            dtype_orig = cls._set_default_dtype(torch_dtype)
 
         if is_deepspeed_zero3_enabled():
             import deepspeed
@@ -492,7 +496,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return model
 
     @classmethod
-    def _set_default_dtype(cls, config_dtype_str, weight_dtype=None) -> torch.dtype:
+    def _set_default_dtype(cls, dtype: torch.dtype) -> torch.dtype:
         """
         If a floating ``dtype`` is passed via the model config or one of its weights ``torch.set_default_dtype`` is
         used to change the global dtype. Which is needed when wanting to instantiate the model under specific dtype.
@@ -511,22 +515,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         ``torch.int64`` is passed. So if a non-float ``dtype`` is passed we don't do anything other than logging a
         warning that the non-float dtype was ignored.
         """
-        dtype_str = config_dtype_str
-        if dtype_str is None and weight_dtype is not None:
-            dtype_str = str(weight_dtype).split(".")[1]
-
-        if dtype_str is None:
-            return None
-
-        if not isinstance(dtype_str, str):
-            raise ValueError(f"dtype is expected to be the string attribute name of ``torch``, got {config_dtype_str}")
-
-        dtype = getattr(torch, dtype_str)
         if not dtype.is_floating_point:
-            logger.warning(
-                f"instantiating {cls.__name__} model under {torch.get_default_dtype()}, since {dtype} is not a floating point dtype"
+            raise ValueError(
+                f"Can't instantiate {cls.__name__} model under dtype={dtype} since it is not a floating point dtype"
             )
-            return None
 
         logger.info(f"Instantiating {cls.__name__} model under default dtype {dtype}.")
         dtype_orig = torch.get_default_dtype()
@@ -1122,6 +1114,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
         _fast_init = kwargs.pop("_fast_init", True)
+        torch_dtype = kwargs.pop("torch_dtype", None)
+        torch_dtype_auto_detect = kwargs.pop("torch_dtype_auto_detect", False)
 
         from_pt = not (from_tf | from_flax)
 
@@ -1241,10 +1235,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
 
             # set dtype to instantiate the model under:
-            # 1. If config.torch_dtype is not None, we use that dtype
-            # 2. Otherwise, we try to auto-detect it from the loaded state_dict, by checking the first
+            # 1. If torch_dtype is not None, we use that dtype
+            # 2. If torch_dtype_auto_detect is True, we auto-detect it from the loaded state_dict, by checking the first
             #    entry - we assume all weights are of the same dtype
-            dtype_orig = cls._set_default_dtype(config.torch_dtype, next(iter(state_dict.values())).dtype)
+            # we also may have config.torch_dtype but we won't rely on it till v5
+            dtype_orig = None
+            if torch_dtype_auto_detect:
+                if torch_dtype is None:
+                    torch_dtype = next(iter(state_dict.values())).dtype
+                else:
+                    raise ValueError(
+                        "ambiguous arguments passed non-None ``torch_dtype`` and ``torch_dtype_auto_detect=True`` at the same time"
+                    )
+            if torch_dtype is not None:
+                dtype_orig = cls._set_default_dtype(torch_dtype)
 
         config.name_or_path = pretrained_model_name_or_path
 

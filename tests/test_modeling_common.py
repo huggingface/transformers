@@ -1589,36 +1589,26 @@ class ModelUtilsTest(TestCasePlus):
         self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
 
     @require_torch
-    def test_model_from_config_dtype(self):
+    def test_model_from_config_torch_dtype(self):
         # test that the model can be instantiated with dtype of user's choice - as long as it's a
         # float dtype. To make it happen config.torch_dtype needs to be set before instantiating the
         # model from the config object.
 
         config = T5Config.from_pretrained(TINY_T5)
-        config.update(dict(torch_dtype=None))  # reset to unknown
         model = AutoModel.from_config(config)
         # XXX: isn't supported
         # model = T5ForConditionalGeneration.from_config(config)
         self.assertEqual(model.dtype, torch.float32)
 
-        config = T5Config.from_pretrained(TINY_T5)
-        config.update(dict(torch_dtype="float16"))  # force fp16
-        # from pprint import pprint
-        # pprint(config)
-        model = AutoModel.from_config(config)
+        model = AutoModel.from_config(config, torch_dtype=torch.float16)
         self.assertEqual(model.dtype, torch.float16)
 
-        # torch.set_default_dtype() supports only float dtypes, so falling back to default float32
-        # if non-float type is passed
-        config = T5Config.from_pretrained(TINY_T5)
-        config.update(dict(torch_dtype="int64"))  # force fp16
-        # from pprint import pprint
-        # pprint(config)
-        model = AutoModel.from_config(config)
-        self.assertEqual(model.dtype, torch.float32)
+        # torch.set_default_dtype() supports only float dtypes, so will fail with non-float type
+        with self.assertRaises(ValueError):
+            model = AutoModel.from_config(config, torch_dtype=torch.int64)
 
     @require_torch
-    def test_model_from_pretrained_dtype(self):
+    def test_model_from_pretrained_torch_dtype(self):
         # test that the model can be instantiated with dtype of either
         # 1. config.torch_dtype setting in the saved model (priority)
         # 2. via autodiscovery by looking at model weights
@@ -1633,22 +1623,23 @@ class ModelUtilsTest(TestCasePlus):
         model.save_pretrained(model_path)
         model = T5ForConditionalGeneration.from_pretrained(model_path)
         self.assertEqual(model.dtype, torch.float32)
+        # test with auto-detection
+        model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype_auto_detect=True)
+        self.assertEqual(model.dtype, torch.float32)
 
-        # test fp16 save_pretrained => from_pretrained using `config.torch_dtype` setting
-        model = model.half()
-        model.save_pretrained(model_path)
-        model = T5ForConditionalGeneration.from_pretrained(model_path)
-        self.assertEqual(model.config.torch_dtype, "float16")
+        # test forced loading in fp16 (even though the weights are in fp32)
+        model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.float16)
         self.assertEqual(model.dtype, torch.float16)
 
-        # test fp16 via autodiscovery.
-        # we hack the already saved model to unset `config.torch_dtype for that - this test is for
-        # models created before this change
-        config = model.config
-        config.update(dict(torch_dtype=None))  # reset to unknown
-        config.save_pretrained(model_path)
-        model = T5ForConditionalGeneration.from_pretrained(model_path)
-        self.assertEqual(model.config.torch_dtype, None)
+        # test fp16 save_pretrained, loaded with auto-detection
+        model = model.half()
+        model.save_pretrained(model_path)
+        model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype_auto_detect=True)
+        self.assertEqual(model.config.torch_dtype, "float16")  # also test `config.torch_dtype` saving
+        self.assertEqual(model.dtype, torch.float16)
+
+        # test fp16 save_pretrained, loaded with the explicit fp16
+        model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.float16)
         self.assertEqual(model.dtype, torch.float16)
 
 
