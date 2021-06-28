@@ -457,7 +457,7 @@ def main():
 
     # Enable tensorboard only on the master node
     if has_tensorboard and jax.process_index() == 0:
-        summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir).joinpath("logs").as_posix())
+        summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir))
 
     # Initialize our training
     rng = jax.random.PRNGKey(training_args.seed)

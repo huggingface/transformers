@@ -275,7 +275,7 @@ def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndar
     return batch_idx
 
 
-def write_metric(train_metrics, eval_metrics, train_time, step):
+def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step):
     summary_writer.scalar("train_time", train_time, step)
 
     train_metrics = get_metrics(train_metrics)
@@ -478,7 +478,7 @@ if __name__ == "__main__":
 
     # Enable tensorboard only on the master node
     if has_tensorboard and jax.process_index() == 0:
-        summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir).joinpath("logs").as_posix())
+        summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir))
 
     # Data collator
     # This one will take care of randomly masking the tokens.
@@ -648,7 +648,7 @@ if __name__ == "__main__":
         # Save metrics
         if has_tensorboard and jax.process_index() == 0:
             cur_step = epoch * (len(tokenized_datasets["train"]) // train_batch_size)
-            write_metric(train_metrics, eval_metrics, train_time, cur_step)
+            write_metric(summary_writer, train_metrics, eval_metrics, train_time, cur_step)
 
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
