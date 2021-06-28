@@ -139,7 +139,6 @@ class DistilBertConfig(PretrainedConfig):
         return self.n_layers
 
 
-# Copied from transformers.models.bert.configuration_bert.BertOnnxConfig with Roberta->DistilBert
 class DistilBertOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -150,5 +149,5 @@ class DistilBertOnnxConfig(OnnxConfig):
 
     @property
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        return {"last_hidden_state": {0: "batch", 1: "sequence"}, "pooler_output": {0: "batch"}}
+        return {"last_hidden_state": {0: "batch", 1: "sequence"}}
 
