@@ -147,11 +147,11 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
 
         # Ignore the gradients applied by the LAMB/ADAM optimizers.
         if (
-            "adam_m" in name
-            or "adam_v" in name
-            or "AdamWeightDecayOptimizer" in name
-            or "AdamWeightDecayOptimizer_1" in name
-            or "global_step" in name
+                "adam_m" in name
+                or "adam_v" in name
+                or "AdamWeightDecayOptimizer" in name
+                or "AdamWeightDecayOptimizer_1" in name
+                or "global_step" in name
         ):
             logger.info(f"Skipping {'/'.join(name)}")
             continue
@@ -187,7 +187,7 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
             array = np.transpose(array)
         try:
             assert (
-                pointer.shape == array.shape
+                    pointer.shape == array.shape
             ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
@@ -226,7 +226,7 @@ class AlbertEmbeddings(nn.Module):
 
     # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.forward
     def forward(
-        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
+            self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
     ):
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -360,16 +360,36 @@ class AlbertAttention(nn.Module):
             attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        context_layer = context_layer.transpose(2, 1)
 
         # Should find a better way to do this
         w = (
             self.dense.weight.t()
-            .view(self.num_attention_heads, self.attention_head_size, self.hidden_size)
-            .to(context_layer.dtype)
+                .view(self.num_attention_heads, self.attention_head_size, self.hidden_size)
+                .to(context_layer.dtype)
         )
         b = self.dense.bias.to(context_layer.dtype)
+
+        def _einsum_via_matmul(input_tensor, w, num_inner_dims):
+            input_shape = input_tensor.shape
+            w_shape = w.shape
+            batch_dims = input_shape[: -num_inner_dims]
+            inner_dims = input_shape[-num_inner_dims:]
+            outer_dims = w_shape[num_inner_dims:]
+            inner_dim = torch.prod(torch.tensor(inner_dims)).item()
+            outer_dim = torch.prod(torch.tensor(outer_dims)).item()
+            if num_inner_dims > 1:
+                input_tensor = input_tensor.reshape(batch_dims + (inner_dim, ))
+            if len(w_shape) > 2:
+                w = w.reshape((inner_dim, outer_dim))
+            ret = torch.matmul(input_tensor, w)
+            if len(outer_dims) > 1:
+                ret = ret.reshape(batch_dims + outer_dims)
+            return ret
+
+        projected_context_layer_mm = torch.matmul(context_layer, w)
+        projected_context_layer_ = _einsum_via_matmul(context_layer, w, 2)
+        projected_context_layer = torch.einsum("bfnd,ndh->bfh", context_layer, w)
 
         projected_context_layer = torch.einsum("bfnd,ndh->bfh", context_layer, w) + b
         projected_context_layer_dropout = self.output_dropout(projected_context_layer)
@@ -392,7 +412,7 @@ class AlbertLayer(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
-        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False
+            self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False
     ):
         attention_output = self.attention(hidden_states, attention_mask, head_mask, output_attentions)
 
@@ -420,7 +440,7 @@ class AlbertLayerGroup(nn.Module):
         self.albert_layers = nn.ModuleList([AlbertLayer(config) for _ in range(config.inner_group_num)])
 
     def forward(
-        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False
+            self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False
     ):
         layer_hidden_states = ()
         layer_attentions = ()
@@ -452,13 +472,13 @@ class AlbertTransformer(nn.Module):
         self.albert_layer_groups = nn.ModuleList([AlbertLayerGroup(config) for _ in range(config.num_hidden_groups)])
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+            self,
+            hidden_states,
+            attention_mask=None,
+            head_mask=None,
+            output_attentions=False,
+            output_hidden_states=False,
+            return_dict=True,
     ):
         hidden_states = self.embedding_hidden_mapping_in(hidden_states)
 
@@ -681,16 +701,16 @@ class AlbertModel(AlbertPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+            self,
+            input_ids=None,
+            attention_mask=None,
+            token_type_ids=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
+            output_attentions=None,
+            output_hidden_states=None,
+            return_dict=None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -781,18 +801,18 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=AlbertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        sentence_order_label=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+            self,
+            input_ids=None,
+            attention_mask=None,
+            token_type_ids=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
+            labels=None,
+            sentence_order_label=None,
+            output_attentions=None,
+            output_hidden_states=None,
+            return_dict=None,
     ):
         r"""
         labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`):
@@ -930,17 +950,17 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+            self,
+            input_ids=None,
+            attention_mask=None,
+            token_type_ids=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
+            labels=None,
+            output_attentions=None,
+            output_hidden_states=None,
+            return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1009,17 +1029,17 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+            self,
+            input_ids=None,
+            attention_mask=None,
+            token_type_ids=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
+            labels=None,
+            output_attentions=None,
+            output_hidden_states=None,
+            return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1110,17 +1130,17 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+            self,
+            input_ids=None,
+            attention_mask=None,
+            token_type_ids=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
+            labels=None,
+            output_attentions=None,
+            output_hidden_states=None,
+            return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1198,18 +1218,18 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        start_positions=None,
-        end_positions=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+            self,
+            input_ids=None,
+            attention_mask=None,
+            token_type_ids=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
+            start_positions=None,
+            end_positions=None,
+            output_attentions=None,
+            output_hidden_states=None,
+            return_dict=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1297,17 +1317,17 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+            self,
+            input_ids=None,
+            attention_mask=None,
+            token_type_ids=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
+            labels=None,
+            output_attentions=None,
+            output_hidden_states=None,
+            return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
