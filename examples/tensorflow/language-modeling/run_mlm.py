@@ -22,6 +22,9 @@ https://huggingface.co/models?filter=masked-lm
 """
 # You can also adapt this script on your own mlm task. Pointers for this are left as comments.
 
+# TODO Do multi-GPU and TPU tests and make sure the dataset length works as expected
+# TODO Duplicate all changes over to the CLM script
+
 import logging
 import math
 import os
@@ -289,6 +292,10 @@ def main():
     if training_args.output_dir is not None:
         training_args.output_dir = Path(training_args.output_dir)
         os.makedirs(training_args.output_dir, exist_ok=True)
+
+    if isinstance(training_args.strategy, tf.distribute.TPUStrategy) and not data_args.pad_to_max_length:
+        logger.warning("We are training on TPU - forcing pad_to_max_length")
+        data_args.pad_to_max_length = True
     # endregion
 
     # region Checkpoints
@@ -521,8 +528,10 @@ def main():
         }
         train_sig["labels"] = train_sig["input_ids"]
         train_sig = (train_sig, train_sig["labels"])
+        options = tf.data.Options()
+        options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
         tf_train_dataset = (
-            tf.data.Dataset.from_generator(train_gen, output_signature=train_sig)
+            tf.data.Dataset.from_generator(train_gen, output_signature=train_sig).with_options(options)
             .batch(batch_size=num_replicas * training_args.per_device_train_batch_size, drop_remainder=True)
             .repeat(int(training_args.num_train_epochs))
         )
@@ -534,7 +543,7 @@ def main():
         }
         eval_sig["labels"] = eval_sig["input_ids"]
         eval_sig = (eval_sig, eval_sig["labels"])
-        tf_eval_dataset = tf.data.Dataset.from_generator(eval_gen, output_signature=eval_sig).batch(
+        tf_eval_dataset = tf.data.Dataset.from_generator(eval_gen, output_signature=eval_sig).with_options(options).batch(
             batch_size=num_replicas * training_args.per_device_eval_batch_size, drop_remainder=True
         )
         # endregion
