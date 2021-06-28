@@ -185,31 +185,32 @@ class FlaxT5Attention(nn.Module):
         self.dropout = self.config.dropout_rate
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
-        inner_dim_init_std = self.config.initializer_factor * (self.inner_dim ** -0.5)
-        d_model_init_std = self.config.initializer_factor * (self.inner_dim ** -0.5)
+        q_init_std = self.config.initializer_factor * ((self.inner_dim * self.key_value_proj_dim) ** -0.5)
+        kv_init_std = self.config.initializer_factor * (self.inner_dim ** -0.5)
+        o_init_std = self.config.initializer_factor * (self.inner_dim ** -0.5)
 
         self.q = nn.Dense(
             self.inner_dim,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(d_model_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(q_init_std, self.dtype),
             dtype=self.dtype,
         )
         self.k = nn.Dense(
             self.inner_dim,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(d_model_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(kv_init_std, self.dtype),
             dtype=self.dtype,
         )
         self.v = nn.Dense(
             self.inner_dim,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(d_model_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(kv_init_std, self.dtype),
             dtype=self.dtype,
         )
         self.o = nn.Dense(
             self.d_model,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(inner_dim_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(o_init_std, self.dtype),
             dtype=self.dtype,
         )
 
@@ -217,7 +218,7 @@ class FlaxT5Attention(nn.Module):
             self.relative_attention_bias = nn.Embed(
                 self.relative_attention_num_buckets,
                 self.n_heads,
-                embedding_init=jax.nn.initializers.normal(d_model_init_std, self.dtype),
+                embedding_init=jax.nn.initializers.normal(kv_init_std, self.dtype),
                 dtype=self.dtype,
             )
 

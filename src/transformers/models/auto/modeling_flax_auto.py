@@ -141,13 +141,6 @@ FLAX_MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     ]
 )
 
-FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
-    [
-        # Model for Seq2Seq Causal LM mapping
-        (BartConfig, FlaxBartForConditionalGeneration)
-    ]
-)
-
 FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
