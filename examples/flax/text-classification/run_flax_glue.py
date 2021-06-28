@@ -124,9 +124,9 @@ def parse_args():
     parser.add_argument("--output_dir", type=str, default=None, help="Where to store the final model.")
     parser.add_argument("--seed", type=int, default=3, help="A seed for reproducible training.")
     parser.add_argument(
-        "--disable_push_to_hub",
+        "--push_to_hub",
         action="store_true",
-        help="If passed,  model checkpoints will not be pusted to the hub",
+        help="If passed, model checkpoints and tensorboard logs will be pushed to the hub",
     )
     args = parser.parse_args()
 
@@ -499,7 +499,7 @@ def main():
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
             params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
-            model.save_pretrained(args.output_dir, params=params, push_to_hub=(not args.disable_push_to_hub))
+            model.save_pretrained(args.output_dir, params=params, push_to_hub=args.push_to_hub)
 
 
 if __name__ == "__main__":

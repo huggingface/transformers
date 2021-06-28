@@ -140,7 +140,8 @@ Next we can run the example script to pretrain the model:
     --pad_to_max_length \
     --num_train_epochs="18" \
     --adam_beta1="0.9" \
-    --adam_beta2="0.98"
+    --adam_beta2="0.98" \
+	--push_to_hub
 ```
 
 Training should converge at a loss and accuracy 
@@ -232,6 +233,7 @@ Next we can run the example script to pretrain the model:
     --adam_beta1="0.9" --adam_beta2="0.98" --weight_decay="0.01" \
     --overwrite_output_dir \
     --num_train_epochs="20" \
+	--push_to_hub
 ```
 
 Training should converge at a loss and perplexity 

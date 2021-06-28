@@ -69,7 +69,8 @@ python run_flax_glue.py \
   --learning_rate 2e-5 \
   --num_train_epochs 3 \
   --per_device_train_batch_size 4 \
-  --output_dir ${MODEL_DIR}
+  --output_dir ${MODEL_DIR} \
+  --push_to_hub
 ```
 
 where task name can be one of cola, mnli, mnli-mm, mrpc, qnli, qqp, rte, sst2, stsb, wnli.
