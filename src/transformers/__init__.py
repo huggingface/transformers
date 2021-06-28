@@ -1632,7 +1632,6 @@ if is_flax_available():
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
     _import_structure["models.pegasus"].extend(
         [
-            "FlaxPegasusForCausalLM",
             "FlaxPegasusForConditionalGeneration",
             "FlaxPegasusModel",
             "FlaxPegasusPreTrainedModel",
@@ -3007,7 +3006,6 @@ if TYPE_CHECKING:
         from .models.t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
         from .models.vit import FlaxViTForImageClassification, FlaxViTModel, FlaxViTPreTrainedModel
         from .models.pegasus import (
-            FlaxPegasusForCausalLM,
             FlaxPegasusForConditionalGeneration,
             FlaxPegasusModel,
             FlaxPegasusPreTrainedModel,
