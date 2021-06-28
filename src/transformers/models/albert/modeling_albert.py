@@ -360,38 +360,9 @@ class AlbertAttention(nn.Module):
             attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_layer)
-        context_layer = context_layer.transpose(2, 1)
+        context_layer = context_layer.transpose(2, 1).flatten(2)
 
-        # Should find a better way to do this
-        w = (
-            self.dense.weight.t()
-                .view(self.num_attention_heads, self.attention_head_size, self.hidden_size)
-                .to(context_layer.dtype)
-        )
-        b = self.dense.bias.to(context_layer.dtype)
-
-        def _einsum_via_matmul(input_tensor, w, num_inner_dims):
-            input_shape = input_tensor.shape
-            w_shape = w.shape
-            batch_dims = input_shape[: -num_inner_dims]
-            inner_dims = input_shape[-num_inner_dims:]
-            outer_dims = w_shape[num_inner_dims:]
-            inner_dim = torch.prod(torch.tensor(inner_dims)).item()
-            outer_dim = torch.prod(torch.tensor(outer_dims)).item()
-            if num_inner_dims > 1:
-                input_tensor = input_tensor.reshape(batch_dims + (inner_dim, ))
-            if len(w_shape) > 2:
-                w = w.reshape((inner_dim, outer_dim))
-            ret = torch.matmul(input_tensor, w)
-            if len(outer_dims) > 1:
-                ret = ret.reshape(batch_dims + outer_dims)
-            return ret
-
-        projected_context_layer_mm = torch.matmul(context_layer.flatten(2), w.flatten(0, 1))
-        projected_context_layer_ = _einsum_via_matmul(context_layer, w, 2)
-        projected_context_layer = torch.einsum("bfnd,ndh->bfh", context_layer, w)
-
-        projected_context_layer = torch.einsum("bfnd,ndh->bfh", context_layer, w) + b
+        projected_context_layer = self.dense(context_layer)
         projected_context_layer_dropout = self.output_dropout(projected_context_layer)
         layernormed_context_layer = self.LayerNorm(hidden_states + projected_context_layer_dropout)
         return (layernormed_context_layer, attention_probs) if output_attentions else (layernormed_context_layer,)
