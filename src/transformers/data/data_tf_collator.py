@@ -105,7 +105,7 @@ class TFDataCollatorForLanguageModeling:
             max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
 
         if tokenizer.padding_side == "right":
-            if (examples.shape[0] == None):
+            if multiple_tensors:
                 result = tf.pad(examples, 
                                 [[0, 0], [0, max_length]],
                                 constant_values=tokenizer._pad_token)
@@ -114,7 +114,7 @@ class TFDataCollatorForLanguageModeling:
                                 [[0, 0], [0, max_length]],
                                 constant_values=tokenizer._pad_token)
         else:
-            if (examples.shape[0] == None):
+            if multiple_tensors:
                 result = tf.pad(examples,
                                 [[0, 0], [max_length, 0]],
                                 constant_values=tokenizer._pad_token)
