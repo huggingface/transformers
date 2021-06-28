@@ -3166,13 +3166,39 @@ class TokenizerTesterMixin:
         self.assertEqual(len(inputs["input_ids"]), 2)
 
         # Test with a special tokens map
-        if tokenizer._cls_token is not None:
-            new_tokenizer = tokenizer.train_new_from_iterator(
-                SMALL_TRAINING_CORPUS, 100, special_tokens_map={tokenizer.cls_token: "<cls>"}
-            )
-            cls_id = new_tokenizer.get_vocab()["<cls>"]
-            self.assertEqual(new_tokenizer.cls_token, "<cls>")
-            self.assertEqual(new_tokenizer.cls_token_id, cls_id)
+        special_tokens_list = [
+            "bos_token",
+            "eos_token",
+            "unk_token",
+            "sep_token",
+            "pad_token",
+            "cls_token",
+            "mask_token",
+        ]
+        special_tokens_map = {}
+        for spe_token_attr in special_tokens_list:
+            spe_token = getattr(tokenizer, spe_token_attr)
+            if spe_token is not None:
+                special_tokens_map[spe_token] = f"{spe_token}a"
+
+        for spe_token in tokenizer.additional_special_tokens:
+            special_tokens_map[spe_token] = f"{spe_token}a"
+
+        new_tokenizer = tokenizer.train_new_from_iterator(
+            SMALL_TRAINING_CORPUS, 100, special_tokens_map=special_tokens_map
+        )
+
+        for spe_token_attr in special_tokens_list:
+            spe_token = getattr(tokenizer, spe_token_attr)
+            if spe_token in special_tokens_map:
+                new_spe_token = getattr(new_tokenizer, spe_token_attr)
+                self.assertEqual(special_tokens_map[spe_token] == new_spe_token)
+
+                new_id = new_tokenizer.get_vocab()[new_spe_token]
+                self.assertEqual(getattr(new_tokenizer, f"{spe_token_attr}_id"), new_id)
+
+        for spe_token in tokenizer.additional_special_tokens:
+            self.assertEqual(special_tokens_map[spe_token] in new_tokenizer.additional_special_tokens)
 
 
 @is_staging_test
