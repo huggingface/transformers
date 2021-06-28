@@ -146,9 +146,9 @@ done in order to achieve the goal. A well-defined project:
 - has defined the datasets that will be used for training
 - has defined the type of training scripts that need to be written
 - has defined the desired outcome of the project
-- has defined the work flows
+- has defined the workflows
 
-By "has defined" it'ss not meant that the corresponding code is already written and ready 
+By "has defined" it's not meant that the corresponding code is already written and ready 
 to be used, but that everybody in team is on the same page on what type of model, data and training script should be used.
 
 To give an example, a well-defined project would be the following:
@@ -168,7 +168,7 @@ the `datasets` library and the training script already be pre-written, however i
 be clear how the desired dataset can be accessed and how the training script can be 
 written. 
 
-It is also important to have a clear plan regarding the work flow. Usually, the 
+It is also important to have a clear plan regarding the workflow. Usually, the 
 data processing is done in a first step. Once the data is in a format that the model can 
 work with, the training script can be written, etc. These steps should be more detailed 
 once the team has a clearly defined project. It can be helpful to set deadlines for each step.
@@ -250,7 +250,7 @@ to use and activate it.
 
 We strongly recommend to make use of the provided JAX/Flax examples scripts in [transformers/examples/flax](https://github.com/huggingface/transformers/tree/master/examples/flax) even if you want to train a JAX/Flax model of another github repository that is not integrated into 🤗 Transformers.
 In all likelihood, you will need to adapt one of the example scripts, so we recommend forking and cloning the 🤗 Transformers repository as follows. 
-Doing so will allow you to share your fork of the Transformers library with your team members so that the team effectively work on the same code base. It will also automatically install the newest versions of `flax`, `jax` and `optax`.
+Doing so will allow you to share your fork of the Transformers library with your team members so that the team effectively works on the same code base. It will also automatically install the newest versions of `flax`, `jax` and `optax`.
 
 **IMPORTANT**: If you are setting up your environment on a TPU VM, make sure to 
 install JAX's TPU version before cloning and installing the transformers repository. 
