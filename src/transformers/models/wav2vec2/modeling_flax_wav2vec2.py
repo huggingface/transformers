@@ -207,17 +207,28 @@ def _sample_negatives(features: np.ndarray, num_negatives: int):
 
 WAV_2_VEC_2_START_DOCSTRING = r"""
     Wav2Vec2 was proposed in `wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations
-    <https://arxiv.org/abs/2006.11477>`__ by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael Auli. This model
-    inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic methods
-    the library implements for all its model (such as downloading or saving etc.). This model is a PyTorch
-    `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use it as a regular PyTorch
-    Module and refer to the PyTorch documentation for all matter related to general usage and behavior.
+    <https://arxiv.org/abs/2006.11477>`__ by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael Auli.
+
+    This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
+    generic methods the library implements for all its model (such as downloading or saving, resizing the input
+    embeddings, pruning heads etc.)
+
+    This model is also a Flax Linen `flax.nn.Module
+    <https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html>`__ subclass. Use it as a regular Flax
+    Module and refer to the Flax documentation for all matter related to general usage and behavior.
+
+    Finally, this model supports inherent JAX features such as:
+
+    - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
+    - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
+    - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
+    - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
 
     Parameters:
-        config (:class:`~transformers.Wav2Vec2Config`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.T5Config`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
+            model weights.
 """
 
 
@@ -996,18 +1007,10 @@ class FlaxWav2Vec2ForCTCModule(nn.Module):
 
             >>> input_values = processor(ds["speech"][0], return_tensors="np").input_values  # Batch size 1
             >>> logits = model(input_values).logits
-            >>> predicted_ids = jnp.argmax(logits, dim=-1)
+            >>> predicted_ids = jnp.argmax(logits, axis=-1)
 
             >>> transcription = processor.decode(predicted_ids[0])
-
-            >>> # compute loss
-            >>> target_transcription = "A MAN SAID TO THE UNIVERSE SIR I EXIST"
-
-            >>> # wrap processor as target processor to encode labels
-            >>> with processor.as_target_processor():
-            >>>     labels = processor(target_transcription, return_tensors="np").input_ids
-
-            >>> loss = model(input_values, labels=labels).loss
+            >>> # should give:  "A MAN SAID TO THE UNIVERSE SIR I EXIST"
         """
 
         outputs = self.wav2vec2(
@@ -1100,7 +1103,9 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
 
         Example::
 
-            >>> import jnp
+            >>> import optax
+            >>> import numpy as np
+            >>> import jax.numpy as jnp
             >>> from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForPreTraining
             >>> from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices
             >>> from datasets import load_dataset
@@ -1119,24 +1124,22 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
             >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
             >>> ds = ds.map(map_to_array)
 
-            >>> input_values = feature_extractor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
+            >>> input_values = feature_extractor(ds["speech"][0], return_tensors="np").input_values  # Batch size 1
 
             >>> # compute masked indices
             >>> batch_size, raw_sequence_length = input_values.shape
             >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length)
-            >>> mask_time_indices = _compute_mask_indices((batch_size, sequence_length), mask_prob=0.2, mask_length=2, device=model.device)
+            >>> mask_time_indices = _compute_mask_indices((batch_size, sequence_length), mask_prob=0.2, mask_length=2)
 
             >>> outputs = model(input_values, mask_time_indices=mask_time_indices)
 
             >>> # compute cosine similarity between predicted (=projected_states) and target (=projected_quantized_states)
-            >>> cosine_sim = jnp.cosine_similarity(
-            ...     outputs.projected_states, outputs.projected_quantized_states, dim=-1
+            >>> cosine_sim = optax.cosine_similarity(
+            ...     outputs.projected_states, outputs.projected_quantized_states, axis=-1
             ... )
 
             >>> # show that cosine similarity is much higher than random
-            >>> assert cosine_sim[mask_time_indices].mean() > 0.5
-
-            >>> # for contrastive loss training model should be put into train mode
+            >>> assert np.asarray(cosine_sim)[mask_time_indices].mean() > 0.5
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
