@@ -3165,6 +3165,15 @@ class TokenizerTesterMixin:
         inputs = new_tokenizer(["This is the first sentence.", "This sentence is different 🤗."])
         self.assertEqual(len(inputs["input_ids"]), 2)
 
+        # Test with a special tokens map
+        if tokenizer._cls_token is not None:
+            new_tokenizer = tokenizer.train_new_from_iterator(
+                SMALL_TRAINING_CORPUS, 100, special_tokens_map={tokenizer.cls_token: "<cls>"}
+            )
+            cls_id = new_tokenizer.get_vocab()["<cls>"]
+            self.assertEqual(new_tokenizer.cls_token, "<cls>")
+            self.assertEqual(new_tokenizer.cls_token_id, cls_id)
+
 
 @is_staging_test
 class TokenizerPushToHubTester(unittest.TestCase):

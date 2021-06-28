@@ -17,6 +17,7 @@
  see tokenization_utils.py
 """
 
+import inspect
 import json
 import os
 from collections import defaultdict
@@ -659,4 +660,14 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             trained_tokenizer_json["post_processor"] = post_processor
             tokenizer = TokenizerFast.from_str(json.dumps(trained_tokenizer_json))
 
-        return self.__class__(tokenizer_object=tokenizer)
+        # Map pad/cls/mask token at the Transformers level
+        kwargs = {}
+        if special_tokens_map is not None:
+            init_signature = inspect.signature(self.__class__)
+            for name, param in init_signature.parameters.items():
+                if param.default in special_tokens_map:
+                    kwargs[name] = special_tokens_map[param.default]
+        if new_special_tokens is not None:
+            kwargs["additional_special_tokens"] = new_special_tokens
+
+        return self.__class__(tokenizer_object=tokenizer, **kwargs)
