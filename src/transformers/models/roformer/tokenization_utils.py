@@ -14,6 +14,7 @@
 # limitations under the License.
 """Tokenization utils for RoFormer."""
 
+import jieba
 from typing import List
 
 from tokenizers import NormalizedString, PreTokenizedString, normalizers
@@ -28,20 +29,12 @@ class JiebaPreTokenizer:
             strip_accents=False,
             lowercase=False,
         )
-        try:
-            import rjieba
-        except ImportError:
-            raise ImportError(
-                "You need to install rjieba to use RoFormerTokenizer."
-                "See https://pypi.org/project/rjieba/ for installation."
-            )
-        self.jieba = rjieba
 
     def jieba_split(self, i: int, normalized_string: NormalizedString) -> List[NormalizedString]:
         splits = []
 
         # this code slice normalized_string is too slow (6s) but test_alignement_methods can pass
-        # for token, start, end in self.jieba.tokenize(str(normalized_string), hmm=False):
+        # for token, start, end in jieba.tokenize(str(normalized_string), hmm=False):
         #     if token in self.vocab:
         #         splits.append(normalized_string.slice((start, end)))
         #     else:
@@ -53,7 +46,7 @@ class JiebaPreTokenizer:
         #                 start = end
 
         # this code test_alignement_methods can't pass but fast (300ms)
-        for token in self.jieba.cut(str(normalized_string), False):
+        for token in jieba.cut(str(normalized_string), False):
             if token in self.vocab:
                 splits.append(NormalizedString(token))
             else:

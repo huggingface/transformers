@@ -16,6 +16,7 @@
 
 import collections
 import os
+import jieba
 from typing import List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer
@@ -45,7 +46,7 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class RoFormerTokenizer(PreTrainedTokenizer):
     r"""
-    Construct a RoFormer tokenizer. Based on `Rust Jieba <https://pypi.org/project/rjieba/>`.
+    Construct a RoFormer tokenizer. Based on `Jieba <https://pypi.org/project/jieba/>`.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
@@ -142,14 +143,7 @@ class RoFormerTokenizer(PreTrainedTokenizer):
                 strip_accents=strip_accents,
             )
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
-        try:
-            import rjieba
-        except ImportError:
-            raise ImportError(
-                "You need to install rjieba to use RoFormerTokenizer."
-                "See https://pypi.org/project/rjieba/ for installation."
-            )
-        self.jieba = rjieba
+
 
     @property
     def do_lower_case(self):
@@ -159,21 +153,6 @@ class RoFormerTokenizer(PreTrainedTokenizer):
     def vocab_size(self):
         return len(self.vocab)
 
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state["jieba"] = None
-        return state
-
-    def __setstate__(self, d):
-        self.__dict__ = d
-        try:
-            import rjieba
-        except ImportError:
-            raise ImportError(
-                "You need to install rjieba to use RoFormerTokenizer."
-                "See https://pypi.org/project/rjieba/ for installation."
-            )
-        self.jieba = rjieba
 
     def get_vocab(self):
         return dict(self.vocab, **self.added_tokens_encoder)
@@ -181,7 +160,7 @@ class RoFormerTokenizer(PreTrainedTokenizer):
     def _tokenize(self, text, use_jieba=True):
         split_tokens = []
         if use_jieba:
-            for wholword in self.jieba.cut(text, False):
+            for wholword in jieba.cut(text, HMM=False):
                 if wholword in self.vocab:
                     split_tokens.append(wholword)
                 else:

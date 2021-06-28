@@ -22,21 +22,21 @@ from transformers.testing_utils import require_tokenizers
 from .test_tokenization_common import TokenizerTesterMixin
 
 
-def is_rjieba_available():
-    return importlib.util.find_spec("rjieba") is not None
+def is_jieba_available():
+    return importlib.util.find_spec("jieba") is not None
 
 
-def require_rjieba(test_case):
+def require_jieba(test_case):
     """
     Decorator marking a test that requires Jieba. These tests are skipped when Jieba isn't installed.
     """
-    if not is_rjieba_available():
-        return unittest.skip("test requires rjieba")(test_case)
+    if not is_jieba_available():
+        return unittest.skip("test requires jieba")(test_case)
     else:
         return test_case
 
 
-@require_rjieba
+@require_jieba
 @require_tokenizers
 class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
