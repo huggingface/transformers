@@ -382,14 +382,14 @@ def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndar
     return batch_idx
 
 
-def write_metric(train_metrics, eval_metrics, train_time, step):
+def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step):
     summary_writer.scalar("train_time", train_time, step)
 
     train_metrics = get_metrics(train_metrics)
     for key, vals in train_metrics.items():
         tag = f"train_{key}"
-        for i, value in enumerate(vals):
-            summary_writer.scalar(tag, value, step)
+        for i, val in enumerate(vals):
+            summary_writer.scalar(tag, val, step - len(vals) + i + 1)
 
     for metric_name, value in eval_metrics.items():
         summary_writer.scalar(f"eval_{metric_name}", value, step)
@@ -750,9 +750,9 @@ if __name__ == "__main__":
         # Save metrics
         if has_tensorboard and jax.process_index() == 0:
             cur_step = epoch * (len(tokenized_datasets["train"]) // train_batch_size)
-            write_metric(train_metrics, eval_metrics, train_time, cur_step)
+            write_metric(summary_writer, train_metrics, eval_metrics, train_time, cur_step)
 
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
             params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
-            model.save_pretrained(training_args.output_dir, params=params, push_to_hub=True)
+            model.save_pretrained(training_args.output_dir, params=params, push_to_hub=training_args.push_to_hub)
