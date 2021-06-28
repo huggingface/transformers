@@ -405,7 +405,7 @@ def main():
     # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
     # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
 
-    with training_args.main_process_first(desc="dataset map pre-processing"):
+    with training_args.main_process_first(desc="grouping texts together"):
         lm_datasets = tokenized_datasets.map(
             group_texts,
             batched=True,
