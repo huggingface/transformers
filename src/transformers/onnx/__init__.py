@@ -13,7 +13,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .config import OnnxConfig, OnnxConfigWithPast, DEFAULT_BERT_OPTIMIZER_FEATURES, EXTERNAL_DATA_FORMAT_SIZE_LIMIT
-from .convert import convert_pytorch
+from .config import DEFAULT_BERT_OPTIMIZER_FEATURES, EXTERNAL_DATA_FORMAT_SIZE_LIMIT, OnnxConfig, OnnxConfigWithPast
 from .utils import ParameterFormat, compute_serialized_parameters_size
-

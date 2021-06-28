@@ -22,8 +22,12 @@ from packaging.version import Version, parse
 from onnxruntime import GraphOptimizationLevel
 
 from .. import PreTrainedModel, PreTrainedTokenizer, TensorType, TFPreTrainedModel, is_torch_available
+from ..utils import logging
 from .config import OnnxConfig
 from .utils import flatten_output_collection_property
+
+
+logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 # This is the minimal required version to support some ONNX Runtime features
@@ -81,15 +85,15 @@ def convert_pytorch(
     import torch
     from torch.onnx import export
 
-    print(f"Using framework PyTorch: {torch.__version__}")
+    logger.info(f"Using framework PyTorch: {torch.__version__}")
     torch.set_grad_enabled(False)
     model.config.return_dict = True
 
     # Check if we need to override certain configuration item
     if config.values_override is not None:
-        print(f"Overriding {len(config.values_override)} configuration item(s)")
+        logger.info(f"Overriding {len(config.values_override)} configuration item(s)")
         for override_config_key, override_config_value in config.values_override.items():
-            print(f"\t- {override_config_key} -> {override_config_value}")
+            logger.info(f"\t- {override_config_key} -> {override_config_value}")
             setattr(model.config, override_config_key, override_config_value)
 
     # Ensure inputs match
@@ -104,7 +108,7 @@ def convert_pytorch(
     # export can works with named args but the dict containing named args as to be last element of the args tuple
     export(
         model,
-        (model_inputs, ),
+        (model_inputs,),
         f=output.as_posix(),
         input_names=ordered_onnx_inputs,
         output_names=onnx_outputs,
@@ -130,7 +134,7 @@ def optimize(
 
     # If we have an optimizer in the config, let's optimize offline
     if onnx_config.optimizer is not None:
-        print(
+        logger.info(
             f"Optimizing model through dedicated '{onnx_config.optimizer}' "
             "tool (tool's name might not match model topology):"
         )
@@ -138,7 +142,7 @@ def optimize(
         optimizer_options = BertOptimizationOptions(onnx_config.optimizer)
         if onnx_config.optimizer_features is not None:
             for feature_name, feature_value in onnx_config.optimizer_features.items():
-                print(f"\t- {feature_name} = {feature_value}")
+                logger.info(f"\t- {feature_name} = {feature_value}")
                 setattr(optimizer_options, feature_name, feature_value)
 
         # Optimize
@@ -148,10 +152,10 @@ def optimize(
             optimization_options=optimizer_options,
             opt_level=int(optimization_level),
             use_gpu=use_gpu,
-            **onnx_config.optimizer_additional_args
+            **onnx_config.optimizer_additional_args,
         )
 
-        print(f"Optimization statistics: {optimizer.get_fused_operator_statistics()}")
+        logger.info(f"Optimization statistics: {optimizer.get_fused_operator_statistics()}")
         optimizer.save_model_to_file(output.as_posix())
 
     # Else use online ONNX Runtime optimization
@@ -171,7 +175,8 @@ def validate_model_outputs(
     atol: float,
 ):
     from onnxruntime import InferenceSession, SessionOptions
-    print("Validating ONNX model...")
+
+    logger.info("Validating ONNX model...")
 
     reference_model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.PYTORCH)
     onnx_model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.NUMPY)
@@ -198,39 +203,41 @@ def validate_model_outputs(
     # Check we have a subset of the keys into onnx_outputs against ref_outputs
     ref_outputs_set, onnx_outputs_set = set(ref_outputs_dict.keys()), set(onnx_named_outputs)
     if not onnx_outputs_set.issubset(ref_outputs_set):
-        print(f"\t-[x] ONNX model outputs' name {onnx_outputs_set} doesn't match reference model {ref_outputs_set}")
+        logger.info(
+            f"\t-[x] ONNX model outputs' name {onnx_outputs_set} doesn't match reference model {ref_outputs_set}"
+        )
 
         raise ValueError(
             "Outputs doesn't match between reference model and ONNX exported model: "
             f"{onnx_outputs_set.difference(ref_outputs_set)}"
         )
     else:
-        print(f"\t-[✓] ONNX model outputs' name match reference model ({onnx_outputs_set}")
+        logger.info(f"\t-[✓] ONNX model outputs' name match reference model ({onnx_outputs_set}")
 
     # Check the shape and values match
     for name, ort_value in zip(onnx_named_outputs, onnx_outputs):
         ref_value = ref_outputs_dict[name].numpy()
-        print(f"\t- Validating ONNX Model output \"{name}\":")
+        logger.info(f'\t- Validating ONNX Model output "{name}":')
 
         # Shape
         if not ort_value.shape == ref_value.shape:
-            print(f"\t\t-[x] shape {ort_value.shape} doesn't match {ref_value.shape}")
+            logger.info(f"\t\t-[x] shape {ort_value.shape} doesn't match {ref_value.shape}")
             raise ValueError(
                 "Outputs shape doesn't match between reference model and ONNX exported model: "
                 f"Got {ref_value.shape} (reference) and {ort_value.shape} (ONNX)"
             )
         else:
-            print(f"\t\t-[✓] {ort_value.shape} matchs {ref_value.shape}")
+            logger.info(f"\t\t-[✓] {ort_value.shape} matchs {ref_value.shape}")
 
         # Values
         if not np.allclose(ref_value, ort_value, atol=atol):
-            print(f"\t\t-[x] values not close enough (atol: {atol})")
+            logger.info(f"\t\t-[x] values not close enough (atol: {atol})")
             raise ValueError(
                 "Outputs values doesn't match between reference model and ONNX exported model: "
                 f"Got max absolute difference of: {np.amax(np.abs(ref_value - ort_value))}"
             )
         else:
-            print(f"\t\t-[✓] all values close (atol: {atol})")
+            logger.info(f"\t\t-[✓] all values close (atol: {atol})")
 
 
 def ensure_model_and_config_inputs_match(
@@ -249,9 +256,5 @@ def ensure_model_and_config_inputs_match(
 
     # Make sure the input order match
     matching_inputs = config_inputs_set.intersection(model_inputs_set)
-    ordered_matching_inputs = [
-        config_input
-        for config_input in config_inputs
-        if config_input in matching_inputs
-    ]
+    ordered_matching_inputs = [config_input for config_input in config_inputs if config_input in matching_inputs]
     return is_ok, ordered_matching_inputs

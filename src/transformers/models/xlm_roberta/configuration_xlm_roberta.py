@@ -14,9 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ XLM-RoBERTa configuration """
-from typing import Mapping, Optional, Any
+from typing import Any, Mapping, Optional
 
-from ...onnx import OnnxConfig, DEFAULT_BERT_OPTIMIZER_FEATURES
+from ...onnx import DEFAULT_BERT_OPTIMIZER_FEATURES, OnnxConfig
 from ...utils import logging
 from ..roberta.configuration_roberta import RobertaConfig
 
@@ -42,9 +42,8 @@ class XLMRobertaConfig(RobertaConfig):
     model_type = "xlm-roberta"
 
 
-# Copied from transformers.models.bert.configuration_bert.BertOnnxConfig with Bert->XLMRoberta
+# Copied from transformers.models.roberta.configuration_roberta.RobertaOnnxConfig with Roberta->XLMRoberta
 class XLMRobertaOnnxConfig(OnnxConfig):
-
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         return {
@@ -54,10 +53,7 @@ class XLMRobertaOnnxConfig(OnnxConfig):
 
     @property
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        return {
-            "last_hidden_state": {0: "batch", 1: "sequence"},
-            "pooler_output": {0: "batch"}
-        }
+        return {"last_hidden_state": {0: "batch", 1: "sequence"}, "pooler_output": {0: "batch"}}
 
     @property
     def optimizer(self) -> Optional[str]:
@@ -69,8 +65,4 @@ class XLMRobertaOnnxConfig(OnnxConfig):
 
     @property
     def optimizer_additional_args(self) -> Optional[Mapping[str, Any]]:
-        return {
-            "num_heads": self._config.num_attention_heads,
-            "hidden_size": self._config.hidden_size
-        }
-
+        return {"num_heads": self._config.num_attention_heads, "hidden_size": self._config.hidden_size}

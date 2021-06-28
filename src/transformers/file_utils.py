@@ -148,9 +148,30 @@ except importlib_metadata.PackageNotFoundError:
         _faiss_available = False
 
 
-_onnx_available = (
-    importlib.util.find_spec("keras2onnx") is not None and importlib.util.find_spec("onnxruntime") is not None
-)
+coloredlogs = importlib.util.find_spec("coloredlogs") is not None
+try:
+    _coloredlogs_available = importlib_metadata.version("coloredlogs")
+    logger.debug(f"Successfully imported sympy version {_coloredlogs_available}")
+except importlib_metadata.PackageNotFoundError:
+    _coloredlogs_available = False
+
+
+sympy_available = importlib.util.find_spec("sympy") is not None
+try:
+    _sympy_available = importlib_metadata.version("sympy")
+    logger.debug(f"Successfully imported sympy version {_sympy_available}")
+except importlib_metadata.PackageNotFoundError:
+    _sympy_available = False
+
+
+_keras2onnx_available = importlib.util.find_spec("keras2onnx") is not None
+try:
+    _keras2onnx_version = importlib_metadata.version("keras2onnx")
+    logger.debug(f"Successfully imported keras2onnx version {_keras2onnx_version}")
+except importlib_metadata.PackageNotFoundError:
+    _keras2onnx_available = False
+
+_onnx_available = importlib.util.find_spec("onnxruntime") is not None
 try:
     _onxx_version = importlib_metadata.version("onnx")
     logger.debug(f"Successfully imported onnx version {_onxx_version}")
@@ -290,6 +311,18 @@ def is_torch_fx_available():
 
 def is_tf_available():
     return _tf_available
+
+
+def is_coloredlogs_available():
+    return _coloredlogs_available
+
+
+def is_sympy_available():
+    return _sympy_available
+
+
+def is_keras2onnx_available():
+    return _keras2onnx_available
 
 
 def is_onnx_available():

@@ -1,16 +1,22 @@
 from pathlib import Path
 from unittest import TestCase
-
 from unittest.mock import patch
 
-from transformers import PreTrainedModel, BertConfig
+from transformers import BertConfig, PreTrainedModel
 from transformers.models.bert.configuration_bert import BertOnnxConfig
-from transformers.onnx import OnnxConfig, ParameterFormat, EXTERNAL_DATA_FORMAT_SIZE_LIMIT
+from transformers.onnx import EXTERNAL_DATA_FORMAT_SIZE_LIMIT, OnnxConfig, ParameterFormat
+
 # from transformers.onnx.convert import convert_pytorch
-from transformers.onnx.utils import compute_serialized_parameters_size, compute_effective_axis_dimension, \
-    flatten_output_collection_property, generate_identified_filename
+from transformers.onnx.utils import (
+    compute_effective_axis_dimension,
+    compute_serialized_parameters_size,
+    flatten_output_collection_property,
+    generate_identified_filename,
+)
+from transformers.testing_utils import require_onnx
 
 
+@require_onnx
 class OnnxUtilsTestCaseV2(TestCase):
     def test_compute_effective_axis_dimension(self):
         # Dynamic axis (batch, no token added by the tokenizer)
@@ -34,7 +40,9 @@ class OnnxUtilsTestCaseV2(TestCase):
         self.assertEqual(generate_identified_filename(Path("model.onnx"), "_suffix"), Path("model_suffix.onnx"))
         self.assertEqual(generate_identified_filename(Path("./model.onnx"), "_suffix"), Path("./model_suffix.onnx"))
         self.assertEqual(generate_identified_filename(Path("../model.onnx"), "_suffix"), Path("../model_suffix.onnx"))
-        self.assertEqual(generate_identified_filename(Path("a/b/model.onnx"), "_suffix"), Path("a/b/model_suffix.onnx"))
+        self.assertEqual(
+            generate_identified_filename(Path("a/b/model.onnx"), "_suffix"), Path("a/b/model_suffix.onnx")
+        )
 
     def test_flatten_output_collection_property(self):
         self.assertEqual(
@@ -43,12 +51,11 @@ class OnnxUtilsTestCaseV2(TestCase):
                 "past_key.0": 0,
                 "past_key.1": 1,
                 "past_key.2": 2,
-            }
+            },
         )
 
 
 class OnnxConfigTestCaseV2(TestCase):
-
     @patch.multiple(OnnxConfig, __abstractmethods__=set())
     def test_use_external_data_format(self):
         """
@@ -97,4 +104,3 @@ class OnnxExportTestCaseV2(TestCase):
 
     def export_with_past(self):
         pass
-

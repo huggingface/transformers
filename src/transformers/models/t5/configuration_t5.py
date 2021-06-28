@@ -13,12 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ T5 model configuration """
-from typing import Mapping, Union, Any, Optional
+from typing import Any, Mapping, Optional
 
-from transformers import PreTrainedModel, TFPreTrainedModel, PreTrainedTokenizer, TensorType
+from transformers import PreTrainedTokenizer, TensorType
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig, OnnxConfigWithPast
+from ...onnx import OnnxConfigWithPast
 from ...utils import logging
 
 
@@ -139,7 +139,6 @@ class T5Config(PretrainedConfig):
 
 
 class T5OnnxConfig(OnnxConfigWithPast):
-
     def __init__(self, config: PretrainedConfig, use_past: bool = False):
         super().__init__(config, use_past)
 
@@ -150,19 +149,19 @@ class T5OnnxConfig(OnnxConfigWithPast):
                 "input_ids": {0: "batch", 1: "encoder_sequence"},
                 "attention_mask": {0: "batch", 1: "encoder_sequence"},
                 "decoder_input_ids": {0: "batch"},
-                "decoder_attention_mask": {0: "batch"}
+                "decoder_attention_mask": {0: "batch"},
             }
             for i in range(self._config.num_layers):
-                common_inputs[f"past_key_values.{i}.decoder.0"] = {0: "batch", 2: "past_sequence"},
-                common_inputs[f"past_key_values.{i}.decoder.1"] = {0: "batch", 2: "past_sequence"},
-                common_inputs[f"past_key_values.{i}.encoder.0"] = {0: "batch", 2: "past_sequence"},
-                common_inputs[f"past_key_values.{i}.encoder.1"] = {0: "batch", 2: "past_sequence"},
+                common_inputs[f"past_key_values.{i}.decoder.0"] = ({0: "batch", 2: "past_sequence"},)
+                common_inputs[f"past_key_values.{i}.decoder.1"] = ({0: "batch", 2: "past_sequence"},)
+                common_inputs[f"past_key_values.{i}.encoder.0"] = ({0: "batch", 2: "past_sequence"},)
+                common_inputs[f"past_key_values.{i}.encoder.1"] = ({0: "batch", 2: "past_sequence"},)
         else:
             common_inputs = {
                 "input_ids": {0: "batch", 1: "encoder_sequence"},
                 "attention_mask": {0: "batch", 1: "encoder_sequence"},
                 "decoder_input_ids": {0: "batch", 1: "decoder_sequence"},
-                "decoder_attention_mask": {0: "batch", 1: "decoder_sequence"}
+                "decoder_attention_mask": {0: "batch", 1: "decoder_sequence"},
             }
 
         return common_inputs
@@ -176,10 +175,10 @@ class T5OnnxConfig(OnnxConfigWithPast):
 
         if self.use_past:
             for i in range(self._config.num_layers):
-                common_outputs[f"past_key_values.{i}.decoder.0"] = {0: "batch", 2: "decoder_sequence"},
-                common_outputs[f"past_key_values.{i}.decoder.1"] = {0: "batch", 2: "decoder_sequence"},
-                common_outputs[f"past_key_values.{i}.encoder.0"] = {0: "batch", 2: "encoder_sequence"},
-                common_outputs[f"past_key_values.{i}.encoder.1"] = {0: "batch", 2: "encoder_sequence"},
+                common_outputs[f"past_key_values.{i}.decoder.0"] = ({0: "batch", 2: "decoder_sequence"},)
+                common_outputs[f"past_key_values.{i}.decoder.1"] = ({0: "batch", 2: "decoder_sequence"},)
+                common_outputs[f"past_key_values.{i}.encoder.0"] = ({0: "batch", 2: "encoder_sequence"},)
+                common_outputs[f"past_key_values.{i}.encoder.1"] = ({0: "batch", 2: "encoder_sequence"},)
 
         return common_outputs
 
@@ -189,10 +188,7 @@ class T5OnnxConfig(OnnxConfigWithPast):
 
     @property
     def optimizer_additional_args(self) -> Optional[Mapping[str, Any]]:
-        return {
-            "num_heads": self._config.num_attention_heads,
-            "hidden_size": self._config.hidden_size
-        }
+        return {"num_heads": self._config.num_attention_heads, "hidden_size": self._config.hidden_size}
 
     def generate_dummy_inputs(
         self,
@@ -200,7 +196,7 @@ class T5OnnxConfig(OnnxConfigWithPast):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional[TensorType] = None
+        framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
         if self.use_past:
             raise NotImplementedError()
@@ -213,4 +209,3 @@ class T5OnnxConfig(OnnxConfigWithPast):
         decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
 
         return dict(**encoder_inputs, **decoder_inputs)
-

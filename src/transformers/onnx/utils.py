@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ctypes import c_int8, c_float, c_double, sizeof
+from ctypes import c_float, sizeof
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Iterable, Union
+from typing import Any, Dict, Iterable
 
 
 class ParameterFormat(Enum):
@@ -25,6 +25,7 @@ class ParameterFormat(Enum):
     def size(self) -> int:
         """
         Number of byte required for this data type
+
         Returns:
             Integer > 0
         """
@@ -42,7 +43,7 @@ def compute_effective_axis_dimension(dimension: int, fixed_dimension: int, num_t
     Returns:
 
     """
-    # < 0 is possible if using a dynamix axis
+    # < 0 is possible if using a dynamic axis
     if dimension <= 0:
         dimension = fixed_dimension
 
@@ -53,6 +54,7 @@ def compute_effective_axis_dimension(dimension: int, fixed_dimension: int, num_t
 def compute_serialized_parameters_size(num_parameters: int, dtype: ParameterFormat) -> int:
     """
     Compute the size taken by all the parameters in the given the storage format when serializing the model
+
     Args:
         num_parameters: Number of parameters to be saved
         dtype: The data format each parameter will be saved

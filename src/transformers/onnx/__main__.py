@@ -14,9 +14,10 @@
 
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import Tuple, Union, Callable
+from typing import Callable, Tuple, Union
 
 from onnxruntime import GraphOptimizationLevel
+from transformers.file_utils import is_coloredlogs_available, is_sympy_available
 from transformers.models.albert import AlbertOnnxConfig
 from transformers.models.auto import AutoTokenizer
 from transformers.models.bart import BartOnnxConfig
@@ -28,6 +29,7 @@ from transformers.models.t5 import T5OnnxConfig
 from transformers.models.xlm_roberta import XLMRobertaOnnxConfig
 
 from .. import is_tf_available, is_torch_available
+from ..utils import logging
 from .convert import convert_pytorch, optimize, validate_model_outputs
 from .utils import generate_identified_filename
 
@@ -58,21 +60,12 @@ if is_tf_available():
 # Set of model topologies we support associated to the features supported by each topology and the factory
 SUPPORTED_MODEL_KIND = {
     "albert": {"default": AlbertOnnxConfig.default},
-    "bart": {
-        "default": BartOnnxConfig.default,
-        "with_past": BartOnnxConfig.with_past
-    },
+    "bart": {"default": BartOnnxConfig.default, "with_past": BartOnnxConfig.with_past},
     "bert": {"default": BertOnnxConfig.default},
     "distilbert": {"default": DistilBertOnnxConfig.default},
-    "gpt2": {
-        "default": GPT2OnnxConfig.default,
-        "with_past": GPT2OnnxConfig.with_past
-    },
+    "gpt2": {"default": GPT2OnnxConfig.default, "with_past": GPT2OnnxConfig.with_past},
     "roberta": {"default": RobertaOnnxConfig},
-    "t5": {
-        "default": T5OnnxConfig.default,
-        "with_past": T5OnnxConfig.with_past
-    },
+    "t5": {"default": T5OnnxConfig.default, "with_past": T5OnnxConfig.with_past},
     "xlm-roberta": {"default": XLMRobertaOnnxConfig.default},
 }
 
@@ -188,7 +181,14 @@ def main():
     if not args.output.parent.exists():
         args.output.parent.mkdir(parents=True)
 
-    print(f"About to export model: {args.model} using framework: {args.framework}")
+    if args.optimization_level != "disabled":
+        if not is_sympy_available() or not is_coloredlogs_available():
+            raise EnvironmentError(
+                "SymPy and coloredlogs must be installed in order to optimize ONNX models: "
+                "pip install sympy coloredlogs"
+            )
+
+    logger.info(f"About to export model: {args.model} using framework: {args.framework}")
 
     # Allocate the model
     tokenizer = AutoTokenizer.from_pretrained(args.model)
@@ -209,25 +209,28 @@ def main():
         raise NotImplementedError()
 
     validate_model_outputs(onnx_config, tokenizer, model, args.output, onnx_outputs, args.atol)
-    print(f"All good, model saved at: {args.output.as_posix()}")
+    logger.info(f"All good, model saved at: {args.output.as_posix()}")
 
     if args.optimization_level != "disabled":
-        print(f"About to optimize model with optimization_level: {args.optimization_level}")
+        logger.info(f"About to optimize model with optimization_level: {args.optimization_level}")
 
         args.opt_model_output = generate_identified_filename(args.output, f"_optimized_{args.optimization_level}")
         args.optimization_level = ONNX_OPTIMIZATION_LEVELS[args.optimization_level]
+
         optimize(args.output, onnx_config, args.optimization_level, args.use_gpu, args.opt_model_output)
 
         if not args.use_gpu:
-            validate_model_outputs(tokenizer, model, args.opt_model_output, onnx_outputs, args.atol)
+            validate_model_outputs(onnx_config, tokenizer, model, args.opt_model_output, onnx_outputs, args.atol)
         else:
-            print(
+            logger.info(
                 "Validating model targeting GPU is not supported yet. "
                 "Please, fill an issue or submit a PR if it's something you need."
             )
 
-        print(f"Optimized model saved at: {args.opt_model_output.as_posix()}")
+        logger.info(f"Optimized model saved at: {args.opt_model_output.as_posix()}")
 
 
 if __name__ == "__main__":
+    logger = logging.get_logger("transformers.onnx")  # pylint: disable=invalid-name
+    logger.setLevel(logging.INFO)
     main()
