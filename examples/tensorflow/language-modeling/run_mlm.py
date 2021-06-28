@@ -578,7 +578,7 @@ def main():
             tf_train_dataset,
             validation_data=tf_eval_dataset,
             epochs=int(training_args.num_train_epochs),
-            steps_per_epoch=len(train_dataset) // training_args.per_device_train_batch_size,
+            steps_per_epoch=len(train_dataset) // (training_args.per_device_train_batch_size * num_replicas),
             callbacks=[SavePretrainedCallback(output_dir=training_args.output_dir)],
         )
         try:
