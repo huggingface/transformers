@@ -2,7 +2,6 @@ from pathlib import Path
 from unittest import TestCase
 from unittest.mock import patch
 
-from transformers import BertConfig, PreTrainedModel
 from transformers.models.bert.configuration_bert import BertOnnxConfig
 from transformers.onnx import EXTERNAL_DATA_FORMAT_SIZE_LIMIT, OnnxConfig, ParameterFormat
 
@@ -52,37 +51,22 @@ class OnnxConfigTestCaseV2(TestCase):
         """
         External data format is required only if the serialized size of the parameters if bigger than 2Gb
         """
-        LIMIT = EXTERNAL_DATA_FORMAT_SIZE_LIMIT
+        TWO_GB_LIMIT = EXTERNAL_DATA_FORMAT_SIZE_LIMIT
 
         # No parameters
-        with patch.object(PreTrainedModel, "num_parameters", return_value=0):
-            model = PreTrainedModel(BertConfig())
-            onnx = OnnxConfig(model)
-            self.assertFalse(onnx.use_external_data_format(model.num_parameters()))
+        self.assertFalse(OnnxConfig.use_external_data_format(0))
 
         # Some parameters
-        with patch.object(PreTrainedModel, "num_parameters", return_value=2):
-            model = PreTrainedModel(BertConfig())
-            onnx = OnnxConfig(model)
-            self.assertFalse(onnx.use_external_data_format(model.num_parameters()))
+        self.assertFalse(OnnxConfig.use_external_data_format(1))
 
         # Almost 2Gb parameters
-        with patch.object(PreTrainedModel, "num_parameters", return_value=(LIMIT - 1) // ParameterFormat.Float.size):
-            model = PreTrainedModel(BertConfig())
-            onnx = OnnxConfig(model)
-            self.assertFalse(onnx.use_external_data_format(model.num_parameters()))
+        self.assertFalse(OnnxConfig.use_external_data_format((TWO_GB_LIMIT - 1) // ParameterFormat.Float.size))
 
         # Exactly 2Gb parameters
-        with patch.object(PreTrainedModel, "num_parameters", return_value=LIMIT):
-            model = PreTrainedModel(BertConfig())
-            onnx = OnnxConfig(model)
-            self.assertTrue(onnx.use_external_data_format(model.num_parameters()))
+        self.assertTrue(OnnxConfig.use_external_data_format(TWO_GB_LIMIT))
 
         # More than 2Gb parameters
-        with patch.object(PreTrainedModel, "num_parameters", return_value=(LIMIT + 1) // ParameterFormat.Float.size):
-            model = PreTrainedModel(BertConfig())
-            onnx = OnnxConfig(model)
-            self.assertTrue(onnx.use_external_data_format(model.num_parameters()))
+        self.assertTrue(OnnxConfig.use_external_data_format((TWO_GB_LIMIT + 1) // ParameterFormat.Float.size))
 
 
 class OnnxExportTestCaseV2(TestCase):
