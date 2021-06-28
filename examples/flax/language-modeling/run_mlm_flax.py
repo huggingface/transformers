@@ -112,6 +112,12 @@ class ModelArguments:
             "help": "Floating-point format in which the model weights should be initialized and trained. Choose one of `[float32, float16, bfloat16]`."
         },
     )
+    push_to_hub: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether the trained checkpoints and tensorboard logs should be pushed to the hub after each epoch."
+        },
+    )
 
 
 @dataclass
@@ -644,7 +650,7 @@ if __name__ == "__main__":
             cur_step = epoch * (len(tokenized_datasets["train"]) // train_batch_size)
             write_metric(train_metrics, eval_metrics, train_time, cur_step)
 
-    # save last checkpoint
-    if jax.process_index() == 0:
-        params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
-        model.save_pretrained(training_args.output_dir, params=params)
+        # save checkpoint after each epoch and push checkpoint to the hub
+        if jax.process_index() == 0:
+            params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+            model.save_pretrained(training_args.output_dir, params=params, push_to_hub=model_args.push_to_hub)

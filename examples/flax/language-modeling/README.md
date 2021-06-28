@@ -33,11 +33,37 @@ in Norwegian on a single TPUv3-8 pod.
 
 The example script uses the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
 
-Let's start by creating a folder to save the trained model and a symbolic link to the `run_mlm_flax.py` script.
+Let's start by creating a model repository to save the trained model and logs.
+Here we call the model `"norwegian-roberta-base"`, but you can change the model name as you like.
+
+You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
+you are logged in) or via the command line:
+
+``
+huggingface-cli repo create norwegian-roberta-base
+```
+
+Next we clone the model repository to add the tokenizer and model files.
+
+```
+git clone https://huggingface.co/<your-username>/norwegian-roberta-base
+```
+
+To ensure that all tensorboard traces will be uploaded correctly, we need to 
+track them. You can run the following command inside your model repo to do so.
+
+```
+cd norwegian-roberta-base
+echo "*.v2 filter=lfs diff=lfs merge=lfs -text" >> .gitattributes
+```
+
+Great, we have set up our model repository. During training, we will automatically
+push the training logs and model weights to the repo.
+
+Next, let's add a symbolic link to the `run_mlm_flax.py`.
 
 ```bash
 export MODEL_DIR="./norwegian-roberta-base"
-mkdir -p ${MODEL_DIR}
 ln -s ~/transformers/examples/flax/language-modeling/run_mlm_flax.py run_mlm_flax.py
 ```
 
@@ -135,11 +161,37 @@ in Norwegian on a single TPUv3-8 pod.
 
 The example script uses the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
 
-Let's start by creating a folder to save the trained model and a symbolic link to the `run_clm_flax.py` script.
+Let's start by creating a model repository to save the trained model and logs.
+Here we call the model `"norwegian-gpt2"`, but you can change the model name as you like.
+
+You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
+you are logged in) or via the command line:
+
+``
+huggingface-cli repo create norwegian-gpt2
+```
+
+Next we clone the model repository to add the tokenizer and model files.
+
+```
+git clone https://huggingface.co/<your-username>/norwegian-gpt2
+```
+
+To ensure that all tensorboard traces will be uploaded correctly, we need to 
+track them. You can run the following command inside your model repo to do so.
+
+```
+cd norwegian-gpt2
+echo "*.v2 filter=lfs diff=lfs merge=lfs -text" >> .gitattributes
+```
+
+Great, we have set up our model repository. During training, we will automatically
+push the training logs and model weights to the repo.
+
+Next, let's add a symbolic link to the `run_clm_flax.py`.
 
 ```bash
 export MODEL_DIR="./norwegian-gpt2"
-mkdir -p ${MODEL_DIR}
 ln -s ~/transformers/examples/flax/language-modeling/run_clm_flax.py run_clm_flax.py
 ```
 
@@ -197,14 +249,9 @@ For reproducibility, we state the training commands used for PyTorch/XLA and PyT
 | Task  | [TPU v3-8 (Flax)](https://tensorboard.dev/experiment/GdYmdak2TWeVz0DDRYOrrg/)  | [TPU v3-8 (Pytorch/XLA)](https://tensorboard.dev/experiment/7Jq1kcQQRAmy12KOdXek7A/)| [8 GPU (PyTorch)](https://tensorboard.dev/experiment/PJneV8FQRxa2unPw1QnVHA)  |
 |-------|-----------|------------|------------|
 | MLM   |  15h32m   |  23h46m    | 44h14m     |
-| **COST*** | $124.24  | $187.84 | $877.92 |
 
-*All experiments are ran on Google Cloud Platform. Prices are on-demand prices
-(not preemptible), obtained on May 12, 2021 for zone Iowa (us-central1) using
-the following tables:
-[TPU pricing table](https://cloud.google.com/tpu/pricing) ($8.00/h for v3-8),
-[GPU pricing table](https://cloud.google.com/compute/gpus-pricing) ($2.48/h per
-V100 GPU). GPU experiments are ran without further optimizations besides JAX
+*All experiments are ran on Google Cloud Platform. 
+GPU experiments are ran without further optimizations besides JAX
 transformations. GPU experiments are ran with full precision (fp32). "TPU v3-8"
 are 8 TPU cores on 4 chips (each chips has 2 cores), while "8 GPU" are 8 GPU chips.
 
