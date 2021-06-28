@@ -264,9 +264,9 @@ def main():
     # Detecting last checkpoint.
     checkpoint = None
     if len(os.listdir(training_args.output_dir)) > 0 and not training_args.overwrite_output_dir:
-        if (training_args.output_dir / CONFIG_NAME).is_file() and (
-            training_args.output_dir / TF2_WEIGHTS_NAME
-        ).is_file():
+        config_path = training_args.output_dir / CONFIG_NAME
+        weights_path = training_args.output_dir / TF2_WEIGHTS_NAME
+        if config_path.is_file() and weights_path.is_file():
             checkpoint = training_args.output_dir
             logger.info(
                 f"Checkpoint detected, resuming training from checkpoint in {training_args.output_dir}. To avoid this"
@@ -393,7 +393,7 @@ def main():
     if block_size > 1024:
         logger.warning(
             f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
-            "Picking 1024 instead. You can change that default value by passing --block_size xxx."
+            "Picking 1024 instead. You can reduce that value by passing --block_size xxx."
         )
         block_size = 1024
 
@@ -444,15 +444,9 @@ def main():
     with training_args.strategy.scope():
         # region Prepare model
         if checkpoint is not None:
-            model = TFAutoModelForCausalLM.from_pretrained(
-                checkpoint,
-                config=config,
-            )
+            model = TFAutoModelForCausalLM.from_pretrained(checkpoint, config=config)
         elif model_args.model_name_or_path:
-            model = TFAutoModelForCausalLM.from_pretrained(
-                model_args.model_name_or_path,
-                config=config,
-            )
+            model = TFAutoModelForCausalLM.from_pretrained(model_args.model_name_or_path, config=config)
         else:
             logger.info("Training new model from scratch")
             model = TFAutoModelForCausalLM.from_config(config)
@@ -462,29 +456,29 @@ def main():
 
         # region TF Dataset preparation
         num_replicas = training_args.strategy.num_replicas_in_sync
-        train_gen = partial(sample_generator, train_dataset, tokenizer)
-        train_sig = {
+        train_generator = partial(sample_generator, train_dataset, tokenizer)
+        train_signature = {
             feature: tf.TensorSpec(shape=(None,), dtype=tf.int64)
             for feature in train_dataset.features
             if feature != "special_tokens_mask"
         }
-        train_sig = (train_sig, train_sig["labels"])
+        train_sig = (train_signature, train_signature["labels"])
         options = tf.data.Options()
         options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
         tf_train_dataset = (
-            tf.data.Dataset.from_generator(train_gen, output_signature=train_sig).with_options(options)
+            tf.data.Dataset.from_generator(train_generator, output_signature=train_sig).with_options(options)
             .batch(batch_size=num_replicas * training_args.per_device_train_batch_size, drop_remainder=True)
             .repeat(int(training_args.num_train_epochs))
         )
-        eval_gen = partial(sample_generator, eval_dataset, tokenizer)
-        eval_sig = {
+        eval_generator = partial(sample_generator, eval_dataset, tokenizer)
+        eval_signature = {
             feature: tf.TensorSpec(shape=(None,), dtype=tf.int64)
             for feature in eval_dataset.features
             if feature != "special_tokens_mask"
         }
-        eval_sig = (eval_sig, eval_sig["labels"])
+        eval_sig = (eval_signature, eval_signature["labels"])
         tf_eval_dataset = (
-            tf.data.Dataset.from_generator(eval_gen, output_signature=eval_sig).with_options(options)
+            tf.data.Dataset.from_generator(eval_generator, output_signature=eval_sig).with_options(options)
             .batch(batch_size=num_replicas * training_args.per_device_eval_batch_size, drop_remainder=True)
             .repeat(int(training_args.num_train_epochs))
         )
