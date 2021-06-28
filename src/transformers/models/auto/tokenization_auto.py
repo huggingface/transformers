@@ -184,6 +184,7 @@ if is_tokenizers_available():
     from ..reformer.tokenization_reformer_fast import ReformerTokenizerFast
     from ..retribert.tokenization_retribert_fast import RetriBertTokenizerFast
     from ..roberta.tokenization_roberta_fast import RobertaTokenizerFast
+    from ..roformer.tokenization_roformer_fast import RoFormerTokenizerFast
     from ..squeezebert.tokenization_squeezebert_fast import SqueezeBertTokenizerFast
     from ..t5.tokenization_t5_fast import T5TokenizerFast
     from ..xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
@@ -218,6 +219,7 @@ else:
     ReformerTokenizerFast = None
     RetriBertTokenizerFast = None
     RobertaTokenizerFast = None
+    RoFormerTokenizerFast = None
     SqueezeBertTokenizerFast = None
     T5TokenizerFast = None
     XLMRobertaTokenizerFast = None
@@ -230,7 +232,7 @@ logger = logging.get_logger(__name__)
 TOKENIZER_MAPPING = OrderedDict(
     [
         (RetriBertConfig, (RetriBertTokenizer, RetriBertTokenizerFast)),
-        (RoFormerConfig, (RoFormerTokenizer, None)),
+        (RoFormerConfig, (RoFormerTokenizer, RoFormerTokenizerFast)),
         (T5Config, (T5Tokenizer, T5TokenizerFast)),
         (MT5Config, (MT5Tokenizer, MT5TokenizerFast)),
         (MobileBertConfig, (MobileBertTokenizer, MobileBertTokenizerFast)),
