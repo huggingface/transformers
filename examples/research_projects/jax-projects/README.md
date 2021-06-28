@@ -127,17 +127,17 @@ Once your team is defined, you can start working on the project as soon as possi
 
 ### Communication
 
-At first it is always useful to get to each other and to set up a means of communication.
+At first, it is always useful to get to know each other and to set up a means of communication.
 While we recommend that all technical aspects of work can be discussed directly on the [forum](https://discuss.huggingface.co/c/flax-jax-projects/22) under your project thread, 
 it can be very helpful to have a more direct way of communicating, *e.g.* in a channel or 
 For this we have created a discord that you can access [here](https://discord.com/channels/858019234139602994/858019234139602997). 
 This discord will not be managed by anybody and is just there so that you can communicate more effectively with your team members. 
-Feel free to create a new channel for you and your team where you can discuss everything. If you and your team have already set up other ways of communicatingc, it is absolutely not required to make use of the discord. However, we do recommend each team to set-up some kind 
+Feel free to create a new channel for you and your team where you can discuss everything. If you and your team have already set up other ways of communicating, it is absolutely not required to make use of the discord. However, we do recommend each team to set up some kind 
 of channel or group for quick discussions.
 
 ### Project definition
 
-In the very beginning, you should make sure your project is well defined and that 
+In the very beginning, you should make sure your project is well-defined and that 
 everybody in the team understands the goal of the project and the work that needs to be 
 done in order to achieve the goal. A well-defined project:
 
@@ -184,7 +184,7 @@ As a conclusion, being honest about one's expected involvement is crucial so tha
 the workload can be divided accordingly. If someone doesn't think her/his tasks are feasible - let 
 the team know early on so that someone else can take care of it!
 
-It is recommend that the motivated and experienced team members take the lead in dividing the work and are ready to take over the work of any another team member. 
+It is recommended that the motivated and experienced team members take the lead in dividing the work and are ready to take over the work of any another team member. 
 
 The workload can often be divided according to:
 
@@ -205,7 +205,7 @@ It is also very important to stay realistic with the scope of your project. Each
 has access to a TPUv3-8 for only *ca.* 10 days, so it's important to keep the scope of 
 the project reasonable. While we do want each team to work on interesting projects, each 
 team should make sure that the project goals can be achieved within the provided compute 
-time on TPU. *E.g.*, pretraining a 11 billion parameter T5 model is not really an realistic 
+time on TPU. *E.g.*, pretraining a 11 billion parameters T5 model is not really a realistic 
 task with just 10 days of TPUv3-8 compute. 
 Also, it might be difficult to finish a project where the whole modeling, dataset and training code has to be written from scratch.
 
@@ -234,7 +234,7 @@ datasets["train"] = datasets["train"].select(range(1000))
 
 It is recommended to install all relevant libraries both on your local machine 
 and on the TPU virtual machine. This way, quick prototyping and testing can be done on
-your local machine and the actualy training can be done on the TPU VM.
+your local machine and the actual training can be done on the TPU VM.
 
 The following libraries are required to train a JAX/Flax model with 🤗 Transformers and 🤗 Datasets:
 
@@ -249,12 +249,12 @@ If you're unfamiliar with Python virtual environments, check out the [user guide
 to use and activate it.
 
 We strongly recommend to make use of the provided JAX/Flax examples scripts in [transformers/examples/flax](https://github.com/huggingface/transformers/tree/master/examples/flax) even if you want to train a JAX/Flax model of another github repository that is not integrated into 🤗 Transformers.
-In all likelihood, you will need to adapt one of the example scripts, so we recommend to fork and clone the 🤗 Transformers repository as follows. 
-Doing so will allow you to share your fork of the Transformers library with your team memebrs so that the team effectively work on the same code base. It will also automatically install the newest versions of `flax`, `jax` and `optax`.
+In all likelihood, you will need to adapt one of the example scripts, so we recommend forking and cloning the 🤗 Transformers repository as follows. 
+Doing so will allow you to share your fork of the Transformers library with your team members so that the team effectively work on the same code base. It will also automatically install the newest versions of `flax`, `jax` and `optax`.
 
-**IMPORTANT**: If you are setting up your enviroment on a TPU VM, make sure to 
+**IMPORTANT**: If you are setting up your environment on a TPU VM, make sure to 
 install JAX's TPU version before cloning and installing the transformers repository. 
-Otherwise, an incorrect version of JAX will be installed and the following commands will 
+Otherwise, an incorrect version of JAX will be installed, and the following commands will 
 throw an error. 
 To install JAX's TPU version simply run the following command:
 
@@ -271,7 +271,7 @@ jax.device_count()
 
 This should display the number of TPU cores, which should be 8 on a TPUv3-8 VM.
 
-Now you can run the run the following steps as usual.
+Now you can run the following steps as usual.
 
 1. Fork the [repository](https://github.com/huggingface/transformers) by
    clicking on the 'Fork' button on the repository's page. This creates a copy of the code
