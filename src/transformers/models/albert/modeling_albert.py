@@ -387,7 +387,7 @@ class AlbertAttention(nn.Module):
                 ret = ret.reshape(batch_dims + outer_dims)
             return ret
 
-        projected_context_layer_mm = torch.matmul(context_layer, w)
+        projected_context_layer_mm = torch.matmul(context_layer.flatten(2), w.flatten(0, 1))
         projected_context_layer_ = _einsum_via_matmul(context_layer, w, 2)
         projected_context_layer = torch.einsum("bfnd,ndh->bfh", context_layer, w)
 
