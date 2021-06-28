@@ -19,9 +19,11 @@ Don't forget to sign up [here](https://forms.gle/tVGPhjKXyEsSgUcs8)!
 	- [How to propose](#how-to-propose-a-project)
 	- [How to form a team](#how-to-form-a-team-around-a-project)
 - [Tips & Tricks for project](#tips-on-how-to-organize-the-project)
+- [How to install flax, jax, optax, transformers, datasets](#how-to-install-relevant-libraries)
 - [Quickstart Flax/JAX](#quickstart-flax-and-jax)
 - [Quickstart Flax/JAX in 🤗 Transformers](#quickstart-flax-and-jax-in-transformers)
-- [How to install flax, jax, optax, transformers, datasets](#how-to-install-relevant-libraries)
+    - [How to use flax models & scripts](#how-to-use-flax-models-and-example-scripts)
+    - [Flax design philosophy in 🤗 Transformers](#flax-design-philosophy-in-transformers)
 - [How to make a demo for submission](#how-to-make-a-demo)
 - [Talks](#talks)
 - [How to setup TPU VM](#how-to-setup-tpu-vm)
@@ -116,7 +118,232 @@ Additionally, the organizers, other participants, or anybody in the community re
 
 ## Tips on how to organize the project
 
-TODO (should be filled by 24.06.)...
+This section gives you some tips on how to most efficiently & effectively 
+work as a team to achieve your goal. It is by no means a strict recipe to follow, 
+but rather a collection of tips from the 🤗 team.
+
+Once your team is defined, you can start working on the project as soon as possible. 
+
+
+### Communication
+
+At first, it is always useful to get to know each other and to set up a means of communication.
+While we recommend that all technical aspects of work can be discussed directly on the [forum](https://discuss.huggingface.co/c/flax-jax-projects/22) under your project thread, 
+it can be very helpful to have a more direct way of communicating, *e.g.* in a channel. 
+For this we have created a discord that you can access [here](https://discord.com/channels/858019234139602994/858019234139602997). 
+This discord will not be managed by anybody and is just there so that you can communicate more effectively with your team members. 
+Feel free to create a new channel for you and your team where you can discuss everything. If you and your team have already set up other ways of communicating, it is absolutely not required to make use of the discord. However, we do recommend each team to set up some kind 
+of channel or group for quick discussions.
+
+### Project definition
+
+In the very beginning, you should make sure your project is well-defined and that 
+everybody in the team understands the goal of the project and the work that needs to be 
+done in order to achieve the goal. A well-defined project:
+
+- has defined the task on which the model will be trained
+- has defined the model that will be trained
+- has defined the datasets that will be used for training
+- has defined the type of training scripts that need to be written
+- has defined the desired outcome of the project
+- has defined the workflows
+
+By "has defined" we don't meant that the corresponding code already has to be written and ready 
+to be used, but that everybody in team is on the same page on what type of model, data and training script should be used.
+
+To give an example, a well-defined project would be the following:
+
+- task: summarization
+- model: [t5-small](https://huggingface.co/t5-small)
+- dataset: [CNN/Daily mail](https://huggingface.co/datasets/cnn_dailymail)
+- training script: [run_summarization_flax.py](https://github.com/huggingface/transformers/blob/master/examples/flax/summarization/run_summarization_flax.py)
+- outcome: t5 model that can summarize news
+- work flow: adapt `run_summarization_flax.py` to work with `t5-small`.
+
+This example is a very easy and not the most interesting project since a `t5-small`
+summarization model exists already for CNN/Daily mail and pretty much no code has to be 
+written. 
+A well-defined project does not need to have the dataset be part of 
+the `datasets` library and the training script already be pre-written, however it should 
+be clear how the desired dataset can be accessed and how the training script can be 
+written. 
+
+It is also important to have a clear plan regarding the workflow. Usually, the 
+data processing is done in a first step. Once the data is in a format that the model can 
+work with, the training script can be written, etc. These steps should be more detailed 
+once the team has a clearly defined project. It can be helpful to set deadlines for each step.
+
+### Workload division
+
+To effectively work as a team, it is crucial to divide the workload among everybody.
+Some team members will be more motivated and experienced than others and 
+some team members simply want to participate to learn more and cannot contribute that 
+much to the team. This is totally fine! One cannot expect everybody in the team to have the same level of experience and time/motivation during the community week.
+
+As a conclusion, being honest about one's expected involvement is crucial so that 
+the workload can be divided accordingly. If someone doesn't think her/his tasks are feasible - let 
+the team know early on so that someone else can take care of it!
+
+It is recommended that the motivated and experienced team members take the lead in dividing the work and are ready to take over the tasks of another team member if necessary. 
+
+The workload can often be divided according to:
+
+- data preprocessing (load the data and preprocess data in the correct format)
+- data tokenization / data collator (process data samples into tokens or images)
+- model configuration (writing the code that defines the model)
+- model forward pass (make sure input / output work correctly)
+- loss function (define the loss function)
+- putting the pieces together in a training script
+
+Many of the steps above require other steps to be finished, so it often makes sense 
+to use dummy data in the expected format to start, *e.g.*, with the model forward pass 
+before the data preprocessing is done.
+
+### Expectations
+
+It is also very important to stay realistic with the scope of your project. Each team 
+has access to a TPUv3-8 for only *ca.* 10 days, so it's important to keep the scope of 
+the project reasonable. While we do want each team to work on interesting projects, each 
+team should make sure that the project goals can be achieved within the provided compute 
+time on TPU. For instance, pretraining a 11 billion parameters T5 model is not really a realistic 
+task with just 10 days of TPUv3-8 compute. 
+Also, it might be difficult to finish a project where the whole modeling, dataset and training code has to be written from scratch.
+
+Having defined your project, feel free to reach out on Slack or the forum for feedback from the organizers. We can surely give you our opinion on whether the project is feasible and what can be done to improve it.
+the project is feasible.
+
+### Other tips
+
+Here is a collection of some more tips:
+
+- We strongly recommend to work as publicly and collaboratively as possible during the week so that other teams 
+and the organizers can best help you. This includes publishing important discussions on 
+the forum and making use of the [🤗 hub](http://huggingface.co/) to have a version 
+control for your models and training logs.
+- When debugging, it is important that the debugging cycle is kept as short as possible to 
+be able to effectively debug. *E.g.* if there is a problem with your training script, 
+you should run it with just a couple of hundreds of examples and not the whole dataset script. This can be done by either making use of [datasets streaming](https://huggingface.co/docs/datasets/master/dataset_streaming.html?highlight=streaming) or by selecting just the first 
+X number of data samples after loading:
+
+```python
+datasets["train"] = datasets["train"].select(range(1000))
+```
+- Ask for help. If you are stuck, use the public Slack channel or the [forum](https://discuss.huggingface.co/c/flax-jax-projects/22) to ask for help.
+
+## How to install relevant libraries
+
+It is recommended to install all relevant libraries both on your local machine 
+and on the TPU virtual machine. This way, quick prototyping and testing can be done on
+your local machine and the actual training can be done on the TPU VM.
+
+The following libraries are required to train a JAX/Flax model with 🤗 Transformers and 🤗 Datasets:
+
+- [JAX](https://github.com/google/jax/)
+- [Flax](https://github.com/google/flax)
+- [Optax](https://github.com/deepmind/optax)
+- [Transformers](https://github.com/huggingface/transformers)
+- [Datasets](https://github.com/huggingface/datasets)
+
+You should install the above libraries in a [virtual environment](https://docs.python.org/3/library/venv.html). 
+If you're unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/). Create a virtual environment with the version of Python you're going
+to use and activate it.
+
+We strongly recommend to make use of the provided JAX/Flax examples scripts in [transformers/examples/flax](https://github.com/huggingface/transformers/tree/master/examples/flax) even if you want to train a JAX/Flax model of another github repository that is not integrated into 🤗 Transformers.
+In all likelihood, you will need to adapt one of the example scripts, so we recommend forking and cloning the 🤗 Transformers repository as follows. 
+Doing so will allow you to share your fork of the Transformers library with your team members so that the team effectively works on the same code base. It will also automatically install the newest versions of `flax`, `jax` and `optax`.
+
+**IMPORTANT**: If you are setting up your environment on a TPU VM, make sure to 
+install JAX's TPU version before cloning and installing the transformers repository. 
+Otherwise, an incorrect version of JAX will be installed, and the following commands will 
+throw an error. 
+To install JAX's TPU version simply run the following command:
+
+```
+$ pip install "jax[tpu]>=0.2.16" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+```
+
+To verify that JAX was correctly installed, you can run the following command:
+
+```python
+import jax
+jax.device_count()
+```
+
+This should display the number of TPU cores, which should be 8 on a TPUv3-8 VM.
+
+Now you can run the following steps as usual.
+
+1. Fork the [repository](https://github.com/huggingface/transformers) by
+   clicking on the 'Fork' button on the repository's page. This creates a copy of the code
+   under your GitHub user account.
+
+2. Clone your fork to your local disk, and add the base repository as a remote:
+
+   ```bash
+   $ git clone https://github.com/<your Github handle>/transformers.git
+   $ cd transformers
+   $ git remote add upstream https://github.com/huggingface/transformers.git
+   ```
+
+3. Create a new branch to hold your development changes. This is especially useful to share code changes with your team:
+
+   ```bash
+   $ git checkout -b a-descriptive-name-for-my-project
+   ```
+
+4. Set up a flax environment by running the following command in a virtual environment:
+
+   ```bash
+   $ pip install -e ".[flax]"
+   ```
+
+   (If transformers was already installed in the virtual environment, remove
+   it with `pip uninstall transformers` before reinstalling it in editable
+   mode with the `-e` flag.)
+
+   If you have already cloned that repo, you might need to `git pull` to get the most recent changes in the `datasets`
+   library.
+
+   Running this command will automatically install `flax`, `jax` and `optax`.
+
+Next, you should also install the 🤗 Datasets library. We strongly recommend installing the 
+library from source to profit from the most current additions during the community week.
+
+Simply run the following steps:
+
+```
+$ cd ~/
+$ git clone https://github.com/huggingface/datasets.git
+$ cd datasets
+$ pip install -e ".[streaming]"
+```
+
+If you plan on contributing a specific dataset during 
+the community week, please fork the datasets repository and follow the instructions 
+[here](https://github.com/huggingface/datasets/blob/master/CONTRIBUTING.md#how-to-create-a-pull-request).
+
+To verify that all libraries are correctly installed, you can run the following command.
+It assumes that both `transformers` and `datasets` were installed from master - otherwise
+datasets streaming will not work correctly.
+
+```python
+from transformers import FlaxRobertaModel, RobertaTokenizerFast
+from datasets import load_dataset
+import jax
+
+dataset = load_dataset('oscar', "unshuffled_deduplicated_en", split='train', streaming=True)
+
+dummy_input = next(iter(dataset))["text"]
+
+tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
+input_ids = tokenizer(dummy_input, return_tensors="np").input_ids[:, :10]
+
+model = FlaxRobertaModel.from_pretrained("julien-c/dummy-unknown")
+
+# run a forward pass, should return an object `FlaxBaseModelOutputWithPooling`
+model(input_ids)
+```
+
 
 ## Quickstart flax and jax
 
@@ -153,20 +380,22 @@ official [flax example folder](https://github.com/huggingface/transformers/tree/
 - [(TODO) Image classification (ViT)]( )
 - [(TODO) CLIP pretraining, fine-tuning (CLIP)]( )
 
-For more in-detail information on how to use/adapt Transformers Flax models and 
-example scripts, please have a look at [(TODO by 25.06.) HOW_TO_USE_FLAX_IN_TRANSFORMERS]( ).
 
-## How to install relevant libraries
+### How to use flax models and example scripts
 
-TODO (should be filled by 25.06.) ...
+TODO (should be filled by 29.06.)
+
+### Flax design philosophy in transformers
+
+TODO (should be filled by 29.06.)
 
 ## How to make a demo
 
-TODO (should be filled by 28.06.)...
+TODO (should be filled by 30.06.)...
 
 ## Talks
 
-TODO (should be filled by 28.06.)...
+TODO (should be filled by 29.06.)...
 
 ## How to setup TPU VM
 
@@ -174,7 +403,7 @@ TODO (should be filled by 2.07.)...
 
 ## How to use the hub for training and demo
  
-TODO (should be filled by 2.07.)...
+TODO (should be filled by 1.07.)...
 
 ## Project evaluation
 
