@@ -14,10 +14,10 @@
 # limitations under the License.
 """ BART model configuration """
 import warnings
-from typing import Any, Mapping, Optional
+from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import DEFAULT_BERT_OPTIMIZER_FEATURES, OnnxConfigWithPast
+from ...onnx import OnnxConfigWithPast
 from ...utils import logging
 
 
@@ -211,15 +211,3 @@ class BartOnnxConfig(OnnxConfigWithPast):
                 "last_hidden_state": {0: "batch", 1: "sequence"},
                 "encoder_last_hidden_state": {0: "batch", 1: "sequence"},
             }
-
-    @property
-    def optimizer(self) -> Optional[str]:
-        return "bert"
-
-    @property
-    def optimizer_features(self) -> Optional[Mapping[str, bool]]:
-        return DEFAULT_BERT_OPTIMIZER_FEATURES
-
-    @property
-    def optimizer_additional_args(self) -> Optional[Mapping[str, Any]]:
-        return {"num_heads": self._config.decoder_attention_heads, "hidden_size": self._config.d_model}

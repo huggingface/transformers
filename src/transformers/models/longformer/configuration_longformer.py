@@ -14,9 +14,9 @@
 # limitations under the License.
 """ Longformer configuration """
 
-from typing import List, Union, Mapping, Optional, Any
+from typing import List, Mapping, Union
 
-from ...onnx import OnnxConfig, DEFAULT_BERT_OPTIMIZER_FEATURES
+from ...onnx import OnnxConfig
 from ...utils import logging
 from ..roberta.configuration_roberta import RobertaConfig
 

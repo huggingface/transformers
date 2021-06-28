@@ -14,9 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ RoBERTa configuration """
-from typing import Any, Mapping, Optional
+from typing import Mapping
 
-from ...onnx import DEFAULT_BERT_OPTIMIZER_FEATURES, OnnxConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 from ..bert.configuration_bert import BertConfig
 

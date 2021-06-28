@@ -65,20 +65,6 @@ def compute_serialized_parameters_size(num_parameters: int, dtype: ParameterForm
     return num_parameters * dtype.size
 
 
-def generate_identified_filename(filename: Path, identifier: str) -> Path:
-    """
-    Append a string-identifier at the end (before the extension, if any) to the provided filepath
-
-    Args:
-        filename: pathlib.Path The actual path object we would like to add an identifier suffix
-        identifier: The suffix to add
-
-    Returns:
-        (str) With concatenated identifier at the end of the filename
-    """
-    return filename.parent.joinpath(filename.stem + identifier).with_suffix(filename.suffix)
-
-
 def flatten_output_collection_property(name: str, field: Iterable[Any]) -> Dict[str, Any]:
     """
     Flatten any potential nested structure expanding the name of the field with the index of the element within the

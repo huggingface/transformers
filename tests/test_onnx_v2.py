@@ -11,7 +11,6 @@ from transformers.onnx.utils import (
     compute_effective_axis_dimension,
     compute_serialized_parameters_size,
     flatten_output_collection_property,
-    generate_identified_filename,
 )
 from transformers.testing_utils import require_onnx
 
@@ -35,14 +34,6 @@ class OnnxUtilsTestCaseV2(TestCase):
 
     def test_compute_parameters_serialized_size(self):
         self.assertEqual(compute_serialized_parameters_size(2, ParameterFormat.Float), 2 * ParameterFormat.Float.size)
-
-    def test_generate_identified_filename(self):
-        self.assertEqual(generate_identified_filename(Path("model.onnx"), "_suffix"), Path("model_suffix.onnx"))
-        self.assertEqual(generate_identified_filename(Path("./model.onnx"), "_suffix"), Path("./model_suffix.onnx"))
-        self.assertEqual(generate_identified_filename(Path("../model.onnx"), "_suffix"), Path("../model_suffix.onnx"))
-        self.assertEqual(
-            generate_identified_filename(Path("a/b/model.onnx"), "_suffix"), Path("a/b/model_suffix.onnx")
-        )
 
     def test_flatten_output_collection_property(self):
         self.assertEqual(

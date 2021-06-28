@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ BERT model configuration """
-from typing import Any, Mapping, Optional
+from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import DEFAULT_BERT_OPTIMIZER_FEATURES, OnnxConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
