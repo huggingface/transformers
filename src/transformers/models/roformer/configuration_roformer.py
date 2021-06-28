@@ -43,7 +43,7 @@ class RoFormerConfig(PretrainedConfig):
             Vocabulary size of the RoFormer model. Defines the number of different tokens that can be represented by
             the :obj:`inputs_ids` passed when calling :class:`~transformers.RoFormerModel` or
             :class:`~transformers.TFRoFormerModel`.
-        embedding_size (:obj:`int`, `optional`, defaults to 768):
+        embedding_size (:obj:`int`, `optional`, defaults to None):
             Dimensionality of the encoder layers and the pooler layer.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimension of the encoder layers and the pooler layer.
@@ -96,7 +96,7 @@ class RoFormerConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=50000,
-        embedding_size=768,
+        embedding_size=None,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -117,7 +117,7 @@ class RoFormerConfig(PretrainedConfig):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 
         self.vocab_size = vocab_size
-        self.embedding_size = embedding_size
+        self.embedding_size = hidden_size if embedding_size is None else embedding_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
