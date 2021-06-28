@@ -604,8 +604,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             if tokenizer_json["model"]["unk_id"] is not None:
                 unk_id = tokenizer_json["model"]["unk_id"]
                 unk_token = tokenizer_json["model"]["vocab"][unk_id][0]
+                if special_tokens_map is not None and unk_token in special_tokens_map:
+                    unk_token = special_tokens_map[unk_token]
                 tokenizer_json["model"]["unk_id"] = 0
-                tokenizer_json["model"]["vocab"] = [tokenizer_json["model"]["vocab"][unk_id]]
+                tokenizer_json["model"]["vocab"] = [[unk_token, 0.0]]
         elif tokenizer_json["model"]["type"] in ["WordLevel", "WordPiece"]:
             tokenizer_json["model"]["vocab"] = {}
         else:
@@ -623,7 +625,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             _ = added_token.pop("id", None)
             if tokenizer_json["model"]["type"] != "Unigram" and not special:
                 continue
+            if special_tokens_map is not None and added_token["content"] in special_tokens_map:
+                added_token["content"] = special_tokens_map[added_token["content"]]
             special_tokens.append(AddedToken(**added_token))
+
+        if new_special_tokens is not None:
+            special_tokens.extend(new_special_tokens)
 
         trainer_class = MODEL_TO_TRAINER_MAPPING[tokenizer_json["model"]["type"]]
         trainer = trainer_class(vocab_size=vocab_size, special_tokens=special_tokens, **kwargs)
@@ -644,9 +651,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             # Almost done, we just have to adjust the token IDs in the post processor
             trained_tokenizer_json = json.loads(tokenizer.to_str())
             for key in post_processor["special_tokens"]:
-                post_processor["special_tokens"][key]["ids"] = [
-                    tokenizer.token_to_id(token) for token in post_processor["special_tokens"][key]["tokens"]
-                ]
+                tokens = post_processor["special_tokens"][key]["tokens"]
+                if special_tokens_map is not None:
+                    tokens = [special_tokens_map.get(token, token) for token in tokens]
+                post_processor["special_tokens"][key]["tokens"] = tokens
+                post_processor["special_tokens"][key]["ids"] = [tokenizer.token_to_id(token) for token in tokens]
             trained_tokenizer_json["post_processor"] = post_processor
             tokenizer = TokenizerFast.from_str(json.dumps(trained_tokenizer_json))
 
