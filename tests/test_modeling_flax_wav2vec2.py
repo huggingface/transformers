@@ -221,6 +221,7 @@ class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(outputs)
 
 
+@require_flax
 class FlaxWav2Vec2UtilsTest(unittest.TestCase):
     def test_compute_mask_indices(self):
         batch_size = 4
