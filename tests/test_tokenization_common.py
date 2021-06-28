@@ -59,7 +59,7 @@ NON_ENGLISH_TAGS = ["chinese", "dutch", "french", "finnish", "german", "multilin
 
 SMALL_TRAINING_CORPUS = [
     ["This is the first sentence.", "This is the second one."],
-    ["This sentence (contains #) over symbols and numbers 12 3 🤗 .", "But not this one."],
+    ["This sentence (contains #) over symbols and numbers 12 3.", "But not this one."],
 ]
 
 
@@ -3161,8 +3161,8 @@ class TokenizerTesterMixin:
         tokenizer = self.get_rust_tokenizer()
         new_tokenizer = tokenizer.train_new_from_iterator(SMALL_TRAINING_CORPUS, 100)
 
-        # Test we can use the new tokenizer
-        inputs = new_tokenizer(SMALL_TRAINING_CORPUS[1])
+        # Test we can use the new tokenizer with something not seen during training
+        inputs = new_tokenizer(["This is the first sentence.", "This sentence is different 🤗."])
         self.assertEqual(len(inputs["input_ids"]), 2)
 
 
