@@ -124,7 +124,7 @@ Next we can run the example script to pretrain the model:
 
 ```bash
 ./run_mlm_flax.py \
-    --output_dir="./runs" \
+    --output_dir="${MODEL_DIR}" \
     --model_type="roberta" \
     --config_name="${MODEL_DIR}" \
     --tokenizer_name="${MODEL_DIR}" \
@@ -219,7 +219,7 @@ Next we can run the example script to pretrain the model:
 
 ```bash
 ./run_clm_flax.py \
-    --output_dir="./runs" \
+    --output_dir="${MODEL_DIR}" \
     --model_type="gpt2" \
     --config_name="${MODEL_DIR}" \
     --tokenizer_name="${MODEL_DIR}" \
@@ -330,7 +330,7 @@ mkdir -p ${MODEL_DIR}
 
 ```bash
 python3 -m torch.distributed.launch --nproc_per_node ${NUM_GPUS} run_mlm.py \
-    --output_dir="./runs" \
+    --output_dir="${MODEL_DIR}" \
     --model_type="roberta" \
     --config_name="${MODEL_DIR}" \
     --tokenizer_name="${MODEL_DIR}" \
