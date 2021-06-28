@@ -376,7 +376,7 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         # compute cosine similarity
         cosine_sim_rand = optax.cosine_similarity(
-            outputs_rand.projected_states, outputs_rand.projected_quantized_states, dim=-1
+            outputs_rand.projected_states, outputs_rand.projected_quantized_states
         )
 
         # retrieve cosine sim of masked features
