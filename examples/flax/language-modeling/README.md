@@ -168,7 +168,7 @@ Here we call the model `"norwegian-gpt2"`, but you can change the model name as 
 You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
 you are logged in) or via the command line:
 
-``
+```
 huggingface-cli repo create norwegian-gpt2
 ```
 

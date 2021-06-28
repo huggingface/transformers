@@ -56,8 +56,8 @@ Next, let's add a symbolic link to the `run_flax_glue.py`.
 export TASK_NAME=mrpc
 export MODEL_DIR="./bert-glue-mrpc-test"
 ln -s ~/transformers/examples/flax/text-classification/run_flax_glue.py run_flax_glue.py
+```
 
-```bash
 
 GLUE is made up of a total of 9 different tasks. Here is how to run the script on one of them:
 

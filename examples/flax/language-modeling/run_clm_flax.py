@@ -607,7 +607,12 @@ def main():
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
             params = jax.device_get(unreplicate(state.params))
-            model.save_pretrained(training_args.output_dir, params=params, push_to_hub=training_args.push_to_hub, commit_message=f"Saving weights and logs of epoch {epoch+1}")
+            model.save_pretrained(
+                training_args.output_dir,
+                params=params,
+                push_to_hub=training_args.push_to_hub,
+                commit_message=f"Saving weights and logs of epoch {epoch+1}",
+            )
 
 
 if __name__ == "__main__":
