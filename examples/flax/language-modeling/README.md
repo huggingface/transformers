@@ -313,7 +313,8 @@ Next we can run the example script to pretrain the model:
     --weight_decay="0.001" \
     --warmup_steps="5000" \
     --overwrite_output_dir \
-    --num_train_epochs="10"
+    --num_train_epochs="10" \
+    --push_to_hub
 ```
 
 Training should converge at a loss and accuracy 
