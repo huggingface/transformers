@@ -31,7 +31,7 @@ _import_structure = {
     "configuration_xlm_roberta": [
         "XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "XLMRobertaConfig",
-        "XLMRobertaOnnxConfig"
+        "XLMRobertaOnnxConfig",
     ],
 }
 
@@ -69,7 +69,7 @@ if TYPE_CHECKING:
     from .configuration_xlm_roberta import (
         XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         XLMRobertaConfig,
-        XLMRobertaOnnxConfig
+        XLMRobertaOnnxConfig,
     )
 
     if is_sentencepiece_available():

@@ -25,7 +25,7 @@ _import_structure = {
     "configuration_distilbert": [
         "DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DistilBertConfig",
-        "DistilBertOnnxConfig"
+        "DistilBertOnnxConfig",
     ],
     "tokenization_distilbert": ["DistilBertTokenizer"],
 }
@@ -63,7 +63,7 @@ if TYPE_CHECKING:
     from .configuration_distilbert import (
         DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DistilBertConfig,
-        DistilBertOnnxConfig
+        DistilBertOnnxConfig,
     )
     from .tokenization_distilbert import DistilBertTokenizer
 

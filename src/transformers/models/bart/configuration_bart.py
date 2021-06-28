@@ -14,10 +14,10 @@
 # limitations under the License.
 """ BART model configuration """
 import warnings
-from typing import Mapping, Optional, Any
+from typing import Any, Mapping, Optional
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfigWithPast, DEFAULT_BERT_OPTIMIZER_FEATURES
+from ...onnx import DEFAULT_BERT_OPTIMIZER_FEATURES, OnnxConfigWithPast
 from ...utils import logging
 
 
@@ -191,7 +191,6 @@ class BartConfig(PretrainedConfig):
 
 
 class BartOnnxConfig(OnnxConfigWithPast):
-
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         return {
@@ -223,7 +222,4 @@ class BartOnnxConfig(OnnxConfigWithPast):
 
     @property
     def optimizer_additional_args(self) -> Optional[Mapping[str, Any]]:
-        return {
-            "num_heads": self._config.decoder_attention_heads,
-            "hidden_size": self._config.d_model
-        }
+        return {"num_heads": self._config.decoder_attention_heads, "hidden_size": self._config.d_model}

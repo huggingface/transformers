@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from abc import ABC, abstractmethod
-from typing import Mapping, Optional, Any
+from typing import Any, Mapping, Optional
 
 from transformers import PretrainedConfig, PreTrainedTokenizer, TensorType
-from .utils import compute_serialized_parameters_size, compute_effective_axis_dimension, ParameterFormat
+
+from .utils import ParameterFormat, compute_effective_axis_dimension, compute_serialized_parameters_size
+
 
 DEFAULT_ONNX_OPSET = 11
 
@@ -39,20 +41,21 @@ class OnnxConfig(ABC):
     """
     Base class for ONNX exportable model describing metadata on how to export the model through the ONNX format.
     """
+
     def __init__(self, config: PretrainedConfig):
         self._config = config
-
 
     @classmethod
     def default(cls, config: PretrainedConfig) -> "OnnxConfig":
         """
         Instantiate a OnnxConfig for a specific model
+
         Args:
             config: The model's configuration to use when exporting to ONNX
 
         Returns:
             OnnxConfig for this model
-       """
+        """
         return cls(config)
 
     @property
@@ -60,6 +63,7 @@ class OnnxConfig(ABC):
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         """
         Mapping containing the axis definition of the input tensors to provide to the model
+
         Returns:
             For each input: its name associated to the axes symbolic name and the axis position within the tensor
         """
@@ -70,6 +74,7 @@ class OnnxConfig(ABC):
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
         """
         Mapping containing the axis definition of the output tensors to provide to the model
+
         Returns:
             For each output: its name associated to the axes symbolic name and the axis position within the tensor
         """
@@ -79,6 +84,7 @@ class OnnxConfig(ABC):
     def values_override(self) -> Optional[Mapping[str, Any]]:
         """
         Dictionary of keys to override in the model's config before exporting
+
         Returns:
             Dictionary with the keys (and their corresponding values) to override
         """
@@ -91,6 +97,7 @@ class OnnxConfig(ABC):
     def default_onnx_opset(self) -> int:
         """
         Which onnx opset to use when exporting the model
+
         Returns:
             Integer ONNX Opset version
         """
@@ -100,6 +107,7 @@ class OnnxConfig(ABC):
     def optimizer(self) -> Optional[str]:
         """
         Indicate which optimizer (if any) to use when optimizing the model
+
         Returns:
             name of the ONNX Runtime optimizer to use or None if no specific optimizer
         """
@@ -108,20 +116,22 @@ class OnnxConfig(ABC):
     @property
     def optimizer_features(self) -> Optional[Mapping[str, bool]]:
         """
-        Specify which optimization(s) to enable through the "optimizer".
-        Some ONNX Runtime optimizer are specific to some models and thus can enable targeted optimizations.
+        Specify which optimization(s) to enable through the "optimizer". Some ONNX Runtime optimizer are specific to
+        some models and thus can enable targeted optimizations.
+
         Returns:
-            Mapping for each optimizer's parameter name (str) if we should enable (True) or disable (False) it.
-            None if no specific optimizer is setup.
+            Mapping for each optimizer's parameter name (str) if we should enable (True) or disable (False) it. None if
+            no specific optimizer is setup.
         """
         return None
 
     @property
     def optimizer_additional_args(self) -> Optional[Mapping[str, Any]]:
         """
-        Additional kwargs to provide to the ONNX Runtime optimizer.
-        ONNX Runtime optimizers sometimes require additional parameters such as number of heads, hidden size, etc.
-        This property allows to provide such model specific attribute
+        Additional kwargs to provide to the ONNX Runtime optimizer. ONNX Runtime optimizers sometimes require
+        additional parameters such as number of heads, hidden size, etc. This property allows to provide such model
+        specific attribute
+
         Returns:
             Mapping with the name of the property as key and the value to pass to the optimizer
         """
@@ -131,17 +141,18 @@ class OnnxConfig(ABC):
     def use_external_data_format(num_parameters: int) -> bool:
         """
         Flag indicating if the model requires using external data format
+
         Args:
             num_parameters: Number of parameter on the model
+
         Returns:
-            True if model.num_parameters() * size_of(float32) >= 2Gb
-            False otherwise
+            True if model.num_parameters() * size_of(float32) >= 2Gb False otherwise
         """
 
-        return compute_serialized_parameters_size(
-            num_parameters,
-            ParameterFormat.Float
-        ) >= EXTERNAL_DATA_FORMAT_SIZE_LIMIT
+        return (
+            compute_serialized_parameters_size(num_parameters, ParameterFormat.Float)
+            >= EXTERNAL_DATA_FORMAT_SIZE_LIMIT
+        )
 
     def generate_dummy_inputs(
         self,
@@ -149,10 +160,11 @@ class OnnxConfig(ABC):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional[TensorType] = None
+        framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
         """
         Generate inputs to provide to the ONNX exporter for the specific framework
+
         Args:
             tokenizer: The tokenizer associated with this model configuration
             batch_size: The batch size (int) to export the model for (-1 means dynamic axis)
@@ -185,6 +197,7 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
     def with_past(cls, config: PretrainedConfig) -> "OnnxConfig":
         """
         Instantiate a OnnxConfig with `use_past` attribute set to True
+
         Args:
             config: The underlying model's config to use when exporting to ONNX
 

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ OpenAI GPT-2 configuration """
-from typing import Mapping, Optional, Any
+from typing import Any, Mapping, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast
@@ -226,8 +226,4 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
 
     @property
     def optimizer_additinal_args(self) -> Mapping[str, Any]:
-        return {
-            "num_heads": self._config.num_attention_heads,
-            "hidden_size": self._config.hidden_size
-        }
-
+        return {"num_heads": self._config.num_attention_heads, "hidden_size": self._config.hidden_size}
