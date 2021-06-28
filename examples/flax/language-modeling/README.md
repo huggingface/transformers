@@ -39,7 +39,7 @@ Here we call the model `"norwegian-roberta-base"`, but you can change the model 
 You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
 you are logged in) or via the command line:
 
-``
+```
 huggingface-cli repo create norwegian-roberta-base
 ```
 
@@ -54,7 +54,7 @@ track them. You can run the following command inside your model repo to do so.
 
 ```
 cd norwegian-roberta-base
-echo "*.v2 filter=lfs diff=lfs merge=lfs -text" >> .gitattributes
+git lfs track "*tfevents*"
 ```
 
 Great, we have set up our model repository. During training, we will automatically
@@ -183,7 +183,7 @@ track them. You can run the following command inside your model repo to do so.
 
 ```
 cd norwegian-gpt2
-echo "*.v2 filter=lfs diff=lfs merge=lfs -text" >> .gitattributes
+git lfs track "*tfevents*"
 ```
 
 Great, we have set up our model repository. During training, we will automatically

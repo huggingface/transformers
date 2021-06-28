@@ -44,7 +44,7 @@ track them. You can run the following command inside your model repo to do so.
 
 ```
 cd bert-glue-mrpc-test
-echo "*.v2 filter=lfs diff=lfs merge=lfs -text" >> .gitattributes
+git lfs track "*tfevents*
 ```
 
 Great, we have set up our model repository. During training, we will automatically
