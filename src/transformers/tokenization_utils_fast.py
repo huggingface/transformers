@@ -665,7 +665,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if special_tokens_map is not None:
             init_signature = inspect.signature(self.__class__)
             for name, param in init_signature.parameters.items():
-                if param.default in special_tokens_map:
+                if isinstance(param.default, str) and param.default in special_tokens_map:
                     kwargs[name] = special_tokens_map[param.default]
         if new_special_tokens is not None:
             kwargs["additional_special_tokens"] = new_special_tokens
