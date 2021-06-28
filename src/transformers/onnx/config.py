@@ -25,18 +25,6 @@ DEFAULT_ONNX_OPSET = 11
 EXTERNAL_DATA_FORMAT_SIZE_LIMIT = 2 * 1024 * 1024 * 1024
 
 
-DEFAULT_BERT_OPTIMIZER_FEATURES = {
-    "enable_gelu": True,
-    "enable_layer_norm": True,
-    "enable_attention": True,
-    "enable_skip_layer_norm": True,
-    "enable_embed_layer_norm": True,
-    "enable_bias_skip_layer_norm": True,
-    "enable_bias_gelu": True,
-    "enable_gelu_approximation": False,
-}
-
-
 class OnnxConfig(ABC):
     """
     Base class for ONNX exportable model describing metadata on how to export the model through the ONNX format.
