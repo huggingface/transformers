@@ -277,6 +277,7 @@ class FlaxDataCollatorForT5MLM:
         batch["decoder_input_ids"] = shift_tokens_right(
             batch["labels"], self.pad_token_id, self.decoder_start_token_id
         )
+
         return batch
 
     def create_sentinel_ids(self, mask_indices):
@@ -388,8 +389,8 @@ def write_metric(train_metrics, eval_metrics, train_time, step):
     train_metrics = get_metrics(train_metrics)
     for key, vals in train_metrics.items():
         tag = f"train_{key}"
-        for i, val in enumerate(vals):
-            summary_writer.scalar(tag, val, step - len(vals) + i + 1)
+        for i, value in enumerate(vals):
+            summary_writer.scalar(tag, value, step)
 
     for metric_name, value in eval_metrics.items():
         summary_writer.scalar(f"eval_{metric_name}", value, step)
@@ -634,7 +635,6 @@ if __name__ == "__main__":
         learning_rate=linear_decay_lr_schedule_fn,
         b1=training_args.adam_beta1,
         b2=training_args.adam_beta2,
-        eps=1e-8,
         weight_decay=training_args.weight_decay,
         mask=decay_mask_fn,
     )
@@ -651,7 +651,7 @@ if __name__ == "__main__":
 
             logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
 
-            # compute loss, ignore padded input tokens
+            # compute loss
             loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1])).mean()
 
             return loss
@@ -676,7 +676,7 @@ if __name__ == "__main__":
 
         logits = model(**batch, params=params, train=False)[0]
 
-        # compute loss, ignore padded input tokens
+        # compute loss
         loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1]))
 
         # compute accuracy
@@ -744,7 +744,7 @@ if __name__ == "__main__":
         eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
 
         # Update progress bar
-        epochs.desc = (
+        epochs.write(
             f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {eval_metrics['loss']}, Acc: {eval_metrics['accuracy']})"
         )
 
