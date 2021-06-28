@@ -311,10 +311,10 @@ Next we can run the example script to pretrain the model:
     --per_device_train_batch_size="16" \
     --per_device_eval_batch_size="16" \
     --learning_rate="1e-3" \
-		--weight_decay="0.001" \
+    --weight_decay="0.001" \
     --warmup_steps="5000" \
     --overwrite_output_dir \
-    --num_train_epochs="10" \
+    --num_train_epochs="10"
 ```
 
 Training should converge at a loss and accuracy 
