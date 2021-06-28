@@ -29,7 +29,7 @@ Here we call the model `"bert-glue-mrpc-test"`, but you can change the model nam
 You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
 you are logged in) or via the command line:
 
-``
+```
 huggingface-cli repo create bert-glue-mrpc-test
 ```
 
