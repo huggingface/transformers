@@ -469,14 +469,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     def _from_config(cls, config, **kwargs):
         """
         All context managers that the model should be initialized under go here.
-        """
 
+        Args:
+            `torch_dtype` - see ``from_pretrained`` for details
+        """
         torch_dtype = kwargs.pop("torch_dtype", None)
 
         # override default dtype if needed
         dtype_orig = None
         if torch_dtype is not None:
-            dtype_orig = cls._set_default_dtype(torch_dtype)
+            dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
         if is_deepspeed_zero3_enabled():
             import deepspeed
@@ -496,24 +498,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return model
 
     @classmethod
-    def _set_default_dtype(cls, dtype: torch.dtype) -> torch.dtype:
+    def _set_default_torch_dtype(cls, dtype: torch.dtype) -> torch.dtype:
         """
-        If a floating ``dtype`` is passed via the model config or one of its weights ``torch.set_default_dtype`` is
-        used to change the global dtype. Which is needed when wanting to instantiate the model under specific dtype.
+        Change the default dtype and return the previous one. This is needed when wanting to instantiate the model under specific dtype.
 
         Args:
-            config_dtype_str (:obj:`str`):
-                value of ``config.torch_dtype``
-            weight_dtype (:obj:`torch.dtype`, `optional`):
-                ``dtype`` of one of the pretrained weights
+            dtype (:obj:`torch.dtype`):
+                a floating dtype to set to.
 
         Returns:
             :obj:`torch.dtype`: the original ``dtype`` that can be used to restore ``torch.set_default_dtype(dtype)``
             if it was modified. If it wasn't, returns :obj:`None`.
 
         Note ``set_default_dtype`` currently only works with floating-point types and asserts if for example,
-        ``torch.int64`` is passed. So if a non-float ``dtype`` is passed we don't do anything other than logging a
-        warning that the non-float dtype was ignored.
+        ``torch.int64`` is passed. So if a non-float ``dtype`` is passed this functions will throw an exception.
         """
         if not dtype.is_floating_point:
             raise ValueError(
@@ -925,7 +923,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         model_to_save = unwrap_model(self)
 
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
-        # so in from_config and from_pretrained we reverse this with getattr(torch, "float32")
+        # we currently don't use this setting automatically, but may start to use with v5
         dtype = get_parameter_dtype(model_to_save)
         model_to_save.config.torch_dtype = str(dtype).split(".")[1]
 
@@ -1248,7 +1246,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         "ambiguous arguments passed non-None ``torch_dtype`` and ``torch_dtype_auto_detect=True`` at the same time"
                     )
             if torch_dtype is not None:
-                dtype_orig = cls._set_default_dtype(torch_dtype)
+                dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
         config.name_or_path = pretrained_model_name_or_path
 
