@@ -16,8 +16,9 @@
 
 import collections
 import os
-import jieba
 from typing import List, Optional, Tuple
+
+import jieba
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
@@ -39,7 +40,14 @@ PRETRAINED_VOCAB_FILES_MAP = {
     }
 }
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"junnyu/roformer_chinese_small": 1536, "junnyu/roformer_chinese_base": 1536, "junnyu/roformer_chinese_char_small":512, "junnyu/roformer_chinese_char_base":512, "junnyu/roformer_small_discriminator":128, "junnyu/roformer_small_generator":128}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "junnyu/roformer_chinese_small": 1536,
+    "junnyu/roformer_chinese_base": 1536,
+    "junnyu/roformer_chinese_char_small": 512,
+    "junnyu/roformer_chinese_char_base": 512,
+    "junnyu/roformer_small_discriminator": 128,
+    "junnyu/roformer_small_generator": 128,
+}
 
 
 PRETRAINED_INIT_CONFIGURATION = {
@@ -152,7 +160,6 @@ class RoFormerTokenizer(PreTrainedTokenizer):
             )
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
 
-
     @property
     def do_lower_case(self):
         return self.basic_tokenizer.do_lower_case
@@ -160,7 +167,6 @@ class RoFormerTokenizer(PreTrainedTokenizer):
     @property
     def vocab_size(self):
         return len(self.vocab)
-
 
     def get_vocab(self):
         return dict(self.vocab, **self.added_tokens_encoder)

@@ -14,9 +14,9 @@
 # limitations under the License.
 """Tokenization utils for RoFormer."""
 
-import jieba
 from typing import List
 
+import jieba
 from tokenizers import NormalizedString, PreTokenizedString, normalizers
 
 

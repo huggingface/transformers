@@ -78,4 +78,3 @@ class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_tokens = tokens + [tokenizer.unk_token]
         exp_tokens = [22943, 21332, 34431, 45904, 117, 306, 1231, 1231, 2653, 33994, 1266, 100]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), exp_tokens)
-

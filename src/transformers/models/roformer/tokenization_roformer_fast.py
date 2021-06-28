@@ -40,7 +40,14 @@ PRETRAINED_VOCAB_FILES_MAP = {
     }
 }
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"junnyu/roformer_chinese_small": 1536, "junnyu/roformer_chinese_base": 1536, "junnyu/roformer_chinese_char_small":512, "junnyu/roformer_chinese_char_base":512, "junnyu/roformer_small_discriminator":128, "junnyu/roformer_small_generator":128}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "junnyu/roformer_chinese_small": 1536,
+    "junnyu/roformer_chinese_base": 1536,
+    "junnyu/roformer_chinese_char_small": 512,
+    "junnyu/roformer_chinese_char_base": 512,
+    "junnyu/roformer_small_discriminator": 128,
+    "junnyu/roformer_small_generator": 128,
+}
 
 
 PRETRAINED_INIT_CONFIGURATION = {
