@@ -59,7 +59,7 @@ NON_ENGLISH_TAGS = ["chinese", "dutch", "french", "finnish", "german", "multilin
 
 SMALL_TRAINING_CORPUS = [
     ["This is the first sentence.", "This is the second one."],
-    ["This sentence (contains #) over symbols and numbers 12 3.", "But not this one."],
+    ["This sentence (contains #) over symbols and numbers 12 3 🤗 .", "But not this one."],
 ]
 
 
