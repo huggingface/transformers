@@ -429,14 +429,15 @@ def main():
             # Select samples from Dataset, This will help to decrease processing time
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
         # Create Training Features
-        train_dataset = train_dataset.map(
-            prepare_train_features,
-            batched=True,
-            num_proc=data_args.preprocessing_num_workers,
-            remove_columns=column_names,
-            load_from_cache_file=not data_args.overwrite_cache,
-            desc="Running tokenizer on train dataset",
-        )
+        with training_args.main_process_first(desc="train dataset map pre-processing"):
+            train_dataset = train_dataset.map(
+                prepare_train_features,
+                batched=True,
+                num_proc=data_args.preprocessing_num_workers,
+                remove_columns=column_names,
+                load_from_cache_file=not data_args.overwrite_cache,
+                desc="Running tokenizer on train dataset",
+            )
         if data_args.max_train_samples is not None:
             # Select samples from dataset again since Feature Creation might increase number of features
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
@@ -515,14 +516,15 @@ def main():
             # Selecting Eval Samples from Dataset
             eval_examples = eval_examples.select(range(data_args.max_eval_samples))
         # Create Features from Eval Dataset
-        eval_dataset = eval_examples.map(
-            prepare_validation_features,
-            batched=True,
-            num_proc=data_args.preprocessing_num_workers,
-            remove_columns=column_names,
-            load_from_cache_file=not data_args.overwrite_cache,
-            desc="Running tokenizer on validation dataset",
-        )
+        with training_args.main_process_first(desc="validation dataset map pre-processing"):
+            eval_dataset = eval_examples.map(
+                prepare_validation_features,
+                batched=True,
+                num_proc=data_args.preprocessing_num_workers,
+                remove_columns=column_names,
+                load_from_cache_file=not data_args.overwrite_cache,
+                desc="Running tokenizer on validation dataset",
+            )
         if data_args.max_eval_samples is not None:
             # Selecting Samples from Dataset again since Feature Creation might increase samples size
             eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
@@ -535,14 +537,15 @@ def main():
             # We will select sample from whole data
             predict_examples = predict_examples.select(range(data_args.max_predict_samples))
         # Test Feature Creation
-        predict_dataset = predict_examples.map(
-            prepare_validation_features,
-            batched=True,
-            num_proc=data_args.preprocessing_num_workers,
-            remove_columns=column_names,
-            load_from_cache_file=not data_args.overwrite_cache,
-            desc="Running tokenizer on prediction dataset",
-        )
+        with training_args.main_process_first(desc="prediction dataset map pre-processing"):
+            predict_dataset = predict_examples.map(
+                prepare_validation_features,
+                batched=True,
+                num_proc=data_args.preprocessing_num_workers,
+                remove_columns=column_names,
+                load_from_cache_file=not data_args.overwrite_cache,
+                desc="Running tokenizer on prediction dataset",
+            )
         if data_args.max_predict_samples is not None:
             # During Feature creation dataset samples might increase, we will select required samples again
             predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
