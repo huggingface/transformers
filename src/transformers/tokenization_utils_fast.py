@@ -633,6 +633,20 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if new_special_tokens is not None:
             special_tokens.extend(new_special_tokens)
 
+        # Trainer needs to know the end of word / continuing subword thingies in BPE
+        if (
+            tokenizer_json["model"]["type"] == "BPE"
+            and "continuing_subword_prefix" not in kwargs
+            and tokenizer_json["model"]["continuing_subword_prefix"] is not None
+        ):
+            kwargs["continuing_subword_prefix"] = tokenizer_json["model"]["continuing_subword_prefix"]
+        if (
+            tokenizer_json["model"]["type"] == "BPE"
+            and "end_of_work_suffix" not in kwargs
+            and tokenizer_json["model"]["end_of_word_suffix"] is not None
+        ):
+            kwargs["end_of_word_suffix"] = tokenizer_json["model"]["end_of_word_suffix"]
+
         trainer_class = MODEL_TO_TRAINER_MAPPING[tokenizer_json["model"]["type"]]
         trainer = trainer_class(vocab_size=vocab_size, special_tokens=special_tokens, **kwargs)
         tokenizer.train_from_iterator(text_iterator, trainer=trainer)
