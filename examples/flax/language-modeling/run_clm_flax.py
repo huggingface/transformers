@@ -451,7 +451,7 @@ def main():
 
     # Enable tensorboard only on the master node
     if has_tensorboard and jax.process_index() == 0:
-        summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir).joinpath("logs").as_posix())
+        summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir))
 
     # Initialize our training
     rng = jax.random.PRNGKey(training_args.seed)
@@ -604,10 +604,15 @@ def main():
             cur_step = epoch * (len(train_dataset) // train_batch_size)
             write_metric(summary_writer, train_metrics, eval_metrics, train_time, cur_step)
 
-    # save last checkpoint
-    if jax.process_index() == 0:
-        params = jax.device_get(unreplicate(state.params))
-        model.save_pretrained(training_args.output_dir, params=params)
+        # save checkpoint after each epoch and push checkpoint to the hub
+        if jax.process_index() == 0:
+            params = jax.device_get(unreplicate(state.params))
+            model.save_pretrained(
+                training_args.output_dir,
+                params=params,
+                push_to_hub=training_args.push_to_hub,
+                commit_message=f"Saving weights and logs of epoch {epoch+1}",
+            )
 
 
 if __name__ == "__main__":
