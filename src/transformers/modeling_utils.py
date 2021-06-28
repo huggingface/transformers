@@ -500,7 +500,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @classmethod
     def _set_default_torch_dtype(cls, dtype: torch.dtype) -> torch.dtype:
         """
-        Change the default dtype and return the previous one. This is needed when wanting to instantiate the model under specific dtype.
+        Change the default dtype and return the previous one. This is needed when wanting to instantiate the model
+        under specific dtype.
 
         Args:
             dtype (:obj:`torch.dtype`):
