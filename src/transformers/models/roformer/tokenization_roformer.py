@@ -18,9 +18,6 @@ import collections
 import os
 from typing import List, Optional, Tuple
 
-import jieba
-
-
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 from ..bert.tokenization_bert import BasicTokenizer, WordpieceTokenizer, load_vocab
