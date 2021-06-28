@@ -3175,6 +3175,7 @@ class TokenizerTesterMixin:
             "cls_token",
             "mask_token",
         ]
+        # Create a new mapping from the special tokens defined in the original tokenizer
         special_tokens_map = {}
         for spe_token_attr in special_tokens_list:
             spe_token = getattr(tokenizer, spe_token_attr)
@@ -3184,10 +3185,12 @@ class TokenizerTesterMixin:
         for spe_token in tokenizer.additional_special_tokens:
             special_tokens_map[spe_token] = f"{spe_token}a"
 
+        # Train new tokenizer
         new_tokenizer = tokenizer.train_new_from_iterator(
             SMALL_TRAINING_CORPUS, 100, special_tokens_map=special_tokens_map
         )
 
+        # Check the changes
         for spe_token_attr in special_tokens_list:
             spe_token = getattr(tokenizer, spe_token_attr)
             if spe_token in special_tokens_map:
