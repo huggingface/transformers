@@ -38,6 +38,7 @@ def postprocess_qa_predictions(
     null_score_diff_threshold: float = 0.0,
     output_dir: Optional[str] = None,
     prefix: Optional[str] = None,
+    is_world_process_zero: bool = True,
 ):
     """
     Post-processes the predictions of a question-answering model to convert them to answers that are substrings of the
@@ -90,6 +91,7 @@ def postprocess_qa_predictions(
         scores_diff_json = collections.OrderedDict()
 
     # Logging.
+    logger.setLevel(logging.INFO if is_world_process_zero else logging.WARN)
     logger.info(f"Post-processing {len(examples)} example predictions split into {len(features)} features.")
 
     # Let's loop over all the examples!
