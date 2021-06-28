@@ -20,22 +20,14 @@ class SentencePieceUnigramTokenizer(BaseTokenizer):
         self,
         replacement: str = "▁",
         add_prefix_space: bool = True,
-        unk_token: Union[str, AddedToken]="<unk>",
-        sep_token: Union[str, AddedToken]="</s>",
-        pad_token: Union[str, AddedToken]="<pad>",
+        unk_token: Union[str, AddedToken] = "<unk>",
+        eos_token: Union[str, AddedToken] = "</s>",
+        pad_token: Union[str, AddedToken] = "<pad>",
     ):
         self.special_tokens = {
-            "pad": {
-                "id": 0,
-                "token": pad_token
-            },"sep": {
-                "id": 1,
-                "token": sep_token
-            },
-            "unk": {
-                "id": 2,
-                "token": unk_token
-            }
+            "pad": {"id": 0, "token": pad_token},
+            "eos": {"id": 1, "token": eos_token},
+            "unk": {"id": 2, "token": unk_token},
         }
 
         self.special_tokens_list = [None] * len(self.special_tokens)
@@ -62,8 +54,8 @@ class SentencePieceUnigramTokenizer(BaseTokenizer):
         tokenizer.decoder = decoders.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
 
         tokenizer.post_processor = TemplateProcessing(
-            single=f"$A {self.special_tokens['sep']['token']}",
-            special_tokens=[(self.special_tokens["sep"]["token"], self.special_tokens["sep"]["id"])],
+            single=f"$A {self.special_tokens['eos']['token']}",
+            special_tokens=[(self.special_tokens["eos"]["token"], self.special_tokens["eos"]["id"])],
         )
 
         parameters = {
@@ -93,6 +85,7 @@ class SentencePieceUnigramTokenizer(BaseTokenizer):
         self._tokenizer.train(files, trainer=trainer)
 
         self.add_unk_id()
+
     def train_from_iterator(
         self,
         iterator: Union[Iterator[str], Iterator[Iterator[str]]],
@@ -108,9 +101,9 @@ class SentencePieceUnigramTokenizer(BaseTokenizer):
         )
 
         self._tokenizer.train_from_iterator(iterator, trainer=trainer)
-        
+
         self.add_unk_id()
-        
+
     def add_unk_id(self):
         tokenizer_json = json.loads(self._tokenizer.to_str())
 

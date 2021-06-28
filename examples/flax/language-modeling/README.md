@@ -256,7 +256,7 @@ model_dir = "./norwegian-t5-small"  # ${MODEL_DIR}
 # Initialize a dataset
 dataset = datasets.load_dataset("oscar", name="unshuffled_deduplicated_no", split="train")
 
-tokenizer = SentencePieceUnigramTokenizer()
+tokenizer = SentencePieceUnigramTokenizer(unk_token="<unk>", eos_token="</s>", pad_token="<pad>")
 
 
 # Build an iterator over this dataset
@@ -273,7 +273,6 @@ tokenizer.train_from_iterator(
     iterator=batch_iterator(input_sentence_size=input_sentence_size),
     vocab_size=vocab_size,
     show_progress=True,
-    special_tokens=["<pad>", "</s>", "<unk>"],
 )
 
 # Save files to disk
