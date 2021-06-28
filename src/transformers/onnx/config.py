@@ -103,40 +103,6 @@ class OnnxConfig(ABC):
         """
         return DEFAULT_ONNX_OPSET
 
-    @property
-    def optimizer(self) -> Optional[str]:
-        """
-        Indicate which optimizer (if any) to use when optimizing the model
-
-        Returns:
-            name of the ONNX Runtime optimizer to use or None if no specific optimizer
-        """
-        return None
-
-    @property
-    def optimizer_features(self) -> Optional[Mapping[str, bool]]:
-        """
-        Specify which optimization(s) to enable through the "optimizer". Some ONNX Runtime optimizer are specific to
-        some models and thus can enable targeted optimizations.
-
-        Returns:
-            Mapping for each optimizer's parameter name (str) if we should enable (True) or disable (False) it. None if
-            no specific optimizer is setup.
-        """
-        return None
-
-    @property
-    def optimizer_additional_args(self) -> Optional[Mapping[str, Any]]:
-        """
-        Additional kwargs to provide to the ONNX Runtime optimizer. ONNX Runtime optimizers sometimes require
-        additional parameters such as number of heads, hidden size, etc. This property allows to provide such model
-        specific attribute
-
-        Returns:
-            Mapping with the name of the property as key and the value to pass to the optimizer
-        """
-        return None
-
     @staticmethod
     def use_external_data_format(num_parameters: int) -> bool:
         """

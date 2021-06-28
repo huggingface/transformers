@@ -31,8 +31,7 @@ from transformers.models.xlm_roberta import XLMRobertaOnnxConfig
 
 from .. import is_tf_available, is_torch_available
 from ..utils import logging
-from .convert import convert_pytorch, optimize, validate_model_outputs
-from .utils import generate_identified_filename
+from .convert import convert_pytorch, validate_model_outputs
 
 
 # Set of frameworks we can export from
@@ -161,17 +160,6 @@ def main():
         "--opset", type=int, default=12, help="ONNX opset version to export the model with (default 12)."
     )
     parser.add_argument(
-        "--use-gpu",
-        action="store_true",
-        help="Flag indicating if we should try to optimize the model for GPU inference.",
-    )
-    parser.add_argument(
-        "--optimization-level",
-        choices=ONNX_OPTIMIZATION_LEVELS.keys(),
-        default="disabled",
-        help="Flag indicating if we should try to optimize the model.",
-    )
-    parser.add_argument(
         "--atol", type=float, default=1e-4, help="Absolute difference tolerence when validating the model."
     )
     parser.add_argument("output", type=Path, help="Path indicating where to store generated ONNX model.")
@@ -182,13 +170,6 @@ def main():
 
     if not args.output.parent.exists():
         args.output.parent.mkdir(parents=True)
-
-    if args.optimization_level != "disabled":
-        if not is_sympy_available() or not is_coloredlogs_available():
-            raise EnvironmentError(
-                "SymPy and coloredlogs must be installed in order to optimize ONNX models: "
-                "pip install sympy coloredlogs"
-            )
 
     logger.info(f"About to export model: {args.model} using framework: {args.framework}")
 
@@ -212,24 +193,6 @@ def main():
 
     validate_model_outputs(onnx_config, tokenizer, model, args.output, onnx_outputs, args.atol)
     logger.info(f"All good, model saved at: {args.output.as_posix()}")
-
-    if args.optimization_level != "disabled":
-        logger.info(f"About to optimize model with optimization_level: {args.optimization_level}")
-
-        args.opt_model_output = generate_identified_filename(args.output, f"_optimized_{args.optimization_level}")
-        args.optimization_level = ONNX_OPTIMIZATION_LEVELS[args.optimization_level]
-
-        optimize(args.output, onnx_config, args.optimization_level, args.use_gpu, args.opt_model_output)
-
-        if not args.use_gpu:
-            validate_model_outputs(onnx_config, tokenizer, model, args.opt_model_output, onnx_outputs, args.atol)
-        else:
-            logger.info(
-                "Validating model targeting GPU is not supported yet. "
-                "Please, fill an issue or submit a PR if it's something you need."
-            )
-
-        logger.info(f"Optimized model saved at: {args.opt_model_output.as_posix()}")
 
 
 if __name__ == "__main__":

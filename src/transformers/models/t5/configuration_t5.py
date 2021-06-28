@@ -182,14 +182,6 @@ class T5OnnxConfig(OnnxConfigWithPast):
 
         return common_outputs
 
-    @property
-    def optimizer(self) -> Optional[str]:
-        return "bert"
-
-    @property
-    def optimizer_additional_args(self) -> Optional[Mapping[str, Any]]:
-        return {"num_heads": self._config.num_attention_heads, "hidden_size": self._config.hidden_size}
-
     def generate_dummy_inputs(
         self,
         tokenizer: PreTrainedTokenizer,

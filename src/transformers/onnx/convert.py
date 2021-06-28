@@ -122,50 +122,6 @@ def convert_pytorch(
     return ordered_onnx_inputs, onnx_outputs
 
 
-def optimize(
-    onnx_model_path: Path,
-    onnx_config: OnnxConfig,
-    optimization_level: GraphOptimizationLevel,
-    use_gpu: bool,
-    output: Path,
-):
-    from onnxruntime.transformers.onnx_model_bert import BertOptimizationOptions
-    from onnxruntime.transformers.optimizer import optimize_by_onnxruntime, optimize_model
-
-    # If we have an optimizer in the config, let's optimize offline
-    if onnx_config.optimizer is not None:
-        logger.info(
-            f"Optimizing model through dedicated '{onnx_config.optimizer}' "
-            "tool (tool's name might not match model topology):"
-        )
-
-        optimizer_options = BertOptimizationOptions(onnx_config.optimizer)
-        if onnx_config.optimizer_features is not None:
-            for feature_name, feature_value in onnx_config.optimizer_features.items():
-                logger.info(f"\t- {feature_name} = {feature_value}")
-                setattr(optimizer_options, feature_name, feature_value)
-
-        # Optimize
-        optimizer = optimize_model(
-            input=onnx_model_path.as_posix(),
-            model_type=onnx_config.optimizer,
-            optimization_options=optimizer_options,
-            opt_level=int(optimization_level),
-            use_gpu=use_gpu,
-            **onnx_config.optimizer_additional_args,
-        )
-
-        logger.info(f"Optimization statistics: {optimizer.get_fused_operator_statistics()}")
-        optimizer.save_model_to_file(output.as_posix())
-
-    # Else use online ONNX Runtime optimization
-    else:
-        from os import replace
-
-        temp_output_path = Path(optimize_by_onnxruntime(onnx_model_path.as_posix()))
-        replace(temp_output_path, output)
-
-
 def validate_model_outputs(
     config: OnnxConfig,
     tokenizer: PreTrainedTokenizer,

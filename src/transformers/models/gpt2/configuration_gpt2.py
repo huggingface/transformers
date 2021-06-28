@@ -219,11 +219,3 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
                 "last_hidden_state": {0: "batch", 1: "sequence"},
                 "encoder_last_hidden_state": {0: "batch", 1: "sequence"},
             }
-
-    @property
-    def optimizer(self) -> Optional[str]:
-        return "gpt2"
-
-    @property
-    def optimizer_additinal_args(self) -> Mapping[str, Any]:
-        return {"num_heads": self._config.num_attention_heads, "hidden_size": self._config.hidden_size}

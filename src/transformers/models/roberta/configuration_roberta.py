@@ -78,14 +78,3 @@ class RobertaOnnxConfig(OnnxConfig):
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
         return {"last_hidden_state": {0: "batch", 1: "sequence"}, "pooler_output": {0: "batch"}}
 
-    @property
-    def optimizer(self) -> Optional[str]:
-        return "bert"
-
-    @property
-    def optimizer_features(self) -> Optional[Mapping[str, bool]]:
-        return DEFAULT_BERT_OPTIMIZER_FEATURES
-
-    @property
-    def optimizer_additional_args(self) -> Optional[Mapping[str, Any]]:
-        return {"num_heads": self._config.num_attention_heads, "hidden_size": self._config.hidden_size}
