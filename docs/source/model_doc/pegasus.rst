@@ -152,3 +152,17 @@ TFPegasusForConditionalGeneration
 
 .. autoclass:: transformers.TFPegasusForConditionalGeneration
     :members: call
+
+
+FlaxPegasusModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxPegasusModel
+    :members: call
+
+
+FlaxPegasusForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxPegasusForConditionalGeneration
+    :members: call

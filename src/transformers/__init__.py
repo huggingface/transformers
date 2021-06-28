@@ -1630,6 +1630,14 @@ if is_flax_available():
     )
     _import_structure["models.t5"].extend(["FlaxT5ForConditionalGeneration", "FlaxT5Model", "FlaxT5PreTrainedModel"])
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
+    _import_structure["models.pegasus"].extend(
+        [
+            "FlaxPegasusForCausalLM",
+            "FlaxPegasusForConditionalGeneration",
+            "FlaxPegasusModel",
+            "FlaxPegasusPreTrainedModel",
+        ]
+    )
 else:
     from .utils import dummy_flax_objects
 
@@ -2998,6 +3006,12 @@ if TYPE_CHECKING:
         )
         from .models.t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
         from .models.vit import FlaxViTForImageClassification, FlaxViTModel, FlaxViTPreTrainedModel
+        from .models.pegasus import (
+            FlaxPegasusForCausalLM,
+            FlaxPegasusForConditionalGeneration,
+            FlaxPegasusModel,
+            FlaxPegasusPreTrainedModel,
+        )
     else:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.

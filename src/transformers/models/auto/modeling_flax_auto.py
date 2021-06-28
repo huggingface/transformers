@@ -64,6 +64,7 @@ from ..roberta.modeling_flax_roberta import (
 )
 from ..t5.modeling_flax_t5 import FlaxT5ForConditionalGeneration, FlaxT5Model
 from ..vit.modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel
+from ..pegasus.modeling_flax_pegasus import FlaxPegasusForConditionalGeneration, FlaxPegasusModel
 from .auto_factory import auto_class_factory
 from .configuration_auto import (
     BartConfig,
@@ -75,6 +76,7 @@ from .configuration_auto import (
     RobertaConfig,
     T5Config,
     ViTConfig,
+    PegasusConfig,
 )
 
 
@@ -93,6 +95,7 @@ FLAX_MODEL_MAPPING = OrderedDict(
         (CLIPConfig, FlaxCLIPModel),
         (ViTConfig, FlaxViTModel),
         (T5Config, FlaxT5Model),
+        (PegasusConfig, FlaxPegasusModel),
     ]
 )
 
@@ -105,6 +108,7 @@ FLAX_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (BartConfig, FlaxBartForConditionalGeneration),
         (ElectraConfig, FlaxElectraForPreTraining),
         (T5Config, FlaxT5ForConditionalGeneration),
+        (PegasusConfig, FlaxPegasusForConditionalGeneration),
     ]
 )
 
@@ -124,6 +128,7 @@ FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
         # Model for Seq2Seq Causal LM mapping
         (BartConfig, FlaxBartForConditionalGeneration),
         (T5Config, FlaxT5ForConditionalGeneration),
+        (PegasusConfig, FlaxPegasusForConditionalGeneration),
     ]
 )
 

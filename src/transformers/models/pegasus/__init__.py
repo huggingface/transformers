@@ -23,6 +23,7 @@ from ...file_utils import (
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
+    is_flax_available,
 )
 
 
@@ -52,6 +53,11 @@ if is_tf_available():
         "TFPegasusPreTrainedModel",
     ]
 
+if is_flax_available():
+    _import_structure["modeling_flax_pegasus"] = [
+        "FlaxPegasusForConditionalGeneration",
+        "FlaxModel",
+    ]
 
 if TYPE_CHECKING:
     from .configuration_pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig
@@ -73,6 +79,12 @@ if TYPE_CHECKING:
 
     if is_tf_available():
         from .modeling_tf_pegasus import TFPegasusForConditionalGeneration, TFPegasusModel, TFPegasusPreTrainedModel
+
+    if is_flax_available():
+        from .modeling_flax_pegasus import (
+            FlaxPegasusForConditionalGeneration,
+            FlaxModel,
+        )
 
 else:
     import importlib
