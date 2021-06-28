@@ -79,6 +79,3 @@ class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         exp_tokens = [22943, 21332, 34431, 45904, 117, 306, 1231, 1231, 2653, 33994, 1266, 100]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), exp_tokens)
 
-    # due to custom pre_tokenize , char_to_token may be error
-    def test_alignement_methods(self):
-        pass
