@@ -3185,10 +3185,7 @@ class TokenizerTesterMixin:
         self.assertEqual(tokenizer.max_len_sentences_pair, new_tokenizer.max_len_sentences_pair)
 
         # Assert the set of special tokens match as we didn't ask to change them
-        # The assertDictEqual fails for T5 even if the dicts are the same so we check manually
-        self.assertListEqual(list(tokenizer.special_tokens_map.keys()), list(new_tokenizer.special_tokens_map.keys()))
-        for key in tokenizer.special_tokens_map.keys():
-            self.assertEqual(tokenizer.special_tokens_map[key], new_tokenizer.special_tokens_map[key])
+        self.assertDictEqual(tokenizer.special_tokens_map, new_tokenizer.special_tokens_map)
 
     def test_training_new_tokenizer_with_special_tokens_change(self):
         # This feature only exists for fast tokenizers
