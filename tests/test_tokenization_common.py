@@ -3166,7 +3166,9 @@ class TokenizerTesterMixin:
         inputs = new_tokenizer(["This is the first sentence", "This sentence is different 🤗."])
         self.assertEqual(len(inputs["input_ids"]), 2)
         decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
-        self.assertEqual("this is the first sentence", decoded_input.lower())
+        if new_tokenizer.init_kwargs["do_lower_case"]:
+            decoded_input = decoded_input.lower()
+        self.assertEqual("this is the first sentence", decoded_input)
 
         # We check that the parameters of the tokenizer remained the same
         # Check we have the same number of added_tokens for both pair and non-pair inputs.
@@ -3226,12 +3228,14 @@ class TokenizerTesterMixin:
 
                 new_id = new_tokenizer.get_vocab()[new_special_token]
                 self.assertEqual(getattr(new_tokenizer, f"{token}_id"), new_id)
-        
+
         # Test we can use the new tokenizer with something not seen during training
         inputs = new_tokenizer(["This is the first sentence", "This sentence is different 🤗."])
         self.assertEqual(len(inputs["input_ids"]), 2)
         decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
-        self.assertEqual("this is the first sentence", decoded_input.lower())
+        if new_tokenizer.init_kwargs["do_lower_case"]:
+            decoded_input = decoded_input.lower()
+        self.assertEqual("this is the first sentence", decoded_input)
 
 
 @is_staging_test

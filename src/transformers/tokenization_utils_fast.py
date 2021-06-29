@@ -609,7 +609,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                     unk_token = special_tokens_map[unk_token]
                 tokenizer_json["model"]["unk_id"] = 0
                 tokenizer_json["model"]["vocab"] = [[unk_token, 0.0]]
-        elif tokenizer_json["model"]["type"] in ["WordLevel", "WordPiece"]:
+        elif tokenizer_json["model"]["type"] == "WordPiece":
+            tokenizer_json["model"]["vocab"] = {}
+            if special_tokens_map is not None and tokenizer_json["model"]["unk_token"] in special_tokens_map:
+                tokenizer_json["model"]["unk_token"] = special_tokens_map[tokenizer_json["model"]["unk_token"]]
+        elif tokenizer_json["model"]["type"] == "WordLevel":
             tokenizer_json["model"]["vocab"] = {}
         else:
             raise ValueError(
