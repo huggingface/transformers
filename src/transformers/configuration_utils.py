@@ -196,7 +196,7 @@ class PretrainedConfig(PushToHubMixin):
           initialize the model to a non-default ``dtype`` (which is normally ``float32``) and thus allow for optimal
           storage allocation. For example, if the saved model is ``float16``, ideally we want to load it back using the
           minimal amount of memory needed to load ``float16`` weights. Since the config object is stored in plain text,
-          this attribute contains just the floating type string without the ``torch\.`` prefix. For example, for
+          this attribute contains just the floating type string without the ``torch.`` prefix. For example, for
           ``torch.float16`` ``torch_dtype`` is the ``"float16"`` string.
 
     TensorFlow specific parameters

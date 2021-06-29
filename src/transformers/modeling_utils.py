@@ -1048,6 +1048,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Please refer to the mirror site for more information.
             _fast_init(:obj:`bool`, `optional`, defaults to `:obj:`True`):
                 Whether or not to disable fast initialization.
+            torch_dtype (:obj:`str` or :obj:`torch.dtype`, `optional`):
+                Override the default ``torch.dtype`` and load the model under this dtype. If ``"auto"`` is passed the
+                dtype will be automatically derived from the model weights.
 
                 .. warning::
 
@@ -1114,7 +1117,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         from_auto_class = kwargs.pop("_from_auto", False)
         _fast_init = kwargs.pop("_fast_init", True)
         torch_dtype = kwargs.pop("torch_dtype", None)
-        torch_dtype_auto_detect = kwargs.pop("torch_dtype_auto_detect", False)
 
         from_pt = not (from_tf | from_flax)
 
@@ -1239,14 +1241,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             #    entry - we assume all weights are of the same dtype
             # we also may have config.torch_dtype but we won't rely on it till v5
             dtype_orig = None
-            if torch_dtype_auto_detect:
-                if torch_dtype is None:
-                    torch_dtype = next(iter(state_dict.values())).dtype
-                else:
-                    raise ValueError(
-                        "ambiguous arguments passed non-None ``torch_dtype`` and ``torch_dtype_auto_detect=True`` at the same time"
-                    )
             if torch_dtype is not None:
+                if isinstance(torch_dtype, str):
+                    if torch_dtype == "auto":
+                        torch_dtype = next(iter(state_dict.values())).dtype
+                    else:
+                        raise ValueError(
+                            f"`torch_dtype` can be either a `torch.dtype` or `auto`, but received {torch_dtype}"
+                        )
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
         config.name_or_path = pretrained_model_name_or_path

@@ -1624,7 +1624,7 @@ class ModelUtilsTest(TestCasePlus):
         model = T5ForConditionalGeneration.from_pretrained(model_path)
         self.assertEqual(model.dtype, torch.float32)
         # test with auto-detection
-        model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype_auto_detect=True)
+        model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype="auto")
         self.assertEqual(model.dtype, torch.float32)
 
         # test forced loading in fp16 (even though the weights are in fp32)
@@ -1634,8 +1634,8 @@ class ModelUtilsTest(TestCasePlus):
         # test fp16 save_pretrained, loaded with auto-detection
         model = model.half()
         model.save_pretrained(model_path)
-        model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype_auto_detect=True)
-        self.assertEqual(model.config.torch_dtype, "float16")  # also test `config.torch_dtype` saving
+        model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype="auto")
+        self.assertEqual(model.config.torch_dtype, "float16")  # tests `config.torch_dtype` saving
         self.assertEqual(model.dtype, torch.float16)
 
         # test fp16 save_pretrained, loaded with the explicit fp16
