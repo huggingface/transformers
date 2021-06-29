@@ -17,7 +17,6 @@
  see tokenization_utils.py
 """
 
-import inspect
 import json
 import os
 from collections import defaultdict
@@ -38,6 +37,7 @@ from .tokenization_utils_base import (
     PreTokenizedInput,
     PreTokenizedInputPair,
     PreTrainedTokenizerBase,
+    SpecialTokensMixin,
     TextInput,
     TextInputPair,
     TruncationStrategy,
@@ -633,6 +633,20 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if new_special_tokens is not None:
             special_tokens.extend(new_special_tokens)
 
+        # Trainer needs to know the end of word / continuing subword thingies in BPE
+        if (
+            tokenizer_json["model"]["type"] == "BPE"
+            and "continuing_subword_prefix" not in kwargs
+            and tokenizer_json["model"]["continuing_subword_prefix"] is not None
+        ):
+            kwargs["continuing_subword_prefix"] = tokenizer_json["model"]["continuing_subword_prefix"]
+        if (
+            tokenizer_json["model"]["type"] == "BPE"
+            and "end_of_work_suffix" not in kwargs
+            and tokenizer_json["model"]["end_of_word_suffix"] is not None
+        ):
+            kwargs["end_of_word_suffix"] = tokenizer_json["model"]["end_of_word_suffix"]
+
         trainer_class = MODEL_TO_TRAINER_MAPPING[tokenizer_json["model"]["type"]]
         trainer = trainer_class(vocab_size=vocab_size, special_tokens=special_tokens, **kwargs)
         tokenizer.train_from_iterator(text_iterator, trainer=trainer)
@@ -661,13 +675,20 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             tokenizer = TokenizerFast.from_str(json.dumps(trained_tokenizer_json))
 
         # Map pad/cls/mask token at the Transformers level
-        kwargs = {}
         if special_tokens_map is not None:
-            init_signature = inspect.signature(self.__class__)
-            for name, param in init_signature.parameters.items():
-                if isinstance(param.default, str) and param.default in special_tokens_map:
-                    kwargs[name] = special_tokens_map[param.default]
+            special_tokens_list = SpecialTokensMixin.SPECIAL_TOKENS_ATTRIBUTES.copy()
+            special_tokens_list.remove("additional_special_tokens")
+            for token in special_tokens_list:
+                # Get the private one to avoid unnecessary warnings.
+                if getattr(self, f"_{token}") is not None:
+                    special_token = getattr(self, token)
+                    if special_token in special_tokens_map:
+                        kwargs[token] = special_tokens_map[special_token]
+
+        additional_special_tokens = self.additional_special_tokens
         if new_special_tokens is not None:
-            kwargs["additional_special_tokens"] = new_special_tokens
+            additional_special_tokens.extend(new_special_tokens)
+        if len(additional_special_tokens) > 0:
+            kwargs["additional_special_tokens"] = additional_special_tokens
 
         return self.__class__(tokenizer_object=tokenizer, **kwargs)
