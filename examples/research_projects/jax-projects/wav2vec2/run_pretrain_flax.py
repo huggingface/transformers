@@ -6,21 +6,23 @@ from typing import Any, Dict, List, Optional, Union
 
 import torch
 from datasets import DatasetDict, load_dataset
-from packaging import version
-from torch import nn
 
 import librosa
 from transformers import (
     HfArgumentParser,
-    Trainer,
     TrainingArguments,
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
     FlaxWav2Vec2ForPreTraining,
-    is_apex_available,
-    trainer_utils,
 )
 from transformers.models.wav2vec2.modeling_flax_wav2vec2 import _compute_mask_indices, _sample_negatives
+import flax
+import jax
+import jax.numpy as jnp
+import optax
+from flax import jax_utils, traverse_util
+from flax.training import train_state
+from flax.training.common_utils import get_metrics, onehot, shard
 
 
 logger = logging.getLogger(__name__)
@@ -69,8 +71,6 @@ def configure_logger(model_args: ModelArguments, training_args: TrainingArgument
     logging_level = logging.WARNING
     if model_args.verbose_logging:
         logging_level = logging.DEBUG
-    elif trainer_utils.is_main_process(training_args.local_rank):
-        logging_level = logging.INFO
     logger.setLevel(logging_level)
 
 
@@ -356,6 +356,163 @@ def main():
 #        gumbel_temp_decay=model_args.gumbel_temperature_decay,
 #    )
 #    trainer.train()
+    # Store some constant
+
+    num_epochs = int(training_args.num_train_epochs)
+    train_batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
+    eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
+
+    num_train_steps = len(vectorized_datasets["train"]) // train_batch_size * num_epochs
+
+    # Create learning rate schedule
+    warmup_fn = optax.linear_schedule(
+        init_value=0.0, end_value=training_args.learning_rate, transition_steps=training_args.warmup_steps
+    )
+    decay_fn = optax.linear_schedule(
+        init_value=training_args.learning_rate,
+        end_value=0,
+        transition_steps=num_train_steps - training_args.warmup_steps,
+    )
+    linear_decay_lr_schedule_fn = optax.join_schedules(
+        schedules=[warmup_fn, decay_fn], boundaries=[training_args.warmup_steps]
+    )
+
+    # We use Optax's "masking" functionality to not apply weight decay
+    # to bias and LayerNorm scale parameters. decay_mask_fn returns a
+    # mask boolean with the same structure as the parameters.
+    # The mask is True for parameters that should be decayed.
+    def decay_mask_fn(params):
+        flat_params = traverse_util.flatten_dict(params)
+        flat_mask = {path: (path[-1] != "bias" and path[-2:] != ("LayerNorm", "scale")) for path in flat_params}
+        return traverse_util.unflatten_dict(flat_mask)
+
+    # create adam optimizer
+    adamw = optax.adamw(
+        learning_rate=linear_decay_lr_schedule_fn,
+        b1=training_args.adam_beta1,
+        b2=training_args.adam_beta2,
+        weight_decay=training_args.weight_decay,
+        mask=decay_mask_fn,
+    )
+
+    # Setup train state
+    state = train_state.TrainState.create(apply_fn=model.__call__, params=model.params, tx=adamw)
+
+    # Define gradient update step fn
+    def train_step(state, batch, dropout_rng):
+        dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
+
+        def loss_fn(params):
+            labels = batch.pop("labels")
+
+            logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
+
+            # compute loss
+            loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1])).mean()
+
+            return loss
+
+        grad_fn = jax.value_and_grad(loss_fn)
+        loss, grad = grad_fn(state.params)
+        grad = jax.lax.pmean(grad, "batch")
+        new_state = state.apply_gradients(grads=grad)
+
+        metrics = jax.lax.pmean(
+            {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}, axis_name="batch"
+        )
+
+        return new_state, metrics, new_dropout_rng
+
+    # Create parallel version of the train step
+    p_train_step = jax.pmap(train_step, "batch", donate_argnums=(0,))
+
+    # Define eval fn
+    def eval_step(params, batch):
+        labels = batch.pop("labels")
+
+        logits = model(**batch, params=params, train=False)[0]
+
+        # compute loss
+        loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1]))
+
+        # compute accuracy
+        accuracy = jnp.equal(jnp.argmax(logits, axis=-1), labels)
+
+        # summarize metrics
+        metrics = {"loss": loss.mean(), "accuracy": accuracy.mean()}
+        metrics = jax.lax.pmean(metrics, axis_name="batch")
+
+        return metrics
+
+    p_eval_step = jax.pmap(eval_step, "batch", donate_argnums=(0,))
+
+    # Replicate the train state on each device
+    state = jax_utils.replicate(state)
+
+    train_time = 0
+    epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
+    for epoch in epochs:
+        # ======================== Training ================================
+        train_start = time.time()
+        train_metrics = []
+
+        # Create sampling rng
+        rng, input_rng = jax.random.split(rng)
+
+        # Generate an epoch by shuffling sampling indices from the train dataset
+        num_train_samples = len(tokenized_datasets["train"])
+        train_samples_idx = jax.random.permutation(input_rng, jnp.arange(num_train_samples))
+        train_batch_idx = generate_batch_splits(train_samples_idx, train_batch_size)
+
+        # Gather the indexes for creating the batch and do a training step
+        for i, batch_idx in enumerate(tqdm(train_batch_idx, desc="Training...", position=1)):
+            samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
+            model_inputs = data_collator(samples)
+
+            # Model forward
+            model_inputs = shard(model_inputs.data)
+            state, train_metric, dropout_rngs = p_train_step(state, model_inputs, dropout_rngs)
+            train_metrics.append(train_metric)
+
+        train_time += time.time() - train_start
+
+        epochs.write(
+            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss'].mean()}, Learning Rate: {train_metric['learning_rate'].mean()})"
+        )
+
+        # ======================== Evaluating ==============================
+        num_eval_samples = len(tokenized_datasets["validation"])
+        eval_samples_idx = jnp.arange(num_eval_samples)
+        eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
+
+        eval_metrics = []
+        for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
+            samples = [tokenized_datasets["validation"][int(idx)] for idx in batch_idx]
+            model_inputs = data_collator(samples)
+
+            # Model forward
+            model_inputs = shard(model_inputs.data)
+            metrics = p_eval_step(state.params, model_inputs)
+            eval_metrics.append(metrics)
+
+        # get eval metrics
+        eval_metrics = get_metrics(eval_metrics)
+        eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
+
+        # Update progress bar
+        epochs.write(
+            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {eval_metrics['loss']}, Acc: {eval_metrics['accuracy']})"
+        )
+
+        # Save metrics
+        if has_tensorboard and jax.process_index() == 0:
+            cur_step = epoch * (len(tokenized_datasets["train"]) // train_batch_size)
+            write_metric(summary_writer, train_metrics, eval_metrics, train_time, cur_step)
+
+        # save checkpoint after each epoch and push checkpoint to the hub
+        if jax.process_index() == 0:
+            params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+            model.save_pretrained(training_args.output_dir, params=params, push_to_hub=training_args.push_to_hub)
 
 
 if __name__ == "__main__":
