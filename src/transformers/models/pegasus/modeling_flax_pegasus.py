@@ -253,7 +253,7 @@ class PegasusSinusoidalPositionalEmbedding(nn.Module):
         )
 
 
-# Copied from transformers.models.bart.modeling_flax_bart.BartAttention with Bart->Pegasus
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartAttention with Bart->Pegasus
 class FlaxPegasusAttention(nn.Module):
     config: PegasusConfig
     embed_dim: int
