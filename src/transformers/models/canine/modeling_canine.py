@@ -18,6 +18,8 @@
 import copy
 import math
 import os
+from dataclasses import dataclass
+from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -28,7 +30,7 @@ from ...activations import ACT2FN
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import (
     BaseModelOutput,
-    BaseModelOutputWithPooling,
+    ModelOutput,
     MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
@@ -58,6 +60,42 @@ CANINE_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 # Support up to 16 hash functions.
 _PRIMES = [31, 43, 59, 61, 73, 97, 103, 113, 137, 149, 157, 173, 181, 193, 211, 223]
+
+
+@dataclass
+class CanineModelOutputWithPooling(ModelOutput):
+    """
+    Output type of :class:`~transformers.CanineModel`. Based on
+    :class:`~transformers.modeling_outputs.BaseModelOutputWithPooling`, but with slightly different
+    :obj:`hidden_states` and :obj:`attentions`, as these also include the hidden states and attentions of the shallow
+    Transformer encoders.
+
+    Args:
+        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model (i.e. the output of the final
+            shallow Transformer encoder).
+        pooler_output (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, hidden_size)`):
+            Hidden-state of the first token of the sequence (classification token) at the last layer of the deep
+            Transformer encoder, further processed by a Linear layer and a Tanh activation function. The Linear layer
+            weights are trained from the next sentence prediction (classification) objective during pretraining.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the input to each encoder + one for the output of each layer of
+            each encoder) of shape :obj:`(batch_size, sequence_length, hidden_size)` and :obj:`(batch_size,
+            sequence_length // config.downsampling_rate, hidden_size)`. Hidden-states of the model at the output of
+            each layer plus the initial input to each Transformer encoder. The hidden states of the shallow encoders
+            have length :obj:`sequence_length`, but the hidden states of the deep encoder have length
+            :obj:`sequence_length` // :obj:`config.downsampling_rate`.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of the 3 Transformer encoders of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)` and :obj:`(batch_size, num_heads,
+            sequence_length // config.downsampling_rate, sequence_length // config.downsampling_rate)`. Attentions
+            weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    pooler_output: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 def load_tf_weights_in_canine(model, config, tf_checkpoint_path):
@@ -586,6 +624,7 @@ class CanineAttention(nn.Module):
 
             # next, compute attention scores for each pair of windows and concatenate
             attention_output_chunks = []
+            attention_probs_chunks = []
             for (from_start, from_end), (to_start, to_end) in zip(from_chunks, to_chunks):
                 from_tensor_chunk = from_tensor[:, from_start:from_end, :]
                 to_tensor_chunk = to_tensor[:, to_start:to_end, :]
@@ -603,6 +642,8 @@ class CanineAttention(nn.Module):
                     from_tensor_chunk, to_tensor_chunk, attention_mask_chunk, head_mask, output_attentions
                 )
                 attention_output_chunks.append(attention_outputs_chunk[0])
+                if output_attentions:
+                    attention_probs_chunks.append(attention_outputs_chunk[1])
 
             attention_output = torch.cat(attention_output_chunks, dim=1)
 
@@ -610,6 +651,8 @@ class CanineAttention(nn.Module):
         outputs = (attention_output,)
         if not self.local:
             outputs = outputs + self_outputs[1:]  # add attentions if we output them
+        else:
+            outputs = outputs + tuple(attention_probs_chunks)  # add attentions if we output them
         return outputs
 
 
@@ -1049,7 +1092,7 @@ class CanineModel(CaninePreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPooling,
+        output_type=CanineModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -1068,6 +1111,8 @@ class CanineModel(CaninePreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
@@ -1117,7 +1162,12 @@ class CanineModel(CaninePreTrainedModel):
         # We use a 3D attention mask for the local attention.
         # `input_char_encoding`: shape (batch_size, char_seq_len, char_dim)
         char_attention_mask = self._create_3d_attention_mask_from_input_mask(input_ids, attention_mask)
-        init_chars_encoder_outputs = self.initial_char_encoder(input_char_embeddings, char_attention_mask)
+        init_chars_encoder_outputs = self.initial_char_encoder(
+            input_char_embeddings,
+            attention_mask=char_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
         input_char_encoding = init_chars_encoder_outputs.last_hidden_state
 
         # Downsample chars to molecules.
@@ -1163,17 +1213,42 @@ class CanineModel(CaninePreTrainedModel):
 
         # Apply final shallow Transformer
         # `sequence_output`: shape (batch_size, char_seq_len, hidden_size])
-        final_chars_encoder_outputs = self.final_char_encoder(sequence_output, extended_attention_mask)
+        final_chars_encoder_outputs = self.final_char_encoder(
+            sequence_output,
+            attention_mask=extended_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
         sequence_output = final_chars_encoder_outputs.last_hidden_state
 
-        if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+        if output_hidden_states:
+            deep_encoder_hidden_states = encoder_outputs.hidden_states if return_dict else encoder_outputs[1]
+            all_hidden_states = (
+                all_hidden_states
+                + init_chars_encoder_outputs.hidden_states
+                + deep_encoder_hidden_states
+                + final_chars_encoder_outputs.hidden_states
+            )
 
-        return BaseModelOutputWithPooling(
+        if output_attentions:
+            deep_encoder_self_attentions = encoder_outputs.attentions if return_dict else encoder_outputs[-1]
+            all_self_attentions = (
+                all_self_attentions
+                + init_chars_encoder_outputs.attentions
+                + deep_encoder_self_attentions
+                + final_chars_encoder_outputs.attentions
+            )
+
+        if not return_dict:
+            output = (sequence_output, pooled_output)
+            output += tuple(v for v in [all_hidden_states, all_self_attentions] if v is not None)
+            return output
+
+        return CanineModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
         )
 
 

@@ -22,7 +22,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from .test_modeling_common import ModelTesterMixin, _config_zero_init, global_rng, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
@@ -259,17 +259,27 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             hidden_states = outputs.hidden_states
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-            )
+            # expected_num_layers equals num_hidden_layers of the deep encoder + 1, + 2 for the first shallow encoder, + 2
+            # for the final shallow encoder
+            expected_num_layers = self.model_tester.num_hidden_layers + 1 + 2 + 2
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             seq_length = self.model_tester.seq_length
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                # expected length of the hidden_states needs to be updated for CANINE since it downsamples the seq length
-                [seq_length // config.downsampling_rate, self.model_tester.hidden_size],
-            )
+            for i in range(expected_num_layers):
+                if (i < 2) or ((expected_num_layers - i) < 3):
+                    # the expected length of the hidden_states of the first and final shallow encoders
+                    # is equal to the seq_length
+                    self.assertListEqual(
+                        list(hidden_states[i].shape[-2:]),
+                        [seq_length, self.model_tester.hidden_size],
+                    )
+                else:
+                    # the expected length of the hidden_states of the deep encoder need to be updated
+                    # for CANINE since the seq length is downsampled
+                    self.assertListEqual(
+                        list(hidden_states[i].shape[-2:]),
+                        [seq_length // config.downsampling_rate, self.model_tester.hidden_size],
+                    )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -287,8 +297,7 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
-        # expected length of the attentions needs to be updated for CANINE since it downsamples the seq length
-        seq_len = getattr(self.model_tester, "seq_length", None) // config.downsampling_rate
+        seq_len = getattr(self.model_tester, "seq_length", None)
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -300,7 +309,8 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            # we add + 2 due to the 2 shallow encoders
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers + 2)
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -311,7 +321,8 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            # we add + 2 due to the 2 shallow encoders
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers + 2)
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
@@ -336,7 +347,7 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
 
             self_attentions = outputs.attentions
 
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers + 2)
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, seq_len, seq_len],
@@ -371,6 +382,7 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
                 recursive_check(tuple_output, dict_output)
 
         for model_class in self.all_model_classes:
+            print(model_class)
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -404,6 +416,63 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
             check_equivalence(
                 model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
             )
+
+    def test_headmasking(self):
+        if not self.test_head_masking:
+            return
+
+        global_rng.seed(42)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        global_rng.seed()
+
+        inputs_dict["output_attentions"] = True
+        config.output_hidden_states = True
+        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            model.to(torch_device)
+            model.eval()
+
+            # Prepare head_mask
+            # Set require_grad after having prepared the tensor to avoid error (leaf variable has been moved into the graph interior)
+            head_mask = torch.ones(
+                self.model_tester.num_hidden_layers,
+                self.model_tester.num_attention_heads,
+                device=torch_device,
+            )
+            head_mask[0, 0] = 0
+            head_mask[-1, :-1] = 0
+            head_mask.requires_grad_(requires_grad=True)
+            inputs = self._prepare_for_class(inputs_dict, model_class).copy()
+            inputs["head_mask"] = head_mask
+
+            outputs = model(**inputs, return_dict=True)
+
+            # Test that we can get a gradient back for importance score computation
+            output = sum(t.sum() for t in outputs[0])
+            output = output.sum()
+            output.backward()
+            multihead_outputs = head_mask.grad
+
+            self.assertIsNotNone(multihead_outputs)
+            self.assertEqual(len(multihead_outputs), self.model_tester.num_hidden_layers)
+
+            def check_attentions_validity(attentions):
+                # Remove Nan
+                for t in attentions:
+                    self.assertLess(
+                        torch.sum(torch.isnan(t)), t.numel() / 4
+                    )  # Check we don't have more than 25% nans (arbitrary)
+                attentions = [
+                    t.masked_fill(torch.isnan(t), 0.0) for t in attentions
+                ]  # remove them (the test is less complete)
+
+                self.assertAlmostEqual(attentions[1][..., 0, :, :].flatten().sum().item(), 0.0)
+                self.assertNotEqual(attentions[1][..., -1, :, :].flatten().sum().item(), 0.0)
+                self.assertAlmostEqual(attentions[-2][..., -2, :, :].flatten().sum().item(), 0.0)
+                self.assertNotEqual(attentions[-2][..., -1, :, :].flatten().sum().item(), 0.0)
+
+            check_attentions_validity(outputs.attentions)
 
     @unittest.skip("CANINE does not have a get_input_embeddings() method.")
     def test_inputs_embeds(self):
