@@ -10,13 +10,16 @@ from transformers import (
     # LongformerConfig,
     RobertaConfig,
     XLMRobertaConfig,
-    is_torch_available,
+    is_torch_available, BartConfig, GPT2Config, T5Config,
 )
 from transformers.models.albert import AlbertOnnxConfig
+from transformers.models.bart import BartOnnxConfig
 from transformers.models.bert.configuration_bert import BertConfig, BertOnnxConfig
 from transformers.models.distilbert import DistilBertOnnxConfig
 # from transformers.models.longformer import LongformerOnnxConfig
+from transformers.models.gpt2 import GPT2OnnxConfig
 from transformers.models.roberta import RobertaOnnxConfig
+from transformers.models.t5 import T5OnnxConfig
 from transformers.models.xlm_roberta import XLMRobertaOnnxConfig
 from transformers.onnx import EXTERNAL_DATA_FORMAT_SIZE_LIMIT, OnnxConfig, ParameterFormat
 
@@ -85,15 +88,24 @@ class OnnxConfigTestCaseV2(TestCase):
 
 
 if is_torch_available():
-    from transformers import AlbertModel, BertModel, DistilBertModel, LongformerModel, RobertaModel, XLMRobertaModel
+    from transformers import AlbertModel, BartModel, BertModel, DistilBertModel, GPT2Model, RobertaModel, T5Model, XLMRobertaModel
 
     PYTORCH_EXPORT_DEFAULT_MODELS = {
         ("ALBERT", "albert-base-v2", AlbertModel, AlbertConfig, AlbertOnnxConfig),
+        ("BART", "facebook/bart-base", BartModel, BartConfig, BartOnnxConfig),
         ("BERT", "bert-base-cased", BertModel, BertConfig, BertOnnxConfig),
         ("DistilBERT", "distilbert-base-cased", DistilBertModel, DistilBertConfig, DistilBertOnnxConfig),
+        ("GPT2", "gpt2", GPT2Model, GPT2Config, GPT2OnnxConfig),
         # ("LongFormer", "longformer-base-4096", LongformerModel, LongformerConfig, LongformerOnnxConfig),
         ("Roberta", "roberta-base", RobertaModel, RobertaConfig, RobertaOnnxConfig),
         ("XLM-Roberta", "roberta-base", XLMRobertaModel, XLMRobertaConfig, XLMRobertaOnnxConfig),
+        ("T5", "t5-small", T5Model, T5Config, T5OnnxConfig)
+    }
+
+    PYTORCH_EXPORT_WITH_PAST_MODELS = {
+        ("BART", ),
+        ("GPT2", ),
+        ("T5", )
     }
 
 
