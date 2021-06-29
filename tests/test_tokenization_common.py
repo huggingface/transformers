@@ -49,6 +49,7 @@ from transformers.testing_utils import (
     slow,
 )
 from transformers.tokenization_utils import AddedToken
+from transformers.tokenization_utils_base import SpecialTokensMixin
 
 
 if TYPE_CHECKING:
@@ -3159,21 +3160,49 @@ class TokenizerTesterMixin:
             return
 
         tokenizer = self.get_rust_tokenizer()
+        
+        # Train new tokenizer
+        new_tokenizer = tokenizer.train_new_from_iterator(
+            SMALL_TRAINING_CORPUS, 100
+        )
 
+        # We check that the parameters of the tokenizer remained the same
+        # Check we have the same number of added_tokens for both pair and non-pair inputs.
+        self.assertEqual(
+            tokenizer.num_special_tokens_to_add(False), new_tokenizer.num_special_tokens_to_add(False)
+        )
+        self.assertEqual(
+            tokenizer.num_special_tokens_to_add(True), new_tokenizer.num_special_tokens_to_add(True)
+        )
+        # Assert the set of special tokens match as we didn't ask to change them
+        self.assertSequenceEqual(
+            tokenizer.special_tokens_map.items(),
+            new_tokenizer.special_tokens_map.items(),
+        )
+        # Check we have the correct max_length for both pair and non-pair inputs.
+        self.assertEqual(tokenizer.max_len_single_sentence, new_tokenizer.max_len_single_sentence)
+        self.assertEqual(tokenizer.max_len_sentences_pair, new_tokenizer.max_len_sentences_pair)
+
+        # Test we can use the new tokenizer with something not seen during training
+        inputs = new_tokenizer(["This is the first sentence", "This sentence is different 🤗."])
+        self.assertEqual(len(inputs["input_ids"]), 2)
+        decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
+        self.assertEqual("this is the first sentence", decoded_input.lower())
+
+    def test_training_new_tokenizer_with_special_tokens_change(self):
+        # This feature only exists for fast tokenizers
+        if not self.test_rust_tokenizer:
+            return
+
+        tokenizer = self.get_rust_tokenizer()
+        
         # Test with a special tokens map
-        special_tokens_list = [
-            "bos_token",
-            "eos_token",
-            "unk_token",
-            "sep_token",
-            "pad_token",
-            "cls_token",
-            "mask_token",
-        ]
+        special_tokens_list = SpecialTokensMixin.SPECIAL_TOKENS_ATTRIBUTES.copy()
+        special_tokens_list.remove("additional_special_tokens")
         # Create a new mapping from the special tokens defined in the original tokenizer
         special_tokens_map = {}
         for spe_token_attr in special_tokens_list:
-            spe_token = getattr(tokenizer, spe_token_attr)
+            spe_token = getattr(tokenizer, f"_{spe_token_attr}")
             if spe_token is not None:
                 special_tokens_map[spe_token] = f"{spe_token}a"
 
@@ -3187,9 +3216,9 @@ class TokenizerTesterMixin:
 
         # Check the changes
         for spe_token_attr in special_tokens_list:
-            spe_token = getattr(tokenizer, spe_token_attr)
+            spe_token = getattr(tokenizer, f"_{spe_token_attr}")
             if spe_token in special_tokens_map:
-                new_spe_token = getattr(new_tokenizer, spe_token_attr)
+                new_spe_token = getattr(new_tokenizer, f"_{spe_token_attr}")
                 self.assertEqual(special_tokens_map[spe_token], new_spe_token)
 
                 new_id = new_tokenizer.get_vocab()[new_spe_token]
