@@ -192,13 +192,13 @@ class BertTokenizer(PreTrainedTokenizer):
 
         if kwargs.get("word_tokenizer_type") == "mecab":
             raise ValueError(
-                "BertTokenizer doesn't support mecab."
+                "BertTokenizer doesn't support mecab. "
                 "Please use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
 
         if kwargs.get("do_subword_tokenize") is not None:
             raise ValueError(
-                "BertTokenizer doesn't support subword_tokenize."
+                "BertTokenizer doesn't support subword_tokenize. "
                 "Please use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
 
