@@ -3167,8 +3167,11 @@ class TokenizerTesterMixin:
         self.assertEqual(len(inputs["input_ids"]), 2)
         decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
         expected_result = "This is the first sentence"
-        if new_tokenizer.init_kwargs.get("do_lower_case", False):
-            decoded_input = decoded_input.lower()
+
+        # OpenAIGPT always lowercases and has no arg.
+        if new_tokenizer.init_kwargs.get("do_lower_case", False) or tokenizer.__class__.__name__.startswith(
+            "OpenAIGPT"
+        ):
             expected_result = expected_result.lower()
         self.assertEqual(expected_result, decoded_input)
 
@@ -3187,10 +3190,7 @@ class TokenizerTesterMixin:
             new_tokenizer.all_special_tokens_extended,
         )
 
-        self.assertSequenceEqual(
-            tokenizer.special_tokens_map.items(),
-            new_tokenizer.special_tokens_map.items(),
-        )
+        self.assertDictEqual(tokenizer.special_tokens_map, new_tokenizer.special_tokens_map)
 
     def test_training_new_tokenizer_with_special_tokens_change(self):
         # This feature only exists for fast tokenizers
@@ -3286,8 +3286,11 @@ class TokenizerTesterMixin:
         self.assertEqual(len(inputs["input_ids"]), 2)
         decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
         expected_result = "This is the first sentence"
-        if new_tokenizer.init_kwargs.get("do_lower_case", False):
-            decoded_input = decoded_input.lower()
+
+        # OpenAIGPT always lowercases and has no arg.
+        if new_tokenizer.init_kwargs.get("do_lower_case", False) or tokenizer.__class__.__name__.startswith(
+            "OpenAIGPT"
+        ):
             expected_result = expected_result.lower()
         self.assertEqual(expected_result, decoded_input)
 

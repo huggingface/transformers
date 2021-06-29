@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
-from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordPieceTrainer
+from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
 
 from .convert_slow_tokenizer import convert_slow_tokenizer
 from .file_utils import PaddingStrategy, add_end_docstrings
@@ -64,6 +64,7 @@ INIT_TOKENIZER_DOCSTRING += """
 MODEL_TO_TRAINER_MAPPING = {
     "BPE": BpeTrainer,
     "Unigram": UnigramTrainer,
+    "WordLevel": WordLevelTrainer,
     "WordPiece": WordPieceTrainer,
 }
 
@@ -608,17 +609,20 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                     unk_token = special_tokens_map[unk_token]
                 tokenizer_json["model"]["unk_id"] = 0
                 tokenizer_json["model"]["vocab"] = [[unk_token, 0.0]]
-        elif tokenizer_json["model"]["type"] == "WordPiece":
-            tokenizer_json["model"]["vocab"] = {}
-            if special_tokens_map is not None and tokenizer_json["model"]["unk_token"] in special_tokens_map:
-                tokenizer_json["model"]["unk_token"] = special_tokens_map[tokenizer_json["model"]["unk_token"]]
-        elif tokenizer_json["model"]["type"] == "WordLevel":
+        elif tokenizer_json["model"]["type"] in ["WordLevel", "WordPiece"]:
             tokenizer_json["model"]["vocab"] = {}
         else:
             raise ValueError(
-                f"This method does not support this type of tokenizer (found {tokenizer_json['model']['vocab']}) "
+                f"This method does not support this type of tokenizer (found {tokenizer_json['model']['type']}) "
                 "only BPE, Unigram, WordLevel and WordPiece."
             )
+
+        if (
+            special_tokens_map is not None
+            and "unk_token" in tokenizer_json["model"]
+            and tokenizer_json["model"]["unk_token"] in special_tokens_map
+        ):
+            tokenizer_json["model"]["unk_token"] = special_tokens_map[tokenizer_json["model"]["unk_token"]]
 
         tokenizer = TokenizerFast.from_str(json.dumps(tokenizer_json))
 
@@ -665,40 +669,51 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 trained_tokenizer_json["model"]["unk_id"] = unk_id
                 tokenizer = TokenizerFast.from_str(json.dumps(trained_tokenizer_json))
 
-        if post_processor is not None and "special_tokens" in post_processor:
-            # Almost done, we just have to adjust the token IDs in the post processor
+        if post_processor is not None:
             trained_tokenizer_json = json.loads(tokenizer.to_str())
-            for key in post_processor["special_tokens"]:
-                tokens = post_processor["special_tokens"][key]["tokens"]
-                if special_tokens_map is not None:
-                    tokens = [special_tokens_map.get(token, token) for token in tokens]
-                post_processor["special_tokens"][key]["tokens"] = tokens
-                post_processor["special_tokens"][key]["ids"] = [tokenizer.token_to_id(token) for token in tokens]
+            # Almost done, we just have to adjust the token IDs in the post processor
+            if "special_tokens" in post_processor:
+                for key in post_processor["special_tokens"]:
+                    tokens = post_processor["special_tokens"][key]["tokens"]
+                    if special_tokens_map is not None:
+                        tokens = [special_tokens_map.get(token, token) for token in tokens]
+                    post_processor["special_tokens"][key]["tokens"] = tokens
+                    post_processor["special_tokens"][key]["ids"] = [tokenizer.token_to_id(token) for token in tokens]
+
+            for special_token in ["cls", "sep"]:
+                if special_token in post_processor:
+                    token, _ = post_processor[special_token]
+                    if special_tokens_map is not None and token in special_tokens_map:
+                        token = special_tokens_map[token]
+                    token_id = tokenizer.token_to_id(token)
+                    post_processor[special_token] = [token, token_id]
+
             trained_tokenizer_json["post_processor"] = post_processor
             tokenizer = TokenizerFast.from_str(json.dumps(trained_tokenizer_json))
 
         kwargs = self.init_kwargs.copy()
         # Map pad/cls/mask token at the Transformers level
-        if special_tokens_map is not None:
-            special_tokens_list = SpecialTokensMixin.SPECIAL_TOKENS_ATTRIBUTES.copy()
-            special_tokens_list.remove("additional_special_tokens")
-            for token in special_tokens_list:
-                # Get the private one to avoid unnecessary warnings.
-                if getattr(self, f"_{token}") is not None:
-                    special_token = getattr(self, token)
-                    if special_token in special_tokens_map:
-                        special_token_full = getattr(self, f"_{token}")
-                        if isinstance(special_token_full, AddedToken):
-                            # Create an added token with the same paramters except the content
-                            kwargs[token] = AddedToken(
-                                special_tokens_map[special_token],
-                                single_word=special_token_full.single_word,
-                                lstrip=special_token_full.lstrip,
-                                rstrip=special_token_full.rstrip,
-                                normalized=special_token_full.normalized,
-                            )
-                        else:
-                            kwargs[token] = special_tokens_map[special_token]
+        special_tokens_list = SpecialTokensMixin.SPECIAL_TOKENS_ATTRIBUTES.copy()
+        special_tokens_list.remove("additional_special_tokens")
+        for token in special_tokens_list:
+            # Get the private one to avoid unnecessary warnings.
+            if getattr(self, f"_{token}") is not None:
+                special_token = getattr(self, token)
+                if special_tokens_map is not None and special_token in special_tokens_map:
+                    special_token = special_tokens_map[special_token]
+
+                special_token_full = getattr(self, f"_{token}")
+                if isinstance(special_token_full, AddedToken):
+                    # Create an added token with the same paramters except the content
+                    kwargs[token] = AddedToken(
+                        special_tokens_map[special_token],
+                        single_word=special_token_full.single_word,
+                        lstrip=special_token_full.lstrip,
+                        rstrip=special_token_full.rstrip,
+                        normalized=special_token_full.normalized,
+                    )
+                else:
+                    kwargs[token] = special_token
 
         additional_special_tokens = self.additional_special_tokens
         if new_special_tokens is not None:
