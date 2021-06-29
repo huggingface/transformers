@@ -1,5 +1,4 @@
 import sys
-
 import numpy as np
 import jsonlines as jsonl
 from transformers import GPT2TokenizerFast, TFGPT2LMHeadModel
