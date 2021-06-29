@@ -34,7 +34,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from typing import Optional
-
+from sklearn.model_selection import train_test_split
 import datasets
 import numpy as np
 import tensorflow as tf
@@ -363,6 +363,7 @@ def main():
         if extension == "txt":
             extension = "text"
         raw_datasets = load_dataset(extension, data_files=data_files)
+        
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
     # endregion
@@ -490,7 +491,15 @@ def main():
     train_dataset = tokenized_datasets["train"]
     if data_args.max_train_samples is not None:
         train_dataset = train_dataset.select(range(data_args.max_train_samples))
-    eval_dataset = tokenized_datasets["validation"]
+    if(data_args.validation_file is not None):
+        eval_dataset = tokenized_datasets["validation"]
+    else:
+        print(f'Validation file not found: using {data_args.validation_split_percentage}% of the dataset as validation as provided in data_args')
+        train_indices,val_indices=train_test_split(list(range(len(train_dataset))),test_size=data_args.validation_split_percentage)
+            
+        eval_dataset = train_dataset.select(val_indices)  
+        train_dataset = train_dataset.select(train_indices)
+
     if data_args.max_eval_samples is not None:
         eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
 
