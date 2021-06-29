@@ -192,6 +192,12 @@ class PretrainedConfig(PushToHubMixin):
         - **tie_word_embeddings** (:obj:`bool`, `optional`, defaults to :obj:`True`) -- Whether the model's input and
           output word embeddings should be tied. Note that this is only relevant if the model has a output word
           embedding layer.
+        - **torch_dtype** (:obj:`str`, `optional`) -- The :obj:`dtype` of the weights. This attribute can be used to
+          initialize the model to a non-default ``dtype`` (which is normally ``float32``) and thus allow for optimal
+          storage allocation. For example, if the saved model is ``float16``, ideally we want to load it back using the
+          minimal amount of memory needed to load ``float16`` weights. Since the config object is stored in plain text,
+          this attribute contains just the floating type string without the ``torch.`` prefix. For example, for
+          ``torch.float16`` ``torch_dtype`` is the ``"float16"`` string.
 
     TensorFlow specific parameters
 
@@ -207,6 +213,7 @@ class PretrainedConfig(PushToHubMixin):
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
         self.output_attentions = kwargs.pop("output_attentions", False)
         self.torchscript = kwargs.pop("torchscript", False)  # Only used by PyTorch models
+        self.torch_dtype = kwargs.pop("torch_dtype", None)  # Only used by PyTorch models
         self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
         self.pruned_heads = kwargs.pop("pruned_heads", {})
         self.tie_word_embeddings = kwargs.pop(

@@ -1,4 +1,4 @@
-.. 
+..
     Copyright 2020 The HuggingFace Team. All rights reserved.
 
     Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -36,6 +36,37 @@ PreTrainedModel
 
 .. autoclass:: transformers.PreTrainedModel
     :members:
+
+
+.. _from_pretrained-torch-dtype:
+
+Model Instantiation dtype
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Under Pytorch a model normally gets instantiated with ``torch.float32`` format. This can be an issue if one tries to
+load a model whose weights are in fp16, since it'd require twice as much memory. To overcome this limitation, you can
+either explicitly pass the desired ``dtype`` using ``torch_dtype`` argument:
+
+.. code-block:: python
+
+    model = T5ForConditionalGeneration.from_pretrained("t5", torch_dtype=torch.float16)
+
+or, if you want the model to always load in the most optimal memory pattern, you can use the special value ``"auto"``,
+and then ``dtype`` will be automatically derived from the model's weights:
+
+.. code-block:: python
+
+    model = T5ForConditionalGeneration.from_pretrained("t5", torch_dtype="auto")
+
+Models instantiated from scratch can also be told which ``dtype`` to use with:
+
+.. code-block:: python
+
+    config = T5Config.from_pretrained("t5")
+    model = AutoModel.from_config(config)
+
+Due to Pytorch design, this functionality is only available for floating dtypes.
+
 
 
 ModuleUtilsMixin

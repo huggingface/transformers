@@ -1549,6 +1549,8 @@ Note: If the fp16 weights of the model can't fit onto the memory of a single GPU
 For full details on this method and other related features please refer to `Constructing Massive Models
 <https://deepspeed.readthedocs.io/en/latest/zero3.html#constructing-massive-models>`__.
 
+Also when loading fp16-pretrained models, you will want to tell ``from_pretrained`` to use
+``torch_dtype=torch.float16``. For details, please, see :ref:`from_pretrained-torch-dtype`.
 
 
 Gathering Parameters

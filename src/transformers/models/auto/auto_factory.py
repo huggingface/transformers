@@ -17,7 +17,6 @@
 import types
 
 from ...configuration_utils import PretrainedConfig
-from ...deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
 from ...file_utils import copy_func
 from ...utils import logging
 from .configuration_auto import AutoConfig, replace_list_option_in_docstrings
@@ -367,16 +366,8 @@ class _BaseAutoModelClass:
     def from_config(cls, config, **kwargs):
         if type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)
-            if is_deepspeed_zero3_enabled():
-                import deepspeed
+            return model_class._from_config(config, **kwargs)
 
-                logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-                # this immediately partitions the model across all gpus, to avoid the overhead in time
-                # and memory copying it on CPU or each GPU first
-                with deepspeed.zero.Init(config=deepspeed_config()):
-                    return model_class(config, **kwargs)
-            else:
-                return model_class(config, **kwargs)
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
             f"Model type should be one of {', '.join(c.__name__ for c in cls._model_mapping.keys())}."
