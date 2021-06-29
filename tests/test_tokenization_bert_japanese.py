@@ -16,11 +16,11 @@
 
 import os
 import pickle
-import unittest
-import tempfile
 import shutil
+import tempfile
+import unittest
 
-from transformers import BertTokenizer, AutoTokenizer
+from transformers import AutoTokenizer, BertTokenizer
 from transformers.models.bert_japanese.tokenization_bert_japanese import (
     VOCAB_FILES_NAMES,
     BertJapaneseTokenizer,
