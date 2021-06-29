@@ -16,7 +16,6 @@ from argparse import ArgumentParser
 from pathlib import Path
 from typing import Callable, Tuple, Union
 
-from onnxruntime import GraphOptimizationLevel
 from transformers.models.albert import AlbertOnnxConfig
 from transformers.models.auto import AutoTokenizer
 from transformers.models.bart import BartOnnxConfig
@@ -67,14 +66,6 @@ SUPPORTED_MODEL_KIND = {
     "roberta": {"default": RobertaOnnxConfig},
     "t5": {"default": T5OnnxConfig.default, "with_past": T5OnnxConfig.with_past},
     "xlm-roberta": {"default": XLMRobertaOnnxConfig.default},
-}
-
-# ONNX Runtime optimization levels for humans
-ONNX_OPTIMIZATION_LEVELS = {
-    "disabled": GraphOptimizationLevel.ORT_DISABLE_ALL,
-    "default": GraphOptimizationLevel.ORT_ENABLE_BASIC,
-    "extended": GraphOptimizationLevel.ORT_ENABLE_EXTENDED,
-    "all": GraphOptimizationLevel.ORT_ENABLE_ALL,
 }
 
 
