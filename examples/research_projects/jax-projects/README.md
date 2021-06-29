@@ -385,10 +385,7 @@ official [flax example folder](https://github.com/huggingface/transformers/tree/
 
 ### Flax design philosophy in transformers
 
-This should explain a bit the philisophy of Flax/JAX in transformers and how it is different to PyTorch (no loss in the model, ...)
-
-This section will exaplain how flax models are implemented in Transformers and how the design differs from PyTorch. It will also explain how to use flax
-models and the training scripts.
+This section will exaplain how flax models are implemented in Transformers and how the design differs from PyTorch.
 
 Let's first go over the differencec between Flax and PyTorch.
 
