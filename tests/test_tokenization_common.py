@@ -3198,7 +3198,11 @@ class TokenizerTesterMixin:
         for spe_token_attr in special_tokens_list:
             spe_token = getattr(tokenizer, f"_{spe_token_attr}")
             if spe_token is not None:
-                special_tokens_map[spe_token] = f"{spe_token}a"
+                if isinstance(spe_token, AddedToken):
+                    # The mapping is composed of strings
+                    special_tokens_map[spe_token.content] = f"{spe_token}a"
+                else:
+                    special_tokens_map[spe_token] = f"{spe_token}a"
 
         for spe_token in tokenizer.additional_special_tokens:
             special_tokens_map[spe_token] = f"{spe_token}a"
