@@ -22,8 +22,8 @@ Don't forget to sign up [here](https://forms.gle/tVGPhjKXyEsSgUcs8)!
 - [How to install flax, jax, optax, transformers, datasets](#how-to-install-relevant-libraries)
 - [Quickstart Flax/JAX](#quickstart-flax-and-jax)
 - [Quickstart Flax/JAX in 🤗 Transformers](#quickstart-flax-and-jax-in-transformers)
-    - [How to use flax models & scripts](#how-to-use-flax-models-and-example-scripts)
     - [Flax design philosophy in 🤗 Transformers](#flax-design-philosophy-in-transformers)
+    - [How to use flax models & scripts](#how-to-use-flax-models-and-example-scripts)
 - [How to make a demo for submission](#how-to-make-a-demo)
 - [Talks](#talks)
 - [How to setup TPU VM](#how-to-setup-tpu-vm)
@@ -383,13 +383,150 @@ official [flax example folder](https://github.com/huggingface/transformers/tree/
 - [(TODO) CLIP pretraining, fine-tuning (CLIP)]( )
 
 
-### How to use flax models and example scripts
-
-TODO (should be filled by 29.06.)
-
 ### Flax design philosophy in transformers
 
-TODO (should be filled by 29.06.)
+This should explain a bit the philisophy of Flax/JAX in transformers and how it is different to PyTorch (no loss in the model, ...)
+
+This section will exaplain how flax models are implemented in Transformers and how the design differs from PyTorch. It will also explain how to use flax
+models and the training scripts.
+
+Let's first go over the differencec between Flax and PyTorch.
+
+In JAX, most transformations (notably `jax.jit`) require functions that are transformed to be stateless to have no side effects. This is because any such side-effects will only be executed once when the Python version of the function is run during compilation (see Stateful Computations in JAX). As a consequence, Flax models, which are designed to work well with JAX transformations, are stateless. This means that when running a model in inference, both the inputs and the model weights are passed to the forward pass. In contrast, PyTorch model are very much stateful with the weights being stored within the model instance and the user just passing the inputs to the forward pass.
+
+Let's illustrate the difference between stateful models in PyTorch and stateless models in Flax.
+
+For simplicity, let's assume the language model consists simply of a single attention layer [`key_proj`, `value_proj`, `query_proj`] and a linear layer `logits_proj` to project the transformed word embeddings to the output logit vectors.
+
+#### **Stateful models in PyTorch**
+
+In PyTorch, the weights matrices would be stored as `torch.nn.Linear` objects alongside the model's config inside the model class `ModelPyTorch`:
+
+```python
+class ModelPyTorch:
+ 
+  def __init__(self, config):
+    self.config = config
+    self.key_proj = torch.nn.Linear(config)
+    self.value_proj = torch.nn.Linear(config)
+    self.query_proj = torch.nn.Linear(config)
+    self.logits_proj = torch.nn.Linear(config)
+```
+
+Instantiating an object `model_pytorch` of the class `ModelPyTorch` would actually allocate memory for the model weights and attach them to the attributes `self.key_proj`, `self.value_proj`, `self.query_proj`, and `self.logits.proj`. We could access the weights via:
+
+```
+key_projection_matrix = model_pytorch.key_proj.weight.data
+```
+
+Visually, we would represent an object of `model_pytorch` therefore as follows:
+
+![alt text](https://raw.githubusercontent.com/patrickvonplaten/scientific_images/master/lm_pytorch_def.png)
+
+Exectuing a forward pass then simply corresponds to passing the `input_ids` to the object `model_pytorch`:
+
+```python
+sequences = model_pytorch(input_ids)
+```
+
+In a more abstract way, this can be represented as passing the word embeddings to the model function to get the output logits:
+
+![alt text](https://raw.githubusercontent.com/patrickvonplaten/scientific_images/master/lm_pt_inference.png)
+
+This design is called **stateful** because the output logits, the `sequences`, can change even if the word embeddings, the `input_ids`, stay the same. Hence, the function's output does not only depend on its inputs, but also on its **state**, `[self.key_proj, self.value_proj, self.query_proj, self.logits_proj]`, which makes `model_pytorch` stateful.
+
+#### **Stateless models in Flax/JAX**
+
+Now, let's see how the mathematically equivalent model would be written in JAX/Flax. The model class `ModelFlax` would define the self-attention and logits projection weights as [**`flax.linen.Dense`**](https://flax.readthedocs.io/en/latest/_autosummary/flax.linen.Dense.html#flax.linen.Dense) objects:
+
+```python
+class ModelFlax:
+
+  def __init__(self, config):
+    self.config = config
+    self.key_proj = flax.linen.Dense(config)
+    self.value_proj = flax.linen.Dense(config)
+    self.query_proj = flax.linen.Dense(config)
+    self.logits_proj = flax.linen.Dense(config)
+```
+
+At first glance the linear layer class `flax.linen.Dense` looks very similar to PyTorch's `torch.nn.Linear` class. However, instantiating an object `model_flax` only defines the linear transformation functions and does **not** allocate memory to store the linear transformation weights. In a way, the attribute `self.key_proj` tell the instantiated object `model_flax` to perform a linear transformation on some input and force it to expect a weight, called `key_proj`, as an input.
+
+This time we would illustrate the object `model_flax` without the weight matrices:
+
+![alt text](https://raw.githubusercontent.com/patrickvonplaten/scientific_images/master/lm_flax_def.png)
+
+
+Accordingly, the forward pass requires both `input_ids` as well as a dictionary consisting of the model's weights (called `state` here) to compute the `sequences`:
+
+To get the initial `state` we need to explicitly do a forward pass by passing a dummy input:
+
+```python
+state = model_flax.init(rng, dummy_input_ids)
+```
+
+and then we can do the forward pass.
+
+```python
+sequences = model_flax.apply(input_ids, state)
+```
+
+Visually, the forward pass would now be represented as passing all tensors required for the computation to the model's object:
+
+![alt text](https://raw.githubusercontent.com/patrickvonplaten/scientific_images/master/lm_flax_inference.png)
+
+This design is called **stateless** because the output logits, the `sequences`, **cannot** change if the word embeddings, the `input_ids`, stay the same. Hence, the function's output only depends on its inputs, being the `input_ids` and the `state` dictionary consisting of the weights **state**, `[key_proj, value_proj, query_proj, logits_proj]`. 
+
+Another term which is often used to describe the design difference between Flax/JAX and PyTorch is **immutable** vs **mutable**. A instantiated Flax model, `model_flax`, is **immutable** as a logical consequence of `model_flax`'s output being fully defined by its input: If calling `model_flax` could mutate `model_flax`, then calling `model_flax` twice with the same inputs could lead to different results which would violate the "*statelessness*" of Flax models.
+
+Now let's see how this is handled in `Transformers`. If you have used a flax model in Transformers already then you might be wondering how come we don't call `model.init` and `model.apply`. This is because the `FlaxPreTrainedModel` class abstracts it away. 
+It is designed this way so that the Flax models in Transformers will have similar API to PyTorch and Tensorflow models.
+
+The `FlaxPreTrainedModel` is an abstract class which holds a flax module, handles weights initialization and provides a simple interface for downloading and loading pretrained weights i.e the `save_pretrained` and `from_pretrained` methods. Each flax model then defines it's own subclass of `FlaxPreTrainedModel` for ex. the BERT model has `FlaxBertPreTrainedModel`. Each such class provides two important methods `init_weights` and `__call__`. Let's see what each of those methods do:
+
+- The `init_weights` method takes the expected input shape and an `rng` (and any other arguments that are required to get initial weights) and calls `module.init` by passing it a random example to get the initial weights. This method is called when we create an instance of the model class so the weights are already initilized when you create a model i.e when you do 
+
+      model = FlaxBertModel(config)
+
+- The `__call__` method is designed for the forward pass. It takes all necessary model inputs, parameters (and any other arguments that are required for the forward pass). The parameters are optional, when no parameters are passed it uses the previously initilized or loaded params which can be accessed using `model.params`. It then calls the `module.apply` method passing it the parameters and inputs to do the actual forward pass. So we can do a forward pass using
+
+      output = model(inputs, params=params)
+
+
+So the important point to remember is, here the `model` is not an instance of `nn.Moudle` it's and abstract class, like a container which holds a flax module, it's paramters and provides convinient methods for initialization and forward pass.
+
+Another important major difference between Flax and PyTorch models is that, `loss` is not computed inside the model and none of the flax models accept `labels` argument.
+This is because in JAX to get the gradients which are required for the backward pass we need to transform the loss function using the `grad` or `value_and_grad` transformations.
+So we decouple this from the modeling code, and write the loss functions in training scripts.
+
+### How to use flax models and example scripts
+
+Let's first see how to load, save and do inference with flax models. As explained in the above section, all flax models in Transformers have similar API to PyTorch models, so we can use the familier `from_pretrained` and `save_pretrained` methods to load and save flax models.
+
+Let's use the base `FlaxRobertaModel` without any heads as an example.
+
+```python
+from transformers import FlaxRobertaModel, RobertaTokenizerFast
+import jax
+
+tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
+inputs = tokenizer("JAX/Flax is amazing ", padding="max_length", rmax_length=128, eturn_tensors="np")
+
+model = FlaxRobertaModel.from_pretrained("julien-c/dummy-unknown")
+
+@jax.jit
+def run_model(input_ids, attention_mask):
+   # run a forward pass, should return an object `FlaxBaseModelOutputWithPooling`
+   return model(input_ids, attention_mask)
+
+outputs = run_model(**inputs)
+```
+
+We use `jit` to compile the function to get maximum performance. Note that in the above example we set `padding=max_length` to pad all examples to same length 
+this is because jax transformations like `jit` or `pmap` complies the function for faster execution and to do that it expects static shapes. If the batches are not
+of same shape the function get compiled again which could lead to major slow-down.
+
+TODO: Maybe a section about how to access intermidiate modules in flax models ?
 
 ## How to make a demo
 
