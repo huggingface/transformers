@@ -283,7 +283,6 @@ class AutoTokenizerCustomTest(unittest.TestCase):
 
 
 class BertTokenizationTest(unittest.TestCase):
-
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
