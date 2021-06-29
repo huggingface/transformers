@@ -729,4 +729,3 @@ class PretrainedConfig(PushToHubMixin):
                 )
 
             setattr(self, k, v)
-

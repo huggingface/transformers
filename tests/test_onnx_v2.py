@@ -3,11 +3,17 @@ from tempfile import NamedTemporaryFile
 from unittest import TestCase
 from unittest.mock import patch
 
-from transformers import AutoTokenizer, is_torch_available, AlbertConfig, DistilBertConfig, LongformerConfig, \
-    RobertaConfig, XLMRobertaConfig
+from transformers import (
+    AlbertConfig,
+    AutoTokenizer,
+    DistilBertConfig,
+    LongformerConfig,
+    RobertaConfig,
+    XLMRobertaConfig,
+    is_torch_available,
+)
 from transformers.models.albert import AlbertOnnxConfig
-
-from transformers.models.bert.configuration_bert import BertOnnxConfig, BertConfig
+from transformers.models.bert.configuration_bert import BertConfig, BertOnnxConfig
 from transformers.models.distilbert import DistilBertOnnxConfig
 from transformers.models.longformer import LongformerOnnxConfig
 from transformers.models.roberta import RobertaOnnxConfig
@@ -21,7 +27,7 @@ from transformers.onnx.utils import (
     compute_serialized_parameters_size,
     flatten_output_collection_property,
 )
-from transformers.testing_utils import require_onnx, slow, require_torch
+from transformers.testing_utils import require_onnx, require_torch, slow
 
 
 @require_onnx
@@ -81,6 +87,7 @@ class OnnxConfigTestCaseV2(TestCase):
 
 if is_torch_available():
     from transformers import AlbertModel, BertModel, DistilBertModel, LongformerModel, RobertaModel, XLMRobertaModel
+
     PYTORCH_EXPORT_DEFAULT_MODELS = {
         ("ALBERT", "albert-base-v2", AlbertModel, AlbertConfig, AlbertOnnxConfig),
         ("BERT", "bert-base-cased", BertModel, BertConfig, BertOnnxConfig),

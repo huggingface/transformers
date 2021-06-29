@@ -168,4 +168,3 @@ class AlbertOnnxConfig(OnnxConfig):
     @property
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
         return {"last_hidden_state": {0: "batch", 1: "sequence"}, "pooler_output": {0: "batch"}}
-

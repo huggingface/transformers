@@ -150,4 +150,3 @@ class DistilBertOnnxConfig(OnnxConfig):
     @property
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
         return {"last_hidden_state": {0: "batch", 1: "sequence"}}
-
