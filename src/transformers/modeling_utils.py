@@ -1238,9 +1238,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
-            # 2. If torch_dtype_auto_detect is True, we auto-detect it from the loaded state_dict, by checking the first
-            #    entry - we assume all weights are of the same dtype
-            # we also may have config.torch_dtype but we won't rely on it till v5
+            # 2. If torch_dtype is "auto", we auto-detect dtype from the loaded state_dict, by checking its first
+            #    weights entry - we assume all weights are of the same dtype
+            # we also may have config.torch_dtype available, but we won't rely on it till v5
             dtype_orig = None
             if torch_dtype is not None:
                 if isinstance(torch_dtype, str):
