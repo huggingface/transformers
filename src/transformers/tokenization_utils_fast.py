@@ -610,11 +610,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                     unk_token = special_tokens_map[unk_token]
                 tokenizer_json["model"]["unk_id"] = 0
                 tokenizer_json["model"]["vocab"] = [[unk_token, 0.0]]
-        elif tokenizer_json["model"]["type"] == ["WordLevel", "WordPiece"]:
+        elif tokenizer_json["model"]["type"] in ["WordLevel", "WordPiece"]:
             tokenizer_json["model"]["vocab"] = {}
         else:
             raise ValueError(
-                f"This method does not support this type of tokenizer (found {tokenizer_json['model']['vocab']}) "
+                f"This method does not support this type of tokenizer (found {tokenizer_json['model']['type']}) "
                 "only BPE, Unigram, WordLevel and WordPiece."
             )
 
