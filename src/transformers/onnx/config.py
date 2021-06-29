@@ -148,7 +148,7 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         self.use_past = use_past
 
     @classmethod
-    def with_past(cls, config: PretrainedConfig) -> "OnnxConfig":
+    def with_past(cls, config: PretrainedConfig) -> "OnnxConfigWithPast":
         """
         Instantiate a OnnxConfig with `use_past` attribute set to True
 
@@ -161,7 +161,7 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         return cls(config, use_past=True)
 
     @property
-    def config_values_override(self) -> Optional[Mapping[str, Any]]:
+    def values_override(self) -> Optional[Mapping[str, Any]]:
         if hasattr(self._config, "use_cache"):
             return {"use_cache": self.use_past}
 
