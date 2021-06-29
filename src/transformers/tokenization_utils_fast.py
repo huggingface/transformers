@@ -706,7 +706,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 if isinstance(special_token_full, AddedToken):
                     # Create an added token with the same paramters except the content
                     kwargs[token] = AddedToken(
-                        special_tokens_map[special_token],
+                        special_token,
                         single_word=special_token_full.single_word,
                         lstrip=special_token_full.lstrip,
                         rstrip=special_token_full.rstrip,
