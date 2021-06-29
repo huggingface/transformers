@@ -18,7 +18,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import List, Tuple
+from typing import Tuple
 
 from tqdm import tqdm
 
@@ -29,8 +29,6 @@ from transformers.models.marian.convert_marian_to_pytorch import (
     convert_opus_name_to_hf_name,
     download_and_unzip,
     get_system_metadata,
-    remove_prefix,
-    remove_suffix,
 )
 
 
@@ -82,7 +80,7 @@ class TatoebaConverter:
         dest_dir.mkdir(exist_ok=True)
         for model in tqdm(models_to_convert):  # k, prepro, download, test_set_url in tqdm(model_list):
             if "SentencePiece" not in model["pre-processing"]:
-                print(f"Skipping {metadata['release']} because it doesn't appear to use SentencePiece")
+                print(f"Skipping {model['release']} because it doesn't appear to use SentencePiece")
                 continue
             if not os.path.exists(save_dir / model["_name"]):
                 download_and_unzip(f"{TATOEBA_MODELS_URL}/{model['release']}", save_dir / model["_name"])
@@ -143,7 +141,7 @@ class TatoebaConverter:
         model_dict["_hf_model_id"] = f"opus-mt-{short_src}-{short_tgt}"
 
         a3_src, a3_tgt = model_dict["_name"].split("-")
-        opus_src_tags, opus_tgt_tags = a3_src.split("+"), a3_tgt.split("+")
+        # opus_src_tags, opus_tgt_tags = a3_src.split("+"), a3_tgt.split("+")
 
         # This messy part tries to deal with language tags in multilingual models, possibly
         # not all having three-letter codes
@@ -194,7 +192,7 @@ class TatoebaConverter:
         langtoken = ""
         if tgt_multilingual:
             langtoken = (
-                f"* a sentence-initial language token is required in the form of >>id<<"
+                "* a sentence-initial language token is required in the form of >>id<<"
                 "(id = valid, usually three-letter target language ID)\n"
             )
 
@@ -211,15 +209,15 @@ class TatoebaConverter:
 
         datainfo = ""
         if "training-data" in model_dict:
-            datainfo += f"* Training data: \n"
+            datainfo += "* Training data: \n"
             for k, v in model_dict["training-data"].items():
                 datainfo += f"  * {str(k)}: {str(v)}\n"
         if "validation-data" in model_dict:
-            datainfo += f"* Validation data: \n"
+            datainfo += "* Validation data: \n"
             for k, v in model_dict["validation-data"].items():
                 datainfo += f"  * {str(k)}: {str(v)}\n"
         if "test-data" in model_dict:
-            datainfo += f"* Test data: \n"
+            datainfo += "* Test data: \n"
             for k, v in model_dict["test-data"].items():
                 datainfo += f"  * {str(k)}: {str(v)}\n"
 
