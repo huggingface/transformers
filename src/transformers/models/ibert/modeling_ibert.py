@@ -130,6 +130,8 @@ class IBertEmbeddings(nn.Module):
         else:
             input_shape = inputs_embeds.size()[:-1]
 
+        seq_length = input_shape[1]
+
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
                 buffered_token_type_ids = self.token_type_ids[:, :seq_length]
