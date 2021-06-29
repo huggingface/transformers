@@ -13,24 +13,26 @@
 # limitations under the License.
 
 import argparse
+import datetime
+import json
 import os
+import re
 from pathlib import Path
 from typing import List, Tuple
-import datetime
-import yaml
-import json
-import re
+
 from tqdm import tqdm
 
+import yaml
 from transformers.models.marian.convert_marian_to_pytorch import (
     FRONT_MATTER_TEMPLATE,
+    convert,
     convert_opus_name_to_hf_name,
+    download_and_unzip,
     get_system_metadata,
     remove_prefix,
     remove_suffix,
-    download_and_unzip,
-    convert,
 )
+
 
 DEFAULT_REPO = "Tatoeba-Challenge"
 DEFAULT_MODEL_DIR = os.path.join(DEFAULT_REPO, "models")
@@ -51,7 +53,8 @@ class TatoebaConverter:
         2. Rename opus model to huggingface format. This means replace each alpha3 code with an alpha2 code if a unique
            one exists. e.g. aav-eng -> aav-en, heb-eng -> he-en
         3. Select the best model for a particular pair, parse the yml for it and write a model card. By default the
-           best model is the one listed first in released-model-results, but it's also possible to specify the most recent one.
+           best model is the one listed first in released-model-results, but it's also possible to specify the most
+           recent one.
     """
 
     def __init__(self, save_dir="marian_converted"):
@@ -129,8 +132,8 @@ class TatoebaConverter:
 
     def write_model_card(self, model_dict, dry_run=False) -> str:
         """
-        Construct card from data parsed from YAML and the model's name. upload command: aws s3 sync
-        model_card_dir s3://models.huggingface.co/bert/Helsinki-NLP/ --dryrun
+        Construct card from data parsed from YAML and the model's name. upload command: aws s3 sync model_card_dir
+        s3://models.huggingface.co/bert/Helsinki-NLP/ --dryrun
         """
         model_dir_url = f"{TATOEBA_MODELS_URL}/{model_dict['release']}"
         long_pair = model_dict["_name"].split("-")
@@ -227,14 +230,17 @@ class TatoebaConverter:
 
         # combine with Tatoeba markdown
         readme_url = f"{TATOEBA_MODELS_URL}/{model_dict['_name']}/README.md"
-        extra_markdown = f"""### {model_dict['_name']}
+        extra_markdown = f"""
+### {model_dict['_name']}
+
 * source language name: {self.tag2name[a3_src]}
 * target language name: {self.tag2name[a3_tgt]}
 * OPUS readme: [README.md]({readme_url})
 """
 
         content = (
-            f"""* model: {model_dict['modeltype']}
+            f"""
+* model: {model_dict['modeltype']}
 * source language code{src_multilingual*'s'}: {', '.join(a2_src_tags)}
 * target language code{tgt_multilingual*'s'}: {', '.join(a2_tgt_tags)}
 * dataset: opus {backtranslated_data}
