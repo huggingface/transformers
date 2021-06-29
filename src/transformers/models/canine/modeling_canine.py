@@ -91,7 +91,17 @@ def load_tf_weights_in_canine(model, config, tf_checkpoint_path):
         # which are not required for using pretrained model
         # also discard the cls weights (which were used for the next sentence prediction pre-training task)
         if any(
-            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step", "cls"]
+            n
+            in [
+                "adam_v",
+                "adam_m",
+                "AdamWeightDecayOptimizer",
+                "AdamWeightDecayOptimizer_1",
+                "global_step",
+                "cls",
+                "autoregressive_decoder",
+                "char_output_weights",
+            ]
             for n in name
         ):
             logger.info(f"Skipping {'/'.join(name)}")
