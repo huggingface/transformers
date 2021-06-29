@@ -227,7 +227,7 @@ class PegasusSinusoidalPositionalEmbedding(nn.Module):
         self.weight = self._init_weight(self.weight)
 
     @staticmethod
-    def _init_weight(out: nn.Parameter):
+    def _init_weight(out):
         """
         Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
         the 2nd half of the vector. [dim // 2:]

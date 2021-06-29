@@ -1617,6 +1617,13 @@ if is_flax_available():
         ]
     )
     _import_structure["models.gpt2"].extend(["FlaxGPT2LMHeadModel", "FlaxGPT2Model", "FlaxGPT2PreTrainedModel"])
+    _import_structure["models.pegasus"].extend(
+        [
+            "FlaxPegasusForConditionalGeneration",
+            "FlaxPegasusModel",
+            "FlaxPegasusPreTrainedModel",
+        ]
+    )
     _import_structure["models.roberta"].extend(
         [
             "FlaxRobertaForMaskedLM",
@@ -1630,13 +1637,6 @@ if is_flax_available():
     )
     _import_structure["models.t5"].extend(["FlaxT5ForConditionalGeneration", "FlaxT5Model", "FlaxT5PreTrainedModel"])
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
-    _import_structure["models.pegasus"].extend(
-        [
-            "FlaxPegasusForConditionalGeneration",
-            "FlaxPegasusModel",
-            "FlaxPegasusPreTrainedModel",
-        ]
-    )
 else:
     from .utils import dummy_flax_objects
 
@@ -2994,6 +2994,7 @@ if TYPE_CHECKING:
             FlaxElectraPreTrainedModel,
         )
         from .models.gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model, FlaxGPT2PreTrainedModel
+        from .models.pegasus import FlaxPegasusForConditionalGeneration, FlaxPegasusModel, FlaxPegasusPreTrainedModel
         from .models.roberta import (
             FlaxRobertaForMaskedLM,
             FlaxRobertaForMultipleChoice,
@@ -3005,11 +3006,6 @@ if TYPE_CHECKING:
         )
         from .models.t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
         from .models.vit import FlaxViTForImageClassification, FlaxViTModel, FlaxViTPreTrainedModel
-        from .models.pegasus import (
-            FlaxPegasusForConditionalGeneration,
-            FlaxPegasusModel,
-            FlaxPegasusPreTrainedModel,
-        )
     else:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.

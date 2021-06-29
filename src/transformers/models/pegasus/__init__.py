@@ -19,11 +19,11 @@ from typing import TYPE_CHECKING
 
 from ...file_utils import (
     _BaseLazyModule,
+    is_flax_available,
     is_sentencepiece_available,
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
-    is_flax_available,
 )
 
 
@@ -55,8 +55,8 @@ if is_tf_available():
 
 if is_flax_available():
     _import_structure["modeling_flax_pegasus"] = [
-        "FlaxPegasusForConditionalGeneration",
         "FlaxModel",
+        "FlaxPegasusForConditionalGeneration",
     ]
 
 if TYPE_CHECKING:
@@ -81,10 +81,7 @@ if TYPE_CHECKING:
         from .modeling_tf_pegasus import TFPegasusForConditionalGeneration, TFPegasusModel, TFPegasusPreTrainedModel
 
     if is_flax_available():
-        from .modeling_flax_pegasus import (
-            FlaxPegasusForConditionalGeneration,
-            FlaxModel,
-        )
+        from .modeling_flax_pegasus import FlaxModel, FlaxPegasusForConditionalGeneration
 
 else:
     import importlib

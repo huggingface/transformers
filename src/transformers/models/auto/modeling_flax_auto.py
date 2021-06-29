@@ -54,6 +54,7 @@ from ..electra.modeling_flax_electra import (
     FlaxElectraModel,
 )
 from ..gpt2.modeling_flax_gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model
+from ..pegasus.modeling_flax_pegasus import FlaxPegasusForConditionalGeneration, FlaxPegasusModel
 from ..roberta.modeling_flax_roberta import (
     FlaxRobertaForMaskedLM,
     FlaxRobertaForMultipleChoice,
@@ -64,7 +65,6 @@ from ..roberta.modeling_flax_roberta import (
 )
 from ..t5.modeling_flax_t5 import FlaxT5ForConditionalGeneration, FlaxT5Model
 from ..vit.modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel
-from ..pegasus.modeling_flax_pegasus import FlaxPegasusForConditionalGeneration, FlaxPegasusModel
 from .auto_factory import auto_class_factory
 from .configuration_auto import (
     BartConfig,
@@ -73,10 +73,10 @@ from .configuration_auto import (
     CLIPConfig,
     ElectraConfig,
     GPT2Config,
+    PegasusConfig,
     RobertaConfig,
     T5Config,
     ViTConfig,
-    PegasusConfig,
 )
 
 

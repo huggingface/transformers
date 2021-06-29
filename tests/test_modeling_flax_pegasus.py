@@ -314,7 +314,6 @@ class FlaxPegasusModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerati
         (
             FlaxPegasusModel,
             FlaxPegasusForConditionalGeneration,
-,
         )
         if is_flax_available()
         else ()
