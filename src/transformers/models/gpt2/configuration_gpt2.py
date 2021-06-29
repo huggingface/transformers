@@ -217,5 +217,4 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
         else:
             return {
                 "last_hidden_state": {0: "batch", 1: "sequence"},
-                "encoder_last_hidden_state": {0: "batch", 1: "sequence"},
             }
