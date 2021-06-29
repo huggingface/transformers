@@ -184,7 +184,7 @@ class TrainingArguments:
             If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in
             :obj:`output_dir`.
         save_on_each_node (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            In multinode distributed training, whether save models or checkpoints on each node, or only on the main
+            When doing multi-node distributed training, whether to save models and checkpoints on each node, or only on the main one
             node.
         no_cuda (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to not use CUDA even when it is available or not.
@@ -462,7 +462,7 @@ class TrainingArguments:
     save_on_each_node: bool = field(
         default=False,
         metadata={
-            "help": "When doing a multinode distributed training, whether to save once per node or just once on the main node."
+            "help": "When doing multi-node distributed training, whether to save models and checkpoints on each node, or only on the main one"
         },
     )
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
@@ -949,7 +949,7 @@ class TrainingArguments:
     @property
     def should_save(self):
         """
-        Whether or not the current process should save or more generally write to disk.
+        Whether or not the current process should write to disk, e.g., to save models and checkpoints.
         """
         if self.save_on_each_node:
             return self.local_process_index == 0

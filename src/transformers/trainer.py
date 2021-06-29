@@ -1367,7 +1367,7 @@ class Trainer:
             else:
                 logger.warn(
                     f"Could not locate the best model at {best_model_path}, if you are running a distributed training "
-                    "on multiple nodes, you should activate `save_on_each_node=True`."
+                    "on multiple nodes, you should activate `--save_on_each_node`."
                 )
 
             if self.deepspeed:
