@@ -22,6 +22,7 @@ from torch.nn.utils.rnn import pad_sequence
 
 from ..file_utils import PaddingStrategy
 from ..modeling_utils import PreTrainedModel
+from ..models.bert import BertTokenizer, BertTokenizerFast
 from ..tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 
 
@@ -395,10 +396,17 @@ class DataCollatorForLanguageModeling:
 @dataclass
 class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
     """
-    Data collator used for language modeling.
+    Data collator used for language modeling that masks entire words.
 
     - collates batches of tensors, honoring their tokenizer's pad_token
     - preprocesses batches for masked language modeling
+
+    .. note::
+
+        This collator relies on details of the implementation of subword tokenization by
+        :class:`~transformers.BertTokenizer`, specifically that subword tokens are prefixed with `##`. For tokenizers
+        that do not adhere to this scheme, this collator will produce an output that is roughly equivalent to
+        :class:`.DataCollatorForLanguageModeling`.
     """
 
     def __call__(
@@ -435,6 +443,11 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         """
         Get 0/1 labels for masked tokens with whole word mask proxy
         """
+        if not isinstance(self.tokenizer, (BertTokenizer, BertTokenizerFast)):
+            warnings.warn(
+                "DataCollatorForWholeWordMask is only suitable for BertTokenizer-like tokenizers."
+                "Please refer to the documentation for more information."
+            )
 
         cand_indexes = []
         for (i, token) in enumerate(input_tokens):

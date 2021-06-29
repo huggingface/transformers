@@ -168,11 +168,11 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-def _sample_negatives(features: np.ndarray, num_negatives: int):
+def _sample_negative_indices(features_shape: Tuple, num_negatives: int):
     """
     Sample `num_negatives` vectors from feature vectors.
     """
-    batch_size, sequence_length, hidden_size = features.shape
+    batch_size, sequence_length, hidden_size = features_shape
     if sequence_length <= 1:
         raise ValueError(
             f"`features should have `sequence_length` > 1, but are of shape (batch_size, sequence_length, hidden_size) = ({batch_size, sequence_length, hidden_size})."
@@ -195,14 +195,7 @@ def _sample_negatives(features: np.ndarray, num_negatives: int):
     for batch_idx in range(1, batch_size):
         sampled_negative_indices[batch_idx] += batch_idx * sequence_length
 
-    features = features.reshape(-1, hidden_size)  # BTC => (BxT)C
-    # take negative vectors from sampled indices
-    sampled_negatives = features[sampled_negative_indices.reshape(-1)]
-    sampled_negatives = sampled_negatives.reshape(batch_size, sequence_length, num_negatives, hidden_size).transpose(
-        2, 0, 1, 3
-    )
-
-    return sampled_negatives
+    return sampled_negative_indices
 
 
 WAV_2_VEC_2_START_DOCSTRING = r"""
@@ -699,12 +692,6 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
             dtype=self.dtype,
         )
 
-        # can be decayed for training
-        self.temperature = 1
-
-    def set_temperature(self, temperature: int):
-        self.temperature = temperature
-
     @staticmethod
     def _compute_perplexity(probs, mask=None):
         if mask is not None:
@@ -717,7 +704,7 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
         perplexity = jnp.exp(-jnp.sum(marginal_probs * jnp.log(marginal_probs + 1e-7), axis=-1)).sum()
         return perplexity
 
-    def __call__(self, hidden_states, mask_time_indices=None, deterministic=True):
+    def __call__(self, hidden_states, mask_time_indices=None, deterministic=True, temperature=1):
         batch_size, sequence_length, hidden_size = hidden_states.shape
 
         # project to codevector dim
@@ -780,20 +767,10 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         attention_mask = jnp.ones_like(input_ids)
-        params_rng, dropout_rng, gumbel_rng = jax.random.split(rng, 3)
-        rngs = {"params": params_rng, "dropout": dropout_rng, "gumbel": gumbel_rng}
+        params_rng, dropout_rng = jax.random.split(rng, 2)
+        rngs = {"params": params_rng, "dropout": dropout_rng}
 
         return self.module.init(rngs, input_ids, attention_mask, return_dict=False)["params"]
-
-    def init_cache(self, batch_size, max_length):
-        # init input variables to retrieve cache
-        input_ids = jnp.ones((batch_size, max_length))
-        attention_mask = jnp.ones_like(input_ids)
-
-        init_variables = self.module.init(
-            jax.random.PRNGKey(0), input_ids, attention_mask, return_dict=False, init_cache=True
-        )
-        return init_variables["cache"]
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     def __call__(
@@ -803,7 +780,6 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
         mask_time_indices=None,
         params: dict = None,
         dropout_rng: jax.random.PRNGKey = None,
-        gumbel_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -824,9 +800,6 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
         rngs = {}
         if dropout_rng is not None:
             rngs["dropout"] = dropout_rng
-
-        if gumbel_rng is not None:
-            rngs["gumbel"] = gumbel_rng
 
         inputs = {"params": params or self.params}
 
@@ -1082,18 +1055,13 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
             dtype=self.dtype,
         )
 
-    def set_gumbel_temperature(self, temperature: int):
-        """
-        Set the Gumbel softmax temperature to a given value. Only necessary for training
-        """
-        return self.quantizer.set_temperature(temperature)
-
     def __call__(
         self,
         input_values,
         attention_mask=None,
         mask_time_indices=None,
         deterministic: bool = True,
+        gumbel_temperature: int = 1,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1160,7 +1128,7 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
         # quantize all (unmasked) extracted features and project to final vq dim
         extract_features = self.dropout_features(outputs[1], deterministic=deterministic)
         quantized_features, codevector_perplexity = self.quantizer(
-            extract_features, mask_time_indices, deterministic=deterministic
+            extract_features, mask_time_indices, deterministic=deterministic, temperature=gumbel_temperature
         )
         quantized_features = self.project_q(quantized_features)
 
@@ -1194,3 +1162,54 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
 @add_start_docstrings("""Wav2Vec2 Model with a quantizer and `VQ` head on top. """, WAV_2_VEC_2_START_DOCSTRING)
 class FlaxWav2Vec2ForPreTraining(FlaxWav2Vec2PreTrainedModel):
     module_class = FlaxWav2Vec2ForPreTrainingModule
+
+    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    # overwrite since has `gumbel_temperature` input
+    def __call__(
+        self,
+        input_values,
+        attention_mask=None,
+        mask_time_indices=None,
+        gumbel_temperature: Optional[int] = None,
+        params: dict = None,
+        dropout_rng: jax.random.PRNGKey = None,
+        gumbel_rng: jax.random.PRNGKey = None,
+        train: bool = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        gumbel_temperature = gumbel_temperature if gumbel_temperature else 1
+
+        batch_size, sequence_length = input_values.shape
+
+        if attention_mask is None:
+            attention_mask = jnp.ones((batch_size, sequence_length))
+
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
+        if gumbel_rng is not None:
+            rngs["gumbel"] = gumbel_rng
+
+        inputs = {"params": params or self.params}
+
+        return self.module.apply(
+            inputs,
+            jnp.array(input_values, dtype="f4"),
+            jnp.array(attention_mask, dtype="i4"),
+            mask_time_indices,
+            gumbel_temperature,
+            not train,
+            output_attentions,
+            output_hidden_states,
+            return_dict,
+            rngs=rngs,
+        )
