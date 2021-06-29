@@ -737,7 +737,7 @@ def extract_hyperparameters_from_trainer(trainer):
     if trainer.args.fp16:
         if trainer.use_amp:
             hyperparameters["mixed_precision_training"] = "Native AMP"
-        elif trainer._use_apex:
+        elif trainer.use_apex:
             hyperparameters["mixed_precision_training"] = f"Apex, opt level {trainer.args.fp16_opt_level}"
 
     if trainer.args.label_smoothing_factor != 0.0:
