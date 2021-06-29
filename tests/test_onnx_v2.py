@@ -187,8 +187,8 @@ if is_torch_available():
     }
 
     PYTORCH_EXPORT_WITH_PAST_MODELS = {
-        ("BART", "facebook/bart-base", BartModel, BartConfig, BartOnnxConfig),
-        ("GPT2", "gpt2", GPT2Model, GPT2Config, GPT2OnnxConfig),
+        # ("BART", "facebook/bart-base", BartModel, BartConfig, BartOnnxConfig),
+        # ("GPT2", "gpt2", GPT2Model, GPT2Config, GPT2OnnxConfig),
         # ("T5", "t5-small", T5Model, T5Config, T5OnnxConfig)
     }
 
