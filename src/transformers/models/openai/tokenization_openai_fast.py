@@ -64,7 +64,7 @@ class OpenAIGPTTokenizerFast(PreTrainedTokenizerFast):
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = OpenAIGPTTokenizer
 
-    def __init__(self, vocab_file, merges_file, tokenizer_file=None, unk_token="<unk>", **kwargs):
+    def __init__(self, vocab_file=None, merges_file=None, tokenizer_file=None, unk_token="<unk>", **kwargs):
         super().__init__(vocab_file, merges_file, tokenizer_file=tokenizer_file, unk_token=unk_token, **kwargs)
 
     @property

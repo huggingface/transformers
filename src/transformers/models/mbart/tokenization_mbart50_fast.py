@@ -110,7 +110,7 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
 
     def __init__(
         self,
-        vocab_file,
+        vocab_file=None,
         src_lang=None,
         tgt_lang=None,
         tokenizer_file=None,
