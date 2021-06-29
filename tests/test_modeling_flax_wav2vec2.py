@@ -35,7 +35,7 @@ if is_flax_available():
         FlaxWav2Vec2GumbelVectorQuantizer,
         FlaxWav2Vec2Model,
         _compute_mask_indices,
-        _sample_negatives,
+        _sample_negative_indices,
     )
 
 
@@ -269,7 +269,14 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
         )  # each value in vector consits of same value
         features = np.broadcast_to(features[None, :], (batch_size, sequence_length, hidden_size))
 
-        negatives = _sample_negatives(features, num_negatives)
+        negative_indices = _sample_negative_indices(features.shape, num_negatives)
+
+        features = features.reshape(-1, hidden_size)  # BTC => (BxT)C
+        # take negative vectors from sampled indices
+        sampled_negatives = features[negative_indices.reshape(-1)]
+        negatives = sampled_negatives.reshape(batch_size, sequence_length, num_negatives, hidden_size).transpose(
+            2, 0, 1, 3
+        )
 
         self.assertTrue(negatives.shape == (num_negatives, batch_size, sequence_length, hidden_size))
 

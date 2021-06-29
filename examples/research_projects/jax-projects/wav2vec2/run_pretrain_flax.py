@@ -1,34 +1,38 @@
 #!/usr/bin/env python3
 import logging
 import sys
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
+import time
+from dataclasses import field
+from pathlib import Path
+from typing import Dict, List, Optional, Union
 
-import torch
+import numpy as np
+import tqdm
 from datasets import DatasetDict, load_dataset
 
+import flax
+import jax
+import jax.numpy as jnp
 import librosa
+import optax
+from flax import jax_utils, traverse_util
+from flax.training import train_state
+from flax.training.common_utils import get_metrics, shard
 from transformers import (
+    FlaxWav2Vec2ForPreTraining,
     HfArgumentParser,
     TrainingArguments,
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
-    FlaxWav2Vec2ForPreTraining,
+    is_tensorboard_available,
 )
-from transformers.models.wav2vec2.modeling_flax_wav2vec2 import _compute_mask_indices, _sample_negatives
-import flax
-import jax
-import jax.numpy as jnp
-import optax
-from flax import jax_utils, traverse_util
-from flax.training import train_state
-from flax.training.common_utils import get_metrics, onehot, shard
+from transformers.models.wav2vec2.modeling_flax_wav2vec2 import _compute_mask_indices, _sample_negative_indices
 
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@flax.struct.dataclass
 class ModelArguments:
     """
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
@@ -62,19 +66,7 @@ class ModelArguments:
     )
 
 
-def configure_logger(model_args: ModelArguments, training_args: TrainingArguments):
-    logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        handlers=[logging.StreamHandler(sys.stdout)],
-    )
-    logging_level = logging.WARNING
-    if model_args.verbose_logging:
-        logging_level = logging.DEBUG
-    logger.setLevel(logging_level)
-
-
-@dataclass
+@flax.struct.dataclass
 class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
@@ -118,8 +110,8 @@ class DataTrainingArguments:
     )
 
 
-@dataclass
-class DataCollatorForWav2Vec2Pretraining:
+@flax.struct.dataclass
+class FlaxDataCollatorForWav2Vec2Pretraining:
     """
     Data collator that will dynamically pad the inputs received and prepare masked indices
     for self-supervised pretraining.
@@ -153,14 +145,14 @@ class DataCollatorForWav2Vec2Pretraining:
     pad_to_multiple_of: Optional[int] = None
     max_length: Optional[int] = None
 
-    def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+    def __call__(self, features: List[Dict[str, Union[List[int], np.ndarray]]]) -> Dict[str, np.ndarray]:
         # reformat list to dict and set to pytorch format
         batch = self.feature_extractor.pad(
             features,
             max_length=self.max_length,
             padding=self.padding,
             pad_to_multiple_of=self.pad_to_multiple_of,
-            return_tensors="pt",
+            return_tensors="np",
         )
         mask_indices_seq_length = self.model._get_feat_extract_output_lengths(batch["input_values"].shape[-1])
 
@@ -169,86 +161,51 @@ class DataCollatorForWav2Vec2Pretraining:
             (batch["input_values"].shape[0], mask_indices_seq_length),
             self.model.config.mask_time_prob,
             self.model.config.mask_time_length,
-            device=batch["input_values"].device,
             min_masks=2,
+        )
+
+        batch["sampled_negative_indices"] = _sample_negative_indices(
+            (batch["mask_time_indices"].shape + (self.model.config.proj_codevector_dim,)),
+            self.model.config.num_negatives,
         )
 
         return batch
 
 
-class Wav2Vec2PreTrainer(Trainer):
-    """
-    Subclassed :class:`~transformers.Trainer` for Wav2Vec2-like pretraining. Trainer can decay gumbel softmax temperature during training.
-    """
+def configure_logger(model_args: ModelArguments, training_args: TrainingArguments):
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
+    logging_level = logging.WARNING
+    if model_args.verbose_logging:
+        logging_level = logging.DEBUG
+    logger.setLevel(logging_level)
 
-    def __init__(self, *args, max_gumbel_temp=1, min_gumbel_temp=0, gumbel_temp_decay=1.0, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.num_update_step = 0
-        self.max_gumbel_temp = max_gumbel_temp
-        self.min_gumbel_temp = min_gumbel_temp
-        self.gumbel_temp_decay = gumbel_temp_decay
 
-    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
-        """
-        Perform a training step on a batch of inputs.
+def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step):
+    summary_writer.scalar("train_time", train_time, step)
 
-        Subclass and override to inject custom behavior.
+    train_metrics = get_metrics(train_metrics)
+    for key, vals in train_metrics.items():
+        tag = f"train_{key}"
+        for i, val in enumerate(vals):
+            summary_writer.scalar(tag, val, step - len(vals) + i + 1)
 
-        Args:
-            model (:obj:`nn.Module`):
-                The model to train.
-            inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
-                The inputs and targets of the model.
+    for metric_name, value in eval_metrics.items():
+        summary_writer.scalar(f"eval_{metric_name}", value, step)
 
-                The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
-                argument :obj:`labels`. Check your model's documentation for all accepted arguments.
 
-        Return:
-            :obj:`torch.Tensor`: The tensor with training loss on this batch.
-        """
+def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndarray:
+    num_samples = len(samples_idx)
+    samples_to_remove = num_samples % batch_size
 
-        model.train()
-        inputs = self._prepare_inputs(inputs)
-
-        if self.use_amp:
-            with autocast():
-                loss = self.compute_loss(model, inputs)
-        else:
-            loss = self.compute_loss(model, inputs)
-
-        if self.args.n_gpu > 1 or self.deepspeed:
-            if model.module.config.ctc_loss_reduction == "mean":
-                loss = loss.mean()
-            elif model.module.config.ctc_loss_reduction == "sum":
-                loss = loss.sum() / (inputs["mask_time_indices"]).sum()
-            else:
-                raise ValueError(f"{model.config.ctc_loss_reduction} is not valid. Choose one of ['mean', 'sum']")
-
-        if self.args.gradient_accumulation_steps > 1:
-            loss = loss / self.args.gradient_accumulation_steps
-
-        if self.use_amp:
-            self.scaler.scale(loss).backward()
-        elif self.use_apex:
-            with amp.scale_loss(loss, self.optimizer) as scaled_loss:
-                scaled_loss.backward()
-        elif self.deepspeed:
-            self.deepspeed.backward(loss)
-        else:
-            loss.backward()
-
-        self.num_update_step += 1
-        # make sure gumbel softmax temperature is decayed
-        if self.args.n_gpu > 1 or self.deepspeed:
-            model.module.set_gumbel_temperature(
-                max(self.max_gumbel_temp * self.gumbel_temp_decay ** self.num_update_step, self.min_gumbel_temp)
-            )
-        else:
-            model.set_gumbel_temperature(
-                max(self.max_gumbel_temp * self.gumbel_temp_decay ** self.num_update_step, self.min_gumbel_temp)
-            )
-
-        return loss.detach()
+    if samples_to_remove != 0:
+        samples_idx = samples_idx[:-samples_to_remove]
+    sections_split = num_samples // batch_size
+    batch_idx = np.split(samples_idx, sections_split)
+    return batch_idx
 
 
 def main():
@@ -342,21 +299,29 @@ def main():
 
     model = FlaxWav2Vec2ForPreTraining(config)
 
-    data_collator = DataCollatorForWav2Vec2Pretraining(model=model, feature_extractor=feature_extractor)
+    data_collator = FlaxDataCollatorForWav2Vec2Pretraining(model=model, feature_extractor=feature_extractor)
 
-#    trainer = Wav2Vec2PreTrainer(
-#        model=model,
-#        data_collator=data_collator,
-#        args=training_args,
-#        train_dataset=vectorized_datasets["train"],
-#        eval_dataset=vectorized_datasets["validation"],
-#        tokenizer=feature_extractor,
-#        max_gumbel_temp=model_args.max_gumbel_temperature,
-#        min_gumbel_temp=model_args.min_gumbel_temperature,
-#        gumbel_temp_decay=model_args.gumbel_temperature_decay,
-#    )
-#    trainer.train()
-    # Store some constant
+    # Enable tensorboard only on the master node
+    has_tensorboard = is_tensorboard_available()
+    if has_tensorboard and jax.process_index() == 0:
+        try:
+            from flax.metrics.tensorboard import SummaryWriter
+
+            summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir))
+        except ImportError as ie:
+            has_tensorboard = False
+            logger.warning(
+                f"Unable to display metrics through TensorBoard because some package are not installed: {ie}"
+            )
+    else:
+        logger.warning(
+            "Unable to display metrics through TensorBoard because the package is not installed: "
+            "Please run pip install tensorboard to enable."
+        )
+
+    # Initialize our training
+    rng = jax.random.PRNGKey(training_args.seed)
+    rng, dropout_rngs, gumbel_rngs = jax.random.split(rng, 3)
 
     num_epochs = int(training_args.num_train_epochs)
     train_batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
@@ -383,7 +348,10 @@ def main():
     # The mask is True for parameters that should be decayed.
     def decay_mask_fn(params):
         flat_params = traverse_util.flatten_dict(params)
-        flat_mask = {path: (path[-1] != "bias" and path[-2:] != ("LayerNorm", "scale")) for path in flat_params}
+        flat_mask = {
+            path: (path[-1] != "bias" and path[-2:] not in [("layer_norm", "scale"), ("final_layer_norm", "scale")])
+            for path in flat_params
+        }
         return traverse_util.unflatten_dict(flat_mask)
 
     # create adam optimizer
@@ -397,18 +365,61 @@ def main():
 
     # Setup train state
     state = train_state.TrainState.create(apply_fn=model.__call__, params=model.params, tx=adamw)
+    num_negatives = model.config.num_negatives
+    contrastive_logits_temperature = model.config.contrastive_logits_temperature
+    num_codevectors = model.config.num_codevectors_per_group * model.config.num_codevector_groups
+    diversity_loss_weight = model.config.diversity_loss_weight
 
     # Define gradient update step fn
-    def train_step(state, batch, dropout_rng):
+    def train_step(state, batch, dropout_rng, gumbel_rng):
         dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
 
         def loss_fn(params):
-            labels = batch.pop("labels")
+            negative_indices = batch.pop("negative_indices")
 
-            logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
+            gumbel_temperature = jnp.clip(
+                model_args.max_gumbel_temperature * model_args.gumbel_temperature_decay ** state.step,
+                a_min=model_args.min_gumbel_temperature,
+            )
 
-            # compute loss
-            loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1])).mean()
+            logits = state.apply_fn(
+                **batch,
+                gumbel_temperature=gumbel_temperature,
+                params=params,
+                dropout_rng=dropout_rng,
+                gumbel_rng=gumbel_rng,
+                train=True,
+            )[0]
+
+            quantized_features = logits.projected_quantized_states
+            transformer_features = logits.projected_states
+
+            batch_size, sequence_length, hidden_size = quantized_features.shape
+
+            # take negative vectors from sampled indices
+            quantized_negatives = quantized_features.reshape(-1, hidden_size)[negative_indices.reshape(-1)]
+            quantized_negatives = quantized_negatives.reshape(
+                batch_size, sequence_length, num_negatives, hidden_size
+            ).transpose(2, 0, 1, 3)
+
+            target_features = jnp.concatenate([quantized_features[None, :], quantized_negatives], axis=0)
+            loss_logits = optax.cosine_similarity(transformer_features, target_features)
+            loss_logits = logits / contrastive_logits_temperature
+
+            neg_is_pos = (quantized_features == quantized_features).all(-1)
+            neg_is_pos[:1] = False
+
+            loss_logits = jnp.where(neg_is_pos, float("-inf"), loss_logits)
+
+            predictions = loss_logits.transpose(2, 1, 0).reshape(-1, loss_logits.shape[0])
+            targets = ((1 - batch["mask_time_indices"]) * -100).transpose(1, 0).flatten()
+
+            target_mask = jnp.where(targets > 0, 1.0, 0.0)
+            contrastive_loss = optax.softmax_cross_entropy(predictions, targets) * target_mask
+            contrastive_loss = contrastive_loss.sum()
+
+            diversity_loss = (num_codevectors - logits.codevector_perplexity) / num_codevectors
+            loss = contrastive_loss + diversity_loss_weight * diversity_loss
 
             return loss
 
@@ -428,18 +439,42 @@ def main():
 
     # Define eval fn
     def eval_step(params, batch):
-        labels = batch.pop("labels")
+        negative_indices = batch.pop("negative_indices")
 
         logits = model(**batch, params=params, train=False)[0]
 
-        # compute loss
-        loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1]))
+        quantized_features = logits.projected_quantized_states
+        transformer_features = logits.projected_states
 
-        # compute accuracy
-        accuracy = jnp.equal(jnp.argmax(logits, axis=-1), labels)
+        batch_size, sequence_length, hidden_size = quantized_features.shape
+
+        # take negative vectors from sampled indices
+        quantized_negatives = quantized_features.reshape(-1, hidden_size)[negative_indices.reshape(-1)]
+        quantized_negatives = quantized_negatives.reshape(
+            batch_size, sequence_length, num_negatives, hidden_size
+        ).transpose(2, 0, 1, 3)
+
+        target_features = jnp.concatenate([quantized_features[None, :], quantized_negatives], axis=0)
+        loss_logits = optax.cosine_similarity(transformer_features, target_features)
+        loss_logits = logits / contrastive_logits_temperature
+
+        neg_is_pos = (quantized_features == quantized_features).all(-1)
+        neg_is_pos[:1] = False
+
+        loss_logits = jnp.where(neg_is_pos, float("-inf"), loss_logits)
+
+        predictions = loss_logits.transpose(2, 1, 0).reshape(-1, loss_logits.shape[0])
+        targets = ((1 - batch["mask_time_indices"]) * -100).transpose(1, 0).flatten()
+
+        target_mask = jnp.where(targets > 0, 1.0, 0.0)
+        contrastive_loss = optax.softmax_cross_entropy(predictions, targets) * target_mask
+        contrastive_loss = contrastive_loss.sum()
+
+        diversity_loss = (num_codevectors - logits.codevector_perplexity) / num_codevectors
+        loss = contrastive_loss + diversity_loss_weight * diversity_loss
 
         # summarize metrics
-        metrics = {"loss": loss.mean(), "accuracy": accuracy.mean()}
+        metrics = {"loss": loss.mean(), "codevector_perplexity": logits.codevector_perplexity}
         metrics = jax.lax.pmean(metrics, axis_name="batch")
 
         return metrics
@@ -460,18 +495,20 @@ def main():
         rng, input_rng = jax.random.split(rng)
 
         # Generate an epoch by shuffling sampling indices from the train dataset
-        num_train_samples = len(tokenized_datasets["train"])
+        num_train_samples = len(vectorized_datasets["train"])
         train_samples_idx = jax.random.permutation(input_rng, jnp.arange(num_train_samples))
         train_batch_idx = generate_batch_splits(train_samples_idx, train_batch_size)
 
         # Gather the indexes for creating the batch and do a training step
         for i, batch_idx in enumerate(tqdm(train_batch_idx, desc="Training...", position=1)):
-            samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
+            samples = [vectorized_datasets["train"][int(idx)] for idx in batch_idx]
             model_inputs = data_collator(samples)
 
             # Model forward
             model_inputs = shard(model_inputs.data)
-            state, train_metric, dropout_rngs = p_train_step(state, model_inputs, dropout_rngs)
+            state, train_metric, dropout_rngs, gumbel_rngs = p_train_step(
+                state, model_inputs, dropout_rngs, gumbel_rngs
+            )
             train_metrics.append(train_metric)
 
         train_time += time.time() - train_start
@@ -481,13 +518,13 @@ def main():
         )
 
         # ======================== Evaluating ==============================
-        num_eval_samples = len(tokenized_datasets["validation"])
+        num_eval_samples = len(vectorized_datasets["validation"])
         eval_samples_idx = jnp.arange(num_eval_samples)
         eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
 
         eval_metrics = []
         for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
-            samples = [tokenized_datasets["validation"][int(idx)] for idx in batch_idx]
+            samples = [vectorized_datasets["validation"][int(idx)] for idx in batch_idx]
             model_inputs = data_collator(samples)
 
             # Model forward
@@ -506,7 +543,7 @@ def main():
 
         # Save metrics
         if has_tensorboard and jax.process_index() == 0:
-            cur_step = epoch * (len(tokenized_datasets["train"]) // train_batch_size)
+            cur_step = epoch * (len(vectorized_datasets["train"]) // train_batch_size)
             write_metric(summary_writer, train_metrics, eval_metrics, train_time, cur_step)
 
         # save checkpoint after each epoch and push checkpoint to the hub
