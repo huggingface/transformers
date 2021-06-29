@@ -184,8 +184,11 @@ class TrainingArguments:
             If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in
             :obj:`output_dir`.
         save_on_each_node (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            When doing multi-node distributed training, whether to save models and checkpoints on each node, or only on the main one
-            node.
+            When doing multi-node distributed training, whether to save models and checkpoints on each node, or only on
+            the main one.
+
+            This should not be activated when the different nodes use the same storage as the files will be saved with
+            the same names for each node.
         no_cuda (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to not use CUDA even when it is available or not.
         seed (:obj:`int`, `optional`, defaults to 42):
