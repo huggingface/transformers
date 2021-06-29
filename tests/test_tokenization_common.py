@@ -3159,13 +3159,6 @@ class TokenizerTesterMixin:
             return
 
         tokenizer = self.get_rust_tokenizer()
-        new_tokenizer = tokenizer.train_new_from_iterator(SMALL_TRAINING_CORPUS, 100)
-
-        # Test we can use the new tokenizer with something not seen during training
-        inputs = new_tokenizer(["This is the first sentence", "This sentence is different 🤗."])
-        self.assertEqual(len(inputs["input_ids"]), 2)
-        decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
-        self.assertEqual("this is the first sentence", decoded_input.lower())
 
         # Test with a special tokens map
         special_tokens_list = [
@@ -3204,6 +3197,12 @@ class TokenizerTesterMixin:
 
         for spe_token in tokenizer.additional_special_tokens:
             self.assertTrue(special_tokens_map[spe_token] in new_tokenizer.additional_special_tokens)
+
+        # Test we can use the new tokenizer with something not seen during training
+        inputs = new_tokenizer(["This is the first sentence", "This sentence is different 🤗."])
+        self.assertEqual(len(inputs["input_ids"]), 2)
+        decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
+        self.assertEqual("this is the first sentence", decoded_input.lower())
 
 
 @is_staging_test
