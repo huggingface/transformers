@@ -471,7 +471,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         All context managers that the model should be initialized under go here.
 
         Args:
-            `torch_dtype` - see ``from_pretrained`` for details
+            torch_dtype (:obj:`torch.dtype`, `optional`):
+                Override the default ``torch.dtype`` and load the model under this dtype.
         """
         torch_dtype = kwargs.pop("torch_dtype", None)
 
