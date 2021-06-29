@@ -3167,8 +3167,11 @@ class TokenizerTesterMixin:
         self.assertEqual(len(inputs["input_ids"]), 2)
         decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
         expected_result = "This is the first sentence"
-        if new_tokenizer.init_kwargs.get("do_lower_case", False):
-            decoded_input = decoded_input.lower()
+
+        # OpenAIGPT always lowercases and has no arg.
+        if new_tokenizer.init_kwargs.get("do_lower_case", False) or tokenizer.__class__.__name__.startswith(
+            "OpenAIGPT"
+        ):
             expected_result = expected_result.lower()
         self.assertEqual(expected_result, decoded_input)
 
@@ -3182,10 +3185,10 @@ class TokenizerTesterMixin:
         self.assertEqual(tokenizer.max_len_sentences_pair, new_tokenizer.max_len_sentences_pair)
 
         # Assert the set of special tokens match as we didn't ask to change them
-        self.assertSequenceEqual(
-            tokenizer.special_tokens_map.items(),
-            new_tokenizer.special_tokens_map.items(),
-        )
+        # The assertDictEqual fails for T5 even if the dicts are the same so we check manually
+        self.assertListEqual(list(tokenizer.special_tokens_map.keys()), list(new_tokenizer.special_tokens_map.keys()))
+        for key in tokenizer.special_tokens_map.keys():
+            self.assertEqual(tokenizer.special_tokens_map[key], new_tokenizer.special_tokens_map[key])
 
     def test_training_new_tokenizer_with_special_tokens_change(self):
         # This feature only exists for fast tokenizers
@@ -3236,8 +3239,11 @@ class TokenizerTesterMixin:
         self.assertEqual(len(inputs["input_ids"]), 2)
         decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
         expected_result = "This is the first sentence"
-        if new_tokenizer.init_kwargs.get("do_lower_case", False):
-            decoded_input = decoded_input.lower()
+
+        # OpenAIGPT always lowercases and has no arg.
+        if new_tokenizer.init_kwargs.get("do_lower_case", False) or tokenizer.__class__.__name__.startswith(
+            "OpenAIGPT"
+        ):
             expected_result = expected_result.lower()
         self.assertEqual(expected_result, decoded_input)
 

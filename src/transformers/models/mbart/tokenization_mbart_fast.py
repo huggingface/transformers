@@ -133,7 +133,10 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
         _additional_special_tokens = FAIRSEQ_LANGUAGE_CODES.copy()
 
         if additional_special_tokens is not None:
-            _additional_special_tokens.extend(additional_special_tokens)
+            # Only add those special tokens if they are not already there.
+            _additional_special_tokens.extend(
+                [t for t in additional_special_tokens if t not in _additional_special_tokens]
+            )
 
         self.add_special_tokens({"additional_special_tokens": _additional_special_tokens})
 
