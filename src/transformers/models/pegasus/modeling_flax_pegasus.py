@@ -616,7 +616,7 @@ class FlaxPegasusDecoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bart.modeling_bart.FlaxBartDecoderLayerCollection with Bart->Pegasus
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderLayerCollection with Bart->Pegasus
 class FlaxPegasusDecoderLayerCollection(nn.Module):
     config: PegasusConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -840,7 +840,7 @@ class FlaxPegasusDecoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bart.modeling_bart.FlaxPegasusModule with Bart->Pegasus
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxPegasusModule with Bart->Pegasus
 class FlaxPegasusModule(nn.Module):
     config: PegasusConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
