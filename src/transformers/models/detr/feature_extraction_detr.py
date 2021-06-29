@@ -440,7 +440,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 annotations.
 
             return_segmentation_masks (:obj:`Dict`, :obj:`List[Dict]`, `optional`, defaults to :obj:`False`):
-                Whether to also return instance segmentation masks in case :obj:`format = "coco_detection"`.
+                Whether to also include instance segmentation masks as part of the labels in case :obj:`format =
+                "coco_detection"`.
 
             masks_path (:obj:`pathlib.Path`, `optional`):
                 Path to the directory containing the PNG files that store the class-agnostic image segmentations. Only
@@ -465,6 +466,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             - **pixel_values** -- Pixel values to be fed to a model.
             - **pixel_mask** -- Pixel mask to be fed to a model (when :obj:`pad_and_return_pixel_mask=True` or if
               `"pixel_mask"` is in :obj:`self.model_input_names`).
+            - **labels** -- Optional labels to be fed to a model (when :obj:`annotations` are provided)
         """
         # Input type checking for clearer error
 
@@ -613,7 +615,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 if not is_torch_available():
                     raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
 
-                encoded_inputs["target"] = [
+                encoded_inputs["labels"] = [
                     {k: torch.from_numpy(v) for k, v in target.items()} for target in annotations
                 ]
 

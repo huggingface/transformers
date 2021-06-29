@@ -828,8 +828,8 @@ DETR_INPUTS_DOCSTRING = r"""
         pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
 
-            Pixel values can be obtained using :class:`~transformers.DetrTokenizer`. See
-            :meth:`transformers.DetrTokenizer.__call__` for details.
+            Pixel values can be obtained using :class:`~transformers.DetrFeatureExtractor`. See
+            :meth:`transformers.DetrFeatureExtractor.__call__` for details.
 
         pixel_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, height, width)`, `optional`):
             Mask to avoid performing attention on padding pixel values. Mask values selected in ``[0, 1]``:
@@ -990,7 +990,6 @@ class DetrDecoder(DetrPreTrainedModel):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
-        self.max_target_positions = config.max_position_embeddings
 
         self.layers = nn.ModuleList([DetrDecoderLayer(config) for _ in range(config.decoder_layers)])
         # in DETR, the decoder uses layernorm after the last decoder layer output

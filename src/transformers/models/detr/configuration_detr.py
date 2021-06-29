@@ -64,11 +64,6 @@ class DetrConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         activation_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        classifier_dropout (:obj:`float`, `optional`, defaults to 0.0):
-            The dropout ratio for classifier.
-        max_position_embeddings (:obj:`int`, `optional`, defaults to 1024):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
         init_std (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         init_xavier_std (:obj:`float`, `optional`, defaults to 1):
@@ -178,7 +173,6 @@ class DetrConfig(PretrainedConfig):
         self.init_xavier_std = init_xavier_std
         self.encoder_layerdrop = encoder_layerdrop
         self.decoder_layerdrop = decoder_layerdrop
-        self.classifier_dropout = classifier_dropout
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.auxiliary_loss = auxiliary_loss
