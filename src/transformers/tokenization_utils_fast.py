@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
-from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordPieceTrainer
+from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
 
 from .convert_slow_tokenizer import convert_slow_tokenizer
 from .file_utils import PaddingStrategy, add_end_docstrings
@@ -65,6 +65,7 @@ INIT_TOKENIZER_DOCSTRING += """
 MODEL_TO_TRAINER_MAPPING = {
     "BPE": BpeTrainer,
     "Unigram": UnigramTrainer,
+    "WordLevel": WordLevelTrainer,
     "WordPiece": WordPieceTrainer,
 }
 
