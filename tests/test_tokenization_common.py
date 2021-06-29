@@ -3185,6 +3185,11 @@ class TokenizerTesterMixin:
         self.assertEqual(tokenizer.max_len_sentences_pair, new_tokenizer.max_len_sentences_pair)
 
         # Assert the set of special tokens match as we didn't ask to change them
+        self.assertSequenceEqual(
+            tokenizer.all_special_tokens_extended,
+            new_tokenizer.all_special_tokens_extended,
+        )
+
         self.assertDictEqual(tokenizer.special_tokens_map, new_tokenizer.special_tokens_map)
 
     def test_training_new_tokenizer_with_special_tokens_change(self):
@@ -3230,6 +3235,51 @@ class TokenizerTesterMixin:
 
                 new_id = new_tokenizer.get_vocab()[new_special_token]
                 self.assertEqual(getattr(new_tokenizer, f"{token}_id"), new_id)
+
+        # Check if the AddedToken / string format has been kept
+        for special_token in tokenizer.all_special_tokens_extended:
+            if isinstance(special_token, AddedToken) and special_token.content not in special_tokens_map:
+                # The special token must appear identically in the list of the new tokenizer.
+                self.assertTrue(
+                    special_token in new_tokenizer.all_special_tokens_extended,
+                    f"'{special_token}' should be in {new_tokenizer.all_special_tokens_extended}",
+                )
+            elif isinstance(special_token, AddedToken):
+                # The special token must appear in the list of the new tokenizer as an object of type AddedToken with
+                # the same parameters as the old AddedToken except the content that the user has requested to change.
+                special_token_str = special_token.content
+                new_special_token_str = special_tokens_map[special_token_str]
+
+                find = False
+                for candidate in new_tokenizer.all_special_tokens_extended:
+                    if (
+                        isinstance(candidate, AddedToken)
+                        and candidate.content == new_special_token_str
+                        and candidate.lstrip == special_token.lstrip
+                        and candidate.rstrip == special_token.rstrip
+                        and candidate.normalized == special_token.normalized
+                        and candidate.single_word == special_token.single_word
+                    ):
+                        find = True
+                        break
+                self.assertTrue(
+                    find,
+                    (
+                        f"'{new_special_token_str}' doesn't appear in the list "
+                        f"'{new_tokenizer.all_special_tokens_extended}' as an AddedToken with the same parameters as "
+                        f"'{special_token}' in the list {tokenizer.all_special_tokens_extended}"
+                    ),
+                )
+            elif special_token not in special_tokens_map:
+                # The special token must appear identically in the list of the new tokenizer.
+                self.assertTrue(
+                    special_token in new_tokenizer.all_special_tokens_extended,
+                    f"'{special_token}' should be in {new_tokenizer.all_special_tokens_extended}",
+                )
+
+            else:
+                # The special token must appear in the list of the new tokenizer as an object of type string.
+                self.assertTrue(special_tokens_map[special_token] in new_tokenizer.all_special_tokens_extended)
 
         # Test we can use the new tokenizer with something not seen during training
         inputs = new_tokenizer(["This is the first sentence", "This sentence is different 🤗."])

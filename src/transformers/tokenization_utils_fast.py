@@ -16,7 +16,6 @@
  Tokenization classes for fast tokenizers (provided by HuggingFace's tokenizers library). For slow (python) tokenizers
  see tokenization_utils.py
 """
-
 import json
 import os
 from collections import defaultdict
@@ -701,8 +700,19 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             if getattr(self, f"_{token}") is not None:
                 special_token = getattr(self, token)
                 if special_tokens_map is not None and special_token in special_tokens_map:
-                    kwargs[token] = special_tokens_map[special_token]
-                elif kwargs.get(token, None) != special_token:
+                    special_token = special_tokens_map[special_token]
+
+                special_token_full = getattr(self, f"_{token}")
+                if isinstance(special_token_full, AddedToken):
+                    # Create an added token with the same paramters except the content
+                    kwargs[token] = AddedToken(
+                        special_token,
+                        single_word=special_token_full.single_word,
+                        lstrip=special_token_full.lstrip,
+                        rstrip=special_token_full.rstrip,
+                        normalized=special_token_full.normalized,
+                    )
+                else:
                     kwargs[token] = special_token
 
         additional_special_tokens = self.additional_special_tokens
