@@ -3163,12 +3163,15 @@ class TokenizerTesterMixin:
         new_tokenizer = tokenizer.train_new_from_iterator(SMALL_TRAINING_CORPUS, 100)
 
         # Test we can use the new tokenizer with something not seen during training
-        inputs = new_tokenizer(["This is the first sentence", "This sentence is different 🤗."])
+        text_input = ["This is the first sentence", "This sentence is different 🤗."]
+        inputs = new_tokenizer(text_input)
         self.assertEqual(len(inputs["input_ids"]), 2)
         decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
-        if new_tokenizer.init_kwargs["do_lower_case"]:
+        if not hasattr(new_tokenizer, "do_lower_case") or (
+            "do_lower_case" in new_tokenizer.init_kwargs and not new_tokenizer.init_kwargs["do_lower_case"]
+        ):
             decoded_input = decoded_input.lower()
-        self.assertEqual("this is the first sentence", decoded_input)
+        self.assertEqual(text_input[0].lower(), decoded_input)
 
         # We check that the parameters of the tokenizer remained the same
         # Check we have the same number of added_tokens for both pair and non-pair inputs.
@@ -3230,12 +3233,15 @@ class TokenizerTesterMixin:
                 self.assertEqual(getattr(new_tokenizer, f"{token}_id"), new_id)
 
         # Test we can use the new tokenizer with something not seen during training
-        inputs = new_tokenizer(["This is the first sentence", "This sentence is different 🤗."])
+        text_input = ["This is the first sentence", "This sentence is different 🤗."]
+        inputs = new_tokenizer(text_input)
         self.assertEqual(len(inputs["input_ids"]), 2)
         decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
-        if new_tokenizer.init_kwargs["do_lower_case"]:
+        if not hasattr(new_tokenizer, "do_lower_case") or (
+            "do_lower_case" in new_tokenizer.init_kwargs and not new_tokenizer.init_kwargs["do_lower_case"]
+        ):
             decoded_input = decoded_input.lower()
-        self.assertEqual("this is the first sentence", decoded_input)
+        self.assertEqual(text_input[0].lower(), decoded_input)
 
 
 @is_staging_test
