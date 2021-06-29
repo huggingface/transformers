@@ -19,7 +19,7 @@ import unittest
 
 from transformers import BatchEncoding, CanineTokenizer
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_tokenizers
+from transformers.testing_utils import require_tokenizers, require_torch
 from transformers.tokenization_utils import AddedToken
 
 from .test_tokenization_common import TokenizerTesterMixin
@@ -43,6 +43,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def get_tokenizer(self, **kwargs) -> CanineTokenizer:
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
+    @require_torch
     def test_prepare_batch_integration(self):
         tokenizer = self.canine_tokenizer
         src_text = ["Life is like a box of chocolates.", "You never know what you're gonna get."]
@@ -59,6 +60,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual((2, 39), batch.input_ids.shape)
         self.assertEqual((2, 39), batch.attention_mask.shape)
 
+    @require_torch
     def test_encoding_keys(self):
         tokenizer = self.canine_tokenizer
         src_text = ["Once there was a man.", "He wrote a test in HuggingFace Tranformers."]
@@ -68,6 +70,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertIn("attention_mask", batch)
         self.assertIn("token_type_ids", batch)
 
+    @require_torch
     def test_max_length_integration(self):
         tokenizer = self.canine_tokenizer
         tgt_text = [
