@@ -103,7 +103,7 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
 
     def __init__(
         self,
-        vocab_file,
+        vocab_file=None,
         tokenizer_file=None,
         unk_token="<unk>",
         bos_token="<s>",
