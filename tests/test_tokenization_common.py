@@ -3160,20 +3160,14 @@ class TokenizerTesterMixin:
             return
 
         tokenizer = self.get_rust_tokenizer()
-        
+
         # Train new tokenizer
-        new_tokenizer = tokenizer.train_new_from_iterator(
-            SMALL_TRAINING_CORPUS, 100
-        )
+        new_tokenizer = tokenizer.train_new_from_iterator(SMALL_TRAINING_CORPUS, 100)
 
         # We check that the parameters of the tokenizer remained the same
         # Check we have the same number of added_tokens for both pair and non-pair inputs.
-        self.assertEqual(
-            tokenizer.num_special_tokens_to_add(False), new_tokenizer.num_special_tokens_to_add(False)
-        )
-        self.assertEqual(
-            tokenizer.num_special_tokens_to_add(True), new_tokenizer.num_special_tokens_to_add(True)
-        )
+        self.assertEqual(tokenizer.num_special_tokens_to_add(False), new_tokenizer.num_special_tokens_to_add(False))
+        self.assertEqual(tokenizer.num_special_tokens_to_add(True), new_tokenizer.num_special_tokens_to_add(True))
         # Assert the set of special tokens match as we didn't ask to change them
         self.assertSequenceEqual(
             tokenizer.special_tokens_map.items(),
@@ -3195,7 +3189,7 @@ class TokenizerTesterMixin:
             return
 
         tokenizer = self.get_rust_tokenizer()
-        
+
         # Test with a special tokens map
         special_tokens_list = SpecialTokensMixin.SPECIAL_TOKENS_ATTRIBUTES.copy()
         special_tokens_list.remove("additional_special_tokens")
