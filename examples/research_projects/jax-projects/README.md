@@ -19,9 +19,11 @@ Don't forget to sign up [here](https://forms.gle/tVGPhjKXyEsSgUcs8)!
 	- [How to propose](#how-to-propose-a-project)
 	- [How to form a team](#how-to-form-a-team-around-a-project)
 - [Tips & Tricks for project](#tips-on-how-to-organize-the-project)
+- [How to install flax, jax, optax, transformers, datasets](#how-to-install-relevant-libraries)
 - [Quickstart Flax/JAX](#quickstart-flax-and-jax)
 - [Quickstart Flax/JAX in 🤗 Transformers](#quickstart-flax-and-jax-in-transformers)
-- [How to install flax, jax, optax, transformers, datasets](#how-to-install-relevant-libraries)
+    - [How to use flax models & scripts](#how-to-use-flax-models-and-example-scripts)
+    - [Flax design philosophy in 🤗 Transformers](#flax-design-philosophy-in-transformers)
 - [How to make a demo for submission](#how-to-make-a-demo)
 - [Talks](#talks)
 - [How to setup TPU VM](#how-to-setup-tpu-vm)
@@ -78,6 +80,8 @@ To be invited to the Slack channel, please make sure you have signed up [on the 
 
 During the first week after the community week announcement, **23.06. - 30.06.**, teams will be formed around the most promising and interesting project ideas. Each team can consist of 2 to 10 participants. Projects can be accessed [here](https://discuss.huggingface.co/c/flax-jax-projects/22).
 
+All officially defined projects can be seen [here](https://docs.google.com/spreadsheets/d/1GpHebL7qrwJOc9olTpIPgjf8vOS0jNb6zR_B8x_Jtik/edit?usp=sharing).
+
 ### How to propose a project
 
 Some default project ideas are given by the organizers. **However, we strongly encourage participants to submit their own project ideas!**
@@ -116,7 +120,232 @@ Additionally, the organizers, other participants, or anybody in the community re
 
 ## Tips on how to organize the project
 
-TODO (should be filled by 24.06.)...
+This section gives you some tips on how to most efficiently & effectively 
+work as a team to achieve your goal. It is by no means a strict recipe to follow, 
+but rather a collection of tips from the 🤗 team.
+
+Once your team is defined, you can start working on the project as soon as possible. 
+
+
+### Communication
+
+At first, it is always useful to get to know each other and to set up a means of communication.
+While we recommend that all technical aspects of work can be discussed directly on the [forum](https://discuss.huggingface.co/c/flax-jax-projects/22) under your project thread, 
+it can be very helpful to have a more direct way of communicating, *e.g.* in a channel. 
+For this we have created a discord that you can access [here](https://discord.com/channels/858019234139602994/858019234139602997). 
+This discord will not be managed by anybody and is just there so that you can communicate more effectively with your team members. 
+Feel free to create a new channel for you and your team where you can discuss everything. If you and your team have already set up other ways of communicating, it is absolutely not required to make use of the discord. However, we do recommend each team to set up some kind 
+of channel or group for quick discussions.
+
+### Project definition
+
+In the very beginning, you should make sure your project is well-defined and that 
+everybody in the team understands the goal of the project and the work that needs to be 
+done in order to achieve the goal. A well-defined project:
+
+- has defined the task on which the model will be trained
+- has defined the model that will be trained
+- has defined the datasets that will be used for training
+- has defined the type of training scripts that need to be written
+- has defined the desired outcome of the project
+- has defined the workflows
+
+By "has defined" we don't meant that the corresponding code already has to be written and ready 
+to be used, but that everybody in team is on the same page on what type of model, data and training script should be used.
+
+To give an example, a well-defined project would be the following:
+
+- task: summarization
+- model: [t5-small](https://huggingface.co/t5-small)
+- dataset: [CNN/Daily mail](https://huggingface.co/datasets/cnn_dailymail)
+- training script: [run_summarization_flax.py](https://github.com/huggingface/transformers/blob/master/examples/flax/summarization/run_summarization_flax.py)
+- outcome: t5 model that can summarize news
+- work flow: adapt `run_summarization_flax.py` to work with `t5-small`.
+
+This example is a very easy and not the most interesting project since a `t5-small`
+summarization model exists already for CNN/Daily mail and pretty much no code has to be 
+written. 
+A well-defined project does not need to have the dataset be part of 
+the `datasets` library and the training script already be pre-written, however it should 
+be clear how the desired dataset can be accessed and how the training script can be 
+written. 
+
+It is also important to have a clear plan regarding the workflow. Usually, the 
+data processing is done in a first step. Once the data is in a format that the model can 
+work with, the training script can be written, etc. These steps should be more detailed 
+once the team has a clearly defined project. It can be helpful to set deadlines for each step.
+
+### Workload division
+
+To effectively work as a team, it is crucial to divide the workload among everybody.
+Some team members will be more motivated and experienced than others and 
+some team members simply want to participate to learn more and cannot contribute that 
+much to the team. This is totally fine! One cannot expect everybody in the team to have the same level of experience and time/motivation during the community week.
+
+As a conclusion, being honest about one's expected involvement is crucial so that 
+the workload can be divided accordingly. If someone doesn't think her/his tasks are feasible - let 
+the team know early on so that someone else can take care of it!
+
+It is recommended that the motivated and experienced team members take the lead in dividing the work and are ready to take over the tasks of another team member if necessary. 
+
+The workload can often be divided according to:
+
+- data preprocessing (load the data and preprocess data in the correct format)
+- data tokenization / data collator (process data samples into tokens or images)
+- model configuration (writing the code that defines the model)
+- model forward pass (make sure input / output work correctly)
+- loss function (define the loss function)
+- putting the pieces together in a training script
+
+Many of the steps above require other steps to be finished, so it often makes sense 
+to use dummy data in the expected format to start, *e.g.*, with the model forward pass 
+before the data preprocessing is done.
+
+### Expectations
+
+It is also very important to stay realistic with the scope of your project. Each team 
+has access to a TPUv3-8 for only *ca.* 10 days, so it's important to keep the scope of 
+the project reasonable. While we do want each team to work on interesting projects, each 
+team should make sure that the project goals can be achieved within the provided compute 
+time on TPU. For instance, pretraining a 11 billion parameters T5 model is not really a realistic 
+task with just 10 days of TPUv3-8 compute. 
+Also, it might be difficult to finish a project where the whole modeling, dataset and training code has to be written from scratch.
+
+Having defined your project, feel free to reach out on Slack or the forum for feedback from the organizers. We can surely give you our opinion on whether the project is feasible and what can be done to improve it.
+the project is feasible.
+
+### Other tips
+
+Here is a collection of some more tips:
+
+- We strongly recommend to work as publicly and collaboratively as possible during the week so that other teams 
+and the organizers can best help you. This includes publishing important discussions on 
+the forum and making use of the [🤗 hub](http://huggingface.co/) to have a version 
+control for your models and training logs.
+- When debugging, it is important that the debugging cycle is kept as short as possible to 
+be able to effectively debug. *E.g.* if there is a problem with your training script, 
+you should run it with just a couple of hundreds of examples and not the whole dataset script. This can be done by either making use of [datasets streaming](https://huggingface.co/docs/datasets/master/dataset_streaming.html?highlight=streaming) or by selecting just the first 
+X number of data samples after loading:
+
+```python
+datasets["train"] = datasets["train"].select(range(1000))
+```
+- Ask for help. If you are stuck, use the public Slack channel or the [forum](https://discuss.huggingface.co/c/flax-jax-projects/22) to ask for help.
+
+## How to install relevant libraries
+
+It is recommended to install all relevant libraries both on your local machine 
+and on the TPU virtual machine. This way, quick prototyping and testing can be done on
+your local machine and the actual training can be done on the TPU VM.
+
+The following libraries are required to train a JAX/Flax model with 🤗 Transformers and 🤗 Datasets:
+
+- [JAX](https://github.com/google/jax/)
+- [Flax](https://github.com/google/flax)
+- [Optax](https://github.com/deepmind/optax)
+- [Transformers](https://github.com/huggingface/transformers)
+- [Datasets](https://github.com/huggingface/datasets)
+
+You should install the above libraries in a [virtual environment](https://docs.python.org/3/library/venv.html). 
+If you're unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/). Create a virtual environment with the version of Python you're going
+to use and activate it.
+
+We strongly recommend to make use of the provided JAX/Flax examples scripts in [transformers/examples/flax](https://github.com/huggingface/transformers/tree/master/examples/flax) even if you want to train a JAX/Flax model of another github repository that is not integrated into 🤗 Transformers.
+In all likelihood, you will need to adapt one of the example scripts, so we recommend forking and cloning the 🤗 Transformers repository as follows. 
+Doing so will allow you to share your fork of the Transformers library with your team members so that the team effectively works on the same code base. It will also automatically install the newest versions of `flax`, `jax` and `optax`.
+
+**IMPORTANT**: If you are setting up your environment on a TPU VM, make sure to 
+install JAX's TPU version before cloning and installing the transformers repository. 
+Otherwise, an incorrect version of JAX will be installed, and the following commands will 
+throw an error. 
+To install JAX's TPU version simply run the following command:
+
+```
+$ pip install "jax[tpu]>=0.2.16" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+```
+
+To verify that JAX was correctly installed, you can run the following command:
+
+```python
+import jax
+jax.device_count()
+```
+
+This should display the number of TPU cores, which should be 8 on a TPUv3-8 VM.
+
+Now you can run the following steps as usual.
+
+1. Fork the [repository](https://github.com/huggingface/transformers) by
+   clicking on the 'Fork' button on the repository's page. This creates a copy of the code
+   under your GitHub user account.
+
+2. Clone your fork to your local disk, and add the base repository as a remote:
+
+   ```bash
+   $ git clone https://github.com/<your Github handle>/transformers.git
+   $ cd transformers
+   $ git remote add upstream https://github.com/huggingface/transformers.git
+   ```
+
+3. Create a new branch to hold your development changes. This is especially useful to share code changes with your team:
+
+   ```bash
+   $ git checkout -b a-descriptive-name-for-my-project
+   ```
+
+4. Set up a flax environment by running the following command in a virtual environment:
+
+   ```bash
+   $ pip install -e ".[flax]"
+   ```
+
+   (If transformers was already installed in the virtual environment, remove
+   it with `pip uninstall transformers` before reinstalling it in editable
+   mode with the `-e` flag.)
+
+   If you have already cloned that repo, you might need to `git pull` to get the most recent changes in the `datasets`
+   library.
+
+   Running this command will automatically install `flax`, `jax` and `optax`.
+
+Next, you should also install the 🤗 Datasets library. We strongly recommend installing the 
+library from source to profit from the most current additions during the community week.
+
+Simply run the following steps:
+
+```
+$ cd ~/
+$ git clone https://github.com/huggingface/datasets.git
+$ cd datasets
+$ pip install -e ".[streaming]"
+```
+
+If you plan on contributing a specific dataset during 
+the community week, please fork the datasets repository and follow the instructions 
+[here](https://github.com/huggingface/datasets/blob/master/CONTRIBUTING.md#how-to-create-a-pull-request).
+
+To verify that all libraries are correctly installed, you can run the following command.
+It assumes that both `transformers` and `datasets` were installed from master - otherwise
+datasets streaming will not work correctly.
+
+```python
+from transformers import FlaxRobertaModel, RobertaTokenizerFast
+from datasets import load_dataset
+import jax
+
+dataset = load_dataset('oscar', "unshuffled_deduplicated_en", split='train', streaming=True)
+
+dummy_input = next(iter(dataset))["text"]
+
+tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
+input_ids = tokenizer(dummy_input, return_tensors="np").input_ids[:, :10]
+
+model = FlaxRobertaModel.from_pretrained("julien-c/dummy-unknown")
+
+# run a forward pass, should return an object `FlaxBaseModelOutputWithPooling`
+model(input_ids)
+```
+
 
 ## Quickstart flax and jax
 
@@ -149,24 +378,109 @@ official [flax example folder](https://github.com/huggingface/transformers/tree/
 - [Masked language modeling (BERT, RoBERTa, ELECTRA, BigBird)](https://github.com/huggingface/transformers/blob/master/examples/flax/language-modeling/run_mlm_flax.py)
 - [Text classification (BERT, RoBERTa, ELECTRA, BigBird)](https://github.com/huggingface/transformers/blob/master/examples/flax/text-classification/run_flax_glue.py)
 - [Summarization / Seq2Seq (BART, MBART, T5)](https://github.com/huggingface/transformers/blob/master/examples/flax/summarization/run_summarization_flax.py)
-- [(TODO) Masked Seq2Seq pret-training (T5)]( )
+- [Masked Seq2Seq pret-training (T5)](https://github.com/huggingface/transformers/blob/master/examples/flax/language-modeling/run_t5_mlm_flax.py)
 - [(TODO) Image classification (ViT)]( )
 - [(TODO) CLIP pretraining, fine-tuning (CLIP)]( )
 
-For more in-detail information on how to use/adapt Transformers Flax models and 
-example scripts, please have a look at [(TODO by 25.06.) HOW_TO_USE_FLAX_IN_TRANSFORMERS]( ).
 
-## How to install relevant libraries
+### How to use flax models and example scripts
 
-TODO (should be filled by 25.06.) ...
+TODO (should be filled by 29.06.)
+
+### Flax design philosophy in transformers
+
+TODO (should be filled by 29.06.)
 
 ## How to make a demo
 
-TODO (should be filled by 28.06.)...
+TODO (should be filled by 30.06.)...
 
 ## Talks
 
-TODO (should be filled by 28.06.)...
+Super excited to kick off 3 days of talks around JAX / Flax, Transformers, large-scale language modeling and other great topics during our community event! Calendar invites and links to join will be sent soon so stay tuned! Meanwhile, have a look at the schedule and the speaker line up! 
+
+### Wednesday, June 30th
+ Speaker        | Topic                           | Time                  | 
+|-------------|---------------------------------|------------------------|
+| Skye Wanderman-Milne, Google Brain | Intro to JAX on Cloud TPUs      | 6.00pm-6.45pm CEST / 9.00am-9.45am PST      | 
+| Marc van Zee, Google Brain | Introduction to Flax      | 6.45pm-7.30pm CEST / 9.45am-10.30am PST      | 
+| Pablo Castro, Google Brain | Using Jax & Flax for RL with the Dopamine library      | 7.30pm-8.00pm CEST / 10.30am-11.00am PST      | 
+
+### Thursday, July 1st
+ Speaker        | Topic                           | Time                  | 
+|-------------|---------------------------------|------------------------|
+| Suraj Patil & Patrick von Platen, Hugging Face | How to use JAX/Flax with Transformers      | 5.30pm-6.00pm CEST / 8.30am-9.00am PST      | 
+| Sabrina J. Mielke, Johns Hopkins University & HuggingFace | From stateful code to purified JAX: how to build your neural net framework | 6.00pm-6.30pm CEST / 9.00am-9.30am PST      | 
+| Mostafa Dehghani, Google Brain | Long Range Arena: Benchmarking Efficient Transformers      | 6.30pm-7.00pm CEST / 9.30am-10.00am PST      | 
+
+### Friday, July 2nd
+
+ Speaker        | Topic                           | Time                  | 
+|-------------|---------------------------------|------------------------|
+| Lucas Beyer, Google Brain | Vision Transformer      | 5.00pm-5.30 CEST / 8.00am-8.30 PST      | 
+| Soňa Mokrá & Junhyuk Oh, DeepMind | TBD      | 5.30pm-6.00 CEST / 8.30am-9.00 PST      | 
+| Ben Wang, EleutherAI | Multihost Training in Mesh Transformer JAX      | 6.00pm-6.30 CEST / 9.00am-9.30am PST      | 
+| Siddhartha Kamalakara, Joanna Yoo & João G M Araújo, Cohere | Training large scale language models      | 6:30pm-7.00pm CEST / 9:30am-10.00am PST      | 
+
+### Talks & Speakers
+
+#### Skye Wanderman-Milne, JAX developer, Google Brain
+- Talk: Intro to JAX on Cloud TPUs
+- Abstract: JAX is a system for high-performance machine-learning research that combines the familiarity of Python + NumPy together with the power of hardware acceleration on CPUs, GPUs, and TPUs. It offers composable function transformations for automatic differentiation, automatic batching, end-to-end compilation, and both data and model parallelism. This talk will show you how to get up and running with JAX on a Cloud TPU VM. 
+- Speaker info: Skye Wanderman-Milne is a software engineer working on JAX. She has previously worked on TensorFlow and Apache Impala, a high-performance distributed database.
+
+#### Marc van Zee, Research SWE, Google Brain (Flax team)
+- Talk: Introduction to Flax
+- Abstract: In this talk I will provide a high-level introduction to the neural network library Flax. I will discuss the Flax philosophy, talk about the ecosystem around Flax and provide a high-level introduction to the code. I explain the Module abstraction and how to use it to train your models.
+- Speaker info: Marc is at Google Research for over 4 years. First he worked on conceptual AI, developing a next generation language understanding and reasoning prototype and he authored the CFQ dataset for compositional generalization. Currently, Marc works as a research software engineer in the Flax team.
+
+#### Pablo Castro, Staff Research Software Developer; Google Research, Brain Team
+- Talk: Using Jax & Flax for RL with the Dopamine library
+- Abstract: The Dopamine library was launched with TensorFlow in 2018 and we added a Jax/Flax variant of it last year. Internally, Jax's flexibility has facilitated our RL research tremendously, and we are excited to demonstrate its potential.
+- Speaker info: Pablo Samuel has been at Google for over 9 years, and is currently a researcher with the Brain team, focusing on fundamental reinforcement learning, as well as machine learning and creativity. Aside from his research, Pablo Samuel is an active musician (with a channel exploring the intersection of music and computer science), and is helping increase the representation of the LatinX community in the research world.
+- Dopamine repo: https://github.com/google/dopamine 
+- Homepage: https://psc-g.github.io/
+- Twitter: https://twitter.com/pcastr
+
+#### Suraj Patil & Patrick von Platen, Machine Learning Engineers at Hugging Face
+- Talk: How to use JAX/Flax with Transformers
+- Abstract: Transformers is one of the most popular open-source ML libraries and supports PyTorch, Tensorflow, and JAX/Flax. In this talk, we will explain how JAX/Flax models should be used in Transformers and compare their design in Transformers with the design of PyTorch models in Transformers. In the second part, we will give you a hands-on presentation of how a model can be trained end-to-end with the official JAX/Flax example scripts using Transformers & Datasets. Along the way, we want to give you some tips and tricks on how to best realize your project.
+- Speaker info: Suraj and Patrick are part of Hugging Face’s open source team and lead the integration of JAX/Flax into Transformers.
+- GitHub: https://github.com/patil-suraj & https://github.com/patrickvonplaten
+
+#### Sabrina J. Mielke, PhD student at The Johns Hopkins University & Part-time research intern at HuggingFace
+- Talk: From stateful code to purified JAX: how to build your neural net framework
+- Abstract: Moving from object-oriented (and stateful) PyTorch- or TF2-code with tape-based backprop to JAX isn't easy---and while running grad() on numpy-oneliners is cool and all, you do wonder... how do I build actual big neural nets? Libraries like flax, trax, or haiku make it easy---but how could you build machinery like that yourself?
+- Speaker info: Sabrina is a PhD student at the Johns Hopkins University and a part-time research intern at HuggingFace, researching open-vocabulary language models for segmentation and tokenization. She has published and co-organized workshops and shared tasks on these topics as well as on morphology and typological analysis in ACL, NAACL, EMNLP, LREC, and AAAI. You can find her reminisce for a time when formal language theory played a bigger role in NLP on Twitter at @sjmielke.
+- Links: The 2020 blogpost this talk will be based on: https://sjmielke.com/jax-purify.htm, leading to our experiment Parallax and eventually Haiku
+
+#### Mostafa Dehghani, Research Scientist, Google Brain
+- Talk: Long Range Arena: Benchmarking Efficient Transformers
+- Abstract: Transformers do not scale very well to long sequence lengths largely because of quadratic self-attention complexity. In the recent months, a wide spectrum of efficient, fast Transformers have been proposed to tackle this problem, more often than not claiming superior or comparable model quality to vanilla Transformer models. So, we now need a well-established consensus on how to evaluate this class of models. Moreover, inconsistent benchmarking on a wide spectrum of tasks and datasets makes it difficult to assess relative model quality amongst many models. I'll talk about a systematic and unified benchmark, LRA, specifically focused on evaluating model quality under long-context scenarios. LRA is a suite of tasks consisting of sequences ranging from 1K to 16K tokens, encompassing a wide range of data types and modalities such as text, natural, synthetic images, and mathematical expressions requiring similarity, structural, and visual-spatial reasoning. We systematically evaluate ten well-established long-range Transformer models (Reformers, Linformers, Linear Transformers, Sinkhorn Transformers, Performers, Synthesizers, Sparse Transformers, and Longformers) on LRA. LRA paves the way towards better understanding this class of efficient Transformer models, facilitates more research in this direction, and presents new challenging tasks to tackle. 
+- Speaker info: https://mostafadehghani.com/
+
+#### Lucas Beyer, Senior Research Engineer, Google Brain
+- Talk: Vision Transformer
+- Abstract: This talk will discuss the learning of general visual representations via large-scale pre-training and few-shot transfer, with a special focus on the Vision Transformer (ViT) architecture, which popularized transformers for the visual domain.
+- Speaker info: Lucas Beyer is a self-taught hacker and studied engineer. He went on to do his PhD in robotic perception at RWTH Aachen and is currently on a quest to find the ultimate visual representation at Google Brain in Zürich
+
+#### Ben Wang, Independent AI Researcher, EleutherAI
+- Talk: Multihost Training in Mesh Transformer JAX
+- Abstract: As models become larger, training must be scaled across multiple nodes. This talk discusses some design decisions and tradeoffs made for scaling to multiple nodes in Mesh Transformer JAX, a library for running model parallel transformers on TPU pods.
+- Speaker info: Ben is an independent AI researcher who contributes to EleutherAI, an open source research collective centered around democratizing access to powerful AI models. Recently he has released GPT-J-6B, a 6 billion parameter transformer which is the most powerful autoregressive language model in terms of zero-shot performance with public weights.
+- Website: https://www.eleuther.ai/
+
+#### Siddhartha Kamalakara, Joanna Yoo, João G M Araújo, MLE at Cohere
+- Talk: Training large scale language models
+- Abstract: A journey through Cohere’s experiences with training large scale language models. Join us in our exploration of pipeline and model parallelism as strategies for efficient training of large language models. We will present and motivate our recent transition to JAX+Flax as our choice of internal tech stack.
+- Speaker info: 
+   - João G M Araújo is a Brazilian college student with a passion for mathematics and a fascination for Deep Learning. João conducted research on representation learning and spent 3 months in Japan working on NeuroEvolution. João likes reading fantasy books and spending quality time with family and friends, and also runs a YouTube series on theoretical understanding of Deep Learning where researchers talk about their findings
+   - Joanna Yoo is one of the founding engineers at Cohere, working on scaling language models for the last year and half. Joanna loves live concerts and rock climbing!
+   - Siddhartha Rao Kamalakara is an MLE at Cohere and a researcher at FOR.ai with research interests at the intersection of efficient training and empirical understanding of DL.
+- Website: https://cohere.ai/
+
+
+
 
 ## How to setup TPU VM
 
@@ -174,7 +488,7 @@ TODO (should be filled by 2.07.)...
 
 ## How to use the hub for training and demo
  
-TODO (should be filled by 2.07.)...
+TODO (should be filled by 1.07.)...
 
 ## Project evaluation
 
