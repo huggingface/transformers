@@ -211,7 +211,13 @@ class OnnxExportTestCaseV2(TestCase):
                 onnx_config = onnx_config_class.default(model.config)
 
                 with NamedTemporaryFile("w") as output:
-                    convert_pytorch(tokenizer, model, onnx_config, DEFAULT_ONNX_OPSET, Path(output.name))
+                    onnx_inputs, onnx_outputs = \
+                        convert_pytorch(tokenizer, model, onnx_config, DEFAULT_ONNX_OPSET, Path(output.name))
+
+                    try:
+                        validate_model_outputs(onnx_config, tokenizer, model, Path(output.name), onnx_outputs, 1e-5)
+                    except ValueError as ve:
+                        self.fail(f"{name} -> {ve}")
 
     @slow
     @require_torch
