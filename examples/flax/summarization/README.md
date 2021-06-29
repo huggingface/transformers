@@ -29,8 +29,7 @@ track them. You can run the following command inside your model repo to do so.
 
 ```
 cd bart-base-xsum
-
-echo "*.v2 filter=lfs diff=lfs merge=lfs -text" >> .gitattributes
+git lfs track "*tfevents*"
 ```
 
 Great, we have set up our model repository. During training, we will automatically
@@ -53,7 +52,7 @@ python run_summarization_flax.py \
 	--tokenizer_name facebook/bart-base \
 	--dataset_name="xsum" \
 	--do_train --do_eval --do_predict --predict_with_generate \
-	--num_train_epochs 5 \
+	--num_train_epochs 6 \
 	--learning_rate 5e-5 --warmup_steps 0 \
 	--per_device_train_batch_size 64 \
 	--per_device_eval_batch_size 64 \
@@ -61,3 +60,7 @@ python run_summarization_flax.py \
 	--max_source_length 512 --max_target_length 64 \
 	--push_to_hub
 ```
+
+This should finish in 37min, with validation loss and ROUGE2 of 1.7785 and 17.01 respectively after 6 epochs. raining statistics can be accessed on [tfhub.de](https://tensorboard.dev/experiment/OcPfOIgXRMSJqYB4RdK2tA/#scalars).
+
+> Note that here we used default `generate` arguments, using arguments specific for `xsum` dataset should give better ROUGE scores.  
