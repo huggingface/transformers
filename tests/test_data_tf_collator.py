@@ -48,6 +48,7 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
     def _test_normal_with_special_tokens_mask(self, features):
         tokenizer = BertTokenizer(self.vocab_file)
         special_tokens_mask = tokenizer.get_special_tokens_mask
+        
         tf_data_collator = TFDataCollatorForLanguageModeling(tokenizer, special_tokens_mask)
 
         tf_dataset = tf.data.Dataset(features)
@@ -95,21 +96,30 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
 
     def _test_normal_without_special_tokens_mask(self, no_pad_features, pad_features):
         tokenizer = BertTokenizer(self.vocab_file)
+
         tf_data_collator = TFDataCollatorForLanguageModeling(tokenizer, padding_length=None)
         tf_data_collator_with_padding = TFDataCollatorForLanguageModeling(tokenizer, padding_length=16)
 
-        tf_dataset_no_pad = tf.data.Dataset.from_generator(
-            lambda: no_pad_features, output_types=tf.int32
+        tf_dataset_no_pad = tf.data.Dataset.from_tensor_slices(
+            no_pad_features
         )
-        tf_dataset_pad = tf.data.Dataset.from_generator(
-            lambda: pad_features, output_types=tf.int32
+        tf_dataset_pad = tf.data.Dataset.from_tensor_slices(
+            tf.ragged.constant(pad_features)
         )
-
-        output = self.test_pad_example(pad_features, 16)
 
         # --- Pre Batching w/ No Padding ----
         batch = (
             tf_dataset_no_pad
+            .batch(2)
+            .map(tf_data_collator)
+        )
+
+        self.assert_all_equal(list(batch), 'input_ids', (2, 10))
+        self.assert_all_equal(list(batch), 'labels', (2, 10))
+
+                # --- Pre Batching w/ No Padding ----
+        batch = (
+            tf_dataset_pad
             .batch(2)
             .map(tf_data_collator)
         )
