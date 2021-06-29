@@ -183,6 +183,9 @@ class TrainingArguments:
         save_total_limit (:obj:`int`, `optional`):
             If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in
             :obj:`output_dir`.
+        save_on_each_node (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            In multinode distributed training, whether save models or checkpoints on each node, or only on the main
+            node.
         no_cuda (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to not use CUDA even when it is available or not.
         seed (:obj:`int`, `optional`, defaults to 42):
@@ -454,6 +457,12 @@ class TrainingArguments:
                 "Limit the total amount of checkpoints."
                 "Deletes the older checkpoints in the output_dir. Default is unlimited checkpoints"
             )
+        },
+    )
+    save_on_each_node: bool = field(
+        default=False,
+        metadata={
+            "help": "When doing a multinode distributed training, whether to save once per node or just once on the main node."
         },
     )
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
@@ -930,6 +939,19 @@ class TrainingArguments:
         Whether or not the current process should produce log.
         """
         if self.log_on_each_node:
+            return self.local_process_index == 0
+        else:
+            if is_sagemaker_mp_enabled():
+                return smp.rank() == 0
+            else:
+                return self.process_index == 0
+
+    @property
+    def should_save(self):
+        """
+        Whether or not the current process should save or more generally write to disk.
+        """
+        if self.save_on_each_node:
             return self.local_process_index == 0
         else:
             if is_sagemaker_mp_enabled():
