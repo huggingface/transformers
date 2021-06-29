@@ -17,8 +17,10 @@
 import os
 import pickle
 import unittest
+import tempfile
+import shutil
 
-from transformers import AutoTokenizer
+from transformers import BertTokenizer, AutoTokenizer
 from transformers.models.bert_japanese.tokenization_bert_japanese import (
     VOCAB_FILES_NAMES,
     BertJapaneseTokenizer,
@@ -278,3 +280,32 @@ class AutoTokenizerCustomTest(unittest.TestCase):
         EXAMPLE_BERT_JAPANESE_ID = "cl-tohoku/bert-base-japanese"
         tokenizer = AutoTokenizer.from_pretrained(EXAMPLE_BERT_JAPANESE_ID)
         self.assertIsInstance(tokenizer, BertJapaneseTokenizer)
+
+
+class BertTokenizationTest(unittest.TestCase):
+
+    def setUp(self):
+        self.tmpdirname = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdirname)
+
+    def test_berttokenizer_initialization(self):
+        EXAMPLE_BERT_JAPANESE_ID = "cl-tohoku/bert-base-japanese"
+
+        vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "こ", "ん", "に", "ち", "は", "ば", "世", "界", "、", "。"]
+
+        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+            vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
+
+        BertTokenizer(self.vocab_file, do_word_tokenize=True, word_tokenizer_type="basic")
+
+        with self.assertRaises(ValueError, msg="BertTokenizer doesn't support mecab."):
+            BertTokenizer(self.vocab_file, do_word_tokenize=True, word_tokenizer_type="mecab")
+
+        with self.assertRaises(ValueError, msg="BertTokenizer doesn't support subword_tokenize."):
+            BertTokenizer(self.vocab_file, do_subword_tokenize=True)
+
+        with self.assertRaises(ValueError, msg="BertTokenizer doesn't support mecab."):
+            BertTokenizer.from_pretrained(EXAMPLE_BERT_JAPANESE_ID)
