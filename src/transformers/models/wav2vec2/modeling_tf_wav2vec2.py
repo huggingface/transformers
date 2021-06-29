@@ -1571,6 +1571,10 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         logits = self.lm_head(hidden_states)
 
         if labels is not None:
+
+            if tf.reduce_max(labels) >= self.config.vocab_size:
+                raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
+
             attention_mask = (
                 inputs["attention_mask"]
                 if inputs["attention_mask"] is not None

@@ -1030,6 +1030,9 @@ class HubertForCTC(HubertPreTrainedModel):
         loss = None
         if labels is not None:
 
+            if labels.max() >= self.config.vocab_size:
+                raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
+
             # retrieve loss input_lengths from attention_mask
             attention_mask = (
                 attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
