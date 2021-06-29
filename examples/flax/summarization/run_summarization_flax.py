@@ -583,16 +583,10 @@ def main():
     # accordingly - see `run_t5_mlm_flax.py` e.g.
     def decay_mask_fn(params):
         flat_params = traverse_util.flatten_dict(params)
-        flat_mask = {
-            path: (
-                path[-1] != "bias"
-                and path[-2:]
-                not in [
-                    (name, "scale") for name in ["self_attn_layer_norm", "layernorm_embedding", "final_layer_norm"]
-                ]
-            )
-            for path in flat_params
-        }
+        layer_norm_params = [
+            (name, "scale") for name in ["self_attn_layer_norm", "layernorm_embedding", "final_layer_norm"]
+        ]
+        flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_params) for path in flat_params}
         return traverse_util.unflatten_dict(flat_mask)
 
     # create adam optimizer
