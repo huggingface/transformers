@@ -48,6 +48,15 @@ python run_mlm.py \
 --dataset_name wikitext \
 --dataset_config_name wikitext-103-raw-v1
 ```
+```
+#In case using a custom dataset
+#validation file can also be added
+#Otherwise some split(customizable) of training data is used as validation
+python run_mlm.py \
+--model_name_or_path distilbert-base-cased \
+--output_dir output \
+--train_file train_file_path
+```
 
 ## run_clm.py
 
@@ -60,4 +69,13 @@ python run_clm.py \
 --output_dir output \
 --dataset_name wikitext \
 --dataset_config_name wikitext-103-raw-v1
+```
+```
+#In case using a custom dataset
+#validation file can also be added
+#Otherwise some split(customizable) of training data is used as validation
+python run_clm.py \
+--model_name_or_path distilgpt2 \
+--output_dir output \
+--train_file train_file_path
 ```
