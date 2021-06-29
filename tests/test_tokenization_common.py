@@ -3168,7 +3168,7 @@ class TokenizerTesterMixin:
         # Check we have the same number of added_tokens for both pair and non-pair inputs.
         self.assertEqual(tokenizer.num_special_tokens_to_add(False), new_tokenizer.num_special_tokens_to_add(False))
         self.assertEqual(tokenizer.num_special_tokens_to_add(True), new_tokenizer.num_special_tokens_to_add(True))
-        
+
         # Check we have the correct max_length for both pair and non-pair inputs.
         self.assertEqual(tokenizer.max_len_single_sentence, new_tokenizer.max_len_single_sentence)
         self.assertEqual(tokenizer.max_len_sentences_pair, new_tokenizer.max_len_sentences_pair)
