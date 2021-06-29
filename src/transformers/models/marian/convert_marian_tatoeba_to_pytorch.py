@@ -13,26 +13,24 @@
 # limitations under the License.
 
 import argparse
-import datetime
-import json
 import os
-import re
 from pathlib import Path
 from typing import List, Tuple
-
+import datetime
 import yaml
+import json
+import re
 from tqdm import tqdm
 
 from transformers.models.marian.convert_marian_to_pytorch import (
     FRONT_MATTER_TEMPLATE,
-    convert,
     convert_opus_name_to_hf_name,
-    download_and_unzip,
     get_system_metadata,
     remove_prefix,
     remove_suffix,
+    download_and_unzip,
+    convert,
 )
-
 
 DEFAULT_REPO = "Tatoeba-Challenge"
 DEFAULT_MODEL_DIR = os.path.join(DEFAULT_REPO, "models")
@@ -289,6 +287,10 @@ class TatoebaConverter:
         def url_to_name(url):
             return url.split("/")[-1].split(".")[0]
 
+        if model_name not in self.model_results:
+            # This is not a language pair, so model results are ambiguous, go by newest
+            method = "newest"
+
         if method == "best":
             # Sort by how early they appear in released-models-results
             results = [url_to_name(model["download"]) for model in self.model_results[model_name]]
@@ -300,7 +302,7 @@ class TatoebaConverter:
             ymls = [f for f in os.listdir(p) if f.endswith(".yml")]
             # Sort by date
             ymls.sort(
-                key=lambda x: timedate.timedate.strptime(re.search(r"\d\d\d\d-\d\d?-\d\d?", x).group(), "%Y-%m-%d")
+                key=lambda x: datetime.datetime.strptime(re.search(r"\d\d\d\d-\d\d?-\d\d?", x).group(), "%Y-%m-%d")
             )
             metadata = yaml.safe_load(open(p / ymls[-1]))
             metadata.update(self.model_type_info_from_model_name(ymls[-1][:-4]))
