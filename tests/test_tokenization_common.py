@@ -3197,13 +3197,13 @@ class TokenizerTesterMixin:
             spe_token = getattr(tokenizer, spe_token_attr)
             if spe_token in special_tokens_map:
                 new_spe_token = getattr(new_tokenizer, spe_token_attr)
-                self.assertEqual(special_tokens_map[spe_token] == new_spe_token)
+                self.assertEqual(special_tokens_map[spe_token], new_spe_token)
 
                 new_id = new_tokenizer.get_vocab()[new_spe_token]
                 self.assertEqual(getattr(new_tokenizer, f"{spe_token_attr}_id"), new_id)
 
         for spe_token in tokenizer.additional_special_tokens:
-            self.assertEqual(special_tokens_map[spe_token] in new_tokenizer.additional_special_tokens)
+            self.assertTrue(special_tokens_map[spe_token] in new_tokenizer.additional_special_tokens)
 
 
 @is_staging_test
