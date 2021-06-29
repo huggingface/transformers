@@ -3168,6 +3168,27 @@ class TokenizerTesterMixin:
         decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
         self.assertEqual("this is the first sentence", decoded_input.lower())
 
+        # We check that the parameters of the tokenizer remained the same
+        # Check we have the same number of added_tokens for both pair and non-pair inputs.
+        self.assertEqual(tokenizer.num_special_tokens_to_add(False), new_tokenizer.num_special_tokens_to_add(False))
+        self.assertEqual(tokenizer.num_special_tokens_to_add(True), new_tokenizer.num_special_tokens_to_add(True))
+
+        # Check we have the correct max_length for both pair and non-pair inputs.
+        self.assertEqual(tokenizer.max_len_single_sentence, new_tokenizer.max_len_single_sentence)
+        self.assertEqual(tokenizer.max_len_sentences_pair, new_tokenizer.max_len_sentences_pair)
+
+        # Assert the set of special tokens match as we didn't ask to change them
+        self.assertSequenceEqual(
+            tokenizer.special_tokens_map.items(),
+            new_tokenizer.special_tokens_map.items(),
+        )
+
+    def test_training_new_tokenizer_with_special_tokens_change(self):
+        # This feature only exists for fast tokenizers
+        if not self.test_rust_tokenizer:
+            return
+
+        tokenizer = self.get_rust_tokenizer()
         # Test with a special tokens map
         class_signature = inspect.signature(tokenizer.__class__)
         if "cls_token" in class_signature.parameters:
@@ -3205,6 +3226,12 @@ class TokenizerTesterMixin:
 
                 new_id = new_tokenizer.get_vocab()[new_special_token]
                 self.assertEqual(getattr(new_tokenizer, f"{token}_id"), new_id)
+        
+        # Test we can use the new tokenizer with something not seen during training
+        inputs = new_tokenizer(["This is the first sentence", "This sentence is different 🤗."])
+        self.assertEqual(len(inputs["input_ids"]), 2)
+        decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
+        self.assertEqual("this is the first sentence", decoded_input.lower())
 
 
 @is_staging_test

@@ -674,6 +674,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             trained_tokenizer_json["post_processor"] = post_processor
             tokenizer = TokenizerFast.from_str(json.dumps(trained_tokenizer_json))
 
+        kwargs = self.init_kwargs.copy()
         # Map pad/cls/mask token at the Transformers level
         if special_tokens_map is not None:
             special_tokens_list = SpecialTokensMixin.SPECIAL_TOKENS_ATTRIBUTES.copy()
