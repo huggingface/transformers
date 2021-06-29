@@ -7,7 +7,7 @@ from transformers import (
     AlbertConfig,
     AutoTokenizer,
     DistilBertConfig,
-    LongformerConfig,
+    # LongformerConfig,
     RobertaConfig,
     XLMRobertaConfig,
     is_torch_available,
@@ -15,12 +15,11 @@ from transformers import (
 from transformers.models.albert import AlbertOnnxConfig
 from transformers.models.bert.configuration_bert import BertConfig, BertOnnxConfig
 from transformers.models.distilbert import DistilBertOnnxConfig
-from transformers.models.longformer import LongformerOnnxConfig
+# from transformers.models.longformer import LongformerOnnxConfig
 from transformers.models.roberta import RobertaOnnxConfig
 from transformers.models.xlm_roberta import XLMRobertaOnnxConfig
 from transformers.onnx import EXTERNAL_DATA_FORMAT_SIZE_LIMIT, OnnxConfig, ParameterFormat
 
-# from transformers.onnx.convert import convert_pytorch
 from transformers.onnx.config import DEFAULT_ONNX_OPSET
 from transformers.onnx.utils import (
     compute_effective_axis_dimension,

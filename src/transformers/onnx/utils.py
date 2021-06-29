@@ -14,7 +14,6 @@
 
 from ctypes import c_float, sizeof
 from enum import Enum
-from pathlib import Path
 from typing import Any, Dict, Iterable
 
 

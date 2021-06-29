@@ -19,8 +19,6 @@ from typing import Iterable, List, Tuple, Union
 import numpy as np
 from packaging.version import Version, parse
 
-from onnxruntime import GraphOptimizationLevel
-
 from .. import PreTrainedModel, PreTrainedTokenizer, TensorType, TFPreTrainedModel, is_torch_available
 from ..utils import logging
 from .config import OnnxConfig

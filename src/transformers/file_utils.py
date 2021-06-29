@@ -317,10 +317,6 @@ def is_coloredlogs_available():
     return _coloredlogs_available
 
 
-def is_sympy_available():
-    return _sympy_available
-
-
 def is_keras2onnx_available():
     return _keras2onnx_available
 

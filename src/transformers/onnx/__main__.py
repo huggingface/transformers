@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Callable, Tuple, Union
 
 from onnxruntime import GraphOptimizationLevel
-from transformers.file_utils import is_coloredlogs_available, is_sympy_available
 from transformers.models.albert import AlbertOnnxConfig
 from transformers.models.auto import AutoTokenizer
 from transformers.models.bart import BartOnnxConfig
