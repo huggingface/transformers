@@ -56,7 +56,7 @@ and then ``dtype`` will be automatically derived from the model's weights:
 
 .. code-block:: python
 
-    model = AutoModel.from_config(config, torch_dtype="auto")
+    model = T5ForConditionalGeneration.from_pretrained("t5", torch_dtype="auto")
 
 Models instantiated from scratch can also be told which ``dtype`` to use with:
 
