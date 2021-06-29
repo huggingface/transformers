@@ -1050,7 +1050,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Whether or not to disable fast initialization.
             torch_dtype (:obj:`str` or :obj:`torch.dtype`, `optional`):
                 Override the default ``torch.dtype`` and load the model under this dtype. If ``"auto"`` is passed the
-                dtype will be automatically derived from the model weights.
+                dtype will be automatically derived from the model's weights.
 
                 .. warning::
 

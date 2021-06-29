@@ -52,7 +52,7 @@ either explicitly pass the desired ``dtype`` using ``torch_dtype`` argument:
     model = T5ForConditionalGeneration.from_pretrained("t5", torch_dtype=torch.float16)
 
 or, if you want the model to always load in the most optimal memory pattern, you can use the special value ``"auto"``,
-and then ``dtype`` will be automatically derived from the model weights:
+and then ``dtype`` will be automatically derived from the model's weights:
 
 .. code-block:: python
 
