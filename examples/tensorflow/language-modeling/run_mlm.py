@@ -489,8 +489,7 @@ def main():
         )
 
     train_dataset = tokenized_datasets["train"]
-    if data_args.max_train_samples is not None:
-        train_dataset = train_dataset.select(range(data_args.max_train_samples))
+    
     if(data_args.validation_file is not None):
         eval_dataset = tokenized_datasets["validation"]
     else:
@@ -499,7 +498,9 @@ def main():
             
         eval_dataset = train_dataset.select(val_indices)  
         train_dataset = train_dataset.select(train_indices)
-
+        
+    if data_args.max_train_samples is not None:
+        train_dataset = train_dataset.select(range(data_args.max_train_samples))
     if data_args.max_eval_samples is not None:
         eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
 
