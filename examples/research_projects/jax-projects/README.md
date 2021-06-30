@@ -648,6 +648,7 @@ opt_state = tx.init(params)
 Now we define a single training step which will do a forward and a backward pass.
 
 ```python
+@jax.jit
 def train_step(params, input_ids, labels)
    # do the forward pass and get the loss and gradients
    loss, grads = grad_fn(params)
