@@ -689,7 +689,6 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
             "codevectors",
             jax.nn.initializers.uniform(),
             (1, self.num_groups * self.num_vars, self.config.codevector_dim // self.num_groups),
-            dtype=self.dtype,
         )
         self.weight_proj = nn.Dense(
             self.num_groups * self.num_vars,
@@ -829,7 +828,7 @@ class FlaxWav2Vec2Module(nn.Module):
         self.feature_extractor = FlaxWav2Vec2FeatureExtractor(self.config, dtype=self.dtype)
         self.feature_projection = FlaxWav2Vec2FeatureProjection(self.config, dtype=self.dtype)
         self.masked_spec_embed = self.param(
-            "masked_spec_embed", jax.nn.initializers.uniform(), (self.config.hidden_size,), dtype=self.dtype
+            "masked_spec_embed", jax.nn.initializers.uniform(), (self.config.hidden_size,)
         )
 
         if self.config.do_stable_layer_norm:
