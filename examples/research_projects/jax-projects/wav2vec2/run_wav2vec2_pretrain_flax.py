@@ -59,7 +59,7 @@ class ModelArguments:
         default=2.0, metadata={"help": "Maximum temperature for gumbel softmax."}
     )
     min_gumbel_temperature: Optional[float] = field(
-        default=0.5, metadata={"help": "Minimum temperature for gumbel softmax."}
+        default=0.1, metadata={"help": "Minimum temperature for gumbel softmax."}
     )
     gumbel_temperature_decay: Optional[float] = field(
         default=0.999995, metadata={"help": "Decay of gumbel temperature during training."}
@@ -291,8 +291,8 @@ def main():
             cache_dir=model_args.cache_dir,
         )
 
-    datasets["train"] = datasets["train"].select(range(1000))
-    datasets["validation"] = datasets["validation"].select(range(400))
+    datasets["train"] = datasets["train"].select(range(10000))
+    datasets["validation"] = datasets["validation"].select(range(4000))
 
     # only normalized-inputs-training is supported
     feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
@@ -548,7 +548,7 @@ def main():
 
         # Update progress bar
         epochs.write(
-            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {eval_metrics['loss']}, Acc: {eval_metrics['codevector_perplexity']})"
+            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {eval_metrics['loss']}, Perplexity: {eval_metrics['codevector_perplexity']})"
         )
 
         # Save metrics
