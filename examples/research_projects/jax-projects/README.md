@@ -648,8 +648,7 @@ opt_state = tx.init(params)
 Now we define a single training step which will do a forward and a backward pass.
 
 ```python
-@jax.jit
-def train_step(params, input_ids, labels)
+def _train_step(params, input_ids, labels)
    # do the forward pass and get the loss and gradients
    loss, grads = grad_fn(params)
 
@@ -658,6 +657,8 @@ def train_step(params, input_ids, labels)
    updated_params = optax.apply_updates(params, updates)
 
    return updates_params, loss
+
+train_step = jax.jit(_train_step)
 ```
 
 Finally, let's run our training loop.
