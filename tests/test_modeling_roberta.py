@@ -530,15 +530,16 @@ class RobertaModelIntegrationTest(TestCasePlus):
 
         self.assertTrue(torch.allclose(output, expected_tensor, atol=1e-4))
 
+    # XXX: this might be a candidate for common tests if we have many of those
     def test_lm_head_ignore_keys(self):
-        keys_to_ignore_on_save_tied = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
-        keys_to_ignore_on_save_untied = [r"position_ids", r"lm_head.decoder.bias"]
+        keys_to_ignore_on_save_tied = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
+        keys_to_ignore_on_save_untied = [r"lm_head.decoder.bias"]
+        config = RobertaConfig.from_pretrained(ROBERTA_TINY)
         for cls in [RobertaForMaskedLM, RobertaForCausalLM]:
             model = cls.from_pretrained(ROBERTA_TINY)
             self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_tied, cls)
 
             # the keys should be different when embeddings aren't tied
-            config = RobertaConfig.from_pretrained(ROBERTA_TINY)
             config.tie_word_embeddings = False
             model = cls(config)
             self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_untied, cls)

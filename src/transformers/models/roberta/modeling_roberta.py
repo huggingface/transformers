@@ -603,15 +603,14 @@ class RobertaPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def update_keys_to_ignore(self, config, keys_to_ignore):
+    def update_keys_to_ignore(self, config, del_keys_to_ignore):
         """Remove some keys from ignore list"""
         if not config.tie_word_embeddings:
-            # if not tied these keys should be saved and loaded
-            for k in keys_to_ignore:
-                if k in self._keys_to_ignore_on_save:
-                    self._keys_to_ignore_on_save.remove(k)
-                if k in self._keys_to_ignore_on_load_missing:
-                    self._keys_to_ignore_on_load_missing.remove(k)
+            # must make a new list, or the class variable gets modified!
+            self._keys_to_ignore_on_save = [k for k in self._keys_to_ignore_on_save if k not in del_keys_to_ignore]
+            self._keys_to_ignore_on_load_missing = [
+                k for k in self._keys_to_ignore_on_load_missing if k not in del_keys_to_ignore
+            ]
 
 
 ROBERTA_START_DOCSTRING = r"""
@@ -874,7 +873,7 @@ class RobertaModel(RobertaPreTrainedModel):
     """RoBERTa Model with a `language modeling` head on top for CLM fine-tuning. """, ROBERTA_START_DOCSTRING
 )
 class RobertaForCausalLM(RobertaPreTrainedModel):
-    _keys_to_ignore_on_save = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
+    _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
@@ -1023,7 +1022,7 @@ class RobertaForCausalLM(RobertaPreTrainedModel):
 
 @add_start_docstrings("""RoBERTa Model with a `language modeling` head on top. """, ROBERTA_START_DOCSTRING)
 class RobertaForMaskedLM(RobertaPreTrainedModel):
-    _keys_to_ignore_on_save = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
+    _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
