@@ -428,8 +428,8 @@ Super excited to kick off 3 days of talks around JAX / Flax, Transformers, large
  Speaker        | Topic                           | Time                  | 
 |-------------|---------------------------------|------------------------|
 | Lucas Beyer, Google Brain | Vision Transformer      | 5.00pm-5.30 CEST / 8.00am-8.30 PST      | 
-| Soňa Mokrá & Junhyuk Oh, DeepMind | TBD      | 5.30pm-6.00 CEST / 8.30am-9.00 PST      | 
-| Ben Wang, EleutherAI | Multihost Training in Mesh Transformer JAX      | 6.00pm-6.30 CEST / 9.00am-9.30am PST      | 
+| Ben Wang, EleutherAI | Multihost Training in Mesh Transformer JAX      | 5.30pm-6.00 CEST / 8.30am-9.00 PST       | 
+| DeepMind, Soňa Mokrá & Junhyuk Oh, DeepMind | TBD      |    6.00pm-6.30 CEST / 9.00am-9.30am PST   | 
 | Siddhartha Kamalakara, Joanna Yoo & João G M Araújo, Cohere | Training large scale language models      | 6:30pm-7.00pm CEST / 9:30am-10.00am PST      | 
 
 ### Talks & Speakers
@@ -489,6 +489,14 @@ Super excited to kick off 3 days of talks around JAX / Flax, Transformers, large
 - Abstract: As models become larger, training must be scaled across multiple nodes. This talk discusses some design decisions and tradeoffs made for scaling to multiple nodes in Mesh Transformer JAX, a library for running model parallel transformers on TPU pods.
 - Speaker info: Ben is an independent AI researcher who contributes to EleutherAI, an open source research collective centered around democratizing access to powerful AI models. Recently he has released GPT-J-6B, a 6 billion parameter transformer which is the most powerful autoregressive language model in terms of zero-shot performance with public weights.
 - Website: https://www.eleuther.ai/
+
+#### Iurii Kemaev, Research Engineer, Soňa Mokrá, Research Engineer, and Junhyuk Oh, Research Scientist, DeepMind
+- Talk: DeepMind JAX Ecosystem
+- Abstract: The DeepMind JAX Ecosystem is an effort to build a shared substrate of components to enable all aspects of AGI Research. In this talk, our researchers and engineers will give a high-level overview of our Ecosystem goals and design philosophies, using our Haiku (neural network), Optax (optimization) and RLax (reinforcement learning) libraries as examples. We will then deep dive on two examples of recent DeepMind research that have been enabled by JAX and these libraries: generative models and meta-gradient reinforcement learning.
+- Speaker info:
+  - Iurii Kemaev is a Research Engineer at DeepMind. He has been using JAX for 2 years advancing RL research. Iurii is one of the DM JAX ecosystem leads.
+  - Soňa Mokrá is a Research Engineer at DeepMind. She has a background in machine translation and has been using JAX as the main ML framework for the past 6 months.
+  - Junhyuk Oh is a Research Scientist at DeepMind, working on reinforcement learning and meta-learning. More information is available at https://junhyuk.com/
 
 #### Siddhartha Kamalakara, Joanna Yoo, João G M Araújo, MLE at Cohere
 - Talk: Training large scale language models
