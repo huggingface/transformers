@@ -102,6 +102,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "CLIPVisionModel",
     "FlaxCLIPTextModel",
     "FlaxCLIPVisionModel",
+    "FlaxWav2Vec2ForCTC",
     "DetrForSegmentation",
     "DPRReader",
     "FlaubertForQuestionAnswering",
