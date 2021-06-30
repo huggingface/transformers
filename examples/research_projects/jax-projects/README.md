@@ -397,9 +397,12 @@ TODO (should be filled by 30.06.)...
 
 ## Talks
 
-Super excited to kick off 3 days of talks around JAX / Flax, Transformers, large-scale language modeling and other great topics during our community event! Calendar invites and links to join will be sent soon so stay tuned! Meanwhile, have a look at the schedule and the speaker line up! 
+Super excited to kick off 3 days of talks around JAX / Flax, Transformers, large-scale language modeling and other great topics during our community event! Find the schedule, zoom links and calendar events below!
 
 ### Wednesday, June 30th
+- [Zoom link](https://us02web.zoom.us/j/89844071286?pwd=RzZaL1VPLzM0Um5kYzJRWVBFMmtRQT09)
+- [Add the event to your Gcal](https://bit.ly/2UTD5N2)
+
  Speaker        | Topic                           | Time                  | 
 |-------------|---------------------------------|------------------------|
 | Skye Wanderman-Milne, Google Brain | Intro to JAX on Cloud TPUs      | 6.00pm-6.45pm CEST / 9.00am-9.45am PST      | 
@@ -407,13 +410,20 @@ Super excited to kick off 3 days of talks around JAX / Flax, Transformers, large
 | Pablo Castro, Google Brain | Using Jax & Flax for RL with the Dopamine library      | 7.30pm-8.00pm CEST / 10.30am-11.00am PST      | 
 
 ### Thursday, July 1st
+- [Zoom link](https://us02web.zoom.us/j/84443602508?pwd=NnZOMC84bXRBU3RaSHl3dTdBekIrZz09)
+- [Add the event to your Gcal](https://bit.ly/3x6vPM5)
+
  Speaker        | Topic                           | Time                  | 
 |-------------|---------------------------------|------------------------|
 | Suraj Patil & Patrick von Platen, Hugging Face | How to use JAX/Flax with Transformers      | 5.30pm-6.00pm CEST / 8.30am-9.00am PST      | 
 | Sabrina J. Mielke, Johns Hopkins University & HuggingFace | From stateful code to purified JAX: how to build your neural net framework | 6.00pm-6.30pm CEST / 9.00am-9.30am PST      | 
-| Mostafa Dehghani, Google Brain | Long Range Arena: Benchmarking Efficient Transformers      | 6.30pm-7.00pm CEST / 9.30am-10.00am PST      | 
+| Mostafa Dehghani, Google Brain | Long Range Arena: Benchmarking Efficient Transformers      | 6.30pm-7.00pm CEST / 9.30am-10.00am PST      |
+| Rohan Anil, Google Brain | Scalable Second Order Optimization for Deep Learning      | 7.00pm-7.30pm CEST / 10.00am-10.30am PST      |
+
 
 ### Friday, July 2nd
+- [Zoom link](https://us02web.zoom.us/j/83307589607?pwd=NnNCN1doQkZKcjVSMlZwVEc2aVgrZz09)
+- [Add the event to your Gcal](https://bit.ly/3y4pVLt)
 
  Speaker        | Topic                           | Time                  | 
 |-------------|---------------------------------|------------------------|
@@ -458,6 +468,16 @@ Super excited to kick off 3 days of talks around JAX / Flax, Transformers, large
 - Talk: Long Range Arena: Benchmarking Efficient Transformers
 - Abstract: Transformers do not scale very well to long sequence lengths largely because of quadratic self-attention complexity. In the recent months, a wide spectrum of efficient, fast Transformers have been proposed to tackle this problem, more often than not claiming superior or comparable model quality to vanilla Transformer models. So, we now need a well-established consensus on how to evaluate this class of models. Moreover, inconsistent benchmarking on a wide spectrum of tasks and datasets makes it difficult to assess relative model quality amongst many models. I'll talk about a systematic and unified benchmark, LRA, specifically focused on evaluating model quality under long-context scenarios. LRA is a suite of tasks consisting of sequences ranging from 1K to 16K tokens, encompassing a wide range of data types and modalities such as text, natural, synthetic images, and mathematical expressions requiring similarity, structural, and visual-spatial reasoning. We systematically evaluate ten well-established long-range Transformer models (Reformers, Linformers, Linear Transformers, Sinkhorn Transformers, Performers, Synthesizers, Sparse Transformers, and Longformers) on LRA. LRA paves the way towards better understanding this class of efficient Transformer models, facilitates more research in this direction, and presents new challenging tasks to tackle. 
 - Speaker info: https://mostafadehghani.com/
+
+#### Rohan Anil, Senior Staff Software Engineer, Google Research, Brain Team
+- Talk: Scalable Second Order Optimization for Deep Learning
+- Abstract: Optimization in machine learning, both theoretical and applied, is presently dominated by first-order gradient methods such as stochastic gradient descent. Second-order optimization methods, that involve second derivatives and/or second order statistics of the data, are far less prevalent despite strong theoretical properties, due to their prohibitive computation, memory and communication costs. In an attempt to bridge this gap between theoretical and practical optimization, we present a scalable implementation of a second-order preconditioned method (concretely, a variant of full-matrix Adagrad), that along with several critical algorithmic and numerical improvements, provides significant convergence and wall-clock time improvements compared to conventional first-order methods on state-of-the-art deep models. Our novel design effectively utilizes the prevalent heterogeneous hardware architecture for training deep models, consisting of a multicore CPU coupled with multiple accelerator units. We demonstrate superior performance compared to state-of-the-art on very large learning tasks such as machine translation with Transformers, language modeling with BERT, click-through rate prediction on Criteo, and image classification on ImageNet with ResNet-50.
+- Speaker info: Rohan Anil is a software engineer at Google Research, Mountain View. Lately, he has been working on scalable and practical optimization techniques for efficient training of neural networks in various regimes.
+- Resources:
+  - https://arxiv.org/abs/2002.09018
+  - https://arxiv.org/abs/1901.11150
+  - https://arxiv.org/abs/2106.06199
+
 
 #### Lucas Beyer, Senior Research Engineer, Google Brain
 - Talk: Vision Transformer
