@@ -60,10 +60,18 @@ class TFDataCollatorForLanguageModeling:
         return tf.math.greater(tf.reduce_sum(x, axis=0), 0)
 
     @tf.function
-    def tf_pad_tokens(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
+    def tf_pad_tokens(self, examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
         """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
         max_length = pad_to_multiple_of
         no_padding_necessary = False
+        multiple_tensors = (len(examples.shape) > 1)
+
+        # Check if we have a `pad_token`.
+        if tokenizer._pad_token is None:
+            raise ValueError(
+                "You are attempting to pad samples but the tokenizer you are using"
+                f" ({tokenizer.__class__.__name__}) does not have a pad token."
+            )
 
         if type(examples) == tf.RaggedTensor:
             examples = examples.to_tensor(0)
@@ -75,8 +83,6 @@ class TFDataCollatorForLanguageModeling:
                 for e in examples:
                     temporary.append(tf.constant(e, dtype=tf.float64))
                 examples = temporary
-
-            multiple_tensors = (examples.shape[0] == None)
 
             # Check if padding is necessary.
             if multiple_tensors:
@@ -90,13 +96,6 @@ class TFDataCollatorForLanguageModeling:
             else:
                 length_of_first = examples.shape[0]
                 no_padding_necessary = (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0)
-
-            # If yes, check if we have a `pad_token`.
-            if tokenizer._pad_token is None:
-                raise ValueError(
-                    "You are attempting to pad samples but the tokenizer you are using"
-                    f" ({tokenizer.__class__.__name__}) does not have a pad token."
-                )
 
             # Padding our tensor with the appropriate pad token.
             max_length = length_of_first
@@ -114,35 +113,76 @@ class TFDataCollatorForLanguageModeling:
             if multiple_tensors:
                 result = tf.pad(examples, 
                                 [[0, 0], [0, max_length]],
-                                constant_values=tokenizer._pad_token)
+                                constant_values=tokenizer.pad_token_id)
             else:
-                result = tf.pad([examples], 
-                                [[0, 0], [0, max_length]],
-                                constant_values=tokenizer._pad_token)
+                result = tf.pad(examples, 
+                                [[0, max_length]],
+                                constant_values=tokenizer.pad_token_id)
         else:
             if multiple_tensors:
                 result = tf.pad(examples,
                                 [[0, 0], [max_length, 0]],
-                                constant_values=tokenizer._pad_token)
+                                constant_values=tokenizer.pad_token_id)
             else:
-                result = tf.pad([examples],
-                                [[0, 0], [max_length, 0]], 
-                                constant_values=tokenizer._pad_token)
+                result = tf.pad(examples,
+                                [[max_length, 0]], 
+                                constant_values=tokenizer.pad_token_id)
 
         return result
 
     @tf.function()
-    def __call__(self, examples: Union[List[int], tf.Tensor, Dict[str, tf.Tensor]]) -> tf.data.Dataset:
+    def encode_objects(self, examples: Union[List[int], tf.Tensor, Dict[str, tf.Tensor]]) -> tf.data.Dataset:
+        padded_output = self.tf_pad_tokens(examples, self.tokenizer, self.padding_length)
 
-        examples = self.tf_pad_tokens(self.tokenizer, self.padding_length)
+        # if len(examples.shape) > 1:
+        #     length_shape = examples.shape[1]
+
+        #     if self.padding_length is not None and length_shape % self.padding_length != 0:
+        #         final_length = length_shape + self.padding_length
+        #     else:
+        #         final_length = length_shape
+
+        #     padded_output = tf.ensure_shape(padded_output, [2, final_length]) 
 
         encoded_batch = {}
         # Mask example sequences and create their respective labels
         encoded_batch["input_ids"], encoded_batch["labels"] = self.tf_mask_tokens(
-            examples
+            padded_output
         )
-        
+
+        # if len(examples.shape) > 1:
+        #     encoded_batch["input_ids"] = tf.ensure_shape(encoded_batch["input_ids"], [2, final_length])
+        #     encoded_batch["labels"] = tf.ensure_shape(encoded_batch["labels"], [2, final_length])
+    
         return encoded_batch
+
+    @tf.function()
+    def __call__(self, 
+                 examples: tf.data.Dataset) -> tf.data.Dataset:
+        return examples.map(self.encode_objects).batch(2)
+        # padded_output = self.tf_pad_tokens(examples, self.tokenizer, self.padding_length)
+
+        # # if len(examples.shape) > 1:
+        # #     length_shape = examples.shape[1]
+
+        # #     if self.padding_length is not None and length_shape % self.padding_length != 0:
+        # #         final_length = length_shape + self.padding_length
+        # #     else:
+        # #         final_length = length_shape
+
+        # #     padded_output = tf.ensure_shape(padded_output, [2, final_length]) 
+
+        # encoded_batch = {}
+        # # Mask example sequences and create their respective labels
+        # encoded_batch["input_ids"], encoded_batch["labels"] = self.tf_mask_tokens(
+        #     padded_output
+        # )
+
+        # # if len(examples.shape) > 1:
+        # #     encoded_batch["input_ids"] = tf.ensure_shape(encoded_batch["input_ids"], [2, final_length])
+        # #     encoded_batch["labels"] = tf.ensure_shape(encoded_batch["labels"], [2, final_length])
+    
+        # return encoded_batch
 
     @tf.function
     def tf_mask_tokens(
