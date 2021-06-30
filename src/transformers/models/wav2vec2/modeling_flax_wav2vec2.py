@@ -218,7 +218,7 @@ WAV_2_VEC_2_START_DOCSTRING = r"""
     - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
 
     Parameters:
-        config (:class:`~transformers.T5Config`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.Wav2Vec2Config`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
             model weights.
@@ -539,11 +539,12 @@ class FlaxWav2Vec2EncoderLayerStableLayerNorm(nn.Module):
             embed_dim=self.config.hidden_size,
             num_heads=self.config.num_attention_heads,
             dropout=self.config.attention_dropout,
+            dtype=self.dtype,
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout)
-        self.layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps)
-        self.feed_forward = FlaxWav2Vec2FeedForward(self.config)
-        self.final_layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.feed_forward = FlaxWav2Vec2FeedForward(self.config, dtype=self.dtype)
+        self.final_layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
 
     def __call__(self, hidden_states, attention_mask=None, deterministic=True, output_attentions=False):
         attn_residual = hidden_states
@@ -851,7 +852,7 @@ class FlaxWav2Vec2Module(nn.Module):
 
         Example::
 
-            >>> from transformers import Wav2Vec2Processor, Wav2Vec2Model
+            >>> from transformers import Wav2Vec2Processor, FlaxWav2Vec2Model
             >>> from datasets import load_dataset
             >>> import soundfile as sf
 
@@ -943,7 +944,7 @@ class FlaxWav2Vec2ForCTCModule(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.wav2vec2 = FlaxWav2Vec2Module(self.config)
+        self.wav2vec2 = FlaxWav2Vec2Module(self.config, dtype=self.dtype)
         self.dropout = nn.Dropout(rate=self.config.final_dropout)
         self.lm_head = nn.Dense(
             self.config.vocab_size,
@@ -967,7 +968,7 @@ class FlaxWav2Vec2ForCTCModule(nn.Module):
         Example::
 
             >>> import jax.numpy as jnp
-            >>> from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
+            >>> from transformers import Wav2Vec2Processor, FlaxWav2Vec2ForCTC
             >>> from datasets import load_dataset
             >>> import soundfile as sf
 
@@ -1040,10 +1041,10 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.wav2vec2 = FlaxWav2Vec2Module(self.config)
+        self.wav2vec2 = FlaxWav2Vec2Module(self.config, dtype=self.dtype)
         self.dropout_features = nn.Dropout(self.config.feat_quantizer_dropout)
 
-        self.quantizer = FlaxWav2Vec2GumbelVectorQuantizer(self.config)
+        self.quantizer = FlaxWav2Vec2GumbelVectorQuantizer(self.config, dtype=self.dtype)
         self.project_q = nn.Dense(
             self.config.proj_codevector_dim,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
@@ -1074,7 +1075,7 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
             >>> import optax
             >>> import numpy as np
             >>> import jax.numpy as jnp
-            >>> from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForPreTraining
+            >>> from transformers import Wav2Vec2FeatureExtractor, FlaxWav2Vec2ForPreTraining
             >>> from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices
             >>> from datasets import load_dataset
             >>> import soundfile as sf
@@ -1119,6 +1120,7 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             mask_time_indices=mask_time_indices,
+            deterministic=deterministic,
             return_dict=return_dict,
         )
 

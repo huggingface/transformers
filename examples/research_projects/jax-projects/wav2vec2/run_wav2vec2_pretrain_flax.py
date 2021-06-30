@@ -123,7 +123,7 @@ class FlaxDataCollatorForWav2Vec2Pretraining:
     for self-supervised pretraining.
 
     Args:
-        model (:class:`~transformers.Wav2Vec2ForPreTraining`):
+        model (:class:`~transformers.FlaxWav2Vec2ForPreTraining`):
             The Wav2Vec2 model used for pretraining. The data collator needs to have access
             to config and ``_get_feat_extract_output_lengths`` function for correct padding.
         feature_extractor (:class:`~transformers.Wav2Vec2FeatureExtractor`):
@@ -336,7 +336,7 @@ def main():
             "PreTraining is only supported for ``config.do_stable_layer_norm=True`` and ``config.feat_extract_norm='layer'"
         )
 
-    model = FlaxWav2Vec2ForPreTraining(config)
+    model = FlaxWav2Vec2ForPreTraining(config,  config=config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
 
     data_collator = FlaxDataCollatorForWav2Vec2Pretraining(
         model=model, feature_extractor=feature_extractor, pad_to_multiple_of=data_args.pad_to_multiple_of
@@ -401,6 +401,7 @@ def main():
         learning_rate=linear_decay_lr_schedule_fn,
         b1=training_args.adam_beta1,
         b2=training_args.adam_beta2,
+        eps=training_args.adam_epsilon,
         weight_decay=training_args.weight_decay,
         mask=decay_mask_fn,
     )
