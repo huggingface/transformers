@@ -383,13 +383,13 @@ official [flax example folder](https://github.com/huggingface/transformers/tree/
 - [(TODO) CLIP pretraining, fine-tuning (CLIP)]( )
 
 
-### Flax design philosophy in transformers
+### **Flax design philosophy in Transformers**
 
-This section will explain how flax models are implemented in Transformers and how the design differs from PyTorch.
+This section will explain how Flax models are implemented in Transformers and how the design differs from PyTorch.
 
 Let's first go over the difference between Flax and PyTorch.
 
-In JAX, most transformations (notably `jax.jit`) require functions that are transformed to be stateless so that they have no side effects. This is because any such side-effects will only be executed once when the transformed function is run during compilation and all subsequent calls of the compiled function would re-use the same side-effects of the compiled run instead of the "actual" side-effects (see [Stateful Computations in JAX](https://jax.readthedocs.io/en/latest/jax-101/07-state.html). If functions could have side-effects, it would mean that In all subsequent runs, the function would not take into account the side-effects and simply re-run the side-effects of the compiled function. As a consequence, Flax models, which are designed to work well with JAX transformations, are stateless. This means that when running a model in inference, both the inputs and the model weights are passed to the forward pass. In contrast, PyTorch model are very much stateful with the weights being stored within the model instance and the user just passing the inputs to the forward pass.
+In JAX, most transformations (notably `jax.jit`) require functions that are transformed to be stateless so that they have no side effects. This is because any such side-effects will only be executed once when the transformed function is run during compilation and all subsequent calls of the compiled function would re-use the same side-effects of the compiled run instead of the "actual" side-effects (see [Stateful Computations in JAX](https://jax.readthedocs.io/en/latest/jax-101/07-state.html)). As a consequence, Flax models, which are designed to work well with JAX transformations, are stateless. This means that when running a model in inference, both the inputs and the model weights are passed to the forward pass. In contrast, PyTorch model are very much stateful with the weights being stored within the model instance and the user just passing the inputs to the forward pass.
 
 Let's illustrate the difference between stateful models in PyTorch and stateless models in Flax.
 
@@ -420,7 +420,7 @@ Visually, we would represent an object of `model_pytorch` therefore as follows:
 
 ![alt text](https://raw.githubusercontent.com/patrickvonplaten/scientific_images/master/lm_pytorch_def.png)
 
-Exectuing a forward pass then simply corresponds to passing the `input_ids` to the object `model_pytorch`:
+Executing a forward pass then simply corresponds to passing the `input_ids` to the object `model_pytorch`:
 
 ```python
 sequences = model_pytorch(input_ids)
@@ -476,16 +476,18 @@ This design is called **stateless** because the output logits, the `sequences`, 
 
 Another term which is often used to describe the design difference between Flax/JAX and PyTorch is **immutable** vs **mutable**. A instantiated Flax model, `model_flax`, is **immutable** as a logical consequence of `model_flax`'s output being fully defined by its input: If calling `model_flax` could mutate `model_flax`, then calling `model_flax` twice with the same inputs could lead to different results which would violate the "*statelessness*" of Flax models.
 
+#### **Flax models in Transformers**
+
 Now let us see how this is handled in `Transformers.` If you have used a Flax model in Transformers already, you might wonder how come you don't always have to pass the parameters to the function of the forward pass. This is because the `FlaxPreTrainedModel` class abstracts it away. 
 It is designed this way so that the Flax models in Transformers will have a similar API to PyTorch and Tensorflow models.
 
-The `FlaxPreTrainedModel` is an abstract class that holds a Flax module, handles weights initialization, and provides a simple interface for downloading and loading pre-trained weights i.e. the `save_pretrained` and `from_pretrained` methods. Each flax model then defines its own subclass of `FlaxPreTrainedModel`; *e.g.* the BERT model has `FlaxBertPreTrainedModel`. Each such class provides two important methods, `init_weights` and `__call__`. Let's see what each of those methods do:
+The `FlaxPreTrainedModel` is an abstract class that holds a Flax module, handles weights initialization, and provides a simple interface for downloading and loading pre-trained weights i.e. the `save_pretrained` and `from_pretrained` methods. Each Flax model then defines its own subclass of `FlaxPreTrainedModel`; *e.g.* the BERT model has `FlaxBertPreTrainedModel`. Each such class provides two important methods, `init_weights` and `__call__`. Let's see what each of those methods do:
 
 - The `init_weights` method takes the expected input shape and a [`PRNGKey`](https://jax.readthedocs.io/en/latest/_autosummary/jax.random.PRNGKey.html) (and any other arguments that are required to get initial weights) and calls `module.init` by passing it a random example to get the initial weights with the given `dtype` (for ex. `fp32` or `bf16` etc). This method is called when we create an instance of the model class, so the weights are already initialized when you create a model i.e., when you do 
 
       model = FlaxBertModel(config)
 
-- The `__call__` method defines forward pass. It takes all necessary model inputs and parameters (and any other arguments required for the forward pass). The parameters are optional; when no parameters are passed, it uses the previously initialized or loaded params which can be accessed using `model.params`. It then calls the `module.apply` method, passing it the parameters and inputs to do the actual forward pass. So we can do a forward pass using
+- The `__call__` method defines forward pass. It takes all necessary model inputs and parameters (and any other arguments required for the forward pass). The parameters are optional; when no parameters are passed, it uses the previously initialized or loaded parameters which can be accessed using `model.params`. It then calls the `module.apply` method, passing it the parameters and inputs to do the actual forward pass. So we can do a forward pass using
 
       output = model(inputs, params=params)
 
@@ -496,7 +498,7 @@ First, write a Flax module that will declare the layers and computation.
 
 ```python
 import flax.linen as nn
-import jax.numpy as np
+import jax.numpy as jnp
 
 class MLPMoudle(nn.Module):
    config: MLPConfig
@@ -513,7 +515,7 @@ class MLPMoudle(nn.Module):
       return hidden_states
 ```
 
-Now let's define the `PreTrained` model class.
+Now let's define the `FlaxPreTrainedModel` model class.
 
 ```python
 from transformers.modeling_flax_utils import FlaxPreTrainedModel
@@ -554,13 +556,16 @@ class FlaxMLPModel(FlaxMLPPreTrainedModel):
 
 Now the `FlaxMLPModel` will have a similar interface as PyTorch or Tensorflow models and allows us to attach loaded or randomely initialized weights to the model instance.
 
-So the important point to remember is that the `model` is not an instance of `nn.Moudle`; it's an abstract class, like a container that holds a flax module, its parameters and provides convenient methods for initialization and forward pass. The key take-away here is that an instance of `FlaxMLPModel` is very much stateful now since it holds all the model parameters, whereas the underlying Flax module `FlaxMLPModule` is still stateless. Now to make `FlaxMLPModel` fully compliant with JAX transformations, it is always possible to pass the parameters to `FlaxMLPModel` as well to make `FlaxMLPModel` stateless and easier to work with during training. Feel free to take a look at the code to see how exactly this is implemented for ex. [`modeling_flax_bert.py`](https://github.com/huggingface/transformers/blob/master/src/transformers/models/bert/modeling_flax_bert.py#L536)
+So the important point to remember is that the `model` is not an instance of `nn.Moudle`; it's an abstract class, like a container that holds a Flax module, its parameters and provides convenient methods for initialization and forward pass. The key take-away here is that an instance of `FlaxMLPModel` is very much stateful now since it holds all the model parameters, whereas the underlying Flax module `FlaxMLPModule` is still stateless. Now to make `FlaxMLPModel` fully compliant with JAX transformations, it is always possible to pass the parameters to `FlaxMLPModel` as well to make it stateless and easier to work with during training. Feel free to take a look at the code to see how exactly this is implemented for ex. [`modeling_flax_bert.py`](https://github.com/huggingface/transformers/blob/master/src/transformers/models/bert/modeling_flax_bert.py#L536)
 
-Another significant difference between Flax and PyTorch models is that, we can pass the labels directly to PyTorch's forward pass to compute the loss, whereas Flax models never accept `labels` as an input argument. In PyTorch, gradient backpropagation is performed by simply calling `.backward()` on the computed loss which makes it very handy for the user to be able to pass the labels. In Flax however, gradient backpropagation cannot be done by simply calling `.backward()` on the loss output, but the loss function itself has to be transformed by `grad` or `value_and_grad` to return the gradients of all parameters. This transformation cannot happen under-the-hood when one passes the `labels` to Flax forward function, so that in Flax, we simply don't allow `labels` to be passed by design and force the user to implement the loss function her-/himself. As a conclusion, you will see that all training-related code is decoupled from the modeling code and always defined in the training scripts themselves.
+Another significant difference between Flax and PyTorch models is that, we can pass the `labels` directly to PyTorch's forward pass to compute the loss, whereas Flax models never accept `labels` as an input argument. In PyTorch, gradient backpropagation is performed by simply calling `.backward()` on the computed loss which makes it very handy for the user to be able to pass the `labels`. In Flax however, gradient backpropagation cannot be done by simply calling `.backward()` on the loss output, but the loss function itself has to be transformed by `jax.grad` or `jax.value_and_grad` to return the gradients of all parameters. This transformation cannot happen under-the-hood when one passes the `labels` to Flax's forward function, so that in Flax, we simply don't allow `labels` to be passed by design and force the user to implement the loss function her-/himself. As a conclusion, you will see that all training-related code is decoupled from the modeling code and always defined in the training scripts themselves.
 
-### How to use flax models and example scripts
+### **How to use flax models and example scripts**
 
-Let's first see how to load, save and do inference with Flax models. As explained in the above section, all flax models in Transformers have similar API to PyTorch models, so we can use the familiar `from_pretrained` and `save_pretrained` methods to load and save flax models.
+
+#### **How to do a forward pass**
+
+Let's first see how to load, save and do inference with Flax models. As explained in the above section, all Flax models in Transformers have similar API to PyTorch models, so we can use the familiar `from_pretrained` and `save_pretrained` methods to load and save Flax models.
 
 Let's use the base `FlaxRobertaModel` without any heads as an example.
 
@@ -581,11 +586,97 @@ def run_model(input_ids, attention_mask):
 outputs = run_model(**inputs)
 ```
 
-We use `jit` to compile the function to get maximum performance. Note that in the above example, we set `padding=max_length` to pad all examples to the same length. We do this because JAX's compiler has to recompile a function everytime its input shape changes - in a sense a compiled function is not only defined by its code but also by its input and output shape. It is usually much more effective to pad the input to be of a fixed static shape than having to recompile every the function multiple times.
+We use `jax.jit` to compile the function to get maximum performance. Note that in the above example, we set `padding=max_length` to pad all examples to the same length. We do this because JAX's compiler has to recompile a function everytime its input shape changes - in a sense a compiled function is not only defined by its code but also by its input and output shape. It is usually much more effective to pad the input to be of a fixed static shape than having to recompile every the function multiple times.
 
-TODO: Maybe a section about how to write a training step
 
-To know more about how to train the flax models and use the example scripts, please look at the [examples README](https://github.com/huggingface/transformers/tree/master/examples/flax).
+#### **How to write a training loop**
+
+Now let's see how we can write a simple training loop to train Flax models, we will use `FlaxGPT2ForCausalLM` as an example. 
+
+A training loop for Flax models typically consists of
+- A loss function that takes the parameters and inputs, runs the forward pass and returns the loss. 
+- We then transform the loss function using `jax.grad` or `jax.value_and_grad`  so that we get the gradients of all parameters.
+- An optimizer to update the paramteres using the gradients returned by the transformed loss function.
+- A train step function which combines the loss function and optimizer update, does the forward and backward pass and returns the updated parameters.
+
+Lets see how that looks like in code:
+
+First initialize our model
+
+```python
+import jax
+import jax.numpy as jnp
+
+from transformers import FlaxGPT2ForCausalLM
+
+model = FlaxGPT2ForCausalLM(config) 
+```
+
+As explained above we don't compute the loss inside the model, so we will define the loss
+function here.
+
+```python
+from flax.training.common_utils import onehot
+
+def cross_entropy(logits, labels):
+   return -jnp.sum(labels * jax.nn.log_softmax(logits, axis=-1), axis=-1)
+
+# define a function which will run the forward pass return loss
+def compute_loss(params, input_ids, labels):
+   logits = model(input_ids, params=params, train=True)
+   loss = cross_entropy(logits, onehot(labels)).mean()
+   return loss
+```
+
+Now we transform the loss function with `jax.value_and_grad`.
+
+```python
+# transform the loss function to get the gradients
+grad_fn = jax.value_and_grad(compute_loss)
+```
+
+Initialize our optimizer, we use the [optax](https://github.com/deepmind/optax) library to get the optimizer. 
+
+```python
+import optax
+
+params = model.params
+tx = optax.sgd(learning_rate=3e-3)
+opt_state = tx.init(params)
+```
+
+Now we define a single training step which will do a forward and a backward pass.
+
+```python
+def train_step(params, input_ids, labels)
+   # do the forward pass and get the loss and gradients
+   loss, grads = grad_fn(params)
+
+   # use the gradients to update parameters
+   updates, opt_state = tx.update(grads, opt_state)
+   updated_params = optax.apply_updates(params, updates)
+
+   return updates_params, loss
+```
+
+Finally, let's run our training loop.
+
+```python
+# train loop
+for i in range(10):
+   params, loss = train_step(params, input_ids, labels)
+```
+
+We can now save the model using the updated parameters using
+
+```python
+model.save_pretrained("awesome-flax-model", params=params)
+```
+
+Note that, as JAX is backed by the [XLA](https://www.tensorflow.org/xla) compiler any JAX/Flax code can run on all `XLA` compliant device without code change!
+That menas you could use the same training script on CPUs, GPUs, TPUs.
+
+To know more about how to train the Flax models on different devices (GPU, multi-GPUs, TPUs) and use the example scripts, please look at the [examples README](https://github.com/huggingface/transformers/tree/master/examples/flax).
 
 ## How to make a demo
 
