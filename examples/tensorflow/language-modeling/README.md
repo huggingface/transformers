@@ -50,7 +50,8 @@ python run_mlm.py \
 ```
 
 In case using a custom dataset, validation file can be seperately passed as an input argument.
-Otherwise some split(customizable) of training data is used as validation
+
+Otherwise some split(customizable) of training data is used as validation.
 ```
 python run_mlm.py \
 --model_name_or_path distilbert-base-cased \
