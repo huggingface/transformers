@@ -95,6 +95,12 @@ class TextClassificationPipeline(Pipeline):
         return_all_scores = return_all_scores if return_all_scores is not None else self.return_all_scores
         function_to_apply = function_to_apply if function_to_apply is not None else self.function_to_apply
 
+        if function_to_apply is None and self.model.config.problem_type is not None:
+            if self.model.config.problem_type == "multi_label_classification":
+                self.function_to_apply = "sigmoid"
+            elif self.model.config.problem_type == "single_label_classification":
+                self.function_to_apply = "softmax"
+
         def sigmoid(_outputs):
             return 1.0 / (1.0 + np.exp(-_outputs))
 
