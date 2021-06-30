@@ -88,7 +88,7 @@ Here can also re-use the feature extractor of [wav2vec2-base-960h](https://huggi
 model_dir="./wav2vec2-base-robust"
 
 from transformers import Wav2Vec2FeatureExtractor
-config = Wav2Vec2FeatureExtractor.from_pretrained("wav2vec2-base", return_attention_mask=True)
+config = Wav2Vec2FeatureExtractor.from_pretrained("facebook/wav2vec2-base", return_attention_mask=True)
 config.save_pretrained(model_dir)
 ```
 
