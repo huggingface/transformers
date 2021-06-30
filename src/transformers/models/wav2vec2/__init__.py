@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_tf_available, is_torch_available
+from ...file_utils import _BaseLazyModule, is_flax_available, is_tf_available, is_torch_available
 
 
 _import_structure = {
@@ -37,13 +37,20 @@ if is_torch_available():
         "Wav2Vec2PreTrainedModel",
     ]
 
-
 if is_tf_available():
     _import_structure["modeling_tf_wav2vec2"] = [
         "TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFWav2Vec2ForCTC",
         "TFWav2Vec2Model",
         "TFWav2Vec2PreTrainedModel",
+    ]
+
+if is_flax_available():
+    _import_structure["modeling_flax_wav2vec2"] = [
+        "FlaxWav2Vec2ForCTC",
+        "FlaxWav2Vec2ForPreTraining",
+        "FlaxWav2Vec2Model",
+        "FlaxWav2Vec2PreTrainedModel",
     ]
 
 
@@ -69,6 +76,14 @@ if TYPE_CHECKING:
             TFWav2Vec2ForCTC,
             TFWav2Vec2Model,
             TFWav2Vec2PreTrainedModel,
+        )
+
+    if is_flax_available():
+        from .modeling_tf_wav2vec2 import (
+            FlaxWav2Vec2ForCTC,
+            FlaxWav2Vec2ForPreTraining,
+            FlaxWav2Vec2Model,
+            FlaxWav2Vec2PreTrainedModel,
         )
 
 
