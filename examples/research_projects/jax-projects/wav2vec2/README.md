@@ -42,7 +42,7 @@ push the training logs and model weights to the repo.
 Next, let's add a symbolic link to the `run_wav2vec2_pretrain_flax`.
 
 ```bash
-export MODEL_DIR="./bart-base-xsum"
+export MODEL_DIR="./wav2vec2-base-robust"
 ln -s ~/transformers/examples/research_projects/jax-projects/wav2vec2/run_wav2vec2_pretrain_flax.py ./
 ```
 
@@ -65,13 +65,13 @@ model_dir="./wav2vec2-base-robust"
 
 from transformers import Wav2Vec2Config
 config = Wav2Vec2Config.from_pretrained(
-	"wav2vec2-base", 
+    "facebook/wav2vec2-base", 
     mask_time_length=10,
-	mask_time_prob=0.05,
-	diversity_loss_weight=0.1,
-	num_negatives=100,
-	do_stable_layer_norm=True,
-	feat_extract_norm="layer",
+    mask_time_prob=0.05,
+    diversity_loss_weight=0.1,
+    num_negatives=100,
+    do_stable_layer_norm=True,
+    feat_extract_norm="layer",
 )
 config.save_pretrained(model_dir)
 ```
@@ -96,7 +96,6 @@ config.save_pretrained(model_dir)
 Finally, we can run the example script to train the model:
 
 ```bash
-export MODEL_DIR="wav2vec2-base-robust"
 ./run_wav2vec2_pretrain_flax.py \
     --output_dir=${MODEL_DIR} \
     --num_train_epochs="5" \
@@ -111,9 +110,9 @@ export MODEL_DIR="wav2vec2-base-robust"
     --train_split_name="train.100" \
     --preprocessing_num_workers="4" \
     --max_duration_in_seconds="10.0" \
-	--adam_beta1="0.9" \
-	--adam_beta2="0.98" \
-	--push_to_hub
+    --adam_beta1="0.9" \
+    --adam_beta2="0.98" \
+    --push_to_hub
 ```
 
 Note that this script is not fully tested yet, so we cannot ensure that 
