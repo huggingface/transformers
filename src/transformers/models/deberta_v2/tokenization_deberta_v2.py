@@ -62,8 +62,8 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
             Whether or not to lowercase the input when tokenizing.
         bos_token (:obj:`string`, `optional`, defaults to "[CLS]"):
             The beginning of sequence token that was used during pre-training. Can be used a sequence classifier token.
-            When building a sequence using special tokens, this is not the token that is used for the beginning 
-            of sequence. The token used is the :obj:`cls_token`.
+            When building a sequence using special tokens, this is not the token that is used for the beginning of
+            sequence. The token used is the :obj:`cls_token`.
         eos_token (:obj:`string`, `optional`, defaults to "[SEP]"):
             The end of sequence token. When building a sequence using special tokens, this is not the token that is
             used for the end of sequence. The token used is the :obj:`sep_token`.
