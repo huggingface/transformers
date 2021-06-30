@@ -397,7 +397,110 @@ TODO (should be filled by 30.06.)...
 
 ## Talks
 
-TODO (should be filled by 29.06.)...
+Super excited to kick off 3 days of talks around JAX / Flax, Transformers, large-scale language modeling and other great topics during our community event! Find the schedule, zoom links and calendar events below!
+
+### Wednesday, June 30th
+- [Zoom link](https://us02web.zoom.us/j/89844071286?pwd=RzZaL1VPLzM0Um5kYzJRWVBFMmtRQT09)
+- [Add the event to your Gcal](https://bit.ly/2UTD5N2)
+
+ Speaker        | Topic                           | Time                  | 
+|-------------|---------------------------------|------------------------|
+| Skye Wanderman-Milne, Google Brain | Intro to JAX on Cloud TPUs      | 6.00pm-6.45pm CEST / 9.00am-9.45am PST      | 
+| Marc van Zee, Google Brain | Introduction to Flax      | 6.45pm-7.30pm CEST / 9.45am-10.30am PST      | 
+| Pablo Castro, Google Brain | Using Jax & Flax for RL with the Dopamine library      | 7.30pm-8.00pm CEST / 10.30am-11.00am PST      | 
+
+### Thursday, July 1st
+- [Zoom link](https://us02web.zoom.us/j/84443602508?pwd=NnZOMC84bXRBU3RaSHl3dTdBekIrZz09)
+- [Add the event to your Gcal](https://bit.ly/3x6vPM5)
+
+ Speaker        | Topic                           | Time                  | 
+|-------------|---------------------------------|------------------------|
+| Suraj Patil & Patrick von Platen, Hugging Face | How to use JAX/Flax with Transformers      | 5.30pm-6.00pm CEST / 8.30am-9.00am PST      | 
+| Sabrina J. Mielke, Johns Hopkins University & HuggingFace | From stateful code to purified JAX: how to build your neural net framework | 6.00pm-6.30pm CEST / 9.00am-9.30am PST      | 
+| Mostafa Dehghani, Google Brain | Long Range Arena: Benchmarking Efficient Transformers      | 6.30pm-7.00pm CEST / 9.30am-10.00am PST      |
+| Rohan Anil, Google Brain | Scalable Second Order Optimization for Deep Learning      | 7.00pm-7.30pm CEST / 10.00am-10.30am PST      |
+
+
+### Friday, July 2nd
+- [Zoom link](https://us02web.zoom.us/j/83307589607?pwd=NnNCN1doQkZKcjVSMlZwVEc2aVgrZz09)
+- [Add the event to your Gcal](https://bit.ly/3y4pVLt)
+
+ Speaker        | Topic                           | Time                  | 
+|-------------|---------------------------------|------------------------|
+| Lucas Beyer, Google Brain | Vision Transformer      | 5.00pm-5.30 CEST / 8.00am-8.30 PST      | 
+| Soňa Mokrá & Junhyuk Oh, DeepMind | TBD      | 5.30pm-6.00 CEST / 8.30am-9.00 PST      | 
+| Ben Wang, EleutherAI | Multihost Training in Mesh Transformer JAX      | 6.00pm-6.30 CEST / 9.00am-9.30am PST      | 
+| Siddhartha Kamalakara, Joanna Yoo & João G M Araújo, Cohere | Training large scale language models      | 6:30pm-7.00pm CEST / 9:30am-10.00am PST      | 
+
+### Talks & Speakers
+
+#### Skye Wanderman-Milne, JAX developer, Google Brain
+- Talk: Intro to JAX on Cloud TPUs
+- Abstract: JAX is a system for high-performance machine-learning research that combines the familiarity of Python + NumPy together with the power of hardware acceleration on CPUs, GPUs, and TPUs. It offers composable function transformations for automatic differentiation, automatic batching, end-to-end compilation, and both data and model parallelism. This talk will show you how to get up and running with JAX on a Cloud TPU VM. 
+- Speaker info: Skye Wanderman-Milne is a software engineer working on JAX. She has previously worked on TensorFlow and Apache Impala, a high-performance distributed database.
+
+#### Marc van Zee, Research SWE, Google Brain (Flax team)
+- Talk: Introduction to Flax
+- Abstract: In this talk I will provide a high-level introduction to the neural network library Flax. I will discuss the Flax philosophy, talk about the ecosystem around Flax and provide a high-level introduction to the code. I explain the Module abstraction and how to use it to train your models.
+- Speaker info: Marc is at Google Research for over 4 years. First he worked on conceptual AI, developing a next generation language understanding and reasoning prototype and he authored the CFQ dataset for compositional generalization. Currently, Marc works as a research software engineer in the Flax team.
+
+#### Pablo Castro, Staff Research Software Developer; Google Research, Brain Team
+- Talk: Using Jax & Flax for RL with the Dopamine library
+- Abstract: The Dopamine library was launched with TensorFlow in 2018 and we added a Jax/Flax variant of it last year. Internally, Jax's flexibility has facilitated our RL research tremendously, and we are excited to demonstrate its potential.
+- Speaker info: Pablo Samuel has been at Google for over 9 years, and is currently a researcher with the Brain team, focusing on fundamental reinforcement learning, as well as machine learning and creativity. Aside from his research, Pablo Samuel is an active musician (with a channel exploring the intersection of music and computer science), and is helping increase the representation of the LatinX community in the research world.
+- Dopamine repo: https://github.com/google/dopamine 
+- Homepage: https://psc-g.github.io/
+- Twitter: https://twitter.com/pcastr
+
+#### Suraj Patil & Patrick von Platen, Machine Learning Engineers at Hugging Face
+- Talk: How to use JAX/Flax with Transformers
+- Abstract: Transformers is one of the most popular open-source ML libraries and supports PyTorch, Tensorflow, and JAX/Flax. In this talk, we will explain how JAX/Flax models should be used in Transformers and compare their design in Transformers with the design of PyTorch models in Transformers. In the second part, we will give you a hands-on presentation of how a model can be trained end-to-end with the official JAX/Flax example scripts using Transformers & Datasets. Along the way, we want to give you some tips and tricks on how to best realize your project.
+- Speaker info: Suraj and Patrick are part of Hugging Face’s open source team and lead the integration of JAX/Flax into Transformers.
+- GitHub: https://github.com/patil-suraj & https://github.com/patrickvonplaten
+
+#### Sabrina J. Mielke, PhD student at The Johns Hopkins University & Part-time research intern at HuggingFace
+- Talk: From stateful code to purified JAX: how to build your neural net framework
+- Abstract: Moving from object-oriented (and stateful) PyTorch- or TF2-code with tape-based backprop to JAX isn't easy---and while running grad() on numpy-oneliners is cool and all, you do wonder... how do I build actual big neural nets? Libraries like flax, trax, or haiku make it easy---but how could you build machinery like that yourself?
+- Speaker info: Sabrina is a PhD student at the Johns Hopkins University and a part-time research intern at HuggingFace, researching open-vocabulary language models for segmentation and tokenization. She has published and co-organized workshops and shared tasks on these topics as well as on morphology and typological analysis in ACL, NAACL, EMNLP, LREC, and AAAI. You can find her reminisce for a time when formal language theory played a bigger role in NLP on Twitter at @sjmielke.
+- Links: The 2020 blogpost this talk will be based on: https://sjmielke.com/jax-purify.htm, leading to our experiment Parallax and eventually Haiku
+
+#### Mostafa Dehghani, Research Scientist, Google Brain
+- Talk: Long Range Arena: Benchmarking Efficient Transformers
+- Abstract: Transformers do not scale very well to long sequence lengths largely because of quadratic self-attention complexity. In the recent months, a wide spectrum of efficient, fast Transformers have been proposed to tackle this problem, more often than not claiming superior or comparable model quality to vanilla Transformer models. So, we now need a well-established consensus on how to evaluate this class of models. Moreover, inconsistent benchmarking on a wide spectrum of tasks and datasets makes it difficult to assess relative model quality amongst many models. I'll talk about a systematic and unified benchmark, LRA, specifically focused on evaluating model quality under long-context scenarios. LRA is a suite of tasks consisting of sequences ranging from 1K to 16K tokens, encompassing a wide range of data types and modalities such as text, natural, synthetic images, and mathematical expressions requiring similarity, structural, and visual-spatial reasoning. We systematically evaluate ten well-established long-range Transformer models (Reformers, Linformers, Linear Transformers, Sinkhorn Transformers, Performers, Synthesizers, Sparse Transformers, and Longformers) on LRA. LRA paves the way towards better understanding this class of efficient Transformer models, facilitates more research in this direction, and presents new challenging tasks to tackle. 
+- Speaker info: https://mostafadehghani.com/
+
+#### Rohan Anil, Senior Staff Software Engineer, Google Research, Brain Team
+- Talk: Scalable Second Order Optimization for Deep Learning
+- Abstract: Optimization in machine learning, both theoretical and applied, is presently dominated by first-order gradient methods such as stochastic gradient descent. Second-order optimization methods, that involve second derivatives and/or second order statistics of the data, are far less prevalent despite strong theoretical properties, due to their prohibitive computation, memory and communication costs. In an attempt to bridge this gap between theoretical and practical optimization, we present a scalable implementation of a second-order preconditioned method (concretely, a variant of full-matrix Adagrad), that along with several critical algorithmic and numerical improvements, provides significant convergence and wall-clock time improvements compared to conventional first-order methods on state-of-the-art deep models. Our novel design effectively utilizes the prevalent heterogeneous hardware architecture for training deep models, consisting of a multicore CPU coupled with multiple accelerator units. We demonstrate superior performance compared to state-of-the-art on very large learning tasks such as machine translation with Transformers, language modeling with BERT, click-through rate prediction on Criteo, and image classification on ImageNet with ResNet-50.
+- Speaker info: Rohan Anil is a software engineer at Google Research, Mountain View. Lately, he has been working on scalable and practical optimization techniques for efficient training of neural networks in various regimes.
+- Resources:
+  - https://arxiv.org/abs/2002.09018
+  - https://arxiv.org/abs/1901.11150
+  - https://arxiv.org/abs/2106.06199
+
+
+#### Lucas Beyer, Senior Research Engineer, Google Brain
+- Talk: Vision Transformer
+- Abstract: This talk will discuss the learning of general visual representations via large-scale pre-training and few-shot transfer, with a special focus on the Vision Transformer (ViT) architecture, which popularized transformers for the visual domain.
+- Speaker info: Lucas Beyer is a self-taught hacker and studied engineer. He went on to do his PhD in robotic perception at RWTH Aachen and is currently on a quest to find the ultimate visual representation at Google Brain in Zürich
+
+#### Ben Wang, Independent AI Researcher, EleutherAI
+- Talk: Multihost Training in Mesh Transformer JAX
+- Abstract: As models become larger, training must be scaled across multiple nodes. This talk discusses some design decisions and tradeoffs made for scaling to multiple nodes in Mesh Transformer JAX, a library for running model parallel transformers on TPU pods.
+- Speaker info: Ben is an independent AI researcher who contributes to EleutherAI, an open source research collective centered around democratizing access to powerful AI models. Recently he has released GPT-J-6B, a 6 billion parameter transformer which is the most powerful autoregressive language model in terms of zero-shot performance with public weights.
+- Website: https://www.eleuther.ai/
+
+#### Siddhartha Kamalakara, Joanna Yoo, João G M Araújo, MLE at Cohere
+- Talk: Training large scale language models
+- Abstract: A journey through Cohere’s experiences with training large scale language models. Join us in our exploration of pipeline and model parallelism as strategies for efficient training of large language models. We will present and motivate our recent transition to JAX+Flax as our choice of internal tech stack.
+- Speaker info: 
+   - João G M Araújo is a Brazilian college student with a passion for mathematics and a fascination for Deep Learning. João conducted research on representation learning and spent 3 months in Japan working on NeuroEvolution. João likes reading fantasy books and spending quality time with family and friends, and also runs a YouTube series on theoretical understanding of Deep Learning where researchers talk about their findings
+   - Joanna Yoo is one of the founding engineers at Cohere, working on scaling language models for the last year and half. Joanna loves live concerts and rock climbing!
+   - Siddhartha Rao Kamalakara is an MLE at Cohere and a researcher at FOR.ai with research interests at the intersection of efficient training and empirical understanding of DL.
+- Website: https://cohere.ai/
+
+
+
 
 ## How to setup TPU VM
 

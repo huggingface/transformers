@@ -121,7 +121,7 @@ class AlbertTokenizerFast(PreTrainedTokenizerFast):
 
     def __init__(
         self,
-        vocab_file,
+        vocab_file=None,
         tokenizer_file=None,
         do_lower_case=True,
         remove_space=True,
