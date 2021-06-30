@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
@@ -42,6 +42,8 @@ if is_torch_available():
         RobertaEmbeddings,
         create_position_ids_from_input_ids,
     )
+
+ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
 
 
 class RobertaModelTester:
@@ -475,7 +477,7 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
 
 @require_torch
-class RobertaModelIntegrationTest(unittest.TestCase):
+class RobertaModelIntegrationTest(TestCasePlus):
     @slow
     def test_inference_masked_lm(self):
         model = RobertaForMaskedLM.from_pretrained("roberta-base")
@@ -527,3 +529,19 @@ class RobertaModelIntegrationTest(unittest.TestCase):
         # expected_tensor = roberta.predict("mnli", input_ids, return_logits=True).detach()
 
         self.assertTrue(torch.allclose(output, expected_tensor, atol=1e-4))
+
+    def test_lm_head_ignore_keys(self):
+        keys_to_ignore_on_save_tied = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
+        keys_to_ignore_on_save_untied = [r"position_ids", r"lm_head.decoder.bias"]
+        for cls in [RobertaForMaskedLM, RobertaForCausalLM]:
+            model = cls.from_pretrained(ROBERTA_TINY)
+            self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_tied, cls)
+
+            # the keys should be different when embeddings aren't tied
+            config = RobertaConfig.from_pretrained(ROBERTA_TINY)
+            config.tie_word_embeddings = False
+            model = cls(config)
+            self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_untied, cls)
+
+            # test that saving works with updated ignore keys - just testing that it doesn't fail
+            model.save_pretrained(self.get_auto_remove_tmp_dir())
