@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 import numpy as np
-import tqdm
 from datasets import DatasetDict, load_dataset
+from tqdm import tqdm
 
 import flax
 import jax
@@ -17,7 +17,7 @@ import librosa
 import optax
 from flax import jax_utils, traverse_util
 from flax.training import train_state
-from flax.training.common_utils import get_metrics, shard
+from flax.training.common_utils import get_metrics, onehot, shard
 from transformers import (
     FlaxWav2Vec2ForPreTraining,
     HfArgumentParser,
@@ -108,6 +108,12 @@ class DataTrainingArguments:
     max_duration_in_seconds: Optional[float] = field(
         default=20.0, metadata={"help": "Filter audio files that are longer than `max_duration_in_seconds` seconds"}
     )
+    pad_to_multiple_of: Optional[int] = field(
+        default=1024,
+        metadata={
+            "help": "If set will pad the sequence to a multiple of the provided value. This is important to avoid triggering recompilations on TPU"
+        },
+    )
 
 
 @flax.struct.dataclass
@@ -164,6 +170,7 @@ class FlaxDataCollatorForWav2Vec2Pretraining:
             min_masks=2,
         )
 
+        # sample indices to take for negative vectors
         batch["sampled_negative_indices"] = _sample_negative_indices(
             (batch["mask_time_indices"].shape + (self.model.config.proj_codevector_dim,)),
             self.model.config.num_negatives,
@@ -206,6 +213,38 @@ def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndar
     sections_split = num_samples // batch_size
     batch_idx = np.split(samples_idx, sections_split)
     return batch_idx
+
+
+def compute_contrastive_loss(
+    quantized_features, transformer_features, negative_indices, mask_time_indices, logits_temp, num_negatives
+):
+    batch_size, sequence_length, hidden_size = quantized_features.shape
+
+    # take negative vectors from sampled indices
+    quantized_negatives = quantized_features.reshape(-1, hidden_size)[negative_indices.reshape(-1)]
+    quantized_negatives = quantized_negatives.reshape(
+        batch_size, sequence_length, num_negatives, hidden_size
+    ).transpose(2, 0, 1, 3)
+
+    target_features = jnp.concatenate([quantized_features[None, :], quantized_negatives], axis=0)
+    loss_logits = optax.cosine_similarity(transformer_features, target_features)
+    loss_logits = loss_logits / logits_temp
+
+    neg_is_pos = (quantized_features == quantized_negatives).all(-1)
+    neg_is_pos = jnp.concatenate([jnp.full((1,) + loss_logits.shape[1:], False), neg_is_pos], axis=0)
+
+    # make sure incorrectly sampled vectors don't contribute to loss
+    loss_logits = jnp.where(neg_is_pos, -1e9, loss_logits)
+
+    predictions = loss_logits.transpose(2, 1, 0).reshape(-1, loss_logits.shape[0])
+    targets = ((1 - mask_time_indices) * -100).transpose(1, 0).flatten()
+
+    target_mask = jnp.where(targets >= 0, 1.0, 0.0)
+    contrastive_loss = optax.softmax_cross_entropy(predictions, onehot(targets, predictions.shape[-1])) * target_mask
+
+    contrastive_loss = contrastive_loss.sum()
+
+    return contrastive_loss
 
 
 def main():
@@ -251,6 +290,9 @@ def main():
             split=f"{data_args.train_split_name}",
             cache_dir=model_args.cache_dir,
         )
+
+    datasets["train"] = datasets["train"].select(range(1000))
+    datasets["validation"] = datasets["validation"].select(range(400))
 
     # only normalized-inputs-training is supported
     feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
@@ -299,7 +341,9 @@ def main():
 
     model = FlaxWav2Vec2ForPreTraining(config)
 
-    data_collator = FlaxDataCollatorForWav2Vec2Pretraining(model=model, feature_extractor=feature_extractor)
+    data_collator = FlaxDataCollatorForWav2Vec2Pretraining(
+        model=model, feature_extractor=feature_extractor, pad_to_multiple_of=data_args.pad_to_multiple_of
+    )
 
     # Enable tensorboard only on the master node
     has_tensorboard = is_tensorboard_available()
@@ -321,7 +365,8 @@ def main():
 
     # Initialize our training
     rng = jax.random.PRNGKey(training_args.seed)
-    rng, dropout_rngs, gumbel_rngs = jax.random.split(rng, 3)
+    dropout_rngs = jax.random.split(rng, jax.local_device_count())
+    gumbel_rngs = jax.random.split(rng, jax.local_device_count())
 
     num_epochs = int(training_args.num_train_epochs)
     train_batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
@@ -363,7 +408,7 @@ def main():
         mask=decay_mask_fn,
     )
 
-    # Setup train state
+    # Setup train state and define training hyper-parameters
     state = train_state.TrainState.create(apply_fn=model.__call__, params=model.params, tx=adamw)
     num_negatives = model.config.num_negatives
     contrastive_logits_temperature = model.config.contrastive_logits_temperature
@@ -373,52 +418,35 @@ def main():
     # Define gradient update step fn
     def train_step(state, batch, dropout_rng, gumbel_rng):
         dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
+        gumbel_rng, new_gumbel_rng = jax.random.split(gumbel_rng)
 
         def loss_fn(params):
-            negative_indices = batch.pop("negative_indices")
+            negative_indices = batch.pop("sampled_negative_indices")
 
             gumbel_temperature = jnp.clip(
                 model_args.max_gumbel_temperature * model_args.gumbel_temperature_decay ** state.step,
                 a_min=model_args.min_gumbel_temperature,
             )
 
-            logits = state.apply_fn(
+            outputs = state.apply_fn(
                 **batch,
                 gumbel_temperature=gumbel_temperature,
                 params=params,
                 dropout_rng=dropout_rng,
                 gumbel_rng=gumbel_rng,
                 train=True,
-            )[0]
+            )
 
-            quantized_features = logits.projected_quantized_states
-            transformer_features = logits.projected_states
+            contrastive_loss = compute_contrastive_loss(
+                outputs.projected_quantized_states,
+                outputs.projected_states,
+                negative_indices,
+                batch["mask_time_indices"],
+                contrastive_logits_temperature,
+                num_negatives,
+            )
 
-            batch_size, sequence_length, hidden_size = quantized_features.shape
-
-            # take negative vectors from sampled indices
-            quantized_negatives = quantized_features.reshape(-1, hidden_size)[negative_indices.reshape(-1)]
-            quantized_negatives = quantized_negatives.reshape(
-                batch_size, sequence_length, num_negatives, hidden_size
-            ).transpose(2, 0, 1, 3)
-
-            target_features = jnp.concatenate([quantized_features[None, :], quantized_negatives], axis=0)
-            loss_logits = optax.cosine_similarity(transformer_features, target_features)
-            loss_logits = logits / contrastive_logits_temperature
-
-            neg_is_pos = (quantized_features == quantized_features).all(-1)
-            neg_is_pos[:1] = False
-
-            loss_logits = jnp.where(neg_is_pos, float("-inf"), loss_logits)
-
-            predictions = loss_logits.transpose(2, 1, 0).reshape(-1, loss_logits.shape[0])
-            targets = ((1 - batch["mask_time_indices"]) * -100).transpose(1, 0).flatten()
-
-            target_mask = jnp.where(targets > 0, 1.0, 0.0)
-            contrastive_loss = optax.softmax_cross_entropy(predictions, targets) * target_mask
-            contrastive_loss = contrastive_loss.sum()
-
-            diversity_loss = (num_codevectors - logits.codevector_perplexity) / num_codevectors
+            diversity_loss = (num_codevectors - outputs.codevector_perplexity) / num_codevectors
             loss = contrastive_loss + diversity_loss_weight * diversity_loss
 
             return loss
@@ -432,49 +460,31 @@ def main():
             {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}, axis_name="batch"
         )
 
-        return new_state, metrics, new_dropout_rng
+        return new_state, metrics, new_dropout_rng, new_gumbel_rng
 
     # Create parallel version of the train step
     p_train_step = jax.pmap(train_step, "batch", donate_argnums=(0,))
 
     # Define eval fn
     def eval_step(params, batch):
-        negative_indices = batch.pop("negative_indices")
+        negative_indices = batch.pop("sampled_negative_indices")
 
-        logits = model(**batch, params=params, train=False)[0]
+        outputs = model(**batch, params=params, train=False)
 
-        quantized_features = logits.projected_quantized_states
-        transformer_features = logits.projected_states
+        contrastive_loss = compute_contrastive_loss(
+            outputs.projected_quantized_states,
+            outputs.projected_states,
+            negative_indices,
+            batch["mask_time_indices"],
+            contrastive_logits_temperature,
+            num_negatives,
+        )
 
-        batch_size, sequence_length, hidden_size = quantized_features.shape
-
-        # take negative vectors from sampled indices
-        quantized_negatives = quantized_features.reshape(-1, hidden_size)[negative_indices.reshape(-1)]
-        quantized_negatives = quantized_negatives.reshape(
-            batch_size, sequence_length, num_negatives, hidden_size
-        ).transpose(2, 0, 1, 3)
-
-        target_features = jnp.concatenate([quantized_features[None, :], quantized_negatives], axis=0)
-        loss_logits = optax.cosine_similarity(transformer_features, target_features)
-        loss_logits = logits / contrastive_logits_temperature
-
-        neg_is_pos = (quantized_features == quantized_features).all(-1)
-        neg_is_pos[:1] = False
-
-        loss_logits = jnp.where(neg_is_pos, float("-inf"), loss_logits)
-
-        predictions = loss_logits.transpose(2, 1, 0).reshape(-1, loss_logits.shape[0])
-        targets = ((1 - batch["mask_time_indices"]) * -100).transpose(1, 0).flatten()
-
-        target_mask = jnp.where(targets > 0, 1.0, 0.0)
-        contrastive_loss = optax.softmax_cross_entropy(predictions, targets) * target_mask
-        contrastive_loss = contrastive_loss.sum()
-
-        diversity_loss = (num_codevectors - logits.codevector_perplexity) / num_codevectors
+        diversity_loss = (num_codevectors - outputs.codevector_perplexity) / num_codevectors
         loss = contrastive_loss + diversity_loss_weight * diversity_loss
 
         # summarize metrics
-        metrics = {"loss": loss.mean(), "codevector_perplexity": logits.codevector_perplexity}
+        metrics = {"loss": loss.mean(), "codevector_perplexity": outputs.codevector_perplexity}
         metrics = jax.lax.pmean(metrics, axis_name="batch")
 
         return metrics
@@ -503,9 +513,9 @@ def main():
         for i, batch_idx in enumerate(tqdm(train_batch_idx, desc="Training...", position=1)):
             samples = [vectorized_datasets["train"][int(idx)] for idx in batch_idx]
             model_inputs = data_collator(samples)
+            model_inputs = shard(model_inputs.data)
 
             # Model forward
-            model_inputs = shard(model_inputs.data)
             state, train_metric, dropout_rngs, gumbel_rngs = p_train_step(
                 state, model_inputs, dropout_rngs, gumbel_rngs
             )
@@ -538,7 +548,7 @@ def main():
 
         # Update progress bar
         epochs.write(
-            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {eval_metrics['loss']}, Acc: {eval_metrics['accuracy']})"
+            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {eval_metrics['loss']}, Acc: {eval_metrics['codevector_perplexity']})"
         )
 
         # Save metrics

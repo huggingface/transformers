@@ -715,7 +715,7 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
             # sample code vector probs via gumbel in differentiateable way
             gumbel_rng = self.make_rng("gumbel")
             gumbels = jax.random.gumbel(gumbel_rng, hidden_states.shape)
-            codevector_probs = nn.softmax((hidden_states + gumbels) / self.temperature)
+            codevector_probs = nn.softmax((hidden_states + gumbels) / temperature)
 
             # compute perplexity
             codevector_soft_dist = nn.softmax(
@@ -1060,8 +1060,8 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
         input_values,
         attention_mask=None,
         mask_time_indices=None,
-        deterministic: bool = True,
         gumbel_temperature: int = 1,
+        deterministic: bool = True,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1170,7 +1170,7 @@ class FlaxWav2Vec2ForPreTraining(FlaxWav2Vec2PreTrainedModel):
         input_values,
         attention_mask=None,
         mask_time_indices=None,
-        gumbel_temperature: Optional[int] = None,
+        gumbel_temperature: int = 1,
         params: dict = None,
         dropout_rng: jax.random.PRNGKey = None,
         gumbel_rng: jax.random.PRNGKey = None,
@@ -1184,7 +1184,6 @@ class FlaxWav2Vec2ForPreTraining(FlaxWav2Vec2PreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
-        gumbel_temperature = gumbel_temperature if gumbel_temperature else 1
 
         batch_size, sequence_length = input_values.shape
 
