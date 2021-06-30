@@ -70,10 +70,11 @@ python run_clm.py \
 --dataset_name wikitext \
 --dataset_config_name wikitext-103-raw-v1
 ```
+
+In case using a custom dataset, validation file can be seperately passed as an input argument.\
+Otherwise some split(customizable) of training data is used as validation.
+
 ```
-#In case using a custom dataset
-#validation file can also be added
-#Otherwise some split(customizable) of training data is used as validation
 python run_clm.py \
 --model_name_or_path distilgpt2 \
 --output_dir output \
