@@ -291,9 +291,6 @@ def main():
             cache_dir=model_args.cache_dir,
         )
 
-    datasets["train"] = datasets["train"].select(range(10000))
-    datasets["validation"] = datasets["validation"].select(range(4000))
-
     # only normalized-inputs-training is supported
     feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
         model_args.model_name_or_path, cache_dir=model_args.cache_dir, do_normalize=True
