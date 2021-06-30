@@ -430,16 +430,18 @@ def main():
     )
 
     train_dataset = lm_datasets["train"]
-    if(data_args.validation_file is not None):
+    if data_args.validation_file is not None:
         eval_dataset = lm_datasets["validation"]
     else:
-        logger.info(f'Validation file not found: using {data_args.validation_split_percentage}% of the dataset as validation as provided in data_args')
-        train_indices,val_indices=train_test_split(list(range(len(train_dataset))),test_size=data_args.validation_split_percentage)
-            
-        eval_dataset = train_dataset.select(val_indices)  
+        logger.info(
+            f"Validation file not found: using {data_args.validation_split_percentage}% of the dataset as validation as provided in data_args"
+        )
+        train_indices, val_indices = train_test_split(
+            list(range(len(train_dataset))), test_size=data_args.validation_split_percentage
+        )
+
+        eval_dataset = train_dataset.select(val_indices)
         train_dataset = train_dataset.select(train_indices)
-    
-    
 
     if data_args.max_train_samples is not None:
         train_dataset = train_dataset.select(range(data_args.max_train_samples))
