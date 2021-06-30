@@ -476,12 +476,12 @@ This design is called **stateless** because the output logits, the `sequences`, 
 
 Another term which is often used to describe the design difference between Flax/JAX and PyTorch is **immutable** vs **mutable**. A instantiated Flax model, `model_flax`, is **immutable** as a logical consequence of `model_flax`'s output being fully defined by its input: If calling `model_flax` could mutate `model_flax`, then calling `model_flax` twice with the same inputs could lead to different results which would violate the "*statelessness*" of Flax models.
 
-Now let us see how this is handled in `Transformers.` If you have used a Flax model in Transformers already, you might wonder how come we don't call `model.init` and `model.apply`. This is because the `FlaxPreTrainedModel` class abstracts it away. 
+Now let us see how this is handled in `Transformers.` If you have used a Flax model in Transformers already, you might wonder how come you don't always have to pass the parameters to the function of the forward pass. This is because the `FlaxPreTrainedModel` class abstracts it away. 
 It is designed this way so that the Flax models in Transformers will have a similar API to PyTorch and Tensorflow models.
 
 The `FlaxPreTrainedModel` is an abstract class that holds a Flax module, handles weights initialization, and provides a simple interface for downloading and loading pre-trained weights i.e. the `save_pretrained` and `from_pretrained` methods. Each flax model then defines its own subclass of `FlaxPreTrainedModel`; *e.g.* the BERT model has `FlaxBertPreTrainedModel`. Each such class provides two important methods, `init_weights` and `__call__`. Let's see what each of those methods do:
 
-- The `init_weights` method takes the expected input shape and an `rng` (and any other arguments that are required to get initial weights) and calls `module.init` by passing it a random example to get the initial weights with the given `dtype` (for ex. `fp32` or `bf16` etc). This method is called when we create an instance of the model class, so the weights are already initialized when you create a model i.e., when you do 
+- The `init_weights` method takes the expected input shape and a [`PRNGKey`](https://jax.readthedocs.io/en/latest/_autosummary/jax.random.PRNGKey.html) (and any other arguments that are required to get initial weights) and calls `module.init` by passing it a random example to get the initial weights with the given `dtype` (for ex. `fp32` or `bf16` etc). This method is called when we create an instance of the model class, so the weights are already initialized when you create a model i.e., when you do 
 
       model = FlaxBertModel(config)
 
@@ -490,9 +490,9 @@ The `FlaxPreTrainedModel` is an abstract class that holds a Flax module, handles
       output = model(inputs, params=params)
 
 
-Let's look at an example to see how this works. First, we will write a simple two-layer MLP model.
+Let's look at an example to see how this works. We will write a simple two-layer MLP model.
 
-We will first write a Flax module that will declare the layers and computation.
+First, write a Flax module that will declare the layers and computation.
 
 ```python
 import flax.linen as nn
@@ -554,11 +554,9 @@ class FlaxMLPModel(FlaxMLPPreTrainedModel):
 
 Now the `FlaxMLPModel` will have a similar interface as PyTorch or Tensorflow models and allows us to attach loaded or randomely initialized weights to the model instance.
 
-So the important point to remember is that the `model` is not an instance of `nn.Moudle`; it's an abstract class, like a container that holds a flax module, its parameters and provides convenient methods for initialization and forward pass. So our flax module is still stateless and immutable, but now we have a simple interface to work with. Feel free to take a look at the code to see how exactly this is implemented for ex. [`modeling_flax_bert.py`](https://github.com/huggingface/transformers/blob/master/src/transformers/models/bert/modeling_flax_bert.py)
+So the important point to remember is that the `model` is not an instance of `nn.Moudle`; it's an abstract class, like a container that holds a flax module, its parameters and provides convenient methods for initialization and forward pass. The key take-away here is that an instance of `FlaxMLPModel` is very much stateful now since it holds all the model parameters, whereas the underlying Flax module `FlaxMLPModule` is still stateless. Now to make `FlaxMLPModel` fully compliant with JAX transformations, it is always possible to pass the parameters to `FlaxMLPModel` as well to make `FlaxMLPModel` stateless and easier to work with during training. Feel free to take a look at the code to see how exactly this is implemented for ex. [`modeling_flax_bert.py`](https://github.com/huggingface/transformers/blob/master/src/transformers/models/bert/modeling_flax_bert.py#L536)
 
-Another significant difference between Flax and PyTorch models is that, we can pass the labels directly to PyTorch's forward pass to compute the loss, whereas Flax models never accept labels as an input argument. In PyTorch, gradient backpropagation is performed by simply calling `.backward()` on the computed loss which makes it very handy for the user to be able to pass the labels. In Flax however, gradient backpropagation cannot be done by simply calling `.backward()` on the loss output, but the loss function itself has to be transformed by `grad` or `value_and_grad` to return the gradients of all parameters. This transformation cannot happen under-the-hood when one passes the labels to Flax forward function, so that in Flax, we simply don't allow labels to be passed by design and force the user to implement the loss function her-/himself.
-This is because in JAX to get the gradients that are required for the backward pass; we need to transform the loss function using the `grad` or `value_and_grad` transformations.
-As a conclusion, you will see that all training-related code is decoupled from the modeling code and always defined in the training scripts themselves.
+Another significant difference between Flax and PyTorch models is that, we can pass the labels directly to PyTorch's forward pass to compute the loss, whereas Flax models never accept `labels` as an input argument. In PyTorch, gradient backpropagation is performed by simply calling `.backward()` on the computed loss which makes it very handy for the user to be able to pass the labels. In Flax however, gradient backpropagation cannot be done by simply calling `.backward()` on the loss output, but the loss function itself has to be transformed by `grad` or `value_and_grad` to return the gradients of all parameters. This transformation cannot happen under-the-hood when one passes the `labels` to Flax forward function, so that in Flax, we simply don't allow `labels` to be passed by design and force the user to implement the loss function her-/himself. As a conclusion, you will see that all training-related code is decoupled from the modeling code and always defined in the training scripts themselves.
 
 ### How to use flax models and example scripts
 
@@ -584,11 +582,10 @@ outputs = run_model(**inputs)
 ```
 
 We use `jit` to compile the function to get maximum performance. Note that in the above example, we set `padding=max_length` to pad all examples to the same length. We do this because JAX's compiler has to recompile a function everytime its input shape changes - in a sense a compiled function is not only defined by its code but also by its input and output shape. It is usually much more effective to pad the input to be of a fixed static shape than having to recompile every the function multiple times.
-of the same shape, the function gets recompiled, which could lead to a significant slow-down.
+
+TODO: Maybe a section about how to write a training step
 
 To know more about how to train the flax models and use the example scripts, please look at the [examples README](https://github.com/huggingface/transformers/tree/master/examples/flax).
-
-TODO: Maybe a section about how to access intermediate modules in flax models?
 
 ## How to make a demo
 
