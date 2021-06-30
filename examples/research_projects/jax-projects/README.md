@@ -648,15 +648,15 @@ opt_state = tx.init(params)
 Now we define a single training step which will do a forward and a backward pass.
 
 ```python
-def _train_step(params, input_ids, labels)
+def _train_step(params, opt_state, input_ids, labels)
    # do the forward pass and get the loss and gradients
-   loss, grads = grad_fn(params)
+   loss, grads = grad_fn(params, input_ids, labels)
 
    # use the gradients to update parameters
    updates, opt_state = tx.update(grads, opt_state)
    updated_params = optax.apply_updates(params, updates)
 
-   return updates_params, loss
+   return updates_params, opt_state, loss
 
 train_step = jax.jit(_train_step)
 ```
@@ -666,10 +666,13 @@ Finally, let's run our training loop.
 ```python
 # train loop
 for i in range(10):
-   params, loss = train_step(params, input_ids, labels)
+   params, opt_state, loss = train_step(params, opt_state, input_ids, labels)
 ```
 
-We can now save the model using the updated parameters using
+Note how we always pass the `params` and `opt_state` to the `train_step` which then returns the updated `params` and `opt_state`. This is becuase of the staless nature off JAX/Flax models, all the state
+like parameters, optimizer state is kept external.
+
+We can now save the model with the trained parameters using
 
 ```python
 model.save_pretrained("awesome-flax-model", params=params)
