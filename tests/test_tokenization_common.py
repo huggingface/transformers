@@ -3168,11 +3168,8 @@ class TokenizerTesterMixin:
         decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
         expected_result = "This is the first sentence"
 
-        # OpenAIGPT always lowercases and has no arg.
-        if new_tokenizer.init_kwargs.get("do_lower_case", False) or tokenizer.__class__.__name__.startswith(
-            "OpenAIGPT"
-        ):
-            expected_result = expected_result.lower()
+        if tokenizer.backend_tokenizer.normalizer is not None:
+            expected_result = tokenizer.backend_tokenizer.normalizer.normalize_str(expected_result)
         self.assertEqual(expected_result, decoded_input)
 
         # We check that the parameters of the tokenizer remained the same
@@ -3287,11 +3284,8 @@ class TokenizerTesterMixin:
         decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
         expected_result = "This is the first sentence"
 
-        # OpenAIGPT always lowercases and has no arg.
-        if new_tokenizer.init_kwargs.get("do_lower_case", False) or tokenizer.__class__.__name__.startswith(
-            "OpenAIGPT"
-        ):
-            expected_result = expected_result.lower()
+        if tokenizer.backend_tokenizer.normalizer is not None:
+            expected_result = tokenizer.backend_tokenizer.normalizer.normalize_str(expected_result)
         self.assertEqual(expected_result, decoded_input)
 
 
