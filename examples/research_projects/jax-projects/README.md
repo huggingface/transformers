@@ -612,8 +612,8 @@ from transformers import FlaxGPT2ForCausalLM
 model = FlaxGPT2ForCausalLM(config) 
 ```
 
-As explained above we don't compute the loss inside the model, so we will define the loss
-function here.
+As explained above we don't compute the loss inside the model, but rather in the task-specific training script.
+For demonstration purposes, we write a pseude training script for causal lanuage modeling in the following.
 
 ```python
 from flax.training.common_utils import onehot
@@ -635,7 +635,7 @@ Now we transform the loss function with `jax.value_and_grad`.
 grad_fn = jax.value_and_grad(compute_loss)
 ```
 
-Initialize our optimizer, we use the [optax](https://github.com/deepmind/optax) library to get the optimizer. 
+We use the [optax](https://github.com/deepmind/optax) library to Initialize the optimizer. 
 
 ```python
 import optax
@@ -669,7 +669,7 @@ for i in range(10):
    params, opt_state, loss = train_step(params, opt_state, input_ids, labels)
 ```
 
-Note how we always pass the `params` and `opt_state` to the `train_step` which then returns the updated `params` and `opt_state`. This is becuase of the staless nature of JAX/Flax models, all the state
+Note how we always pass the `params` and `opt_state` to the `train_step` which then returns the updated `params` and `opt_state`. This is because of the staless nature of JAX/Flax models, all the state
 like parameters, optimizer state is kept external.
 
 We can now save the model with the trained parameters using
