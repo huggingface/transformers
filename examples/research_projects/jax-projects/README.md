@@ -669,7 +669,7 @@ for i in range(10):
    params, opt_state, loss = train_step(params, opt_state, input_ids, labels)
 ```
 
-Note how we always pass the `params` and `opt_state` to the `train_step` which then returns the updated `params` and `opt_state`. This is becuase of the staless nature off JAX/Flax models, all the state
+Note how we always pass the `params` and `opt_state` to the `train_step` which then returns the updated `params` and `opt_state`. This is becuase of the staless nature of JAX/Flax models, all the state
 like parameters, optimizer state is kept external.
 
 We can now save the model with the trained parameters using
