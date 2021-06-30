@@ -336,7 +336,9 @@ def main():
             "PreTraining is only supported for ``config.do_stable_layer_norm=True`` and ``config.feat_extract_norm='layer'"
         )
 
-    model = FlaxWav2Vec2ForPreTraining(config,  config=config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
+    model = FlaxWav2Vec2ForPreTraining(
+        config, config=config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+    )
 
     data_collator = FlaxDataCollatorForWav2Vec2Pretraining(
         model=model, feature_extractor=feature_extractor, pad_to_multiple_of=data_args.pad_to_multiple_of

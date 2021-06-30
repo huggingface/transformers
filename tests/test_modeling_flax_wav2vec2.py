@@ -284,7 +284,8 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
         for negative in negatives:
             self.assertTrue(((negative - features.reshape(negative.shape)) == 0).sum() == 0.0)
 
-        # make sure that full vectors are sampled and not values of vectors => this means that `unique()` yields a single value for `hidden_size` dim
+        # make sure that full vectors are sampled and not values of vectors
+        # => this means that `unique()` yields a single value for `hidden_size` dim
         self.assertTrue(np.unique(negatives, axis=-1).shape, (num_negatives, batch_size, sequence_length, 1))
 
 

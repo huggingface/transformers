@@ -45,8 +45,9 @@ class FlaxWav2Vec2BaseModelOutput(ModelOutput):
     Args:
         last_hidden_state (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        extract_features (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length, conv_dim[-1])`):
-            Sequence of extracted feature vectors of the last convolutional layer of the model.
+        extract_features (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length, last_conv_dim)`):
+            Sequence of extracted feature vectors of the last convolutional layer of the model with ``last_conv_dim``
+            being the dimension of the last convolutional layer.
         hidden_states (:obj:`tuple(jnp.ndarray)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`jnp.ndarray` (one for the output of the embeddings + one for the output of each layer) of
             shape :obj:`(batch_size, sequence_length, hidden_size)`.
@@ -175,7 +176,8 @@ def _sample_negative_indices(features_shape: Tuple, num_negatives: int):
     batch_size, sequence_length, hidden_size = features_shape
     if sequence_length <= 1:
         raise ValueError(
-            f"`features should have `sequence_length` > 1, but are of shape (batch_size, sequence_length, hidden_size) = ({batch_size, sequence_length, hidden_size})."
+            f"`features should have `sequence_length` > 1, but are of shape "
+            f"(batch_size, sequence_length, hidden_size) = ({batch_size, sequence_length, hidden_size})."
         )
 
     # get `num_negatives` random vector indices from the same utterance
@@ -415,9 +417,10 @@ class FlaxWav2Vec2Attention(nn.Module):
 
     def setup(self) -> None:
         self.head_dim = self.embed_dim // self.num_heads
-        assert (
-            self.head_dim * self.num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+            )
 
         dense = partial(
             nn.Dense,
@@ -443,14 +446,13 @@ class FlaxWav2Vec2Attention(nn.Module):
         hidden_states: jnp.ndarray,
         key_value_states: Optional[jnp.ndarray] = None,
         attention_mask: Optional[jnp.ndarray] = None,
-        init_cache: bool = False,
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
         """Input shape: Batch x Time x Channel"""
 
         # get query proj
         query_states = self.q_proj(hidden_states)
-        # self_attention
+
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
@@ -619,8 +621,8 @@ class FlaxWav2Vec2StableLayerNormEncoder(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.pos_conv_embed = FlaxWav2Vec2PositionalConvEmbedding(self.config)
-        self.layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps)
+        self.pos_conv_embed = FlaxWav2Vec2PositionalConvEmbedding(self.config, dtype=self.dtype)
+        self.layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout)
         self.layers = FlaxWav2Vec2EncoderLayerStableLayerNormCollection(self.config, dtype=self.dtype)
 
@@ -678,7 +680,8 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
 
         if self.config.codevector_dim % self.num_groups != 0:
             raise ValueError(
-                f"`config.codevector_dim {self.config.codevector_dim} must be divisible by `config.num_codevector_groups` {self.num_groups} for concatenation"
+                f"`config.codevector_dim {self.config.codevector_dim} must be divisible by"
+                f" `config.num_codevector_groups` {self.num_groups} for concatenation"
             )
 
         # storage for codebook variables (codewords)
@@ -686,6 +689,7 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
             "codevectors",
             jax.nn.initializers.uniform(),
             (1, self.num_groups * self.num_vars, self.config.codevector_dim // self.num_groups),
+            dtype=self.dtype,
         )
         self.weight_proj = nn.Dense(
             self.num_groups * self.num_vars,
@@ -734,11 +738,8 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
         codevector_probs = codevector_probs.reshape(batch_size * sequence_length, -1)
         # use probs to retrieve codevectors
         codevectors_per_group = jnp.expand_dims(codevector_probs, axis=-1) * self.codevectors
-        codevectors = (
-            codevectors_per_group.reshape(batch_size * sequence_length, self.num_groups, self.num_vars, -1)
-            .sum(-2)
-            .reshape(batch_size, sequence_length, -1)
-        )
+        codevectors = codevectors_per_group.reshape(batch_size * sequence_length, self.num_groups, self.num_vars, -1)
+        codevectors = codevectors.sum(-2).reshape(batch_size, sequence_length, -1)
 
         return codevectors, perplexity
 
@@ -766,12 +767,12 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         # init input tensors
-        input_ids = jnp.zeros(input_shape, dtype="i4")
-        attention_mask = jnp.ones_like(input_ids)
+        input_values = jnp.zeros(input_shape, dtype="i4")
+        attention_mask = jnp.ones_like(input_values)
         params_rng, dropout_rng = jax.random.split(rng, 2)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(rngs, input_ids, attention_mask, return_dict=False)["params"]
+        return self.module.init(rngs, input_values, attention_mask, return_dict=False)["params"]
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     def __call__(
@@ -828,7 +829,7 @@ class FlaxWav2Vec2Module(nn.Module):
         self.feature_extractor = FlaxWav2Vec2FeatureExtractor(self.config, dtype=self.dtype)
         self.feature_projection = FlaxWav2Vec2FeatureProjection(self.config, dtype=self.dtype)
         self.masked_spec_embed = self.param(
-            "masked_spec_embed", jax.nn.initializers.uniform(), (self.config.hidden_size,)
+            "masked_spec_embed", jax.nn.initializers.uniform(), (self.config.hidden_size,), dtype=self.dtype
         )
 
         if self.config.do_stable_layer_norm:
