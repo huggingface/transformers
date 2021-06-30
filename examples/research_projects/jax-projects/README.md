@@ -385,7 +385,7 @@ official [flax example folder](https://github.com/huggingface/transformers/tree/
 
 ### Flax design philosophy in transformers
 
-This section will exaplain how flax models are implemented in Transformers and how the design differs from PyTorch.
+This section will explain how flax models are implemented in Transformers and how the design differs from PyTorch.
 
 Let's first go over the differencec between Flax and PyTorch.
 
@@ -476,29 +476,93 @@ This design is called **stateless** because the output logits, the `sequences`, 
 
 Another term which is often used to describe the design difference between Flax/JAX and PyTorch is **immutable** vs **mutable**. A instantiated Flax model, `model_flax`, is **immutable** as a logical consequence of `model_flax`'s output being fully defined by its input: If calling `model_flax` could mutate `model_flax`, then calling `model_flax` twice with the same inputs could lead to different results which would violate the "*statelessness*" of Flax models.
 
-Now let's see how this is handled in `Transformers`. If you have used a flax model in Transformers already then you might be wondering how come we don't call `model.init` and `model.apply`. This is because the `FlaxPreTrainedModel` class abstracts it away. 
-It is designed this way so that the Flax models in Transformers will have similar API to PyTorch and Tensorflow models.
+Now let us see how this is handled in `Transformers.` If you have used a flax model in Transformers already, you might wonder how come we don't call `model.init` and `model.apply`. This is because the `FlaxPreTrainedModel` class abstracts it away. 
+It is designed this way so that the Flax models in Transformers will have a similar API to PyTorch and Tensorflow models.
 
-The `FlaxPreTrainedModel` is an abstract class which holds a flax module, handles weights initialization and provides a simple interface for downloading and loading pretrained weights i.e the `save_pretrained` and `from_pretrained` methods. Each flax model then defines it's own subclass of `FlaxPreTrainedModel` for ex. the BERT model has `FlaxBertPreTrainedModel`. Each such class provides two important methods `init_weights` and `__call__`. Let's see what each of those methods do:
+The `FlaxPreTrainedModel` is an abstract class that holds a flax module, handles weights initialization, and provides a simple interface for downloading and loading pre-trained weights i.e. the `save_pretrained` and `from_pretrained` methods. Each flax model then defines its own subclass of `FlaxPreTrainedModel`; for ex. the BERT model has `FlaxBertPreTrainedModel`. Each such class provides two important methods, `init_weights` and `__call__`. Let's see what each of those methods do:
 
-- The `init_weights` method takes the expected input shape and an `rng` (and any other arguments that are required to get initial weights) and calls `module.init` by passing it a random example to get the initial weights. This method is called when we create an instance of the model class so the weights are already initilized when you create a model i.e when you do 
+- The `init_weights` method takes the expected input shape and an `rng` (and any other arguments that are required to get initial weights) and calls `module.init` by passing it a random example to get the initial weights with the given `dtype` (for ex. `fp32` or `bf16` etc). This method is called when we create an instance of the model class, so the weights are already initialized when you create a model i.e., when you do 
 
       model = FlaxBertModel(config)
 
-- The `__call__` method is designed for the forward pass. It takes all necessary model inputs, parameters (and any other arguments that are required for the forward pass). The parameters are optional, when no parameters are passed it uses the previously initilized or loaded params which can be accessed using `model.params`. It then calls the `module.apply` method passing it the parameters and inputs to do the actual forward pass. So we can do a forward pass using
+- The `__call__` method is designed for the forward pass. It takes all necessary model inputs and parameters (and any other arguments required for the forward pass). The parameters are optional; when no parameters are passed, it uses the previously initialized or loaded params which can be accessed using `model.params`. It then calls the `module.apply` method, passing it the parameters and inputs to do the actual forward pass. So we can do a forward pass using
 
       output = model(inputs, params=params)
 
 
-So the important point to remember is, here the `model` is not an instance of `nn.Moudle` it's and abstract class, like a container which holds a flax module, it's paramters and provides convinient methods for initialization and forward pass.
+Let's look at an example to see how this works. First, we will write a simple two-layer MLP model.
 
-Another important major difference between Flax and PyTorch models is that, `loss` is not computed inside the model and none of the flax models accept `labels` argument.
-This is because in JAX to get the gradients which are required for the backward pass we need to transform the loss function using the `grad` or `value_and_grad` transformations.
-So we decouple this from the modeling code, and write the loss functions in training scripts.
+We will first write a flax module that will declare the layers and computation.
+
+```python
+import flax.linen as nn
+import jax.numpy as np
+
+class MLPMoudle(nn.Module):
+   config: MLPConfig
+   dtype: jnp.dtype = jnp.float32
+
+   def setup(self):
+      self.dense1 = nn.Dense(self.config.hidden_dim, dtype=self.dtype)
+      self.dense2 = nn.Desne(self.config.hidden_dim, dtype=self.dtype)
+   
+   def __call__(self, inputs):
+      hidden_states = self.dense1(inputs)
+      hidden_states = nn.relu(hidden_states)
+      hidden_states = self.dense2(hidden_states)
+      return hidden_states
+```
+
+Now let's define the `PreTrained` model class.
+
+```python
+from transformers.modeling_flax_utils import FlaxPreTrainedModel
+
+class FlaxMLPPreTrainedModel(FlaxPreTrainedModel):
+   config_class = MLPConfig
+   base_model_prefix = "model"
+   module_class: nn.Module = None
+
+   def __init__(self, config: BertConfig, input_shape: Tuple = (1, 8), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs):
+      # initialize the flax module
+      module = self.module_class(config=config, dtype=dtype, **kwargs)
+      super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+   
+   def init_weights(self, rng, input_shape):
+      # init input tensors
+      inputs = jnp.zeros(input_shape, dtype="i4")
+      
+      params_rng, dropout_rng = jax.random.split(rng)
+      rngs = {"params": params_rng, "dropout": dropout_rng}
+      
+      params = self.module.init(rngs, inputs)["params"]
+      return params
+   
+   def __call__(self, inputs, params: dict = None):
+      params = {"params": params or self.params}
+      outputs = self.module.apply(params, jnp.array(inputs))
+      return outputs
+```
+
+
+Now we can define our model class as follows.
+
+```python
+class FlaxMLPModel(FlaxMLPPreTrainedModel):
+   module_class = FlaxMLPModule
+```
+
+Now the `FlaxMLPModel` will have a similar interface as that of other Transformers models.
+
+So the important point to remember is that the `model` is not an instance of `nn.Moudle`; it's an abstract class, like a container that holds a flax module, its parameters and provides convenient methods for initialization and forward pass. So our flax module is still stateless and immutable, but now we have a simple interface to work with. Feel free to take a look at the code to see how exactly this is implemented for ex. [`modeling_flax_bert.py`](https://github.com/huggingface/transformers/blob/master/src/transformers/models/bert/modeling_flax_bert.py)
+
+Another significant difference between Flax and PyTorch models is that `loss` is not computed inside the model, and none of the flax models accept `labels` argument.
+This is because in JAX to get the gradients that are required for the backward pass; we need to transform the loss function using the `grad` or `value_and_grad` transformations.
+So we decouple this from the modeling code and write the loss functions in training scripts.
 
 ### How to use flax models and example scripts
 
-Let's first see how to load, save and do inference with flax models. As explained in the above section, all flax models in Transformers have similar API to PyTorch models, so we can use the familier `from_pretrained` and `save_pretrained` methods to load and save flax models.
+Let's first see how to load, save and do inference with flax models. As explained in the above section, all flax models in Transformers have similar API to PyTorch models, so we can use the familiar `from_pretrained` and `save_pretrained` methods to load and save flax models.
 
 Let's use the base `FlaxRobertaModel` without any heads as an example.
 
@@ -507,7 +571,7 @@ from transformers import FlaxRobertaModel, RobertaTokenizerFast
 import jax
 
 tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
-inputs = tokenizer("JAX/Flax is amazing ", padding="max_length", rmax_length=128, eturn_tensors="np")
+inputs = tokenizer("JAX/Flax is amazing ", padding="max_length", max_length=128, return_tensors="np")
 
 model = FlaxRobertaModel.from_pretrained("julien-c/dummy-unknown")
 
@@ -519,11 +583,12 @@ def run_model(input_ids, attention_mask):
 outputs = run_model(**inputs)
 ```
 
-We use `jit` to compile the function to get maximum performance. Note that in the above example we set `padding=max_length` to pad all examples to same length 
-this is because jax transformations like `jit` or `pmap` complies the function for faster execution and to do that it expects static shapes. If the batches are not
-of same shape the function get compiled again which could lead to major slow-down.
+We use `jit` to compile the function to get maximum performance. Note that in the above example, we set `padding=max_length` to pad all examples to the same length because JAX transformations like `jit` or `pmap` compile the function and expect static shapes. If the batches are not
+of the same shape, the function gets recompiled, which could lead to a significant slow-down.
 
-TODO: Maybe a section about how to access intermidiate modules in flax models ?
+To know more about how to train the flax models and use the example scripts, please look at the [examples README](https://github.com/huggingface/transformers/tree/master/examples/flax).
+
+TODO: Maybe a section about how to access intermediate modules in flax models?
 
 ## How to make a demo
 
