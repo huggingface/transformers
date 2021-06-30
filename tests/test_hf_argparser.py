@@ -106,8 +106,12 @@ class HfArgumentParserTest(unittest.TestCase):
         expected.add_argument("--foo", type=int, required=True)
         expected.add_argument("--bar", type=float, required=True)
         expected.add_argument("--baz", type=str, required=True)
-        expected.add_argument("--flag", type=string_to_bool, default=True, const=True, nargs="?")
+        expected.add_argument("--flag", type=string_to_bool, default=False, const=True, nargs="?")
         self.argparsersEqual(parser, expected)
+
+        args = ["--foo", "1", "--baz", "quux", "--bar", "0.5"]
+        (example,) = parser.parse_args_into_dataclasses(args, look_for_args_file=False)
+        self.assertFalse(example.flag)
 
     def test_with_default(self):
         parser = HfArgumentParser(WithDefaultExample)
