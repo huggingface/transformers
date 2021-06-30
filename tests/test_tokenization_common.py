@@ -33,6 +33,7 @@ from transformers import (
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
+    SpecialTokensMixin,
     is_tf_available,
     is_torch_available,
 )
@@ -56,6 +57,11 @@ if TYPE_CHECKING:
 
 
 NON_ENGLISH_TAGS = ["chinese", "dutch", "french", "finnish", "german", "multilingual"]
+
+SMALL_TRAINING_CORPUS = [
+    ["This is the first sentence.", "This is the second one."],
+    ["This sentence (contains #) over symbols and numbers 12 3.", "But not this one."],
+]
 
 
 def filter_non_english(_, pretrained_name: str):
@@ -390,7 +396,11 @@ class TokenizerTesterMixin:
         tokenizer = self.get_rust_tokenizer()
 
         for parameter_name, parameter in signature.parameters.items():
-            if parameter.default != inspect.Parameter.empty and parameter_name != "tokenizer_file":
+            if parameter.default != inspect.Parameter.empty and parameter_name not in [
+                "vocab_file",
+                "merges_file",
+                "tokenizer_file",
+            ]:
                 self.assertIn(parameter_name, tokenizer.init_kwargs)
 
     def test_rust_and_python_full_tokenizers(self):
@@ -3143,6 +3153,146 @@ class TokenizerTesterMixin:
                     self.assertEqual(cr_output, r_output)
                     self.assertTrue(special_token_id in p_output)
                     self.assertTrue(special_token_id in cr_output)
+
+    def test_training_new_tokenizer(self):
+        # This feature only exists for fast tokenizers
+        if not self.test_rust_tokenizer:
+            return
+
+        tokenizer = self.get_rust_tokenizer()
+        new_tokenizer = tokenizer.train_new_from_iterator(SMALL_TRAINING_CORPUS, 100)
+
+        # Test we can use the new tokenizer with something not seen during training
+        inputs = new_tokenizer(["This is the first sentence", "This sentence is different 🤗."])
+        self.assertEqual(len(inputs["input_ids"]), 2)
+        decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
+        expected_result = "This is the first sentence"
+
+        # OpenAIGPT always lowercases and has no arg.
+        if new_tokenizer.init_kwargs.get("do_lower_case", False) or tokenizer.__class__.__name__.startswith(
+            "OpenAIGPT"
+        ):
+            expected_result = expected_result.lower()
+        self.assertEqual(expected_result, decoded_input)
+
+        # We check that the parameters of the tokenizer remained the same
+        # Check we have the same number of added_tokens for both pair and non-pair inputs.
+        self.assertEqual(tokenizer.num_special_tokens_to_add(False), new_tokenizer.num_special_tokens_to_add(False))
+        self.assertEqual(tokenizer.num_special_tokens_to_add(True), new_tokenizer.num_special_tokens_to_add(True))
+
+        # Check we have the correct max_length for both pair and non-pair inputs.
+        self.assertEqual(tokenizer.max_len_single_sentence, new_tokenizer.max_len_single_sentence)
+        self.assertEqual(tokenizer.max_len_sentences_pair, new_tokenizer.max_len_sentences_pair)
+
+        # Assert the set of special tokens match as we didn't ask to change them
+        self.assertSequenceEqual(
+            tokenizer.all_special_tokens_extended,
+            new_tokenizer.all_special_tokens_extended,
+        )
+
+        self.assertDictEqual(tokenizer.special_tokens_map, new_tokenizer.special_tokens_map)
+
+    def test_training_new_tokenizer_with_special_tokens_change(self):
+        # This feature only exists for fast tokenizers
+        if not self.test_rust_tokenizer:
+            return
+
+        tokenizer = self.get_rust_tokenizer()
+        # Test with a special tokens map
+        class_signature = inspect.signature(tokenizer.__class__)
+        if "cls_token" in class_signature.parameters:
+            new_tokenizer = tokenizer.train_new_from_iterator(
+                SMALL_TRAINING_CORPUS, 100, special_tokens_map={tokenizer.cls_token: "<cls>"}
+            )
+            cls_id = new_tokenizer.get_vocab()["<cls>"]
+            self.assertEqual(new_tokenizer.cls_token, "<cls>")
+            self.assertEqual(new_tokenizer.cls_token_id, cls_id)
+
+        # Create a new mapping from the special tokens defined in the original tokenizer
+        special_tokens_list = SpecialTokensMixin.SPECIAL_TOKENS_ATTRIBUTES.copy()
+        special_tokens_list.remove("additional_special_tokens")
+        special_tokens_map = {}
+        for token in special_tokens_list:
+            # Get the private one to avoid unnecessary warnings.
+            if getattr(tokenizer, f"_{token}") is not None:
+                special_token = getattr(tokenizer, token)
+                special_tokens_map[special_token] = f"{special_token}a"
+
+        # Train new tokenizer
+        new_tokenizer = tokenizer.train_new_from_iterator(
+            SMALL_TRAINING_CORPUS, 100, special_tokens_map=special_tokens_map
+        )
+
+        # Check the changes
+        for token in special_tokens_list:
+            # Get the private one to avoid unnecessary warnings.
+            if getattr(tokenizer, f"_{token}") is None:
+                continue
+            special_token = getattr(tokenizer, token)
+            if special_token in special_tokens_map:
+                new_special_token = getattr(new_tokenizer, token)
+                self.assertEqual(special_tokens_map[special_token], new_special_token)
+
+                new_id = new_tokenizer.get_vocab()[new_special_token]
+                self.assertEqual(getattr(new_tokenizer, f"{token}_id"), new_id)
+
+        # Check if the AddedToken / string format has been kept
+        for special_token in tokenizer.all_special_tokens_extended:
+            if isinstance(special_token, AddedToken) and special_token.content not in special_tokens_map:
+                # The special token must appear identically in the list of the new tokenizer.
+                self.assertTrue(
+                    special_token in new_tokenizer.all_special_tokens_extended,
+                    f"'{special_token}' should be in {new_tokenizer.all_special_tokens_extended}",
+                )
+            elif isinstance(special_token, AddedToken):
+                # The special token must appear in the list of the new tokenizer as an object of type AddedToken with
+                # the same parameters as the old AddedToken except the content that the user has requested to change.
+                special_token_str = special_token.content
+                new_special_token_str = special_tokens_map[special_token_str]
+
+                find = False
+                for candidate in new_tokenizer.all_special_tokens_extended:
+                    if (
+                        isinstance(candidate, AddedToken)
+                        and candidate.content == new_special_token_str
+                        and candidate.lstrip == special_token.lstrip
+                        and candidate.rstrip == special_token.rstrip
+                        and candidate.normalized == special_token.normalized
+                        and candidate.single_word == special_token.single_word
+                    ):
+                        find = True
+                        break
+                self.assertTrue(
+                    find,
+                    (
+                        f"'{new_special_token_str}' doesn't appear in the list "
+                        f"'{new_tokenizer.all_special_tokens_extended}' as an AddedToken with the same parameters as "
+                        f"'{special_token}' in the list {tokenizer.all_special_tokens_extended}"
+                    ),
+                )
+            elif special_token not in special_tokens_map:
+                # The special token must appear identically in the list of the new tokenizer.
+                self.assertTrue(
+                    special_token in new_tokenizer.all_special_tokens_extended,
+                    f"'{special_token}' should be in {new_tokenizer.all_special_tokens_extended}",
+                )
+
+            else:
+                # The special token must appear in the list of the new tokenizer as an object of type string.
+                self.assertTrue(special_tokens_map[special_token] in new_tokenizer.all_special_tokens_extended)
+
+        # Test we can use the new tokenizer with something not seen during training
+        inputs = new_tokenizer(["This is the first sentence", "This sentence is different 🤗."])
+        self.assertEqual(len(inputs["input_ids"]), 2)
+        decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
+        expected_result = "This is the first sentence"
+
+        # OpenAIGPT always lowercases and has no arg.
+        if new_tokenizer.init_kwargs.get("do_lower_case", False) or tokenizer.__class__.__name__.startswith(
+            "OpenAIGPT"
+        ):
+            expected_result = expected_result.lower()
+        self.assertEqual(expected_result, decoded_input)
 
 
 @is_staging_test
