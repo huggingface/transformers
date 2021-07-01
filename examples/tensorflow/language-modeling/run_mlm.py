@@ -30,11 +30,13 @@ import math
 import os
 import random
 import sys
+
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Optional
 from sklearn.model_selection import train_test_split
+from typing import Optional
+
 import datasets
 import numpy as np
 import tensorflow as tf
