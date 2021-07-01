@@ -180,9 +180,9 @@ class Flax{{cookiecutter.camelcase_modelname}}ModelTester:
     ):
         config.num_choices = self.num_choices
         model = Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoice(config=config)
-        multiple_choice_inputs_ids = tf.tile(tf.expand_dims(input_ids, 1), (1, self.num_choices, 1))
-        multiple_choice_input_mask = tf.tile(tf.expand_dims(input_mask, 1), (1, self.num_choices, 1))
-        multiple_choice_token_type_ids = tf.tile(tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1))
+        multiple_choice_inputs_ids = np.tile(np.expand_dims(input_ids, 1), (1, self.num_choices, 1))
+        multiple_choice_input_mask = np.tile(np.expand_dims(input_mask, 1), (1, self.num_choices, 1))
+        multiple_choice_token_type_ids = np.tile(np.expand_dims(token_type_ids, 1), (1, self.num_choices, 1))
         inputs = {
             "input_ids": multiple_choice_inputs_ids,
             "attention_mask": multiple_choice_input_mask,
@@ -319,7 +319,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ModelIntegrationTest(unittest.Test
                 ]
             ]
         )
-        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=1e-4)
+        _assert_tensors_equal(output[:, :3, :3], expected_slice, atol=1e-4)
 
 {% else %}
 import unittest
@@ -388,8 +388,8 @@ class Flax{{cookiecutter.camelcase_modelname}}ModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
-        eos_tensor = tf.expand_dims(tf.constant([self.eos_token_id] * self.batch_size), 1)
-        input_ids = tf.concat([input_ids, eos_tensor], axis=1)
+        eos_tensor = np.expand_dims(np.array([self.eos_token_id] * self.batch_size), 1)
+        input_ids = np.concatenate([input_ids, eos_tensor], axis=1)
 
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -430,11 +430,11 @@ class Flax{{cookiecutter.camelcase_modelname}}ModelTester:
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_attn_mask = tf.cast(ids_tensor((self.batch_size, 3), 2), tf.int8)
+        next_attn_mask = np.astype(ids_tensor((self.batch_size, 3), 2), np.int8)
 
         # append to next input_ids and
-        next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
-        next_attention_mask = tf.concat([attention_mask, next_attn_mask], axis=-1)
+        next_input_ids = np.concatenate([input_ids, next_tokens], axis=-1)
+        next_attention_mask = np.concatenate([attention_mask, next_attn_mask], axis=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[0]
         output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[0]
@@ -447,7 +447,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ModelTester:
         output_from_past_slice = output_from_past[:, :, random_slice_idx]
 
         # test that outputs are equal for slice
-        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
+        _assert_tensors_equal(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
 
 
 def prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(
@@ -458,9 +458,9 @@ def prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(
     decoder_attention_mask=None,
 ):
     if attention_mask is None:
-        attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
+        attention_mask = np.astype(np.not_equal(input_ids, config.pad_token_id), np.int8)
     if decoder_attention_mask is None:
-        decoder_attention_mask = tf.concat([tf.ones(decoder_input_ids[:, :1].shape, dtype=tf.int8), tf.cast(tf.math.not_equal(decoder_input_ids[:, 1:], config.pad_token_id), tf.int8)], axis=-1)
+        decoder_attention_mask = np.concatenate([np.ones(decoder_input_ids[:, :1].shape, dtype=np.int8), np.astype(np.not_equal(decoder_input_ids[:, 1:], config.pad_token_id), np.int8)], axis=-1)
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
@@ -578,7 +578,7 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
     if a is None and b is None:
         return True
     try:
-        if tf.debugging.assert_near(a, b, atol=atol):
+        if _assert_tensors_equal(a, b, atol=atol):
             return True
         raise
     except Exception:
@@ -588,7 +588,7 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
 
 
 def _long_tensor(tok_lst):
-    return tf.constant(tok_lst, dtype=tf.int32)
+    return np.array(tok_lst, dtype=np.int32)
 
 
 TOLERANCE = 1e-4
@@ -609,10 +609,10 @@ class Flax{{cookiecutter.camelcase_modelname}}ModelIntegrationTest(unittest.Test
         expected_shape = (1, 11, 1024)
         self.assertEqual(output.shape, expected_shape)
         # change to expected output here
-        expected_slice = tf.Tensor(
+        expected_slice = np.array(
             [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]],
         )
-        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE)
+        _assert_tensors_equal(output[:, :3, :3], expected_slice, atol=TOLERANCE)
 
     def test_inference_with_head(self):
         model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
@@ -624,10 +624,10 @@ class Flax{{cookiecutter.camelcase_modelname}}ModelIntegrationTest(unittest.Test
         expected_shape = (1, 11, 1024)
         self.assertEqual(output.shape, expected_shape)
         # change to expected output here
-        expected_slice = tf.Tensor(
+        expected_slice = np.array(
             [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]],
         )
-        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE)
+        _assert_tensors_equal(output[:, :3, :3], expected_slice, atol=TOLERANCE)
 
     def test_seq_to_seq_generation(self):
         hf = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
@@ -647,7 +647,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ModelIntegrationTest(unittest.Test
             padding="max_length",
             truncation_strategy="only_first",
             truncation=True,
-            return_tensors="tf",
+            return_tensors="np",
         )
 
         hypotheses_batch = hf.generate(
