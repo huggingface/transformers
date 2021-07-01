@@ -106,7 +106,7 @@ class MPNetTokenizerFast(PreTrainedTokenizerFast):
 
     def __init__(
         self,
-        vocab_file,
+        vocab_file=None,
         tokenizer_file=None,
         do_lower_case=True,
         bos_token="<s>",
@@ -138,11 +138,11 @@ class MPNetTokenizerFast(PreTrainedTokenizerFast):
 
         pre_tok_state = json.loads(self.backend_tokenizer.normalizer.__getstate__())
         if (
-            pre_tok_state.get("do_lower_case", do_lower_case) != do_lower_case
+            pre_tok_state.get("lowercase", do_lower_case) != do_lower_case
             or pre_tok_state.get("strip_accents", strip_accents) != strip_accents
         ):
             pre_tok_class = getattr(normalizers, pre_tok_state.pop("type"))
-            pre_tok_state["do_lower_case"] = do_lower_case
+            pre_tok_state["lowercase"] = do_lower_case
             pre_tok_state["strip_accents"] = strip_accents
             self.backend_tokenizer.normalizer = pre_tok_class(**pre_tok_state)
 
@@ -154,7 +154,7 @@ class MPNetTokenizerFast(PreTrainedTokenizerFast):
         :obj:`str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while
         not having been set.
 
-        MPNet tokenizer has a special mask token to be usble in the fill-mask pipeline. The mask token will greedily
+        MPNet tokenizer has a special mask token to be usable in the fill-mask pipeline. The mask token will greedily
         comprise the space before the `<mask>`.
         """
         if self._mask_token is None and self.verbose:

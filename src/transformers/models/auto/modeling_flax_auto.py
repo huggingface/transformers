@@ -17,11 +17,67 @@
 
 from collections import OrderedDict
 
-from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..bert.modeling_flax_bert import FlaxBertModel
-from ..roberta.modeling_flax_roberta import FlaxRobertaModel
-from .configuration_auto import AutoConfig, BertConfig, RobertaConfig
+from ..bart.modeling_flax_bart import (
+    FlaxBartForConditionalGeneration,
+    FlaxBartForQuestionAnswering,
+    FlaxBartForSequenceClassification,
+    FlaxBartModel,
+)
+from ..bert.modeling_flax_bert import (
+    FlaxBertForMaskedLM,
+    FlaxBertForMultipleChoice,
+    FlaxBertForNextSentencePrediction,
+    FlaxBertForPreTraining,
+    FlaxBertForQuestionAnswering,
+    FlaxBertForSequenceClassification,
+    FlaxBertForTokenClassification,
+    FlaxBertModel,
+)
+from ..big_bird.modeling_flax_big_bird import (
+    FlaxBigBirdForMaskedLM,
+    FlaxBigBirdForMultipleChoice,
+    FlaxBigBirdForPreTraining,
+    FlaxBigBirdForQuestionAnswering,
+    FlaxBigBirdForSequenceClassification,
+    FlaxBigBirdForTokenClassification,
+    FlaxBigBirdModel,
+)
+from ..clip.modeling_flax_clip import FlaxCLIPModel
+from ..electra.modeling_flax_electra import (
+    FlaxElectraForMaskedLM,
+    FlaxElectraForMultipleChoice,
+    FlaxElectraForPreTraining,
+    FlaxElectraForQuestionAnswering,
+    FlaxElectraForSequenceClassification,
+    FlaxElectraForTokenClassification,
+    FlaxElectraModel,
+)
+from ..gpt2.modeling_flax_gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model
+from ..roberta.modeling_flax_roberta import (
+    FlaxRobertaForMaskedLM,
+    FlaxRobertaForMultipleChoice,
+    FlaxRobertaForQuestionAnswering,
+    FlaxRobertaForSequenceClassification,
+    FlaxRobertaForTokenClassification,
+    FlaxRobertaModel,
+)
+from ..t5.modeling_flax_t5 import FlaxT5ForConditionalGeneration, FlaxT5Model
+from ..vit.modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel
+from ..wav2vec2.modeling_flax_wav2vec2 import FlaxWav2Vec2ForPreTraining, FlaxWav2Vec2Model
+from .auto_factory import auto_class_factory
+from .configuration_auto import (
+    BartConfig,
+    BertConfig,
+    BigBirdConfig,
+    CLIPConfig,
+    ElectraConfig,
+    GPT2Config,
+    RobertaConfig,
+    T5Config,
+    ViTConfig,
+    Wav2Vec2Config,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -29,138 +85,167 @@ logger = logging.get_logger(__name__)
 
 FLAX_MODEL_MAPPING = OrderedDict(
     [
+        # Base model mapping
         (RobertaConfig, FlaxRobertaModel),
         (BertConfig, FlaxBertModel),
+        (BigBirdConfig, FlaxBigBirdModel),
+        (BartConfig, FlaxBartModel),
+        (GPT2Config, FlaxGPT2Model),
+        (ElectraConfig, FlaxElectraModel),
+        (CLIPConfig, FlaxCLIPModel),
+        (ViTConfig, FlaxViTModel),
+        (T5Config, FlaxT5Model),
+        (Wav2Vec2Config, FlaxWav2Vec2Model),
     ]
 )
 
+FLAX_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
+    [
+        # Model for pre-training mapping
+        (RobertaConfig, FlaxRobertaForMaskedLM),
+        (BertConfig, FlaxBertForPreTraining),
+        (BigBirdConfig, FlaxBigBirdForPreTraining),
+        (BartConfig, FlaxBartForConditionalGeneration),
+        (ElectraConfig, FlaxElectraForPreTraining),
+        (T5Config, FlaxT5ForConditionalGeneration),
+        (Wav2Vec2Config, FlaxWav2Vec2ForPreTraining),
+    ]
+)
 
-class FlaxAutoModel(object):
-    r"""
-    :class:`~transformers.FlaxAutoModel` is a generic model class that will be instantiated as one of the base model
-    classes of the library when created with the `FlaxAutoModel.from_pretrained(pretrained_model_name_or_path)` or the
-    `FlaxAutoModel.from_config(config)` class methods.
+FLAX_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
+    [
+        # Model for Masked LM mapping
+        (RobertaConfig, FlaxRobertaForMaskedLM),
+        (BertConfig, FlaxBertForMaskedLM),
+        (BigBirdConfig, FlaxBigBirdForMaskedLM),
+        (BartConfig, FlaxBartForConditionalGeneration),
+        (ElectraConfig, FlaxElectraForMaskedLM),
+    ]
+)
 
-    This class cannot be instantiated using `__init__()` (throws an error).
-    """
+FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
+    [
+        # Model for Seq2Seq Causal LM mapping
+        (BartConfig, FlaxBartForConditionalGeneration),
+        (T5Config, FlaxT5ForConditionalGeneration),
+    ]
+)
 
-    def __init__(self):
-        raise EnvironmentError(
-            "FlaxAutoModel is designed to be instantiated "
-            "using the `FlaxAutoModel.from_pretrained(pretrained_model_name_or_path)` or "
-            "`FlaxAutoModel.from_config(config)` methods."
-        )
+FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
+    [
+        # Model for Image-classsification
+        (ViTConfig, FlaxViTForImageClassification),
+    ]
+)
 
-    @classmethod
-    def from_config(cls, config):
-        r"""
-        Instantiates one of the base model classes of the library from a configuration.
+FLAX_MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
+    [
+        # Model for Causal LM mapping
+        (GPT2Config, FlaxGPT2LMHeadModel)
+    ]
+)
 
-        Args:
-            config (:class:`~transformers.PretrainedConfig`):
-                The model class to instantiate is selected based on the configuration class:
+FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
+    [
+        # Model for Sequence Classification mapping
+        (RobertaConfig, FlaxRobertaForSequenceClassification),
+        (BertConfig, FlaxBertForSequenceClassification),
+        (BigBirdConfig, FlaxBigBirdForSequenceClassification),
+        (BartConfig, FlaxBartForSequenceClassification),
+        (ElectraConfig, FlaxElectraForSequenceClassification),
+    ]
+)
 
-                - isInstance of `roberta` configuration class: :class:`~transformers.FlaxRobertaModel` (RoBERTa model)
-                - isInstance of `bert` configuration class: :class:`~transformers.FlaxBertModel` (Bert model
+FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
+    [
+        # Model for Question Answering mapping
+        (RobertaConfig, FlaxRobertaForQuestionAnswering),
+        (BertConfig, FlaxBertForQuestionAnswering),
+        (BigBirdConfig, FlaxBigBirdForQuestionAnswering),
+        (BartConfig, FlaxBartForQuestionAnswering),
+        (ElectraConfig, FlaxElectraForQuestionAnswering),
+    ]
+)
 
-        Examples::
+FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
+    [
+        # Model for Token Classification mapping
+        (RobertaConfig, FlaxRobertaForTokenClassification),
+        (BertConfig, FlaxBertForTokenClassification),
+        (BigBirdConfig, FlaxBigBirdForTokenClassification),
+        (ElectraConfig, FlaxElectraForTokenClassification),
+    ]
+)
 
-            config = BertConfig.from_pretrained('bert-base-uncased')
-            # Download configuration from huggingface.co and cache.
-            model = FlaxAutoModel.from_config(config)
-            # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-        """
-        for config_class, model_class in FLAX_MODEL_MAPPING.items():
-            if isinstance(config, config_class):
-                return model_class(config)
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} "
-            f"for this kind of FlaxAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in FLAX_MODEL_MAPPING.keys())}."
-        )
+FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
+    [
+        # Model for Multiple Choice mapping
+        (RobertaConfig, FlaxRobertaForMultipleChoice),
+        (BertConfig, FlaxBertForMultipleChoice),
+        (BigBirdConfig, FlaxBigBirdForMultipleChoice),
+        (ElectraConfig, FlaxElectraForMultipleChoice),
+    ]
+)
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""
-        Instantiates one of the base model classes of the library from a pre-trained model configuration.
+FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = OrderedDict(
+    [
+        (BertConfig, FlaxBertForNextSentencePrediction),
+    ]
+)
 
-        The `from_pretrained()` method takes care of returning the correct model class instance based on the
-        `model_type` property of the config object, or when it's missing, falling back to using pattern matching on the
-        `pretrained_model_name_or_path` string.
+FlaxAutoModel = auto_class_factory("FlaxAutoModel", FLAX_MODEL_MAPPING)
 
-        The base model class to instantiate is selected as the first pattern matching in the
-        `pretrained_model_name_or_path` string (in the following order):
+FlaxAutoModelForImageClassification = auto_class_factory(
+    "FlaxAutoModelForImageClassification",
+    FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+    head_doc="image classification modeling",
+)
 
-            - contains `roberta`: :class:`~transformers.FlaxRobertaModel` (RoBERTa model)
-            - contains `bert`: :class:`~transformers.FlaxBertModel` (Bert model)
+FlaxAutoModelForCausalLM = auto_class_factory(
+    "FlaxAutoModelForCausalLM", FLAX_MODEL_FOR_CAUSAL_LM_MAPPING, head_doc="causal language modeling"
+)
 
-            The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated) To
-            train the model, you should first set it back in training mode with `model.train()`
+FlaxAutoModelForPreTraining = auto_class_factory(
+    "FlaxAutoModelForPreTraining", FLAX_MODEL_FOR_PRETRAINING_MAPPING, head_doc="pretraining"
+)
 
-        Args:
-            pretrained_model_name_or_path: either:
+FlaxAutoModelForMaskedLM = auto_class_factory(
+    "FlaxAutoModelForMaskedLM", FLAX_MODEL_FOR_MASKED_LM_MAPPING, head_doc="masked language modeling"
+)
 
-                - a string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co. Valid
-                  model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under a user or
-                  organization name, like ``dbmdz/bert-base-german-cased``.
-                - a path to a `directory` containing model weights saved using
-                  :func:`~transformers.FlaxPreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
-                - a path or url to a `pytorch index checkpoint file` (e.g. `./pt_model/pytorch_model.bin`). In this
-                  case, ``from_pt`` should be set to True and a configuration object should be provided as ``config``
-                  argument.
 
-            model_args: (`optional`) Sequence of positional arguments:
-                All remaining positional arguments will be passed to the underlying model's ``__init__`` method
+FlaxAutoModelForSeq2SeqLM = auto_class_factory(
+    "FlaxAutoModelForSeq2SeqLM",
+    FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    head_doc="sequence-to-sequence language modeling",
+)
 
-            config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
-                Configuration for the model to use instead of an automatically loaded configuration. Configuration can
-                be automatically loaded when:
+FlaxAutoModelForSequenceClassification = auto_class_factory(
+    "FlaxAutoModelForSequenceClassification",
+    FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+    head_doc="sequence classification",
+)
 
-                - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a
-                  pretrained model), or
-                - the model was saved using :func:`~transformers.FlaxPreTrainedModel.save_pretrained` and is reloaded
-                  by supplying the save directory.
-                - the model is loaded by supplying a local directory as ``pretrained_model_name_or_path`` and a
-                  configuration JSON file named `config.json` is found in the directory.
+FlaxAutoModelForQuestionAnswering = auto_class_factory(
+    "FlaxAutoModelForQuestionAnswering", FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING, head_doc="question answering"
+)
 
-            cache_dir: (`optional`) string:
-                Path to a directory in which a downloaded pre-trained model configuration should be cached if the
-                standard cache should not be used.
+FlaxAutoModelForTokenClassification = auto_class_factory(
+    "FlaxAutoModelForTokenClassification", FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING, head_doc="token classification"
+)
 
-            force_download: (`optional`) boolean, default False:
-                Force to (re-)download the model weights and configuration files and override the cached versions if
-                they exists.
+FlaxAutoModelForMultipleChoice = auto_class_factory(
+    "AutoModelForMultipleChoice", FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING, head_doc="multiple choice"
+)
 
-            resume_download: (`optional`) boolean, default False:
-                Do not delete incompletely received file. Attempt to resume the download if such a file exists.
+FlaxAutoModelForNextSentencePrediction = auto_class_factory(
+    "FlaxAutoModelForNextSentencePrediction",
+    FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
+    head_doc="next sentence prediction",
+)
 
-            proxies: (`optional`) dict, default None:
-                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128',
-                'http://hostname': 'foo.bar:4012'}. The proxies are used on each request.
-
-            output_loading_info: (`optional`) boolean:
-                Set to ``True`` to also return a dictionary containing missing keys, unexpected keys and error
-                messages.
-
-            kwargs: (`optional`) Remaining dictionary of keyword arguments:
-                These arguments will be passed to the configuration and the model.
-
-        Examples::
-
-            model = FlaxAutoModel.from_pretrained('bert-base-uncased')    # Download model and configuration from huggingface.co and cache.
-            model = FlaxAutoModel.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            assert model.config.output_attention == True
-
-        """
-        config = kwargs.pop("config", None)
-        if not isinstance(config, PretrainedConfig):
-            config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        for config_class, model_class in FLAX_MODEL_MAPPING.items():
-            if isinstance(config, config_class):
-                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} "
-            f"for this kind of FlaxAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in FLAX_MODEL_MAPPING.keys())}"
-        )
+FlaxAutoModelForSeq2SeqLM = auto_class_factory(
+    "FlaxAutoModelForSeq2SeqLM",
+    FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    head_doc="sequence-to-sequence language modeling",
+)

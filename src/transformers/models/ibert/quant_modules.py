@@ -19,8 +19,7 @@ import decimal
 
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from torch import nn
 from torch.autograd import Function
 
 from ...utils import logging
@@ -35,11 +34,11 @@ class QuantEmbedding(nn.Module):
     :obj:`torch.nn.Embedding`.
 
     Args:
-        weight_bit (:obj:`int`, `optiona`l, defaults to :obj:`8`):
+        weight_bit (:obj:`int`, `optional`, defaults to :obj:`8`):
             Bitwidth for the quantized weight.
-        momentum (:obj:`float`, `optional, defaults to :obj:`0.95`):
+        momentum (:obj:`float`, `optional`, defaults to :obj:`0.95`):
             Momentum for updating the activation quantization range.
-        quant_mode (:obj:`bool`, `optional, defaults to :obj:`False`):
+        quant_mode (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not the layer is quantized.
     """
 
@@ -79,7 +78,7 @@ class QuantEmbedding(nn.Module):
     def forward(self, x, positions=None, incremental_state=None):
         if not self.quant_mode:
             return (
-                F.embedding(
+                nn.functional.embedding(
                     x,
                     self.weight,
                     self.padding_idx,
@@ -101,7 +100,7 @@ class QuantEmbedding(nn.Module):
             self.weight, self.weight_bit, self.percentile_mode, self.weight_scaling_factor
         )
 
-        emb_int = F.embedding(
+        emb_int = nn.functional.embedding(
             x,
             self.weight_integer,
             self.padding_idx,
@@ -124,7 +123,7 @@ class QuantAct(nn.Module):
             Momentum for updating the activation quantization range.
         per_channel (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to or not use channel-wise quantization.
-        channel_len (:obj:`int`, `optional`, defaults to :obj:`None`):
+        channel_len (:obj:`int`, `optional`):
             Specify the channel length when set the `per_channel` True.
         quant_mode (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not the layer is quantized.
@@ -151,11 +150,9 @@ class QuantAct(nn.Module):
 
     def __repr__(self):
         return (
-            "{0}(activation_bit={1}, "
-            "quant_mode: {2}, Act_min: {3:.2f}, "
-            "Act_max: {4:.2f})".format(
-                self.__class__.__name__, self.activation_bit, self.quant_mode, self.x_min.item(), self.x_max.item()
-            )
+            f"{self.__class__.__name__}(activation_bit={self.activation_bit}, "
+            f"quant_mode: {self.activation_bit}, Act_min: {self.x_min.item():.2f}, "
+            f"Act_max: {self.x_max.item():.2f})"
         )
 
     def forward(
@@ -261,12 +258,12 @@ class QuantLinear(nn.Module):
 
     def __repr__(self):
         s = super().__repr__()
-        s = "(" + s + " weight_bit={}, quant_mode={})".format(self.weight_bit, self.quant_mode)
+        s = f"({s} weight_bit={self.weight_bit}, quant_mode={self.quant_mode})"
         return s
 
     def forward(self, x, prev_act_scaling_factor=None):
         if not self.quant_mode:
-            return F.linear(x, weight=self.weight, bias=self.bias), None
+            return nn.functional.linear(x, weight=self.weight, bias=self.bias), None
 
         # assert that prev_act_scaling_factor is a scalar tensor
         assert prev_act_scaling_factor is not None and prev_act_scaling_factor.shape == (1,), (
@@ -297,7 +294,7 @@ class QuantLinear(nn.Module):
         x_int = x / prev_act_scaling_factor
 
         return (
-            F.linear(x_int, weight=self.weight_integer, bias=self.bias_integer) * bias_scaling_factor,
+            nn.functional.linear(x_int, weight=self.weight_integer, bias=self.bias_integer) * bias_scaling_factor,
             bias_scaling_factor,
         )
 
@@ -471,7 +468,7 @@ class IntLayerNorm(nn.Module):
             shift = (torch.log2(torch.sqrt(var_int / 2 ** self.max_bit)).ceil()).max()
             shift_old = self.shift
             self.shift = torch.max(self.shift, shift)
-            logger.info("Dynamic shift adjustment: {} -> {}".format(int(shift_old), int(self.shift)))
+            logger.info(f"Dynamic shift adjustment: {int(shift_old)} -> {int(self.shift)}")
 
     def overflow_fallback(self, y_int):
         """
@@ -621,7 +618,7 @@ def symmetric_linear_quantization_params(num_bits, saturation_min, saturation_ma
         `saturation_max`.
     """
     # in this part, we do not need any gradient computation,
-    # in order to enfore this, we put torch.no_grad()
+    # in order to enforce this, we put torch.no_grad()
     with torch.no_grad():
         n = 2 ** (num_bits - 1) - 1
 
@@ -757,9 +754,9 @@ class FixedPointMul(Function):
             Quantization bitwidth.
         z_scaling_factor (:obj:`torch.Tensor`):
             Scaling factor of the output tensor.
-        identity (:obj:`torch.Tensor`, `optional`, defaults to :obj:`None`):
+        identity (:obj:`torch.Tensor`, `optional`):
             Identity tensor, if exists.
-        identity_scaling_factor (:obj:`torch.Tensor`, `optional`, defaults to :obj:`None`):
+        identity_scaling_factor (:obj:`torch.Tensor`, `optional`):
             Scaling factor of the identity tensor `identity`, if exists.
 
     Returns:

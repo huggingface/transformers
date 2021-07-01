@@ -55,6 +55,7 @@ def prepare_bart_inputs_dict(
     decoder_attention_mask=None,
     head_mask=None,
     decoder_head_mask=None,
+    cross_attn_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.ne(config.pad_token_id)
@@ -64,6 +65,8 @@ def prepare_bart_inputs_dict(
         head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
     if decoder_head_mask is None:
         decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+    if cross_attn_head_mask is None:
+        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
@@ -71,6 +74,7 @@ def prepare_bart_inputs_dict(
         "decoder_attention_mask": attention_mask,
         "head_mask": head_mask,
         "decoder_head_mask": decoder_head_mask,
+        "cross_attn_head_mask": cross_attn_head_mask,
     }
 
 
@@ -304,14 +308,16 @@ class BartHeadTests(unittest.TestCase):
             max_position_embeddings=48,
         )
         lm_model = BartForConditionalGeneration(config).to(torch_device)
-        context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long().to(torch_device)
-        summary = torch.Tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]]).long().to(torch_device)
+        context = torch.tensor(
+            [[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]], device=torch_device, dtype=torch.long
+        )
+        summary = torch.tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]], device=torch_device, dtype=torch.long)
         outputs = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
         expected_shape = (*summary.shape, config.vocab_size)
         self.assertEqual(outputs["logits"].shape, expected_shape)
 
     def test_generate_beam_search(self):
-        input_ids = torch.Tensor([[71, 82, 2], [68, 34, 2]]).long().to(torch_device)
+        input_ids = torch.tensor([[71, 82, 2], [68, 34, 2]], device=torch_device, dtype=torch.long)
         config = BartConfig(
             vocab_size=self.vocab_size,
             d_model=24,
@@ -341,7 +347,7 @@ class BartHeadTests(unittest.TestCase):
         self.assertEqual(generated_ids.shape, (input_ids.shape[0], max_length))
 
     def test_shift_tokens_right(self):
-        input_ids = torch.Tensor([[71, 82, 18, 33, 2, 1, 1], [68, 34, 26, 58, 30, 82, 2]]).long()
+        input_ids = torch.tensor([[71, 82, 18, 33, 2, 1, 1], [68, 34, 26, 58, 30, 82, 2]], dtype=torch.long)
         shifted = shift_tokens_right(input_ids, 1, 2)
         n_pad_before = input_ids.eq(1).float().sum()
         n_pad_after = shifted.eq(1).float().sum()
@@ -354,8 +360,8 @@ class BartHeadTests(unittest.TestCase):
         tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
         examples = [" Hello world", " DomDramg"]  # need leading spaces for equality
         fairseq_results = [
-            torch.Tensor([0, 20920, 232, 2]),
-            torch.Tensor([0, 11349, 495, 4040, 571, 2]),
+            torch.tensor([0, 20920, 232, 2]),
+            torch.tensor([0, 11349, 495, 4040, 571, 2]),
         ]
         for ex, desired_result in zip(examples, fairseq_results):
             bart_toks = tokenizer.encode(ex, return_tensors="pt").squeeze()
@@ -610,7 +616,7 @@ class BartModelIntegrationTests(unittest.TestCase):
         batched_logits = outputs.logits
         expected_shape = torch.Size((2, 3))
         self.assertEqual(batched_logits.shape, expected_shape)
-        expected_slice = torch.Tensor([[0.1907, 1.4342, -1.0289]]).to(torch_device)
+        expected_slice = torch.tensor([[0.1907, 1.4342, -1.0289]], device=torch_device)
         logits_arr = batched_logits[0].detach()
 
         # Test that padding does not change results

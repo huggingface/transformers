@@ -20,6 +20,7 @@ import json
 import os
 import subprocess
 import sys
+import warnings
 from argparse import ArgumentParser
 from contextlib import AbstractContextManager
 from typing import Dict, List, Optional
@@ -57,13 +58,17 @@ class LfsCommands(BaseTransformersCLICommand):
     @staticmethod
     def register_subcommand(parser: ArgumentParser):
         enable_parser = parser.add_parser(
-            "lfs-enable-largefiles", help="Configure your repository to enable upload of files > 5GB."
+            "lfs-enable-largefiles",
+            help="Deprecated: use `huggingface-cli` instead. "
+            "Configure your repository to enable upload of files > 5GB.",
         )
         enable_parser.add_argument("path", type=str, help="Local path to repository you want to configure.")
         enable_parser.set_defaults(func=lambda args: LfsEnableCommand(args))
 
         upload_parser = parser.add_parser(
-            LFS_MULTIPART_UPLOAD_COMMAND, help="Command will get called by git-lfs, do not call it directly."
+            LFS_MULTIPART_UPLOAD_COMMAND,
+            help="Deprecated: use `huggingface-cli` instead. "
+            "Command will get called by git-lfs, do not call it directly.",
         )
         upload_parser.set_defaults(func=lambda args: LfsUploadCommand(args))
 
@@ -73,6 +78,9 @@ class LfsEnableCommand:
         self.args = args
 
     def run(self):
+        warnings.warn(
+            "Managing repositories through transformers-cli is deprecated. Please use `huggingface-cli` instead."
+        )
         local_path = os.path.abspath(self.args.path)
         if not os.path.isdir(local_path):
             print("This does not look like a valid git repo.")
@@ -96,7 +104,7 @@ def write_msg(msg: Dict):
 
 
 def read_msg() -> Optional[Dict]:
-    """Read Line delimited JSON from stdin. """
+    """Read Line delimited JSON from stdin."""
     msg = json.loads(sys.stdin.readline().strip())
 
     if "terminate" in (msg.get("type"), msg.get("event")):

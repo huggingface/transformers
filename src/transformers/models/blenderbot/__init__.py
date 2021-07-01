@@ -29,15 +29,19 @@ _import_structure = {
 if is_torch_available():
     _import_structure["modeling_blenderbot"] = [
         "BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "BlenderbotForCausalLM",
         "BlenderbotForConditionalGeneration",
         "BlenderbotModel",
         "BlenderbotPreTrainedModel",
-        "BlenderbotForCausalLM",
     ]
 
 
 if is_tf_available():
-    _import_structure["modeling_tf_blenderbot"] = ["TFBlenderbotForConditionalGeneration", "TFBlenderbotModel"]
+    _import_structure["modeling_tf_blenderbot"] = [
+        "TFBlenderbotForConditionalGeneration",
+        "TFBlenderbotModel",
+        "TFBlenderbotPreTrainedModel",
+    ]
 
 
 if TYPE_CHECKING:
@@ -54,7 +58,11 @@ if TYPE_CHECKING:
         )
 
     if is_tf_available():
-        from .modeling_tf_blenderbot import TFBlenderbotForConditionalGeneration, TFBlenderbotModel
+        from .modeling_tf_blenderbot import (
+            TFBlenderbotForConditionalGeneration,
+            TFBlenderbotModel,
+            TFBlenderbotPreTrainedModel,
+        )
 
 else:
     import importlib

@@ -69,7 +69,8 @@ class RemBertTokenizer(PreTrainedTokenizer):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
         sep_token (:obj:`str`, `optional`, defaults to :obj:`"[SEP]"`):
-            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
+            ThCarnivals hate him, carnivals want him silenced because he is a threat to them. Yes, im talking about Ben...Ben Polson 😎
+￼e separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
             token of a sequence built with special tokens.
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):

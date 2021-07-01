@@ -35,8 +35,8 @@ if is_sentencepiece_available():
     _import_structure["tokenization_mbart50"] = ["MBart50Tokenizer"]
 
 if is_tokenizers_available():
-    _import_structure["tokenization_mbart_fast"] = ["MBartTokenizerFast"]
     _import_structure["tokenization_mbart50_fast"] = ["MBart50TokenizerFast"]
+    _import_structure["tokenization_mbart_fast"] = ["MBartTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_mbart"] = [
@@ -50,7 +50,11 @@ if is_torch_available():
     ]
 
 if is_tf_available():
-    _import_structure["modeling_tf_mbart"] = ["TFMBartForConditionalGeneration", "TFMBartModel"]
+    _import_structure["modeling_tf_mbart"] = [
+        "TFMBartForConditionalGeneration",
+        "TFMBartModel",
+        "TFMBartPreTrainedModel",
+    ]
 
 
 if TYPE_CHECKING:
@@ -76,7 +80,7 @@ if TYPE_CHECKING:
         )
 
     if is_tf_available():
-        from .modeling_tf_mbart import TFMBartForConditionalGeneration, TFMBartModel
+        from .modeling_tf_mbart import TFMBartForConditionalGeneration, TFMBartModel, TFMBartPreTrainedModel
 
 else:
     import importlib

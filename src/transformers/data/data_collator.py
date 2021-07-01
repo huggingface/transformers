@@ -22,6 +22,7 @@ from torch.nn.utils.rnn import pad_sequence
 
 from ..file_utils import PaddingStrategy
 from ..modeling_utils import PreTrainedModel
+from ..models.bert import BertTokenizer, BertTokenizerFast
 from ..tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 
 
@@ -192,7 +193,7 @@ class DataCollatorForTokenClassification:
         return batch
 
 
-def _collate_batch(examples, tokenizer):
+def _collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
     """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
     # Tensorize if necessary.
     if isinstance(examples[0], (list, tuple)):
@@ -201,7 +202,7 @@ def _collate_batch(examples, tokenizer):
     # Check if padding is necessary.
     length_of_first = examples[0].size(0)
     are_tensors_same_length = all(x.size(0) == length_of_first for x in examples)
-    if are_tensors_same_length:
+    if are_tensors_same_length and (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0):
         return torch.stack(examples, dim=0)
 
     # If yes, check if we have a `pad_token`.
@@ -213,6 +214,8 @@ def _collate_batch(examples, tokenizer):
 
     # Creating the full tensor and filling it with our data.
     max_length = max(x.size(0) for x in examples)
+    if pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+        max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
     result = examples[0].new_full([len(examples), max_length], tokenizer.pad_token_id)
     for i, example in enumerate(examples):
         if tokenizer.padding_side == "right":
@@ -311,6 +314,8 @@ class DataCollatorForLanguageModeling:
             non-masked tokens and the value to predict for the masked token.
         mlm_probability (:obj:`float`, `optional`, defaults to 0.15):
             The probability with which to (randomly) mask tokens in the input, when :obj:`mlm` is set to :obj:`True`.
+        pad_to_multiple_of (:obj:`int`, `optional`):
+            If set will pad the sequence to a multiple of the provided value.
 
     .. note::
 
@@ -323,6 +328,7 @@ class DataCollatorForLanguageModeling:
     tokenizer: PreTrainedTokenizerBase
     mlm: bool = True
     mlm_probability: float = 0.15
+    pad_to_multiple_of: Optional[int] = None
 
     def __post_init__(self):
         if self.mlm and self.tokenizer.mask_token is None:
@@ -336,9 +342,9 @@ class DataCollatorForLanguageModeling:
     ) -> Dict[str, torch.Tensor]:
         # Handle dict or lists with proper padding and conversion to tensor.
         if isinstance(examples[0], (dict, BatchEncoding)):
-            batch = self.tokenizer.pad(examples, return_tensors="pt")
+            batch = self.tokenizer.pad(examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of)
         else:
-            batch = {"input_ids": _collate_batch(examples, self.tokenizer)}
+            batch = {"input_ids": _collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)}
 
         # If special token mask has been preprocessed, pop it from the dict.
         special_tokens_mask = batch.pop("special_tokens_mask", None)
@@ -390,10 +396,17 @@ class DataCollatorForLanguageModeling:
 @dataclass
 class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
     """
-    Data collator used for language modeling.
+    Data collator used for language modeling that masks entire words.
 
     - collates batches of tensors, honoring their tokenizer's pad_token
     - preprocesses batches for masked language modeling
+
+    .. note::
+
+        This collator relies on details of the implementation of subword tokenization by
+        :class:`~transformers.BertTokenizer`, specifically that subword tokens are prefixed with `##`. For tokenizers
+        that do not adhere to this scheme, this collator will produce an output that is roughly equivalent to
+        :class:`.DataCollatorForLanguageModeling`.
     """
 
     def __call__(
@@ -430,6 +443,11 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         """
         Get 0/1 labels for masked tokens with whole word mask proxy
         """
+        if not isinstance(self.tokenizer, (BertTokenizer, BertTokenizerFast)):
+            warnings.warn(
+                "DataCollatorForWholeWordMask is only suitable for BertTokenizer-like tokenizers."
+                "Please refer to the documentation for more information."
+            )
 
         cand_indexes = []
         for (i, token) in enumerate(input_tokens):

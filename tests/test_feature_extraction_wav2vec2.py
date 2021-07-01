@@ -21,9 +21,9 @@ import unittest
 import numpy as np
 
 from transformers import WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST, Wav2Vec2Config, Wav2Vec2FeatureExtractor
-from transformers.testing_utils import slow
+from transformers.testing_utils import require_torch, slow
 
-from .test_feature_extraction_common import FeatureExtractionMixin
+from .test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
 
 global_rng = random.Random()
@@ -94,7 +94,7 @@ class Wav2Vec2FeatureExtractionTester(unittest.TestCase):
         return speech_inputs
 
 
-class Wav2Vec2FeatureExtractionTest(FeatureExtractionMixin, unittest.TestCase):
+class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
 
     feature_extraction_class = Wav2Vec2FeatureExtractor
 
@@ -134,6 +134,7 @@ class Wav2Vec2FeatureExtractionTest(FeatureExtractionMixin, unittest.TestCase):
         _check_zero_mean_unit_variance(input_values[2])
 
     @slow
+    @require_torch
     def test_pretrained_checkpoints_are_set_correctly(self):
         # this test makes sure that models that are using
         # group norm don't have their feature extractor return the

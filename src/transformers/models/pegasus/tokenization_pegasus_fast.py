@@ -54,8 +54,8 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
     Construct a "fast" PEGASUS tokenizer (backed by HuggingFace's `tokenizers` library). Based on `Unigram
     <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models>`__.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (:obj:`str`):
@@ -90,7 +90,6 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
             <https://github.com/google-research/pegasus/blob/939830367bcf411193d2b5eca2f2f90f3f9260ca/pegasus/ops/pretrain_parsing_ops.cc#L66>`__
             that uses the tokens 2 - 104 only for pretraining
     """
-    offset = 103  # entries 2-104 are only used for pretraining
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
@@ -99,7 +98,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
 
     def __init__(
         self,
-        vocab_file,
+        vocab_file=None,
         tokenizer_file=None,
         pad_token="<pad>",
         eos_token="</s>",
@@ -107,8 +106,11 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
         mask_token="<mask_2>",
         mask_token_sent="<mask_1>",
         additional_special_tokens=None,
+        offset=103,  # entries 2 - 104 are only used for pretraining
         **kwargs
     ):
+        self.offset = offset
+
         if additional_special_tokens is not None:
             assert isinstance(
                 additional_special_tokens, list
@@ -116,7 +118,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
 
             additional_special_tokens_extended = (
                 ([mask_token_sent] + additional_special_tokens)
-                if mask_token_sent not in additional_special_tokens
+                if mask_token_sent not in additional_special_tokens and mask_token_sent is not None
                 else additional_special_tokens
             )
             # fill additional tokens with ..., <unk_token_102> in case not all additional tokens are already taken
@@ -130,7 +132,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
                 )
             additional_special_tokens = additional_special_tokens_extended
         else:
-            additional_special_tokens = [mask_token_sent]
+            additional_special_tokens = [mask_token_sent] if mask_token_sent is not None else []
             additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
 
         super().__init__(
@@ -141,10 +143,10 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
             unk_token=unk_token,
             mask_token=mask_token,
             mask_token_sent=mask_token_sent,
+            offset=offset,
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
-
         self.vocab_file = vocab_file
 
     def _special_token_mask(self, seq):
@@ -191,7 +193,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
-            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         out_vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]

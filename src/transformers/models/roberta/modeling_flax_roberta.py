@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google Flax Team Authors and The HuggingFace Inc. team.
+# Copyright 2021 The Google Flax Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Callable, Dict, Tuple
+from typing import Callable, Optional, Tuple
 
 import numpy as np
 
@@ -20,16 +20,28 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict
+from flax.linen.attention import dot_product_attention_weights
+from jax import lax
 from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel
+from ...modeling_flax_outputs import (
+    FlaxBaseModelOutput,
+    FlaxBaseModelOutputWithPooling,
+    FlaxMaskedLMOutput,
+    FlaxMultipleChoiceModelOutput,
+    FlaxQuestionAnsweringModelOutput,
+    FlaxSequenceClassifierOutput,
+    FlaxTokenClassifierOutput,
+)
+from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, overwrite_call_docstring
 from ...utils import logging
 from .configuration_roberta import RobertaConfig
 
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "roberta-base"
 _CONFIG_FOR_DOC = "RobertaConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
@@ -47,7 +59,14 @@ def create_position_ids_from_input_ids(input_ids, padding_idx):
     """
     # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
     mask = (input_ids != padding_idx).astype("i4")
-    incremental_indices = jnp.cumsum(mask, axis=1).astype("i4") * mask
+
+    if mask.ndim > 2:
+        mask = mask.reshape((-1, mask.shape[-1]))
+        incremental_indices = jnp.cumsum(mask, axis=1).astype("i4") * mask
+        incremental_indices = incremental_indices.reshape(input_ids.shape)
+    else:
+        incremental_indices = jnp.cumsum(mask, axis=1).astype("i4") * mask
+
     return incremental_indices.astype("i4") + padding_idx
 
 
@@ -57,9 +76,9 @@ ROBERTA_START_DOCSTRING = r"""
     generic methods the library implements for all its model (such as downloading, saving and converting weights from
     PyTorch models)
 
-    This model is also a Flax Linen `flax.nn.Module
-    <https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html>`__ subclass. Use it as a regular Flax
-    Module and refer to the Flax documentation for all matter related to general usage and behavior.
+    This model is also a Flax Linen `flax.linen.Module
+    <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`__ subclass. Use it as a regular Flax linen Module
+    and refer to the Flax documentation for all matter related to general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
 
@@ -71,8 +90,8 @@ ROBERTA_START_DOCSTRING = r"""
     Parameters:
         config (:class:`~transformers.RobertaConfig`): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
+            model weights.
 """
 
 ROBERTA_INPUTS_DOCSTRING = r"""
@@ -108,295 +127,392 @@ ROBERTA_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayerNorm with Bert->Roberta
-class FlaxRobertaLayerNorm(nn.Module):
-    """
-    Layer normalization (https://arxiv.org/abs/1607.06450). Operates on the last axis of the input data.
-    """
-
-    epsilon: float = 1e-6
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    bias: bool = True  # If True, bias (beta) is added.
-    scale: bool = True  # If True, multiply by scale (gamma). When the next layer is linear
-    # (also e.g. nn.relu), this can be disabled since the scaling will be
-    # done by the next layer.
-    scale_init: Callable[..., np.ndarray] = jax.nn.initializers.ones
-    bias_init: Callable[..., np.ndarray] = jax.nn.initializers.zeros
-
-    @nn.compact
-    def __call__(self, x):
-        """
-        Applies layer normalization on the input. It normalizes the activations of the layer for each given example in
-        a batch independently, rather than across a batch like Batch Normalization. i.e. applies a transformation that
-        maintains the mean activation within each example close to 0 and the activation standard deviation close to 1
-
-        Args:
-          x: the inputs
-
-        Returns:
-          Normalized inputs (the same shape as inputs).
-        """
-        features = x.shape[-1]
-        mean = jnp.mean(x, axis=-1, keepdims=True)
-        mean2 = jnp.mean(jax.lax.square(x), axis=-1, keepdims=True)
-        var = mean2 - jax.lax.square(mean)
-        mul = jax.lax.rsqrt(var + self.epsilon)
-
-        if self.scale:
-            mul = mul * jnp.asarray(self.param("gamma", self.scale_init, (features,)))
-        y = (x - mean) * mul
-
-        if self.bias:
-            y = y + jnp.asarray(self.param("beta", self.bias_init, (features,)))
-        return y
-
-
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEmbedding with Bert->Roberta
-class FlaxRobertaEmbedding(nn.Module):
-    """
-    Specify a new class for doing the embedding stuff as Flax's one use 'embedding' for the parameter name and PyTorch
-    use 'weight'
-    """
-
-    vocab_size: int
-    hidden_size: int
-    kernel_init_scale: float = 0.2
-    emb_init: Callable[..., np.ndarray] = jax.nn.initializers.normal(stddev=kernel_init_scale)
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-
-    @nn.compact
-    def __call__(self, inputs):
-        embedding = self.param("weight", self.emb_init, (self.vocab_size, self.hidden_size))
-        return jnp.take(embedding, inputs, axis=0)
-
-
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEmbeddings with Bert->Roberta
 class FlaxRobertaEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
-    vocab_size: int
-    hidden_size: int
-    type_vocab_size: int
-    max_length: int
-    kernel_init_scale: float = 0.2
-    dropout_rate: float = 0.0
+    config: RobertaConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    @nn.compact
-    def __call__(self, input_ids, token_type_ids, position_ids, attention_mask, deterministic: bool = True):
+    def setup(self):
+        self.word_embeddings = nn.Embed(
+            self.config.vocab_size,
+            self.config.hidden_size,
+            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            dtype=self.dtype,
+        )
+        self.position_embeddings = nn.Embed(
+            self.config.max_position_embeddings,
+            self.config.hidden_size,
+            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            dtype=self.dtype,
+        )
+        self.token_type_embeddings = nn.Embed(
+            self.config.type_vocab_size,
+            self.config.hidden_size,
+            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            dtype=self.dtype,
+        )
+        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
+    def __call__(self, input_ids, token_type_ids, position_ids, attention_mask, deterministic: bool = True):
         # Embed
-        w_emb = FlaxRobertaEmbedding(
-            self.vocab_size,
-            self.hidden_size,
-            kernel_init_scale=self.kernel_init_scale,
-            name="word_embeddings",
-            dtype=self.dtype,
-        )(jnp.atleast_2d(input_ids.astype("i4")))
-        p_emb = FlaxRobertaEmbedding(
-            self.max_length,
-            self.hidden_size,
-            kernel_init_scale=self.kernel_init_scale,
-            name="position_embeddings",
-            dtype=self.dtype,
-        )(jnp.atleast_2d(position_ids.astype("i4")))
-        t_emb = FlaxRobertaEmbedding(
-            self.type_vocab_size,
-            self.hidden_size,
-            kernel_init_scale=self.kernel_init_scale,
-            name="token_type_embeddings",
-            dtype=self.dtype,
-        )(jnp.atleast_2d(token_type_ids.astype("i4")))
+        inputs_embeds = self.word_embeddings(input_ids.astype("i4"))
+        position_embeds = self.position_embeddings(position_ids.astype("i4"))
+        token_type_embeddings = self.token_type_embeddings(token_type_ids.astype("i4"))
 
         # Sum all embeddings
-        summed_emb = w_emb + jnp.broadcast_to(p_emb, w_emb.shape) + t_emb
+        hidden_states = inputs_embeds + token_type_embeddings + position_embeds
 
         # Layer Norm
-        layer_norm = FlaxRobertaLayerNorm(name="layer_norm", dtype=self.dtype)(summed_emb)
-        embeddings = nn.Dropout(rate=self.dropout_rate)(layer_norm, deterministic=deterministic)
-        return embeddings
+        hidden_states = self.LayerNorm(hidden_states)
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        return hidden_states
+
+
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertSelfAttention with Bert->Roberta
+class FlaxRobertaSelfAttention(nn.Module):
+    config: RobertaConfig
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        if self.config.hidden_size % self.config.num_attention_heads != 0:
+            raise ValueError(
+                "`config.hidden_size`: {self.config.hidden_size} has to be a multiple of `config.num_attention_heads`\
+                    : {self.config.num_attention_heads}"
+            )
+
+        self.query = nn.Dense(
+            self.config.hidden_size,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+        )
+        self.key = nn.Dense(
+            self.config.hidden_size,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+        )
+        self.value = nn.Dense(
+            self.config.hidden_size,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+        )
+
+    def __call__(self, hidden_states, attention_mask, deterministic=True, output_attentions: bool = False):
+        head_dim = self.config.hidden_size // self.config.num_attention_heads
+
+        query_states = self.query(hidden_states).reshape(
+            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
+        )
+        value_states = self.value(hidden_states).reshape(
+            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
+        )
+        key_states = self.key(hidden_states).reshape(
+            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
+        )
+
+        # Convert the boolean attention mask to an attention bias.
+        if attention_mask is not None:
+            # attention mask in the form of attention bias
+            attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
+            attention_bias = lax.select(
+                attention_mask > 0,
+                jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
+                jnp.full(attention_mask.shape, -1e10).astype(self.dtype),
+            )
+        else:
+            attention_bias = None
+
+        dropout_rng = None
+        if not deterministic and self.config.attention_probs_dropout_prob > 0.0:
+            dropout_rng = self.make_rng("dropout")
+
+        attn_weights = dot_product_attention_weights(
+            query_states,
+            key_states,
+            bias=attention_bias,
+            dropout_rng=dropout_rng,
+            dropout_rate=self.config.attention_probs_dropout_prob,
+            broadcast_dropout=True,
+            deterministic=deterministic,
+            dtype=self.dtype,
+            precision=None,
+        )
+
+        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
+        attn_output = attn_output.reshape(attn_output.shape[:2] + (-1,))
+
+        outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
+        return outputs
+
+
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertSelfOutput with Bert->Roberta
+class FlaxRobertaSelfOutput(nn.Module):
+    config: RobertaConfig
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        self.dense = nn.Dense(
+            self.config.hidden_size,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            dtype=self.dtype,
+        )
+        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+
+    def __call__(self, hidden_states, input_tensor, deterministic: bool = True):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        return hidden_states
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertAttention with Bert->Roberta
 class FlaxRobertaAttention(nn.Module):
-    num_heads: int
-    head_size: int
-    dropout_rate: float = 0.0
-    kernel_init_scale: float = 0.2
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    config: RobertaConfig
+    dtype: jnp.dtype = jnp.float32
 
-    @nn.compact
-    def __call__(self, hidden_states, attention_mask, deterministic: bool = True):
+    def setup(self):
+        self.self = FlaxRobertaSelfAttention(self.config, dtype=self.dtype)
+        self.output = FlaxRobertaSelfOutput(self.config, dtype=self.dtype)
+
+    def __call__(self, hidden_states, attention_mask, deterministic=True, output_attentions: bool = False):
         # Attention mask comes in as attention_mask.shape == (*batch_sizes, kv_length)
         # FLAX expects: attention_mask.shape == (*batch_sizes, 1, 1, kv_length) such that it is broadcastable
         # with attn_weights.shape == (*batch_sizes, num_heads, q_length, kv_length)
-        attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
-        self_att = nn.attention.SelfAttention(
-            num_heads=self.num_heads,
-            qkv_features=self.head_size,
-            dropout_rate=self.dropout_rate,
-            deterministic=deterministic,
-            kernel_init=jax.nn.initializers.normal(self.kernel_init_scale, self.dtype),
-            bias_init=jax.nn.initializers.zeros,
-            name="self",
-            dtype=self.dtype,
-        )(hidden_states, attention_mask)
+        attn_outputs = self.self(
+            hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
+        )
+        attn_output = attn_outputs[0]
+        hidden_states = self.output(attn_output, hidden_states, deterministic=deterministic)
 
-        layer_norm = FlaxRobertaLayerNorm(name="layer_norm", dtype=self.dtype)(self_att + hidden_states)
-        return layer_norm
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_outputs[1],)
+
+        return outputs
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertIntermediate with Bert->Roberta
 class FlaxRobertaIntermediate(nn.Module):
-    output_size: int
-    hidden_act: str = "gelu"
-    kernel_init_scale: float = 0.2
+    config: RobertaConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    @nn.compact
-    def __call__(self, hidden_states):
-        hidden_states = nn.Dense(
-            features=self.output_size,
-            kernel_init=jax.nn.initializers.normal(self.kernel_init_scale, self.dtype),
-            name="dense",
+    def setup(self):
+        self.dense = nn.Dense(
+            self.config.intermediate_size,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
             dtype=self.dtype,
-        )(hidden_states)
-        hidden_states = ACT2FN[self.hidden_act](hidden_states)
+        )
+        self.activation = ACT2FN[self.config.hidden_act]
+
+    def __call__(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.activation(hidden_states)
         return hidden_states
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertOutput with Bert->Roberta
 class FlaxRobertaOutput(nn.Module):
-    dropout_rate: float = 0.0
-    kernel_init_scale: float = 0.2
+    config: RobertaConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    @nn.compact
-    def __call__(self, intermediate_output, attention_output, deterministic: bool = True):
-        hidden_states = nn.Dense(
-            attention_output.shape[-1],
-            kernel_init=jax.nn.initializers.normal(self.kernel_init_scale, self.dtype),
-            name="dense",
+    def setup(self):
+        self.dense = nn.Dense(
+            self.config.hidden_size,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
             dtype=self.dtype,
-        )(intermediate_output)
-        hidden_states = nn.Dropout(rate=self.dropout_rate)(hidden_states, deterministic=deterministic)
-        hidden_states = FlaxRobertaLayerNorm(name="layer_norm", dtype=self.dtype)(hidden_states + attention_output)
+        )
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+
+    def __call__(self, hidden_states, attention_output, deterministic: bool = True):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        hidden_states = self.LayerNorm(hidden_states + attention_output)
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayer with Bert->Roberta
 class FlaxRobertaLayer(nn.Module):
-    num_heads: int
-    head_size: int
-    intermediate_size: int
-    hidden_act: str = "gelu"
-    dropout_rate: float = 0.0
-    kernel_init_scale: float = 0.2
+    config: RobertaConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    @nn.compact
-    def __call__(self, hidden_states, attention_mask, deterministic: bool = True):
-        attention = FlaxRobertaAttention(
-            self.num_heads,
-            self.head_size,
-            kernel_init_scale=self.kernel_init_scale,
-            dropout_rate=self.dropout_rate,
-            name="attention",
-            dtype=self.dtype,
-        )(hidden_states, attention_mask, deterministic=deterministic)
-        intermediate = FlaxRobertaIntermediate(
-            self.intermediate_size,
-            kernel_init_scale=self.kernel_init_scale,
-            hidden_act=self.hidden_act,
-            name="intermediate",
-            dtype=self.dtype,
-        )(attention)
-        output = FlaxRobertaOutput(
-            kernel_init_scale=self.kernel_init_scale, dropout_rate=self.dropout_rate, name="output", dtype=self.dtype
-        )(intermediate, attention, deterministic=deterministic)
+    def setup(self):
+        self.attention = FlaxRobertaAttention(self.config, dtype=self.dtype)
+        self.intermediate = FlaxRobertaIntermediate(self.config, dtype=self.dtype)
+        self.output = FlaxRobertaOutput(self.config, dtype=self.dtype)
 
-        return output
+    def __call__(self, hidden_states, attention_mask, deterministic: bool = True, output_attentions: bool = False):
+        attention_outputs = self.attention(
+            hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
+        )
+        attention_output = attention_outputs[0]
+
+        hidden_states = self.intermediate(attention_output)
+        hidden_states = self.output(hidden_states, attention_output, deterministic=deterministic)
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attention_outputs[1],)
+        return outputs
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayerCollection with Bert->Roberta
 class FlaxRobertaLayerCollection(nn.Module):
-    """
-    Stores N RobertaLayer(s)
-    """
-
-    num_layers: int
-    num_heads: int
-    head_size: int
-    intermediate_size: int
-    hidden_act: str = "gelu"
-    dropout_rate: float = 0.0
-    kernel_init_scale: float = 0.2
+    config: RobertaConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    @nn.compact
-    def __call__(self, inputs, attention_mask, deterministic: bool = True):
-        assert self.num_layers > 0, f"num_layers should be >= 1, got ({self.num_layers})"
+    def setup(self):
+        self.layers = [
+            FlaxRobertaLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
+        ]
 
-        # Initialize input / output
-        input_i = inputs
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        all_attentions = () if output_attentions else None
+        all_hidden_states = () if output_hidden_states else None
 
-        # Forward over all encoders
-        for i in range(self.num_layers):
-            layer = FlaxRobertaLayer(
-                self.num_heads,
-                self.head_size,
-                self.intermediate_size,
-                kernel_init_scale=self.kernel_init_scale,
-                dropout_rate=self.dropout_rate,
-                hidden_act=self.hidden_act,
-                name=f"{i}",
-                dtype=self.dtype,
+        for i, layer in enumerate(self.layers):
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            layer_outputs = layer(
+                hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
             )
-            input_i = layer(input_i, attention_mask, deterministic=deterministic)
-        return input_i
+
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_attentions += (layer_outputs[1],)
+
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        outputs = (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in outputs if v is not None)
+
+        return FlaxBaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        )
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEncoder with Bert->Roberta
 class FlaxRobertaEncoder(nn.Module):
-    num_layers: int
-    num_heads: int
-    head_size: int
-    intermediate_size: int
-    hidden_act: str = "gelu"
-    dropout_rate: float = 0.0
-    kernel_init_scale: float = 0.2
+    config: RobertaConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    @nn.compact
-    def __call__(self, hidden_states, attention_mask, deterministic: bool = True):
-        layer = FlaxRobertaLayerCollection(
-            self.num_layers,
-            self.num_heads,
-            self.head_size,
-            self.intermediate_size,
-            hidden_act=self.hidden_act,
-            kernel_init_scale=self.kernel_init_scale,
-            dropout_rate=self.dropout_rate,
-            name="layer",
-            dtype=self.dtype,
-        )(hidden_states, attention_mask, deterministic=deterministic)
-        return layer
+    def setup(self):
+        self.layer = FlaxRobertaLayerCollection(self.config, dtype=self.dtype)
+
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        return self.layer(
+            hidden_states,
+            attention_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPooler with Bert->Roberta
 class FlaxRobertaPooler(nn.Module):
-    kernel_init_scale: float = 0.2
+    config: RobertaConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    @nn.compact
-    def __call__(self, hidden_states):
-        cls_token = hidden_states[:, 0]
-        out = nn.Dense(
-            hidden_states.shape[-1],
-            kernel_init=jax.nn.initializers.normal(self.kernel_init_scale, self.dtype),
-            name="dense",
+    def setup(self):
+        self.dense = nn.Dense(
+            self.config.hidden_size,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
             dtype=self.dtype,
-        )(cls_token)
-        return nn.tanh(out)
+        )
+
+    def __call__(self, hidden_states):
+        cls_hidden_state = hidden_states[:, 0]
+        cls_hidden_state = self.dense(cls_hidden_state)
+        return nn.tanh(cls_hidden_state)
+
+
+class FlaxRobertaLMHead(nn.Module):
+    config: RobertaConfig
+    dtype: jnp.dtype = jnp.float32
+    bias_init: Callable[..., np.ndarray] = jax.nn.initializers.zeros
+
+    def setup(self):
+        self.dense = nn.Dense(
+            self.config.hidden_size,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+        )
+        self.layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.decoder = nn.Dense(
+            self.config.vocab_size,
+            dtype=self.dtype,
+            use_bias=False,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+        )
+        self.bias = self.param("bias", self.bias_init, (self.config.vocab_size,))
+
+    def __call__(self, hidden_states, shared_embedding=None):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = ACT2FN["gelu"](hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
+
+        if shared_embedding is not None:
+            hidden_states = self.decoder.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
+        else:
+            hidden_states = self.decoder(hidden_states)
+
+        hidden_states += self.bias
+        return hidden_states
+
+
+class FlaxRobertaClassificationHead(nn.Module):
+    config: RobertaConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.dense = nn.Dense(
+            self.config.hidden_size,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+        )
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+        self.out_proj = nn.Dense(
+            self.config.num_labels,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+        )
+
+    def __call__(self, hidden_states, deterministic=True):
+        hidden_states = hidden_states[:, 0, :]  # take <s> token (equiv. to [CLS])
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        hidden_states = self.dense(hidden_states)
+        hidden_states = nn.tanh(hidden_states)
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        hidden_states = self.out_proj(hidden_states)
+        return hidden_states
 
 
 class FlaxRobertaPreTrainedModel(FlaxPreTrainedModel):
@@ -408,109 +524,7 @@ class FlaxRobertaPreTrainedModel(FlaxPreTrainedModel):
     config_class = RobertaConfig
     base_model_prefix = "roberta"
 
-    @staticmethod
-    def convert_from_pytorch(pt_state: Dict, config: RobertaConfig) -> Dict:
-        jax_state = dict(pt_state)
-
-        # Need to change some parameters name to match Flax names so that we don't have to fork any layer
-        for key, tensor in pt_state.items():
-            # Key parts
-            key_parts = set(key.split("."))
-
-            # Every dense layer has "kernel" parameters instead of "weight"
-            if "dense.weight" in key:
-                del jax_state[key]
-                key = key.replace("weight", "kernel")
-                jax_state[key] = tensor
-
-            # SelfAttention needs also to replace "weight" by "kernel"
-            if {"query", "key", "value"} & key_parts:
-
-                # Flax SelfAttention decomposes the heads (num_head, size // num_heads)
-                if "bias" in key:
-                    jax_state[key] = tensor.reshape((config.num_attention_heads, -1))
-                elif "weight":
-                    del jax_state[key]
-                    key = key.replace("weight", "kernel")
-                    tensor = tensor.reshape((config.num_attention_heads, -1, config.hidden_size)).transpose((2, 0, 1))
-                    jax_state[key] = tensor
-
-            # SelfAttention output is not a separate layer, remove one nesting
-            if "attention.output.dense" in key:
-                del jax_state[key]
-                key = key.replace("attention.output.dense", "attention.self.out")
-                jax_state[key] = tensor
-
-            # SelfAttention output is not a separate layer, remove nesting on layer norm
-            if "attention.output.LayerNorm" in key:
-                del jax_state[key]
-                key = key.replace("attention.output.LayerNorm", "attention.LayerNorm")
-                jax_state[key] = tensor
-
-            # There are some transposed parameters w.r.t their PyTorch counterpart
-            if "intermediate.dense.kernel" in key or "output.dense.kernel" in key:
-                jax_state[key] = tensor.T
-
-            # Self Attention output projection needs to be transposed
-            if "out.kernel" in key:
-                jax_state[key] = tensor.reshape((config.hidden_size, config.num_attention_heads, -1)).transpose(
-                    1, 2, 0
-                )
-
-            # Pooler needs to transpose its kernel
-            if "pooler.dense.kernel" in key:
-                jax_state[key] = tensor.T
-
-            # Handle LayerNorm conversion
-            if "LayerNorm" in key:
-                del jax_state[key]
-
-                # Replace LayerNorm by layer_norm
-                new_key = key.replace("LayerNorm", "layer_norm")
-
-                if "weight" in key:
-                    new_key = new_key.replace("weight", "gamma")
-                elif "bias" in key:
-                    new_key = new_key.replace("bias", "beta")
-
-                jax_state[new_key] = tensor
-
-        return jax_state
-
-    def init(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
-        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
-            jnp.zeros(input_shape, dtype="i4"), None, None, None
-        )
-
-        params_rng, dropout_rng = jax.random.split(rng)
-        rngs = {"params": params_rng, "dropout": dropout_rng}
-
-        return self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids)["params"]
-
-    def _check_inputs(self, input_ids, attention_mask, token_type_ids, position_ids):
-        if token_type_ids is None:
-            token_type_ids = jnp.ones_like(input_ids)
-
-        if position_ids is None:
-            position_ids = create_position_ids_from_input_ids(input_ids, self.config.pad_token_id)
-
-        if attention_mask is None:
-            attention_mask = jnp.ones_like(input_ids)
-
-        return input_ids, attention_mask, token_type_ids, position_ids
-
-
-@add_start_docstrings(
-    "The bare RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
-    ROBERTA_START_DOCSTRING,
-)
-class FlaxRobertaModel(FlaxRobertaPreTrainedModel):
-    """
-    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
-    cross-attention is added between the self-attention layers, following the architecture described in `Attention is
-    all you need`_ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
-    Kaiser and Illia Polosukhin.
-    """
+    module_class: nn.Module = None
 
     def __init__(
         self,
@@ -520,37 +534,52 @@ class FlaxRobertaModel(FlaxRobertaPreTrainedModel):
         dtype: jnp.dtype = jnp.float32,
         **kwargs
     ):
-        module = FlaxRobertaModule(
-            vocab_size=config.vocab_size,
-            hidden_size=config.hidden_size,
-            type_vocab_size=config.type_vocab_size,
-            max_length=config.max_position_embeddings,
-            num_encoder_layers=config.num_hidden_layers,
-            num_heads=config.num_attention_heads,
-            head_size=config.hidden_size,
-            hidden_act=config.hidden_act,
-            intermediate_size=config.intermediate_size,
-            dropout_rate=config.hidden_dropout_prob,
-            dtype=dtype,
-            **kwargs,
-        )
-
+        module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+        # init input tensors
+        input_ids = jnp.zeros(input_shape, dtype="i4")
+        token_type_ids = jnp.ones_like(input_ids)
+        position_ids = create_position_ids_from_input_ids(input_ids, self.config.pad_token_id)
+        attention_mask = jnp.ones_like(input_ids)
+
+        params_rng, dropout_rng = jax.random.split(rng)
+        rngs = {"params": params_rng, "dropout": dropout_rng}
+
+        return self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids, return_dict=False)[
+            "params"
+        ]
 
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
         self,
         input_ids,
-        token_type_ids=None,
         attention_mask=None,
+        token_type_ids=None,
         position_ids=None,
         params: dict = None,
         dropout_rng: PRNGKey = None,
         train: bool = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
-        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
-            input_ids, attention_mask, token_type_ids, position_ids
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        # init input tensors if not passed
+        if token_type_ids is None:
+            token_type_ids = jnp.zeros_like(input_ids)
+
+        if position_ids is None:
+            position_ids = create_position_ids_from_input_ids(input_ids, self.config.pad_token_id)
+
+        if attention_mask is None:
+            attention_mask = jnp.ones_like(input_ids)
 
         # Handle any PRNG if needed
         rngs = {}
@@ -564,56 +593,415 @@ class FlaxRobertaModel(FlaxRobertaPreTrainedModel):
             jnp.array(token_type_ids, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
             not train,
+            output_attentions,
+            output_hidden_states,
+            return_dict,
             rngs=rngs,
         )
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertModule with Bert->Roberta
 class FlaxRobertaModule(nn.Module):
-    vocab_size: int
-    hidden_size: int
-    type_vocab_size: int
-    max_length: int
-    num_encoder_layers: int
-    num_heads: int
-    head_size: int
-    intermediate_size: int
-    hidden_act: str = "gelu"
-    dropout_rate: float = 0.0
-    kernel_init_scale: float = 0.2
+    config: RobertaConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
     add_pooling_layer: bool = True
 
-    @nn.compact
-    def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True):
+    def setup(self):
+        self.embeddings = FlaxRobertaEmbeddings(self.config, dtype=self.dtype)
+        self.encoder = FlaxRobertaEncoder(self.config, dtype=self.dtype)
+        self.pooler = FlaxRobertaPooler(self.config, dtype=self.dtype)
 
-        # Embedding
-        embeddings = FlaxRobertaEmbeddings(
-            self.vocab_size,
-            self.hidden_size,
-            self.type_vocab_size,
-            self.max_length,
-            kernel_init_scale=self.kernel_init_scale,
-            dropout_rate=self.dropout_rate,
-            name="embeddings",
-            dtype=self.dtype,
-        )(input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic)
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        hidden_states = self.embeddings(
+            input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic
+        )
+        outputs = self.encoder(
+            hidden_states,
+            attention_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        hidden_states = outputs[0]
+        pooled = self.pooler(hidden_states) if self.add_pooling_layer else None
 
-        # N stacked encoding layers
-        encoder = FlaxRobertaEncoder(
-            self.num_encoder_layers,
-            self.num_heads,
-            self.head_size,
-            self.intermediate_size,
-            kernel_init_scale=self.kernel_init_scale,
-            dropout_rate=self.dropout_rate,
-            hidden_act=self.hidden_act,
-            name="encoder",
-            dtype=self.dtype,
-        )(embeddings, attention_mask, deterministic=deterministic)
+        if not return_dict:
+            # if pooled is None, don't return it
+            if pooled is None:
+                return (hidden_states,) + outputs[1:]
+            return (hidden_states, pooled) + outputs[1:]
 
-        if not self.add_pooling_layer:
-            return encoder
+        return FlaxBaseModelOutputWithPooling(
+            last_hidden_state=hidden_states,
+            pooler_output=pooled,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
-        pooled = FlaxRobertaPooler(kernel_init_scale=self.kernel_init_scale, name="pooler", dtype=self.dtype)(encoder)
-        return encoder, pooled
+
+@add_start_docstrings(
+    "The bare RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
+    ROBERTA_START_DOCSTRING,
+)
+class FlaxRobertaModel(FlaxRobertaPreTrainedModel):
+    module_class = FlaxRobertaModule
+
+
+append_call_sample_docstring(
+    FlaxRobertaModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
+)
+
+
+class FlaxRobertaForMaskedLMModule(nn.Module):
+    config: RobertaConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.roberta = FlaxRobertaModule(config=self.config, add_pooling_layer=False, dtype=self.dtype)
+        self.lm_head = FlaxRobertaLMHead(config=self.config, dtype=self.dtype)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        # Model
+        outputs = self.roberta(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = outputs[0]
+        if self.config.tie_word_embeddings:
+            shared_embedding = self.roberta.variables["params"]["embeddings"]["word_embeddings"]["embedding"]
+        else:
+            shared_embedding = None
+
+        # Compute the prediction scores
+        logits = self.lm_head(hidden_states, shared_embedding=shared_embedding)
+
+        if not return_dict:
+            return (logits,) + outputs[1:]
+
+        return FlaxMaskedLMOutput(
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings("""RoBERTa Model with a `language modeling` head on top. """, ROBERTA_START_DOCSTRING)
+class FlaxRobertaForMaskedLM(FlaxRobertaPreTrainedModel):
+    module_class = FlaxRobertaForMaskedLMModule
+
+
+append_call_sample_docstring(
+    FlaxRobertaForMaskedLM,
+    _TOKENIZER_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
+    FlaxBaseModelOutputWithPooling,
+    _CONFIG_FOR_DOC,
+    mask="<mask>",
+)
+
+
+class FlaxRobertaForSequenceClassificationModule(nn.Module):
+    config: RobertaConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.roberta = FlaxRobertaModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
+        self.classifier = FlaxRobertaClassificationHead(config=self.config, dtype=self.dtype)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        # Model
+        outputs = self.roberta(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        sequence_output = outputs[0]
+        logits = self.classifier(sequence_output, deterministic=deterministic)
+
+        if not return_dict:
+            return (logits,) + outputs[1:]
+
+        return FlaxSequenceClassifierOutput(
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    Roberta Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
+    """,
+    ROBERTA_START_DOCSTRING,
+)
+class FlaxRobertaForSequenceClassification(FlaxRobertaPreTrainedModel):
+    module_class = FlaxRobertaForSequenceClassificationModule
+
+
+append_call_sample_docstring(
+    FlaxRobertaForSequenceClassification,
+    _TOKENIZER_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
+    FlaxSequenceClassifierOutput,
+    _CONFIG_FOR_DOC,
+)
+
+
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForMultipleChoiceModule with Bert->Roberta, with self.bert->self.roberta
+class FlaxRobertaForMultipleChoiceModule(nn.Module):
+    config: RobertaConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.roberta = FlaxRobertaModule(config=self.config, dtype=self.dtype)
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+        self.classifier = nn.Dense(1, dtype=self.dtype)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        num_choices = input_ids.shape[1]
+        input_ids = input_ids.reshape(-1, input_ids.shape[-1]) if input_ids is not None else None
+        attention_mask = attention_mask.reshape(-1, attention_mask.shape[-1]) if attention_mask is not None else None
+        token_type_ids = token_type_ids.reshape(-1, token_type_ids.shape[-1]) if token_type_ids is not None else None
+        position_ids = position_ids.reshape(-1, position_ids.shape[-1]) if position_ids is not None else None
+
+        # Model
+        outputs = self.roberta(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        pooled_output = outputs[1]
+        pooled_output = self.dropout(pooled_output, deterministic=deterministic)
+        logits = self.classifier(pooled_output)
+
+        reshaped_logits = logits.reshape(-1, num_choices)
+
+        if not return_dict:
+            return (reshaped_logits,) + outputs[2:]
+
+        return FlaxMultipleChoiceModelOutput(
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    Roberta Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    softmax) e.g. for RocStories/SWAG tasks.
+    """,
+    ROBERTA_START_DOCSTRING,
+)
+class FlaxRobertaForMultipleChoice(FlaxRobertaPreTrainedModel):
+    module_class = FlaxRobertaForMultipleChoiceModule
+
+
+overwrite_call_docstring(
+    FlaxRobertaForMultipleChoice, ROBERTA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+)
+append_call_sample_docstring(
+    FlaxRobertaForMultipleChoice,
+    _TOKENIZER_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
+    FlaxMultipleChoiceModelOutput,
+    _CONFIG_FOR_DOC,
+)
+
+
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForTokenClassificationModule with Bert->Roberta, with self.bert->self.roberta
+class FlaxRobertaForTokenClassificationModule(nn.Module):
+    config: RobertaConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.roberta = FlaxRobertaModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+        self.classifier = nn.Dense(self.config.num_labels, dtype=self.dtype)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        # Model
+        outputs = self.roberta(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = outputs[0]
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        logits = self.classifier(hidden_states)
+
+        if not return_dict:
+            return (logits,) + outputs[1:]
+
+        return FlaxTokenClassifierOutput(
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    Roberta Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """,
+    ROBERTA_START_DOCSTRING,
+)
+class FlaxRobertaForTokenClassification(FlaxRobertaPreTrainedModel):
+    module_class = FlaxRobertaForTokenClassificationModule
+
+
+append_call_sample_docstring(
+    FlaxRobertaForTokenClassification,
+    _TOKENIZER_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
+    FlaxTokenClassifierOutput,
+    _CONFIG_FOR_DOC,
+)
+
+
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForQuestionAnsweringModule with Bert->Roberta, with self.bert->self.roberta
+class FlaxRobertaForQuestionAnsweringModule(nn.Module):
+    config: RobertaConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.roberta = FlaxRobertaModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
+        self.qa_outputs = nn.Dense(self.config.num_labels, dtype=self.dtype)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        # Model
+        outputs = self.roberta(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = outputs[0]
+
+        logits = self.qa_outputs(hidden_states)
+        start_logits, end_logits = logits.split(self.config.num_labels, axis=-1)
+        start_logits = start_logits.squeeze(-1)
+        end_logits = end_logits.squeeze(-1)
+
+        if not return_dict:
+            return (start_logits, end_logits) + outputs[1:]
+
+        return FlaxQuestionAnsweringModelOutput(
+            start_logits=start_logits,
+            end_logits=end_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    Roberta Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
+    ROBERTA_START_DOCSTRING,
+)
+class FlaxRobertaForQuestionAnswering(FlaxRobertaPreTrainedModel):
+    module_class = FlaxRobertaForQuestionAnsweringModule
+
+
+append_call_sample_docstring(
+    FlaxRobertaForQuestionAnswering,
+    _TOKENIZER_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
+    FlaxQuestionAnsweringModelOutput,
+    _CONFIG_FOR_DOC,
+)

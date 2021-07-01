@@ -51,7 +51,7 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
     )  # '_._' is replaced by a level separation (can be used to convert TF2.0 lists in PyTorch nn.ModulesList)
     tf_name = re.sub(r"//+", "/", tf_name)  # Remove empty levels at the end
     tf_name = tf_name.split("/")  # Convert from TF2.0 '/' separators to PyTorch '.' separators
-    # Some weights have a single name withtout "/" such as final_logits_bias in BART
+    # Some weights have a single name without "/" such as final_logits_bias in BART
     if len(tf_name) > 1:
         tf_name = tf_name[1:]  # Remove level zero
 
@@ -98,10 +98,10 @@ def load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_i
         raise
 
     pt_path = os.path.abspath(pytorch_checkpoint_path)
-    logger.info("Loading PyTorch weights from {}".format(pt_path))
+    logger.info(f"Loading PyTorch weights from {pt_path}")
 
     pt_state_dict = torch.load(pt_path, map_location="cpu")
-    logger.info("PyTorch checkpoint contains {:,} parameters".format(sum(t.numel() for t in pt_state_dict.values())))
+    logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters")
 
     return load_pytorch_weights_in_tf2_model(
         tf_model, pt_state_dict, tf_inputs=tf_inputs, allow_missing_keys=allow_missing_keys
@@ -178,7 +178,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
                 if any(re.search(pat, name) is not None for pat in tf_model._keys_to_ignore_on_load_missing):
                     continue
 
-            raise AttributeError("{} not found in PyTorch model".format(name))
+            raise AttributeError(f"{name} not found in PyTorch model")
 
         array = pt_state_dict[name].numpy()
 
@@ -204,7 +204,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             raise e
 
         tf_loaded_numel += array.size
-        # logger.warning("Initialize TF weight {}".format(symbolic_weight.name))
+        # logger.warning(f"Initialize TF weight {symbolic_weight.name}")
 
         weight_value_tuples.append((symbolic_weight, array))
         all_pytorch_weights.discard(name)
@@ -214,7 +214,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
     if tf_inputs is not None:
         tf_model(tf_inputs, training=False)  # Make sure restore ops are run
 
-    logger.info("Loaded {:,} parameters in the TF 2.0 model.".format(tf_loaded_numel))
+    logger.info(f"Loaded {tf_loaded_numel:,} parameters in the TF 2.0 model.")
 
     unexpected_keys = list(all_pytorch_weights)
 
@@ -276,7 +276,7 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
 
     from .modeling_tf_utils import load_tf_weights
 
-    logger.info("Loading TensorFlow weights from {}".format(tf_checkpoint_path))
+    logger.info(f"Loading TensorFlow weights from {tf_checkpoint_path}")
 
     # Instantiate and load the associated TF 2.0 model
     tf_model_class_name = "TF" + pt_model.__class__.__name__  # Add "TF" at the beginning
@@ -333,6 +333,7 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
     all_tf_weights = set(list(tf_weights_map.keys()))
     loaded_pt_weights_data_ptr = {}
     missing_keys_pt = []
+
     for pt_weight_name, pt_weight in current_pt_params_dict.items():
         # Handle PyTorch shared weight ()not duplicated in TF 2.0
         if pt_weight.data_ptr() in loaded_pt_weights_data_ptr:
@@ -345,7 +346,7 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
                 missing_keys_pt.append(pt_weight_name)
                 continue
 
-            raise AttributeError("{} not found in TF 2.0 model".format(pt_weight_name))
+            raise AttributeError(f"{pt_weight_name} not found in TF 2.0 model")
 
         array, transpose = tf_weights_map[pt_weight_name]
 
@@ -370,7 +371,7 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
             e.args += (pt_weight.shape, array.shape)
             raise e
 
-        # logger.warning("Initialize PyTorch weight {}".format(pt_weight_name))
+        # logger.warning(f"Initialize PyTorch weight {pt_weight_name}")
 
         new_pt_params_dict[pt_weight_name] = torch.from_numpy(array)
         loaded_pt_weights_data_ptr[pt_weight.data_ptr()] = torch.from_numpy(array)
@@ -378,6 +379,16 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
 
     missing_keys, unexpected_keys = pt_model.load_state_dict(new_pt_params_dict, strict=False)
     missing_keys += missing_keys_pt
+
+    # Some models may have keys that are not in the state by design, removing them before needlessly warning
+    # the user.
+    if pt_model._keys_to_ignore_on_load_missing is not None:
+        for pat in pt_model._keys_to_ignore_on_load_missing:
+            missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
+
+    if pt_model._keys_to_ignore_on_load_unexpected is not None:
+        for pat in pt_model._keys_to_ignore_on_load_unexpected:
+            unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
     if len(unexpected_keys) > 0:
         logger.warning(
@@ -403,6 +414,6 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
             f"you can already use {pt_model.__class__.__name__} for predictions without further training."
         )
 
-    logger.info("Weights or buffers not loaded from TF 2.0 model: {}".format(all_tf_weights))
+    logger.info(f"Weights or buffers not loaded from TF 2.0 model: {all_tf_weights}")
 
     return pt_model

@@ -32,24 +32,24 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "roberta-large": "https://huggingface.co/roberta-large/resolve/main/vocab.json",
         "roberta-large-mnli": "https://huggingface.co/roberta-large-mnli/resolve/main/vocab.json",
         "distilroberta-base": "https://huggingface.co/distilroberta-base/resolve/main/vocab.json",
-        "roberta-base-openai-detector": "https://huggingface.co/roberta-base/resolve/main/vocab.json",
-        "roberta-large-openai-detector": "https://huggingface.co/roberta-large/resolve/main/vocab.json",
+        "roberta-base-openai-detector": "https://huggingface.co/roberta-base-openai-detector/resolve/main/vocab.json",
+        "roberta-large-openai-detector": "https://huggingface.co/roberta-large-openai-detector/resolve/main/vocab.json",
     },
     "merges_file": {
         "roberta-base": "https://huggingface.co/roberta-base/resolve/main/merges.txt",
         "roberta-large": "https://huggingface.co/roberta-large/resolve/main/merges.txt",
         "roberta-large-mnli": "https://huggingface.co/roberta-large-mnli/resolve/main/merges.txt",
         "distilroberta-base": "https://huggingface.co/distilroberta-base/resolve/main/merges.txt",
-        "roberta-base-openai-detector": "https://huggingface.co/roberta-base/resolve/main/merges.txt",
-        "roberta-large-openai-detector": "https://huggingface.co/roberta-large/resolve/main/merges.txt",
+        "roberta-base-openai-detector": "https://huggingface.co/roberta-base-openai-detector/resolve/main/merges.txt",
+        "roberta-large-openai-detector": "https://huggingface.co/roberta-large-openai-detector/resolve/main/merges.txt",
     },
     "tokenizer_file": {
         "roberta-base": "https://huggingface.co/roberta-base/resolve/main/tokenizer.json",
         "roberta-large": "https://huggingface.co/roberta-large/resolve/main/tokenizer.json",
         "roberta-large-mnli": "https://huggingface.co/roberta-large-mnli/resolve/main/tokenizer.json",
         "distilroberta-base": "https://huggingface.co/distilroberta-base/resolve/main/tokenizer.json",
-        "roberta-base-openai-detector": "https://huggingface.co/roberta-base/resolve/main/tokenizer.json",
-        "roberta-large-openai-detector": "https://huggingface.co/roberta-large/resolve/main/tokenizer.json",
+        "roberta-base-openai-detector": "https://huggingface.co/roberta-base-openai-detector/resolve/main/tokenizer.json",
+        "roberta-large-openai-detector": "https://huggingface.co/roberta-large-openai-detector/resolve/main/tokenizer.json",
     },
 }
 
@@ -143,8 +143,8 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
 
     def __init__(
         self,
-        vocab_file,
-        merges_file,
+        vocab_file=None,
+        merges_file=None,
         tokenizer_file=None,
         errors="replace",
         bos_token="<s>",
@@ -179,7 +179,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         :obj:`str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while
         not having been set.
 
-        Roberta tokenizer has a special mask token to be usble in the fill-mask pipeline. The mask token will greedily
+        Roberta tokenizer has a special mask token to be usable in the fill-mask pipeline. The mask token will greedily
         comprise the space before the `<mask>`.
         """
         if self._mask_token is None and self.verbose:

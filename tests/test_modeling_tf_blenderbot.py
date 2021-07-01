@@ -146,6 +146,7 @@ def prepare_blenderbot_inputs_dict(
     decoder_attention_mask=None,
     head_mask=None,
     decoder_head_mask=None,
+    cross_attn_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
@@ -161,6 +162,8 @@ def prepare_blenderbot_inputs_dict(
         head_mask = tf.ones((config.encoder_layers, config.encoder_attention_heads))
     if decoder_head_mask is None:
         decoder_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
+    if cross_attn_head_mask is None:
+        cross_attn_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
@@ -168,6 +171,7 @@ def prepare_blenderbot_inputs_dict(
         "decoder_attention_mask": decoder_attention_mask,
         "head_mask": head_mask,
         "decoder_head_mask": decoder_head_mask,
+        "cross_attn_head_mask": cross_attn_head_mask,
     }
 
 
@@ -287,10 +291,9 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
             return True
         raise
     except Exception:
-        msg = "{} != {}".format(a, b)
-        if prefix:
-            msg = prefix + ": " + msg
-        raise AssertionError(msg)
+        if len(prefix) > 0:
+            prefix = f"{prefix}: "
+        raise AssertionError(f"{prefix}{a} != {b}")
 
 
 def _long_tensor(tok_lst):
@@ -309,7 +312,7 @@ class TFBlenderbot400MIntegrationTests(unittest.TestCase):
 
     @cached_property
     def model(self):
-        model = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name, from_pt=True)
+        model = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name)
         return model
 
     @slow

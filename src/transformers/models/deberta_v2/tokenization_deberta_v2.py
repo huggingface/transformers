@@ -16,7 +16,7 @@
 
 import os
 import unicodedata
-from typing import Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as sp
 import six
@@ -60,6 +60,13 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
             contains the vocabulary necessary to instantiate a tokenizer.
         do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to lowercase the input when tokenizing.
+        bos_token (:obj:`string`, `optional`, defaults to "[CLS]"):
+            The beginning of sequence token that was used during pre-training. Can be used a sequence classifier token.
+            When building a sequence using special tokens, this is not the token that is used for the beginning of
+            sequence. The token used is the :obj:`cls_token`.
+        eos_token (:obj:`string`, `optional`, defaults to "[SEP]"):
+            The end of sequence token. When building a sequence using special tokens, this is not the token that is
+            used for the end of sequence. The token used is the :obj:`sep_token`.
         unk_token (:obj:`str`, `optional`, defaults to :obj:`"[UNK]"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -75,6 +82,20 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         mask_token (:obj:`str`, `optional`, defaults to :obj:`"[MASK]"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
+        sp_model_kwargs (:obj:`dict`, `optional`):
+            Will be passed to the ``SentencePieceProcessor.__init__()`` method. The `Python wrapper for SentencePiece
+            <https://github.com/google/sentencepiece/tree/master/python>`__ can be used, among other things, to set:
+
+            - ``enable_sampling``: Enable subword regularization.
+            - ``nbest_size``: Sampling parameters for unigram. Invalid for BPE-Dropout.
+
+              - ``nbest_size = {0,1}``: No sampling is performed.
+              - ``nbest_size > 1``: samples from the nbest_size results.
+              - ``nbest_size < 0``: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+                using forward-filtering-and-backward-sampling algorithm.
+
+            - ``alpha``: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+              BPE-dropout.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -87,32 +108,40 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         vocab_file,
         do_lower_case=False,
         split_by_punct=False,
+        bos_token="[CLS]",
+        eos_token="[SEP]",
         unk_token="[UNK]",
         sep_token="[SEP]",
         pad_token="[PAD]",
         cls_token="[CLS]",
         mask_token="[MASK]",
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs
-    ):
+    ) -> None:
+        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+
         super().__init__(
             do_lower_case=do_lower_case,
+            bos_token=bos_token,
+            eos_token=eos_token,
             unk_token=unk_token,
             sep_token=sep_token,
             pad_token=pad_token,
             cls_token=cls_token,
             mask_token=mask_token,
             split_by_punct=split_by_punct,
+            sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
 
         if not os.path.isfile(vocab_file):
             raise ValueError(
-                "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained "
-                "model use `tokenizer = DebertaV2Tokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`".format(vocab_file)
+                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained "
+                "model use `tokenizer = DebertaV2Tokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.do_lower_case = do_lower_case
         self.split_by_punct = split_by_punct
-        self._tokenizer = SPMTokenizer(vocab_file, split_by_punct=split_by_punct)
+        self._tokenizer = SPMTokenizer(vocab_file, split_by_punct=split_by_punct, sp_model_kwargs=self.sp_model_kwargs)
 
     @property
     def vocab_size(self):
@@ -127,14 +156,14 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         vocab.update(self.get_added_vocab())
         return vocab
 
-    def _tokenize(self, text):
+    def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
         if self.do_lower_case:
             text = text.lower()
         return self._tokenizer.tokenize(text)
 
     def _convert_token_to_id(self, token):
-        """ Converts a token (str) in an id using the vocab. """
+        """Converts a token (str) in an id using the vocab."""
         return self._tokenizer.spm.PieceToId(token)
 
     def _convert_id_to_token(self, index):
@@ -142,7 +171,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         return self._tokenizer.spm.IdToPiece(index) if index < self.vocab_size else self.unk_token
 
     def convert_tokens_to_string(self, tokens):
-        """ Converts a sequence of tokens (string) in a single string. """
+        """Converts a sequence of tokens (string) in a single string."""
         return self._tokenizer.decode(tokens)
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
@@ -187,16 +216,8 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         """
 
         if already_has_special_tokens:
-            if token_ids_1 is not None:
-                raise ValueError(
-                    "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formatted with special tokens for the model."
-                )
-            return list(
-                map(
-                    lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0,
-                    token_ids_0,
-                )
+            return super().get_special_tokens_mask(
+                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
             )
 
         if token_ids_1 is not None:
@@ -242,10 +263,34 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
 
 
 class SPMTokenizer:
-    def __init__(self, vocab_file, split_by_punct=False):
+    r"""
+    Constructs a tokenizer based on `SentencePiece <https://github.com/google/sentencepiece>`__.
+
+    Args:
+        vocab_file (:obj:`str`):
+            `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
+            contains the vocabulary necessary to instantiate a tokenizer.
+        sp_model_kwargs (:obj:`dict`, `optional`):
+            Will be passed to the ``SentencePieceProcessor.__init__()`` method. The `Python wrapper for SentencePiece
+            <https://github.com/google/sentencepiece/tree/master/python>`__ can be used, among other things, to set:
+
+            - ``enable_sampling``: Enable subword regularization.
+            - ``nbest_size``: Sampling parameters for unigram. Invalid for BPE-Dropout.
+
+              - ``nbest_size = {0,1}``: No sampling is performed.
+              - ``nbest_size > 1``: samples from the nbest_size results.
+              - ``nbest_size < 0``: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+                using forward-filtering-and-backward-sampling algorithm.
+
+            - ``alpha``: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+              BPE-dropout.
+    """
+
+    def __init__(self, vocab_file, split_by_punct=False, sp_model_kwargs: Optional[Dict[str, Any]] = None):
         self.split_by_punct = split_by_punct
         self.vocab_file = vocab_file
-        spm = sp.SentencePieceProcessor()
+        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+        spm = sp.SentencePieceProcessor(**self.sp_model_kwargs)
         assert os.path.exists(vocab_file)
         spm.load(vocab_file)
         bpe_vocab_size = spm.GetPieceSize()
@@ -254,7 +299,7 @@ class SPMTokenizer:
         # <s> 1+1
         # </s> 2+1
         self.vocab = {spm.IdToPiece(i): i for i in range(bpe_vocab_size)}
-        self.id_to_tokens = [spm.IdToPiece(i) for i in range(bpe_vocab_size)]
+        self.ids_to_tokens = [spm.IdToPiece(i) for i in range(bpe_vocab_size)]
         # self.vocab['[PAD]'] = 0
         # self.vocab['[CLS]'] = 1
         # self.vocab['[SEP]'] = 2
@@ -269,7 +314,12 @@ class SPMTokenizer:
 
     def __setstate__(self, d):
         self.__dict__ = d
-        self.spm = sp.SentencePieceProcessor()
+
+        # for backward compatibility
+        if not hasattr(self, "sp_model_kwargs"):
+            self.sp_model_kwargs = {}
+
+        self.spm = sp.SentencePieceProcessor(**self.sp_model_kwargs)
         self.spm.Load(self.vocab_file)
 
     def tokenize(self, text):
@@ -312,7 +362,7 @@ class SPMTokenizer:
             self.special_tokens.append(token)
             if token not in self.vocab:
                 self.vocab[token] = len(self.vocab) - 1
-                self.id_to_tokens.append(token)
+                self.ids_to_tokens.append(token)
         return self.id(token)
 
     def part_of_whole_word(self, token, is_bos=False):
@@ -352,10 +402,10 @@ class SPMTokenizer:
         text = convert_to_unicode(text)
         if self.split_by_punct:
             words = self._run_split_on_punc(text)
-            pieces = [self.spm.encode_as_pieces(w) for w in words]
+            pieces = [self.spm.encode(w, out_type=str) for w in words]
             return [p for w in pieces for p in w]
         else:
-            return self.spm.encode_as_pieces(text)
+            return self.spm.encode(text, out_type=str)
 
     def split_to_words(self, text):
         pieces = self._encode_as_pieces(text)
@@ -436,7 +486,7 @@ class SPMTokenizer:
 
 def _is_whitespace(char):
     """Checks whether `chars` is a whitespace character."""
-    # \t, \n, and \r are technically contorl characters but we treat them
+    # \t, \n, and \r are technically control characters but we treat them
     # as whitespace since they are generally considered as such.
     if char == " " or char == "\t" or char == "\n" or char == "\r":
         return True
@@ -481,11 +531,11 @@ def convert_to_unicode(text):
         elif isinstance(text, bytes):
             return text.decode("utf-8", "ignore")
         else:
-            raise ValueError("Unsupported string type: %s" % (type(text)))
+            raise ValueError(f"Unsupported string type: {type(text)}")
     elif six.PY2:
         if isinstance(text, str):
             return text.decode("utf-8", "ignore")
         else:
-            raise ValueError("Unsupported string type: %s" % (type(text)))
+            raise ValueError(f"Unsupported string type: {type(text)}")
     else:
         raise ValueError("Not running on Python2 or Python 3?")

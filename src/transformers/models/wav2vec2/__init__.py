@@ -17,23 +17,40 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_tokenizers_available, is_torch_available
+from ...file_utils import _BaseLazyModule, is_flax_available, is_tf_available, is_torch_available
 
 
 _import_structure = {
     "configuration_wav2vec2": ["WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Wav2Vec2Config"],
-    "tokenization_wav2vec2": ["Wav2Vec2CTCTokenizer", "Wav2Vec2Tokenizer"],
     "feature_extraction_wav2vec2": ["Wav2Vec2FeatureExtractor"],
     "processing_wav2vec2": ["Wav2Vec2Processor"],
+    "tokenization_wav2vec2": ["Wav2Vec2CTCTokenizer", "Wav2Vec2Tokenizer"],
 }
 
 if is_torch_available():
     _import_structure["modeling_wav2vec2"] = [
         "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "Wav2Vec2ForMaskedLM",
         "Wav2Vec2ForCTC",
+        "Wav2Vec2ForMaskedLM",
+        "Wav2Vec2ForPreTraining",
         "Wav2Vec2Model",
         "Wav2Vec2PreTrainedModel",
+    ]
+
+if is_tf_available():
+    _import_structure["modeling_tf_wav2vec2"] = [
+        "TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFWav2Vec2ForCTC",
+        "TFWav2Vec2Model",
+        "TFWav2Vec2PreTrainedModel",
+    ]
+
+if is_flax_available():
+    _import_structure["modeling_flax_wav2vec2"] = [
+        "FlaxWav2Vec2ForCTC",
+        "FlaxWav2Vec2ForPreTraining",
+        "FlaxWav2Vec2Model",
+        "FlaxWav2Vec2PreTrainedModel",
     ]
 
 
@@ -48,8 +65,25 @@ if TYPE_CHECKING:
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Wav2Vec2ForCTC,
             Wav2Vec2ForMaskedLM,
+            Wav2Vec2ForPreTraining,
             Wav2Vec2Model,
             Wav2Vec2PreTrainedModel,
+        )
+
+    if is_tf_available():
+        from .modeling_tf_wav2vec2 import (
+            TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFWav2Vec2ForCTC,
+            TFWav2Vec2Model,
+            TFWav2Vec2PreTrainedModel,
+        )
+
+    if is_flax_available():
+        from .modeling_tf_wav2vec2 import (
+            FlaxWav2Vec2ForCTC,
+            FlaxWav2Vec2ForPreTraining,
+            FlaxWav2Vec2Model,
+            FlaxWav2Vec2PreTrainedModel,
         )
 
 

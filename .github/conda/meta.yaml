@@ -16,6 +16,8 @@ requirements:
     - pip
     - numpy >=1.17
     - dataclasses
+    - importlib_metadata
+    - huggingface_hub
     - packaging
     - filelock
     - requests
@@ -24,10 +26,13 @@ requirements:
     - regex !=2019.12.17
     - protobuf
     - tokenizers >=0.10.1,<0.11.0
+    - pyyaml
   run:
     - python
     - numpy >=1.17
     - dataclasses
+    - importlib_metadata
+    - huggingface_hub
     - packaging
     - filelock
     - requests
@@ -36,6 +41,7 @@ requirements:
     - regex !=2019.12.17
     - protobuf
     - tokenizers >=0.10.1,<0.11.0
+    - pyyaml
 
 test:
   imports:

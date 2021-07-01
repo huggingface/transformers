@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_torch_available
+from ...file_utils import _BaseLazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -26,21 +26,27 @@ _import_structure = {
     "tokenization_deberta": ["DebertaTokenizer"],
 }
 
+if is_tokenizers_available():
+    _import_structure["tokenization_deberta_fast"] = ["DebertaTokenizerFast"]
+
 if is_torch_available():
     _import_structure["modeling_deberta"] = [
         "DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "DebertaForSequenceClassification",
-        "DebertaModel",
         "DebertaForMaskedLM",
-        "DebertaPreTrainedModel",
-        "DebertaForTokenClassification",
         "DebertaForQuestionAnswering",
+        "DebertaForSequenceClassification",
+        "DebertaForTokenClassification",
+        "DebertaModel",
+        "DebertaPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
     from .configuration_deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig
     from .tokenization_deberta import DebertaTokenizer
+
+    if is_tokenizers_available():
+        from .tokenization_deberta_fast import DebertaTokenizerFast
 
     if is_torch_available():
         from .modeling_deberta import (

@@ -69,8 +69,8 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
         if config.d_model % config.n_head != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.d_model, config.n_head)
+                f"The hidden size ({config.d_model}) is not a multiple of the number of attention "
+                f"heads ({config.n_head}"
             )
 
         self.n_head = config.n_head
@@ -455,7 +455,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         self.word_embedding = TFSharedEmbeddings(
             config.vocab_size, config.d_model, initializer_range=config.initializer_range, name="word_embedding"
         )
-        self.layer = [TFXLNetLayer(config, name="layer_._{}".format(i)) for i in range(config.n_layer)]
+        self.layer = [TFXLNetLayer(config, name=f"layer_._{i}") for i in range(config.n_layer)]
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
         self.use_mems_eval = config.use_mems_eval
@@ -550,7 +550,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             # beg, end = klen - 1, -1
             beg, end = klen, -1
         else:
-            raise ValueError("Unknown `attn_type` {}.".format(self.attn_type))
+            raise ValueError(f"Unknown `attn_type` {self.attn_type}.")
 
         if self.bi_data:
             fwd_pos_seq = tf.range(beg, end, -1.0)
@@ -662,7 +662,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         elif self.attn_type == "bi":
             attn_mask = None
         else:
-            raise ValueError("Unsupported attention type: {}".format(self.attn_type))
+            raise ValueError(f"Unsupported attention type: {self.attn_type}")
 
         # data mask: input mask & perm mask
         assert inputs["input_mask"] is None or inputs["attention_mask"] is None, (
@@ -796,7 +796,13 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             else:
                 hidden_states = tuple(tf.transpose(hs, perm=(1, 0, 2)) for hs in hidden_states)
         if inputs["output_attentions"]:
-            attentions = tuple(tf.transpose(t, perm=(2, 3, 0, 1)) for t in attentions)
+            if inputs["target_mapping"] is not None:
+                # when target_mapping is provided, there are 2-tuple of attentions
+                attentions = tuple(
+                    tuple(tf.transpose(attn_stream, perm=(2, 3, 0, 1)) for attn_stream in t) for t in attentions
+                )
+            else:
+                attentions = tuple(tf.transpose(t, perm=(2, 3, 0, 1)) for t in attentions)
 
         if not inputs["return_dict"]:
             return tuple(v for v in [output, new_mems, hidden_states, attentions] if v is not None)
@@ -1113,7 +1119,7 @@ XLNET_INPUTS_DOCSTRING = r"""
             Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **masked**,
-            - 0 for tokens that are **not maked**.
+            - 0 for tokens that are **not masked**.
 
             You can only uses one of :obj:`input_mask` and :obj:`attention_mask`.
         head_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):

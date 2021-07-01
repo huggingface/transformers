@@ -26,6 +26,7 @@ from datetime import datetime
 
 import numpy as np
 import torch
+from torch import nn
 from torch.utils.data import DataLoader, SequentialSampler, Subset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
@@ -49,14 +50,14 @@ logger = logging.getLogger(__name__)
 
 
 def entropy(p):
-    """ Compute the entropy of a probability distribution """
+    """Compute the entropy of a probability distribution"""
     plogp = p * torch.log(p)
     plogp[p == 0] = 0
     return -plogp.sum(dim=-1)
 
 
 def print_2d_tensor(tensor):
-    """ Print a 2D tensor """
+    """Print a 2D tensor"""
     logger.info("lv, h >\t" + "\t".join(f"{x + 1}" for x in range(len(tensor))))
     for row in range(len(tensor)):
         if tensor.dtype != torch.long:
@@ -415,11 +416,11 @@ def main():
     # Distributed and parallel training
     model.to(args.device)
     if args.local_rank != -1:
-        model = torch.nn.parallel.DistributedDataParallel(
+        model = nn.parallel.DistributedDataParallel(
             model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True
         )
     elif args.n_gpu > 1:
-        model = torch.nn.DataParallel(model)
+        model = nn.DataParallel(model)
 
     # Print/save training arguments
     os.makedirs(args.output_dir, exist_ok=True)

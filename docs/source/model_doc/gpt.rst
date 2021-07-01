@@ -45,12 +45,13 @@ Tips:
 `Write With Transformer <https://transformer.huggingface.co/doc/gpt>`__ is a webapp created and hosted by Hugging Face
 showcasing the generative capabilities of several models. GPT is one of them.
 
-The original code can be found `here <https://github.com/openai/finetune-transformer-lm>`__.
+This model was contributed by `thomwolf <https://huggingface.co/thomwolf>`__. The original code can be found `here
+<https://github.com/openai/finetune-transformer-lm>`__.
 
 Note:
 
 If you want to reproduce the original tokenization process of the `OpenAI GPT` paper, you will need to install ``ftfy``
-and ``SpaCy``::
+and ``SpaCy``:
 
 .. code-block:: bash
 

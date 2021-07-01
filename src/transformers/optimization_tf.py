@@ -182,7 +182,7 @@ class AdamWeightDecay(tf.keras.optimizers.Adam):
         name (:obj:`str`, `optional`, defaults to 'AdamWeightDecay'):
             Optional name for the operations created when applying gradients.
         kwargs:
-            Keyward arguments. Allowed to be {``clipnorm``, ``clipvalue``, ``lr``, ``decay``}. ``clipnorm`` is clip
+            Keyword arguments. Allowed to be {``clipnorm``, ``clipvalue``, ``lr``, ``decay``}. ``clipnorm`` is clip
             gradients by norm; ``clipvalue`` is clip gradients by value, ``decay`` is included for backward
             compatibility to allow time inverse decay of learning rate. ``lr`` is included for backward compatibility,
             recommended to use ``learning_rate`` instead.
@@ -333,7 +333,7 @@ class GradientAccumulator(object):
                 ]
             )
         if len(gradients) != len(self._gradients):
-            raise ValueError("Expected %s gradients, but got %d" % (len(self._gradients), len(gradients)))
+            raise ValueError(f"Expected {len(self._gradients)} gradients, but got {len(gradients)}")
 
         for accum_gradient, gradient in zip(self._gradients, gradients):
             if accum_gradient is not None and gradient is not None:

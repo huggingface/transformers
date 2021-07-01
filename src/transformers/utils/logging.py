@@ -102,6 +102,10 @@ def _reset_library_root_logger() -> None:
         _default_handler = None
 
 
+def get_log_levels_dict():
+    return log_levels
+
+
 def get_logger(name: Optional[str] = None) -> logging.Logger:
     """
     Return a logger with the specified name.
@@ -140,7 +144,7 @@ def get_verbosity() -> int:
 
 def set_verbosity(verbosity: int) -> None:
     """
-    Set the vebosity level for the 🤗 Transformers's root logger.
+    Set the verbosity level for the 🤗 Transformers's root logger.
 
     Args:
         verbosity (:obj:`int`):
@@ -193,6 +197,24 @@ def enable_default_handler() -> None:
 
     assert _default_handler is not None
     _get_library_root_logger().addHandler(_default_handler)
+
+
+def add_handler(handler: logging.Handler) -> None:
+    """adds a handler to the HuggingFace Transformers's root logger."""
+
+    _configure_library_root_logger()
+
+    assert handler is not None
+    _get_library_root_logger().addHandler(handler)
+
+
+def remove_handler(handler: logging.Handler) -> None:
+    """removes given handler from the HuggingFace Transformers's root logger."""
+
+    _configure_library_root_logger()
+
+    assert handler is not None and handler not in _get_library_root_logger().handlers
+    _get_library_root_logger().removeHandler(handler)
 
 
 def disable_propagation() -> None:

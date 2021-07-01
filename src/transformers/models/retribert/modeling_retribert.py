@@ -20,8 +20,8 @@ RetriBERT model
 import math
 
 import torch
-import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
+from torch import nn
 
 from ...file_utils import add_start_docstrings
 from ...modeling_utils import PreTrainedModel
@@ -50,7 +50,7 @@ class RetriBertPreTrainedModel(PreTrainedModel):
     base_model_prefix = "retribert"
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:

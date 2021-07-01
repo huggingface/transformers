@@ -72,7 +72,7 @@ class XLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        """ Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt """
+        """Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt"""
         tokenizer = XLMTokenizer(self.vocab_file, self.merges_file)
 
         text = "lower"

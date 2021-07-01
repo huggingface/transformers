@@ -13,17 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import csv
+import importlib
 import json
 import os
 import pickle
 import sys
+import warnings
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from os.path import abspath, exists
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
+from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
+from ..models.auto.configuration_auto import AutoConfig
 from ..tokenization_utils import PreTrainedTokenizer, TruncationStrategy
 from ..utils import logging
 
@@ -46,6 +50,142 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+def infer_framework_load_model(
+    model,
+    config: AutoConfig,
+    model_classes: Optional[Dict[str, Tuple[type]]] = None,
+    task: Optional[str] = None,
+    framework: Optional[str] = None,
+    **model_kwargs
+):
+    """
+    Select framework (TensorFlow or PyTorch) to use from the :obj:`model` passed. Returns a tuple (framework, model).
+
+    If :obj:`model` is instantiated, this function will just infer the framework from the model class. Otherwise
+    :obj:`model` is actually a checkpoint name and this method will try to instantiate it using :obj:`model_classes`.
+    Since we don't want to instantiate the model twice, this model is returned for use by the pipeline.
+
+    If both frameworks are installed and available for :obj:`model`, PyTorch is selected.
+
+    Args:
+        model (:obj:`str`, :class:`~transformers.PreTrainedModel` or :class:`~transformers.TFPreTrainedModel`):
+            The model to infer the framework from. If :obj:`str`, a checkpoint name. The model to infer the framewrok
+            from.
+        config (:class:`~transformers.AutoConfig`):
+            The config associated with the model to help using the correct class
+        model_classes (dictionary :obj:`str` to :obj:`type`, `optional`):
+            A mapping framework to class.
+        task (:obj:`str`):
+            The task defining which pipeline will be returned.
+        model_kwargs:
+            Additional dictionary of keyword arguments passed along to the model's :obj:`from_pretrained(...,
+            **model_kwargs)` function.
+
+    Returns:
+        :obj:`Tuple`: A tuple framework, model.
+    """
+    if not is_tf_available() and not is_torch_available():
+        raise RuntimeError(
+            "At least one of TensorFlow 2.0 or PyTorch should be installed. "
+            "To install TensorFlow 2.0, read the instructions at https://www.tensorflow.org/install/ "
+            "To install PyTorch, read the instructions at https://pytorch.org/."
+        )
+    if isinstance(model, str):
+        model_kwargs["_from_pipeline"] = task
+        class_tuple = ()
+        look_pt = is_torch_available() and framework in {"pt", None}
+        look_tf = is_tf_available() and framework in {"tf", None}
+        if model_classes:
+            if look_pt:
+                class_tuple = class_tuple + model_classes.get("pt", (AutoModel,))
+            if look_tf:
+                class_tuple = class_tuple + model_classes.get("tf", (TFAutoModel,))
+        if config.architectures:
+            classes = []
+            for architecture in config.architectures:
+                transformers_module = importlib.import_module("transformers")
+                if look_tf:
+                    _class = getattr(transformers_module, architecture, None)
+                    if _class is not None:
+                        classes.append(_class)
+                if look_pt:
+                    _class = getattr(transformers_module, f"TF{architecture}", None)
+                    if _class is not None:
+                        classes.append(_class)
+            class_tuple = class_tuple + tuple(classes)
+
+        if len(class_tuple) == 0:
+            raise ValueError(f"Pipeline cannot infer suitable model classes from {model}")
+
+        for model_class in class_tuple:
+            kwargs = model_kwargs.copy()
+            if framework == "pt" and model.endswith(".h5"):
+                kwargs["from_tf"] = True
+                logger.warning(
+                    "Model might be a TensorFlow model (ending with `.h5`) but TensorFlow is not available. "
+                    "Trying to load the model with PyTorch."
+                )
+            elif framework == "tf" and model.endswith(".bin"):
+                kwargs["from_pt"] = True
+                logger.warning(
+                    "Model might be a PyTorch model (ending with `.bin`) but PyTorch is not available. "
+                    "Trying to load the model with Tensorflow."
+                )
+
+            try:
+                model = model_class.from_pretrained(model, **kwargs)
+                # Stop loading on the first successful load.
+                break
+            except (OSError, ValueError):
+                continue
+
+        if isinstance(model, str):
+            raise ValueError(f"Could not load model {model} with any of the following classes: {class_tuple}.")
+
+    framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
+    return framework, model
+
+
+def infer_framework_from_model(
+    model,
+    model_classes: Optional[Dict[str, Tuple[type]]] = None,
+    task: Optional[str] = None,
+    framework: Optional[str] = None,
+    **model_kwargs
+):
+    """
+    Select framework (TensorFlow or PyTorch) to use from the :obj:`model` passed. Returns a tuple (framework, model).
+
+    If :obj:`model` is instantiated, this function will just infer the framework from the model class. Otherwise
+    :obj:`model` is actually a checkpoint name and this method will try to instantiate it using :obj:`model_classes`.
+    Since we don't want to instantiate the model twice, this model is returned for use by the pipeline.
+
+    If both frameworks are installed and available for :obj:`model`, PyTorch is selected.
+
+    Args:
+        model (:obj:`str`, :class:`~transformers.PreTrainedModel` or :class:`~transformers.TFPreTrainedModel`):
+            The model to infer the framework from. If :obj:`str`, a checkpoint name. The model to infer the framewrok
+            from.
+        model_classes (dictionary :obj:`str` to :obj:`type`, `optional`):
+            A mapping framework to class.
+        task (:obj:`str`):
+            The task defining which pipeline will be returned.
+        model_kwargs:
+            Additional dictionary of keyword arguments passed along to the model's :obj:`from_pretrained(...,
+            **model_kwargs)` function.
+
+    Returns:
+        :obj:`Tuple`: A tuple framework, model.
+    """
+    if isinstance(model, str):
+        config = AutoConfig.from_pretrained(model, _from_pipeline=task, **model_kwargs)
+    else:
+        config = model.config
+    return infer_framework_load_model(
+        model, config, model_classes=model_classes, _from_pipeline=task, task=task, framework=framework, **model_kwargs
+    )
+
+
 def get_framework(model, revision: Optional[str] = None):
     """
     Select framework (TensorFlow or PyTorch) to use.
@@ -55,6 +195,10 @@ def get_framework(model, revision: Optional[str] = None):
             If both frameworks are installed, picks the one corresponding to the model passed (either a model class or
             the model name). If no specific model is provided, defaults to using PyTorch.
     """
+    warnings.warn(
+        "`get_framework` is deprecated and will be removed in v5, use `infer_framework_from_model` instead.",
+        FutureWarning,
+    )
     if not is_tf_available() and not is_torch_available():
         raise RuntimeError(
             "At least one of TensorFlow 2.0 or PyTorch should be installed. "
@@ -103,7 +247,7 @@ def get_default_model(targeted_task: Dict, framework: Optional[str], task_option
     defaults = targeted_task["default"]
     if task_options:
         if task_options not in defaults:
-            raise ValueError("The task does not provide any default models for options {}".format(task_options))
+            raise ValueError(f"The task does not provide any default models for options {task_options}")
         default_models = defaults[task_options]["model"]
     elif "model" in defaults:
         default_models = targeted_task["default"]["model"]
@@ -184,11 +328,11 @@ class PipelineDataFormat:
 
         if output_path is not None and not overwrite:
             if exists(abspath(self.output_path)):
-                raise OSError("{} already exists on disk".format(self.output_path))
+                raise OSError(f"{self.output_path} already exists on disk")
 
         if input_path is not None:
             if not exists(abspath(self.input_path)):
-                raise OSError("{} doesnt exist on disk".format(self.input_path))
+                raise OSError(f"{self.input_path} doesnt exist on disk")
 
     @abstractmethod
     def __iter__(self):
@@ -257,7 +401,7 @@ class PipelineDataFormat:
         elif format == "pipe":
             return PipedPipelineDataFormat(output_path, input_path, column, overwrite=overwrite)
         else:
-            raise KeyError("Unknown reader {} (Available reader are json/csv/pipe)".format(format))
+            raise KeyError(f"Unknown reader {format} (Available reader are json/csv/pipe)")
 
 
 class CsvPipelineDataFormat(PipelineDataFormat):
@@ -464,7 +608,8 @@ class Pipeline(_ScikitCompat):
     def __init__(
         self,
         model: Union["PreTrainedModel", "TFPreTrainedModel"],
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: Optional[PreTrainedTokenizer] = None,
+        feature_extractor: Optional[PreTrainedFeatureExtractor] = None,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
         task: str = "",
@@ -474,14 +619,15 @@ class Pipeline(_ScikitCompat):
     ):
 
         if framework is None:
-            framework = get_framework(model)
+            framework, model = infer_framework_load_model(model, config=model.config)
 
         self.task = task
         self.model = model
         self.tokenizer = tokenizer
+        self.feature_extractor = feature_extractor
         self.modelcard = modelcard
         self.framework = framework
-        self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else "cuda:{}".format(device))
+        self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else f"cuda:{device}")
         self.binary_output = binary_output
 
         # Special handling
@@ -502,12 +648,18 @@ class Pipeline(_ScikitCompat):
                 A path to the directory where to saved. It will be created if it doesn't exist.
         """
         if os.path.isfile(save_directory):
-            logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
+            logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
         os.makedirs(save_directory, exist_ok=True)
 
         self.model.save_pretrained(save_directory)
-        self.tokenizer.save_pretrained(save_directory)
+
+        if self.tokenizer is not None:
+            self.tokenizer.save_pretrained(save_directory)
+
+        if self.feature_extractor is not None:
+            self.feature_extractor.save_pretrained(save_directory)
+
         if self.modelcard is not None:
             self.modelcard.save_pretrained(save_directory)
 
@@ -540,7 +692,7 @@ class Pipeline(_ScikitCompat):
                 output = pipe(...)
         """
         if self.framework == "tf":
-            with tf.device("/CPU:0" if self.device == -1 else "/device:GPU:{}".format(self.device)):
+            with tf.device("/CPU:0" if self.device == -1 else f"/device:GPU:{self.device}"):
                 yield
         else:
             if self.device.type == "cuda":
@@ -558,7 +710,10 @@ class Pipeline(_ScikitCompat):
         Return:
             :obj:`Dict[str, torch.Tensor]`: The same as :obj:`inputs` but on the proper device.
         """
-        return {name: tensor.to(self.device) for name, tensor in inputs.items()}
+        return {
+            name: tensor.to(self.device) if isinstance(tensor, torch.Tensor) else tensor
+            for name, tensor in inputs.items()
+        }
 
     def check_model_type(self, supported_models: Union[List[str], dict]):
         """
@@ -569,7 +724,14 @@ class Pipeline(_ScikitCompat):
                 The list of models supported by the pipeline, or a dictionary with model class values.
         """
         if not isinstance(supported_models, list):  # Create from a model mapping
-            supported_models = [item[1].__name__ for item in supported_models.items()]
+            supported_models_names = []
+            for config, model in supported_models.items():
+                # Mapping can now contain tuples of models for the same configuration.
+                if isinstance(model, tuple):
+                    supported_models_names.extend([_model.__name__ for _model in model])
+                else:
+                    supported_models_names.append(model.__name__)
+            supported_models = supported_models_names
         if self.model.__class__.__name__ not in supported_models:
             raise PipelineException(
                 self.task,

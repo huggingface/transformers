@@ -33,6 +33,20 @@ VOCAB_FILES_NAMES = {
     "tokenizer_config_file": "tokenizer_config.json",
 }
 
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/vocab.json"
+    },
+    "merges_file": {
+        "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/merges.txt"
+    },
+    "tokenizer_config_file": {
+        "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/tokenizer_config.json"
+    },
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/blenderbot_small-90M": 512}
+
 
 def get_pairs(word):
     """
@@ -75,23 +89,9 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
             Additional keyword arguments passed along to :class:`~transformers.PreTrainedTokenizer`
     """
 
-    vocab_files_names = {
-        "vocab_file": "vocab.json",
-        "merges_file": "merges.txt",
-        "tokenizer_config": "tokenizer_config.json",
-    }
-    pretrained_vocab_files_map = {
-        "vocab_file": {
-            "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/vocab.json"
-        },
-        "merges_file": {
-            "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/merges.txt"
-        },
-        "tokenizer_config_file": {
-            "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/tokenizer.json"
-        },
-    }
-    max_model_input_sizes = {"facebook/blenderbot_small-90M": 512}
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -183,7 +183,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         return " ".join(words)
 
     def _tokenize(self, text: str) -> List[str]:
-        """ Split a string into tokens using BPE."""
+        """Split a string into tokens using BPE."""
         split_tokens = []
 
         words = re.findall(r"\S+\n?", text)
@@ -193,7 +193,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         return split_tokens
 
     def _convert_token_to_id(self, token: str) -> int:
-        """ Converts a token to an id using the vocab. """
+        """Converts a token to an id using the vocab."""
         token = token.lower()
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
@@ -202,13 +202,13 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         return self.decoder.get(index, self.unk_token)
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        """ Converts a sequence of tokens  in a single string. """
+        """Converts a sequence of tokens  in a single string."""
         out_string = " ".join(tokens).replace("@@ ", "").strip()
         return out_string
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
-            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
@@ -226,8 +226,8 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
             for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
                 if index != token_index:
                     logger.warning(
-                        "Saving vocabulary to {}: BPE merge indices are not consecutive."
-                        " Please check that the tokenizer is not corrupted!".format(merge_file)
+                        f"Saving vocabulary to {merge_file}: BPE merge indices are not consecutive."
+                        " Please check that the tokenizer is not corrupted!"
                     )
                     index = token_index
                 writer.write(" ".join(bpe_tokens) + "\n")

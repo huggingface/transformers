@@ -1,10 +1,15 @@
 // These two things need to be updated at each release for the version selector.
 // Last stable version
-const stableVersion = "v4.3.2"
+const stableVersion = "v4.8.2"
 // Dictionary doc folder to label. The last stable version should have an empty key.
 const versionMapping = {
     "master": "master",
-    "": "v4.3.0/v4.3.1/v4.3.2/v4.3.3 (stable)",
+    "": "v4.8.0/v4.8.1/v4.8.2 (stable)",
+    "v4.7.0": "v4.7.0",
+    "v4.6.0": "v4.6.0",
+    "v4.5.1": "v4.5.0/v4.5.1",
+    "v4.4.2": "v4.4.0/v4.4.1/v4.4.2",
+    "v4.3.3": "v4.3.0/v4.3.1/v4.3.2/v4.3.3",
     "v4.2.2": "v4.2.0/v4.2.1/v4.2.2",
     "v4.1.1": "v4.1.0/v4.1.1",
     "v4.0.1": "v4.0.0/v4.0.1",
@@ -61,7 +66,7 @@ function addIcon() {
 function addCustomFooter() {
     const customFooter = document.createElement("div");
     const questionOrIssue = document.createElement("div");
-    questionOrIssue.innerHTML = "Stuck? Read our <a href='https://medium.com/huggingface'>Blog posts</a> or <a href='https://github.com/huggingface/transformers'>Create an issue</a>";
+    questionOrIssue.innerHTML = "Stuck? Read our <a href='https://huggingface.co/blog'>Blog posts</a> or <a href='https://github.com/huggingface/transformers'>Create an issue</a>";
     customFooter.appendChild(questionOrIssue);
     customFooter.classList.add("footer");
 
@@ -128,7 +133,7 @@ function addVersionControl() {
     const parts = location.toString().split('/');
     let versionIndex = parts.length - 2;
     // Index page may not have a last part with filename.html so we need to go up
-    if (parts[parts.length - 1] != "" && ! parts[parts.length - 1].match(/\.html$|^search.html?/)) {
+    if (parts[parts.length - 1] != "" && ! parts[parts.length - 1].match(/\.html/)) {
         versionIndex = parts.length - 1;
     }
     // Main classes and models are nested so we need to go deeper

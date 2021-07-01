@@ -17,7 +17,8 @@ import argparse
 import glob
 import os
 import re
-import tempfile
+
+import black
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -26,9 +27,16 @@ TRANSFORMERS_PATH = "src/transformers"
 PATH_TO_DOCS = "docs/source"
 REPO_PATH = "."
 
+# Mapping for files that are full copies of others (keys are copies, values the file to keep them up to data with)
+FULL_COPIES = {"examples/tensorflow/question-answering/utils_qa.py": "examples/pytorch/question-answering/utils_qa.py"}
+
+
+def _should_continue(line, indent):
+    return line.startswith(indent) or len(line) <= 1 or re.search(r"^\s*\):\s*$", line) is not None
+
 
 def find_code_in_transformers(object_name):
-    """ Find and return the code source code of `object_name`."""
+    """Find and return the code source code of `object_name`."""
     parts = object_name.split(".")
     i = 0
 
@@ -62,7 +70,7 @@ def find_code_in_transformers(object_name):
 
     # We found the beginning of the class / func, now let's find the end (when the indent diminishes).
     start_index = line_index
-    while line_index < len(lines) and (lines[line_index].startswith(indent) or len(lines[line_index]) <= 1):
+    while line_index < len(lines) and _should_continue(lines[line_index], indent):
         line_index += 1
     # Clean up empty lines at the end (if any).
     while len(lines[line_index - 1]) <= 1:
@@ -76,23 +84,6 @@ _re_copy_warning = re.compile(r"^(\s*)#\s*Copied from\s+transformers\.(\S+\.\S+)
 _re_replace_pattern = re.compile(r"^\s*(\S+)->(\S+)(\s+.*|$)")
 
 
-def blackify(code):
-    """
-    Applies the black part of our `make style` command to `code`.
-    """
-    has_indent = code.startswith("    ")
-    if has_indent:
-        code = f"class Bla:\n{code}"
-    with tempfile.TemporaryDirectory() as d:
-        fname = os.path.join(d, "tmp.py")
-        with open(fname, "w", encoding="utf-8", newline="\n") as f:
-            f.write(code)
-        os.system(f"black -q --line-length 119 --target-version py35 {fname}")
-        with open(fname, "r", encoding="utf-8", newline="\n") as f:
-            result = f.read()
-            return result[len("class Bla:\n") :] if has_indent else result
-
-
 def get_indent(code):
     lines = code.split("\n")
     idx = 0
@@ -100,7 +91,18 @@ def get_indent(code):
         idx += 1
     if idx < len(lines):
         return re.search(r"^(\s*)\S", lines[idx]).groups()[0]
-    return 0
+    return ""
+
+
+def blackify(code):
+    """
+    Applies the black part of our `make style` command to `code`.
+    """
+    has_indent = len(get_indent(code)) > 0
+    if has_indent:
+        code = f"class Bla:\n{code}"
+    result = black.format_str(code, mode=black.FileMode([black.TargetVersion.PY35], line_length=119))
+    return result[len("class Bla:\n") :] if has_indent else result
 
 
 def is_copy_consistent(filename, overwrite=False):
@@ -136,9 +138,7 @@ def is_copy_consistent(filename, overwrite=False):
             if line_index >= len(lines):
                 break
             line = lines[line_index]
-            should_continue = (len(line) <= 1 or line.startswith(indent)) and re.search(
-                f"^{indent}# End copy", line
-            ) is None
+            should_continue = _should_continue(line, indent) and re.search(f"^{indent}# End copy", line) is None
         # Clean up empty lines at the end (if any).
         while len(lines[line_index - 1]) <= 1:
             line_index -= 1
@@ -158,6 +158,11 @@ def is_copy_consistent(filename, overwrite=False):
                 if option.strip() == "all-casing":
                     theoretical_code = re.sub(obj1.lower(), obj2.lower(), theoretical_code)
                     theoretical_code = re.sub(obj1.upper(), obj2.upper(), theoretical_code)
+
+            # Blackify after replacement. To be able to do that, we need the header (class or function definition)
+            # from the previous line
+            theoretical_code = blackify(lines[start_index - 1] + theoretical_code)
+            theoretical_code = theoretical_code[len(lines[start_index - 1]) :]
 
         # Test for a diff and act accordingly.
         if observed_code != theoretical_code:
@@ -190,8 +195,32 @@ def check_copies(overwrite: bool = False):
     check_model_list_copy(overwrite=overwrite)
 
 
+def check_full_copies(overwrite: bool = False):
+    diffs = []
+    for target, source in FULL_COPIES.items():
+        with open(source, "r", encoding="utf-8") as f:
+            source_code = f.read()
+        with open(target, "r", encoding="utf-8") as f:
+            target_code = f.read()
+        if source_code != target_code:
+            if overwrite:
+                with open(target, "w", encoding="utf-8") as f:
+                    print(f"Replacing the content of {target} by the one of {source}.")
+                    f.write(source_code)
+            else:
+                diffs.append(f"- {target}: copy does not match {source}.")
+
+    if not overwrite and len(diffs) > 0:
+        diff = "\n".join(diffs)
+        raise Exception(
+            "Found the following copy inconsistencies:\n"
+            + diff
+            + "\nRun `make fix-copies` or `python utils/check_copies.py --fix_and_overwrite` to fix them."
+        )
+
+
 def get_model_list():
-    """ Extracts the model list from the README. """
+    """Extracts the model list from the README."""
     # If the introduction or the conclusion of the list change, the prompts may need to be updated.
     _start_prompt = "🤗 Transformers currently provides the following architectures"
     _end_prompt = "1. Want to contribute a new model?"
@@ -222,7 +251,7 @@ def get_model_list():
 
 
 def split_long_line_with_indent(line, max_per_line, indent):
-    """ Split the `line` so that it doesn't go over `max_per_line` and adds `indent` to new lines. """
+    """Split the `line` so that it doesn't go over `max_per_line` and adds `indent` to new lines."""
     words = line.split(" ")
     lines = []
     current_line = words[0]
@@ -237,7 +266,7 @@ def split_long_line_with_indent(line, max_per_line, indent):
 
 
 def convert_to_rst(model_list, max_per_line=None):
-    """ Convert `model_list` to rst format. """
+    """Convert `model_list` to rst format."""
     # Convert **[description](link)** to `description <link>`__
     def _rep_link(match):
         title, link = match.groups()
@@ -296,11 +325,11 @@ def _find_text_in_file(filename, start_prompt, end_prompt):
 
 
 def check_model_list_copy(overwrite=False, max_per_line=119):
-    """ Check the model lists in the README and index.rst are consistent and maybe `overwrite`. """
+    """Check the model lists in the README and index.rst are consistent and maybe `overwrite`."""
     rst_list, start_index, end_index, lines = _find_text_in_file(
         filename=os.path.join(PATH_TO_DOCS, "index.rst"),
         start_prompt="    This list is updated automatically from the README",
-        end_prompt=".. _bigtable:",
+        end_prompt="Supported frameworks",
     )
     md_list = get_model_list()
     converted_list = convert_to_rst(md_list, max_per_line=max_per_line)
@@ -322,3 +351,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     check_copies(args.fix_and_overwrite)
+    check_full_copies(args.fix_and_overwrite)

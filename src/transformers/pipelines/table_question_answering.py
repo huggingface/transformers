@@ -2,7 +2,7 @@ import collections
 
 import numpy as np
 
-from ..file_utils import add_end_docstrings, is_torch_available, requires_pandas
+from ..file_utils import add_end_docstrings, is_torch_available, requires_backends
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline, PipelineException
 
 
@@ -24,7 +24,7 @@ class TableQuestionAnsweringArgumentHandler(ArgumentHandler):
         #   ...,
         #   {"table": pd.DataFrame, "query" : List[str]}
         # ]
-        requires_pandas(self)
+        requires_backends(self, "pandas")
         import pandas as pd
 
         if table is None:

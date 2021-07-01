@@ -65,10 +65,10 @@ respectively.
 .. code-block:: bash
 
     ## PYTORCH CODE
-    python examples/benchmarking/run_benchmark.py --help
+    python examples/pytorch/benchmarking/run_benchmark.py --help
 
     ## TENSORFLOW CODE
-    python examples/benchmarking/run_benchmark_tf.py --help
+    python examples/tensorflow/benchmarking/run_benchmark_tf.py --help
 
 
 An instantiated benchmark object can then simply be run by calling ``benchmark.run()``.
@@ -358,4 +358,6 @@ available `here
 <https://docs.google.com/spreadsheets/d/1sryqufw2D0XlUH4sq3e9Wnxu5EAQkaohzrJbd5HdQ_w/edit?usp=sharing>`__.
 
 With the new `benchmark` tools, it is easier than ever to share your benchmark results with the community
-:prefix_link:`here <examples/benchmarking/README.md>`.
+
+- :prefix_link:`PyTorch Benchmarking Results<examples/pytorch/benchmarking/README.md>`.
+- :prefix_link:`TensorFlow Benchmarking Results<examples/tensorflow/benchmarking/README.md>`.

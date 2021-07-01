@@ -21,6 +21,7 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -51,6 +52,7 @@ def prepare_led_inputs_dict(
     decoder_attention_mask=None,
     head_mask=None,
     decoder_head_mask=None,
+    cross_attn_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.ne(config.pad_token_id)
@@ -60,6 +62,8 @@ def prepare_led_inputs_dict(
         head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
     if decoder_head_mask is None:
         decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+    if cross_attn_head_mask is None:
+        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
@@ -67,6 +71,7 @@ def prepare_led_inputs_dict(
         "decoder_attention_mask": decoder_attention_mask,
         "head_mask": head_mask,
         "decoder_head_mask": decoder_head_mask,
+        "cross_attn_head_mask": cross_attn_head_mask,
     }
 
 
@@ -412,7 +417,7 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             if "labels" in inputs_dict:
                 correct_outlen += 1  # loss is added to beginning
             # Question Answering model returns start_logits and end_logits
-            if model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
+            if model_class in get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING):
                 correct_outlen += 1  # start_logits and end_logits instead of only 1 output
             if "past_key_values" in outputs:
                 correct_outlen += 1  # past_key_values have been returned

@@ -62,7 +62,7 @@ class TFAttention(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
-        # [switch nx => n_state from Block to Attention to keep identical to TF implem]
+        # [switch nx => n_state from Block to Attention to keep identical to TF implementation]
         assert (
             n_state % config.n_head == 0
         ), f"Hidden dimension {n_state} not dividable by number of heads {config.n_head}"
@@ -210,7 +210,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             config.vocab_size, config.n_embd, initializer_range=config.initializer_range, name="tokens_embed"
         )
         self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
-        self.h = [TFBlock(config.n_ctx, config, scale=True, name="h_._{}".format(i)) for i in range(config.n_layer)]
+        self.h = [TFBlock(config.n_ctx, config, scale=True, name=f"h_._{i}") for i in range(config.n_layer)]
 
     def build(self, input_shape):
         with tf.name_scope("positions_embed"):
