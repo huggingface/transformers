@@ -25,7 +25,7 @@ Don't forget to sign up [here](https://forms.gle/tVGPhjKXyEsSgUcs8)!
     - [Flax design philosophy in 🤗 Transformers](#flax-design-philosophy-in-transformers)
     - [How to use flax models & scripts](#how-to-use-flax-models-and-example-scripts)
 - [Talks](#talks)
-- [How to use the 🤗 Hub for training](#how-to-use-the-hub-for-training)
+- [How to use the 🤗 Hub for training](#how-to-use-the-hub-for-collaboration)
 - [How to setup TPU VM](#how-to-setup-tpu-vm)
 - [How to use the 🤗 Hub for demo](#how-to-use-the-hub-for-demo)
 - [Project evaluation](#project-evaluation)
