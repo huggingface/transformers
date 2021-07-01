@@ -17,28 +17,26 @@
 
 import unittest
 
-from transformers import is_tf_available, {{cookiecutter.camelcase_modelname}}Config
-from transformers.testing_utils import require_tf, slow
+from transformers import is_flax_available, {{cookiecutter.camelcase_modelname}}Config
+from transformers.testing_utils import require_flax, slow
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
 
-
-if is_tf_available():
-    import tensorflow as tf
-
+if is_flax_available():
+    import numpy as np
     from transformers import (
-        TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
-        TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
-        TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
-        TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
-        TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
-        TF{{cookiecutter.camelcase_modelname}}ForTokenClassification,
-        TF{{cookiecutter.camelcase_modelname}}Model,
+        Flax{{cookiecutter.camelcase_modelname}}ForCausalLM,
+        Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM,
+        Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
+        Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
+        Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
+        Flax{{cookiecutter.camelcase_modelname}}ForTokenClassification,
+        Flax{{cookiecutter.camelcase_modelname}}Model,
     )
 
 
-class TF{{cookiecutter.camelcase_modelname}}ModelTester:
+class Flax{{cookiecutter.camelcase_modelname}}ModelTester:
     def __init__(
         self,
         parent,
@@ -126,7 +124,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = TF{{cookiecutter.camelcase_modelname}}Model(config=config)
+        model = Flax{{cookiecutter.camelcase_modelname}}Model(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
 
         inputs = [input_ids, input_mask]
@@ -140,7 +138,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.is_decoder = True
-        model = TF{{cookiecutter.camelcase_modelname}}ForCausalLM(config=config)
+        model = Flax{{cookiecutter.camelcase_modelname}}ForCausalLM(config=config)
         inputs = {
             "input_ids": input_ids,
             "attention_mask": input_mask,
@@ -148,13 +146,13 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
         }
         prediction_scores = model(inputs)["logits"]
         self.parent.assertListEqual(
-            list(prediction_scores.numpy().shape), [self.batch_size, self.seq_length, self.vocab_size]
+            list(prediction_scores.shape), [self.batch_size, self.seq_length, self.vocab_size]
         )
 
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(config=config)
+        model = Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM(config=config)
         inputs = {
             "input_ids": input_ids,
             "attention_mask": input_mask,
@@ -167,7 +165,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
-        model = TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification(config=config)
+        model = Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification(config=config)
         inputs = {
             "input_ids": input_ids,
             "attention_mask": input_mask,
@@ -181,7 +179,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_choices = self.num_choices
-        model = TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(config=config)
+        model = Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoice(config=config)
         multiple_choice_inputs_ids = tf.tile(tf.expand_dims(input_ids, 1), (1, self.num_choices, 1))
         multiple_choice_input_mask = tf.tile(tf.expand_dims(input_mask, 1), (1, self.num_choices, 1))
         multiple_choice_token_type_ids = tf.tile(tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1))
@@ -197,7 +195,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
-        model = TF{{cookiecutter.camelcase_modelname}}ForTokenClassification(config=config)
+        model = Flax{{cookiecutter.camelcase_modelname}}ForTokenClassification(config=config)
         inputs = {
             "input_ids": input_ids,
             "attention_mask": input_mask,
@@ -209,7 +207,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
     def create_and_check_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering(config=config)
+        model = Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering(config=config)
         inputs = {
             "input_ids": input_ids,
             "attention_mask": input_mask,
@@ -235,20 +233,20 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
         return config, inputs_dict
 
 
-@require_tf
-class TF{{cookiecutter.camelcase_modelname}}ModelTest(TFModelTesterMixin, unittest.TestCase):
+@require_flax
+class Flax{{cookiecutter.camelcase_modelname}}ModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            TF{{cookiecutter.camelcase_modelname}}Model,
-            TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
-            TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
-            TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
-            TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
-            TF{{cookiecutter.camelcase_modelname}}ForTokenClassification,
-            TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
+            Flax{{cookiecutter.camelcase_modelname}}Model,
+            Flax{{cookiecutter.camelcase_modelname}}ForCausalLM,
+            Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM,
+            Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
+            Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
+            Flax{{cookiecutter.camelcase_modelname}}ForTokenClassification,
+            Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
         )
-        if is_tf_available()
+        if is_flax_available()
         else ()
     )
 
@@ -256,7 +254,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTest(TFModelTesterMixin, unitte
     test_onnx = False
 
     def setUp(self):
-        self.model_tester = TF{{cookiecutter.camelcase_modelname}}ModelTester(self)
+        self.model_tester = Flax{{cookiecutter.camelcase_modelname}}ModelTester(self)
         self.config_tester = ConfigTester(self, config_class={{cookiecutter.camelcase_modelname}}Config, hidden_size=37)
 
     def test_config(self):
@@ -292,15 +290,15 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTest(TFModelTesterMixin, unitte
 
     @slow
     def test_model_from_pretrained(self):
-        model = TF{{cookiecutter.camelcase_modelname}}Model.from_pretrained("{{cookiecutter.checkpoint_identifier}}")
+        model = Flax{{cookiecutter.camelcase_modelname}}Model.from_pretrained("{{cookiecutter.checkpoint_identifier}}")
         self.assertIsNotNone(model)
 
-@require_tf
-class TF{{cookiecutter.camelcase_modelname}}ModelIntegrationTest(unittest.TestCase):
+@require_flax
+class Flax{{cookiecutter.camelcase_modelname}}ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = TF{{cookiecutter.camelcase_modelname}}ForMaskedLM.from_pretrained("{{cookiecutter.checkpoint_identifier}}")
-        input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
+        model = Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM.from_pretrained("{{cookiecutter.checkpoint_identifier}}")
+        input_ids = np.array([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
         # TODO Replace vocab size
@@ -312,7 +310,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelIntegrationTest(unittest.TestCa
         print(output[:, :3, :3])
 
         # TODO Replace values below with what was printed above.
-        expected_slice = tf.constant(
+        expected_slice = np.array(
             [
                 [
                     [-0.05243197, -0.04498899, 0.05512108],
@@ -327,27 +325,26 @@ class TF{{cookiecutter.camelcase_modelname}}ModelIntegrationTest(unittest.TestCa
 import unittest
 
 from transformers import (
-    is_tf_available,
+    is_flax_available,
     {{cookiecutter.camelcase_modelname}}Config,
     {{cookiecutter.camelcase_modelname}}Tokenizer,
 )
-from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.testing_utils import require_sentencepiece, require_flax, require_tokenizers, slow
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
-if is_tf_available():
-    import tensorflow as tf
-
+if is_flax_available():
+    import numpy as np
     from transformers import (
-        TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
-        TF{{cookiecutter.camelcase_modelname}}Model,
+        Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
+        Flax{{cookiecutter.camelcase_modelname}}Model,
     )
 
 
-@require_tf
-class TF{{cookiecutter.camelcase_modelname}}ModelTester:
+@require_flax
+class Flax{{cookiecutter.camelcase_modelname}}ModelTester:
     config_cls = {{cookiecutter.camelcase_modelname}}Config
     config_updates = {}
     hidden_act = "gelu"
@@ -418,7 +415,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
         return config, inputs_dict
 
     def check_decoder_model_past_large_inputs(self, config, inputs_dict):
-        model = TF{{cookiecutter.camelcase_modelname}}Model(config=config).get_decoder()
+        model = Flax{{cookiecutter.camelcase_modelname}}Model(config=config).get_decoder()
         input_ids = inputs_dict["input_ids"]
 
         input_ids = input_ids[:1, :]
@@ -472,17 +469,17 @@ def prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(
     }
 
 
-@require_tf
-class TF{{cookiecutter.camelcase_modelname}}ModelTest(TFModelTesterMixin, unittest.TestCase):
-    all_model_classes = (TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration, TF{{cookiecutter.camelcase_modelname}}Model) if is_tf_available() else ()
-    all_generative_model_classes = (TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,) if is_tf_available() else ()
+@require_flax
+class Flax{{cookiecutter.camelcase_modelname}}ModelTest(FlaxModelTesterMixin, unittest.TestCase):
+    all_model_classes = (Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration, Flax{{cookiecutter.camelcase_modelname}}Model) if is_flax_available() else ()
+    all_generative_model_classes = (Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,) if is_flax_available() else ()
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False
     test_onnx = False
 
     def setUp(self):
-        self.model_tester = TF{{cookiecutter.camelcase_modelname}}ModelTester(self)
+        self.model_tester = Flax{{cookiecutter.camelcase_modelname}}ModelTester(self)
         self.config_tester = ConfigTester(self, config_class={{cookiecutter.camelcase_modelname}}Config)
 
     def test_config(self):
@@ -600,10 +597,10 @@ TOLERANCE = 1e-4
 @slow
 @require_sentencepiece
 @require_tokenizers
-@require_tf
-class TF{{cookiecutter.camelcase_modelname}}ModelIntegrationTest(unittest.TestCase):
+@require_flax
+class Flax{{cookiecutter.camelcase_modelname}}ModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head(self):
-        model = TF{{cookiecutter.camelcase_modelname}}Model.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
+        model = Flax{{cookiecutter.camelcase_modelname}}Model.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
         # change to intended input here
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -618,7 +615,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelIntegrationTest(unittest.TestCa
         tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE)
 
     def test_inference_with_head(self):
-        model = TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
+        model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
         # change to intended input here
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -633,7 +630,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelIntegrationTest(unittest.TestCa
         tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE)
 
     def test_seq_to_seq_generation(self):
-        hf = TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
+        hf = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
         tok = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
 
         batch_input = [
