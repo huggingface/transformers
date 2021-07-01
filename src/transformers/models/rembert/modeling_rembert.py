@@ -56,7 +56,9 @@ _CONFIG_FOR_DOC = "RemBertConfig"
 _TOKENIZER_FOR_DOC = "RemBertTokenizer"
 
 REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/rembert-large",
+    # FIXME: Revert back to Google once uploaded.
+    "iwontbecreative/rembert",
+    # "google/rembert-large",
     # See all RemBERT models at https://huggingface.co/models?filter=rembert
 ]
 

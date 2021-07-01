@@ -300,7 +300,7 @@ class TFRemBertModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = TFRemBertModel.from_pretrained("rembert-large")
+        model = TFRemBertModel.from_pretrained("iwontbecreative/rembert")
         self.assertIsNotNone(model)
 
 
@@ -308,9 +308,7 @@ class TFRemBertModelTest(TFModelTesterMixin, unittest.TestCase):
 class TFRemBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_model(self):
-        # model = TFRemBertModel.from_pretrained("rembert")
-        model = TFRemBertModel.from_pretrained("../rembert")
-        # FIXME(tfevry): Remove once uploaded to model hub
+        model = TFRemBertModel.from_pretrained("iwontbecreative/rembert")
 
         input_ids = tf.constant([[312, 56498, 313, 2125, 313]])
         segment_ids = tf.constant([[0, 0, 0, 1, 1]])
