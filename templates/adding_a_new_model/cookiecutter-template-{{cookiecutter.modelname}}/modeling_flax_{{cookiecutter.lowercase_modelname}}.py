@@ -39,7 +39,7 @@ from ...file_utils import (
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPooling,
-    FlaxCa*usalLMOutput,
+    FlaxCausalLMOutput,
     FlaxMaskedLMOutput,
     FlaxMultipleChoiceModelOutput,
     FlaxNextSentencePredictorOutput,
@@ -300,7 +300,7 @@ class Flax{{cookiecutter.camelcase_modelname}}Layer(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayerCollection with Bert->{{cookiecutter.camelcase_modelname}}
-class Flax{{cookiecutter.camelcase_modelname}}tLayerCollection(nn.Module):
+class Flax{{cookiecutter.camelcase_modelname}}LayerCollection(nn.Module):
     config: {{cookiecutter.camelcase_modelname}}Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -375,7 +375,7 @@ class Flax{{cookiecutter.camelcase_modelname}}Encoder(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPooler with Bert->{{cookiecutter.camelcase_modelname}}
-class Flax{{cookiecutter.camelcase_modelname}}tPooler(nn.Module):
+class Flax{{cookiecutter.camelcase_modelname}}Pooler(nn.Module):
     config: {{cookiecutter.camelcase_modelname}}Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -456,7 +456,7 @@ class Flax{{cookiecutter.camelcase_modelname}}OnlyNSPHead(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPreTrainingHeads with Bert->{{cookiecutter.camelcase_modelname}}
-class Flax{{cookiecutter.camelcase_modelname}}tPreTrainingHeads(nn.Module):
+class Flax{{cookiecutter.camelcase_modelname}}PreTrainingHeads(nn.Module):
     config: {{cookiecutter.camelcase_modelname}}Config
     dtype: jnp.dtype = jnp.float32
 
@@ -469,201 +469,128 @@ class Flax{{cookiecutter.camelcase_modelname}}tPreTrainingHeads(nn.Module):
         seq_relationship_score = self.seq_relationship(pooled_output)
         return prediction_scores, seq_relationship_score
 
-@keras_serializable
-class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
-    config_class = {{cookiecutter.camelcase_modelname}}Config
 
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, add_pooling_layer: bool = True, **kwargs):
-        super().__init__(**kwargs)
-
-        self.config = config
-
-        self.embeddings = TF{{cookiecutter.camelcase_modelname}}Embeddings(config, name="embeddings")
-        self.encoder = TF{{cookiecutter.camelcase_modelname}}Encoder(config, name="encoder")
-
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.get_input_embeddings
-    def get_input_embeddings(self) -> tf.keras.layers.Layer:
-        return self.embeddings
-
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.set_input_embeddings
-    def set_input_embeddings(self, value: tf.Variable):
-        self.embeddings.weight = value
-        self.embeddings.vocab_size = shape_list(value)[0]
-
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer._prune_heads
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        raise NotImplementedError
-
-    def call(
-        self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: bool = False,
-        **kwargs,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
-
-        if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif inputs["input_ids"] is not None:
-            input_shape = shape_list(inputs["input_ids"])
-        elif inputs["inputs_embeds"] is not None:
-            input_shape = shape_list(inputs["inputs_embeds"])[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        if inputs["attention_mask"] is None:
-            inputs["attention_mask"] = tf.fill(dims=input_shape, value=1)
-
-        if inputs["token_type_ids"] is None:
-            inputs["token_type_ids"] = tf.fill(dims=input_shape, value=0)
-
-        embedding_output = self.embeddings(
-            input_ids=inputs["input_ids"],
-            position_ids=inputs["position_ids"],
-            token_type_ids=inputs["token_type_ids"],
-            inputs_embeds=inputs["inputs_embeds"],
-            training=inputs["training"],
-        )
-
-        # We create a 3D attention mask from a 2D tensor mask.
-        # Sizes are [batch_size, 1, 1, to_seq_length]
-        # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
-        # this attention mask is more simple than the triangular masking of causal attention
-        # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-        extended_attention_mask = tf.reshape(inputs["attention_mask"], (input_shape[0], 1, 1, input_shape[1]))
-
-        # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-        # masked positions, this operation will create a tensor which is 0.0 for
-        # positions we want to attend and -10000.0 for masked positions.
-        # Since we are adding it to the raw scores before the softmax, this is
-        # effectively the same as removing these entirely.
-        extended_attention_mask = tf.cast(extended_attention_mask, dtype=embedding_output.dtype)
-        one_cst = tf.constant(1.0, dtype=embedding_output.dtype)
-        ten_thousand_cst = tf.constant(-10000.0, dtype=embedding_output.dtype)
-        extended_attention_mask = tf.multiply(tf.subtract(one_cst, extended_attention_mask), ten_thousand_cst)
-
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        if inputs["head_mask"] is not None:
-            raise NotImplementedError
-        else:
-            inputs["head_mask"] = [None] * self.config.num_hidden_layers
-
-        encoder_outputs = self.encoder(
-            hidden_states=embedding_output,
-            attention_mask=extended_attention_mask,
-            head_mask=inputs["head_mask"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-        )
-
-        sequence_output = encoder_outputs[0]
-
-        if not inputs["return_dict"]:
-            return (
-                sequence_output,
-            ) + encoder_outputs[1:]
-
-        return TFBaseModelOutput(
-            last_hidden_state=sequence_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
-
-
-class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
-    """An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPreTrainedModel with Bert->{{cookiecutter.camelcase_modelname}}
+class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = {{cookiecutter.camelcase_modelname}}Config
     base_model_prefix = "{{cookiecutter.lowercase_modelname}}"
+    module_class: nn.Module = None
 
+    def __init__(
+        self, config: {{cookiecutter.camelcase_modelname}Config, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
+    ):
+        module = self.module_class(config=config, dtype=dtype, **kwargs)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
-{{cookiecutter.uppercase_modelname}}_START_DOCSTRING = r"""
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+        # init input tensors
+        input_ids = jnp.zeros(input_shape, dtype="i4")
+        token_type_ids = jnp.zeros_like(input_ids)
+        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape)
+        attention_mask = jnp.ones_like(input_ids)
 
-    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading or saving, resizing the input
-    embeddings, pruning heads etc.)
+        params_rng, dropout_rng = jax.random.split(rng)
+        rngs = {"params": params_rng, "dropout": dropout_rng}
 
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass.
-    Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general
-    usage and behavior.
+        return self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids, return_dict=False)[
+            "params"
+        ]
 
-    .. note::
+    @add_start_docstrings_to_model_forward({{cookiecutter.camelcase_modelname}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    def __call__(
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        params: dict = None,
+        dropout_rng: jax.random.PRNGKey = None,
+        train: bool = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        TF 2.0 models accepts two formats as inputs:
+        # init input tensors if not passed
+        if token_type_ids is None:
+            token_type_ids = jnp.zeros_like(input_ids)
 
-        - having all inputs as keyword arguments (like PyTorch models), or
-        - having all inputs as a list, tuple or dict in the first positional arguments.
+        if position_ids is None:
+            position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having
-        all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+        if attention_mask is None:
+            attention_mask = jnp.ones_like(input_ids)
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors
-        in the first positional argument :
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
 
-        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
-        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
-        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+        return self.module.apply(
+            {"params": params or self.params},
+            jnp.array(input_ids, dtype="i4"),
+            jnp.array(attention_mask, dtype="i4"),
+            jnp.array(token_type_ids, dtype="i4"),
+            jnp.array(position_ids, dtype="i4"),
+            not train,
+            output_attentions,
+            output_hidden_states,
+            return_dict,
+            rngs=rngs,
+        )
+        
+{{cookiecutter.uppercase_modelname}}_START_DOCSTRING =  r"""
 
-    Args:
-        config (:class:`~transformers.{{cookiecutter.camelcase_modelname}}Config`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+    This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
+    generic methods the library implements for all its model (such as downloading, saving and converting weights from
+    PyTorch models)
+
+    This model is also a Flax Linen `flax.linen.Module
+    <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`__ subclass. Use it as a regular Flax linen Module
+    and refer to the Flax documentation for all matter related to general usage and behavior.
+
+    Finally, this model supports inherent JAX features such as:
+
+    - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
+    - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
+    - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
+    - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
+
+    Parameters:
+        config (:class:`~transformers.{{cookiecutter.uppercase_modelname}}Config`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
+            model weights.
 """
 
 {{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`np.ndarray`, :obj:`tf.Tensor`, :obj:`List[tf.Tensor]` :obj:`Dict[str, tf.Tensor]` or :obj:`Dict[str, np.ndarray]` and each example must have the shape :obj:`({0})`):
+        input_ids (:obj:`numpy.ndarray` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
-            :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
+            Indices can be obtained using :class:`~transformers.{{cookiecutter.uppercase_modelname}}ConfiTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
+        attention_mask (:obj:`numpy.ndarray` of shape :obj:`({0})`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
+        token_type_ids (:obj:`numpy.ndarray` of shape :obj:`({0})`, `optional`):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
             1]``:
 
@@ -671,790 +598,413 @@ class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
             - 1 corresponds to a `sentence B` token.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`__
-        position_ids (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
+        position_ids (:obj:`numpy.ndarray` of shape :obj:`({0})`, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
             config.max_position_embeddings - 1]``.
-
-            `What are position IDs? <../glossary.html#position-ids>`__
-        head_mask (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0}, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
-            config will be used instead.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
-            used instead.
         return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
-            argument can be used in eager mode, in graph mode the value will always be set to True.
-        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to use the model in training mode (some modules like dropout modules have different
-            behaviors between training and evaluation).
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+
 """
 
 
-@add_start_docstrings(
-    "The bare {{cookiecutter.modelname}} Model transformer outputing raw hidden-states without any specific head on top.",
+add_start_docstrings(
+    "The bare {cookiecutter.camelcase_modelname}} Model transformer outputting raw hidden-states without any specific head on top.",
     {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
-class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel):
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
+class Flax{{cookiecutter.camelcase_modelname}}Model(Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel):
+    module_class = Flax{{cookiecutter.camelcase_modelname}}Module
 
-        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
 
-    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFBaseModelOutputWithPooling,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def call(
+class Flax{{cookiecutter.camelcase_modelname}}ForMaskedLMModule(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.{{cookiecutter.lowercase_modelname}} = Flax{{cookiecutter.camelcase_modelname}}Module(config=self.config, add_pooling_layer=False, dtype=self.dtype)
+        self.cls = Flax{{cookiecutter.camelcase_modelname}}OnlyMLMHead(config=self.config, dtype=self.dtype)
+
+    def __call__(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-        **kwargs,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        # Model
+        outputs = self.{{cookiecutter.lowercase_modelname}}(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
-        outputs = self.{{cookiecutter.lowercase_modelname}}(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
 
-        return outputs
+        hidden_states = outputs[0]
+        if self.config.tie_word_embeddings:
+            shared_embedding = self.{{cookiecutter.lowercase_modelname}}.variables["params"]["embeddings"]["word_embeddings"]["embedding"]
+        else:
+            shared_embedding = None
 
-    # Copied from transformers.models.distilbert.modeling_tf_distilbert.TFDistilBertModel.serving_output
-    def serving_output(self, output: TFBaseModelOutput) -> TFBaseModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        # Compute the prediction scores
+        logits = self.cls(hidden_states, shared_embedding=shared_embedding)
 
-        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
+        if not return_dict:
+            return (logits,) + outputs[1:]
 
-
-@add_start_docstrings("""{{cookiecutter.modelname}} Model with a `language modeling` head on top. """, {{cookiecutter.uppercase_modelname}}_START_DOCSTRING)
-class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFMaskedLanguageModelingLoss):
-
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-
-        if config.is_decoder:
-            logger.warning(
-                "If you want to use `TF{{cookiecutter.camelcase_modelname}}ForMaskedLM` make sure `config.is_decoder=False` for "
-                "bi-directional self-attention."
-            )
-
-        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
-        self.mlm = TF{{cookiecutter.camelcase_modelname}}MLMHead(config, input_embeddings=self.{{cookiecutter.lowercase_modelname}}.embeddings, name="mlm___cls")
-
-    def get_lm_head(self) -> tf.keras.layers.Layer:
-        return self.mlm.predictions
-
-    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFMaskedLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def call(
-        self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        training: Optional[bool] = False,
-        **kwargs,
-    ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
-        r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
-            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
-            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
-        """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            labels=labels,
-            training=training,
-            kwargs_call=kwargs,
-        )
-        outputs = self.{{cookiecutter.lowercase_modelname}}(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-        )
-        sequence_output = outputs[0]
-        prediction_scores = self.mlm(sequence_output=sequence_output, training=inputs["training"])
-        loss = (
-            None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=prediction_scores)
-        )
-
-        if not inputs["return_dict"]:
-            output = (prediction_scores,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
-        return TFMaskedLMOutput(
-            loss=loss,
-            logits=prediction_scores,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
-    def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
-
-
-@add_start_docstrings(
-    """{{cookiecutter.modelname}} Model with a `language modeling` head on top for CLM fine-tuning. """, {{cookiecutter.uppercase_modelname}}_START_DOCSTRING
-)
-class TF{{cookiecutter.camelcase_modelname}}ForCausalLM(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFCausalLanguageModelingLoss):
-
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-
-        if not config.is_decoder:
-            logger.warning("If you want to use `TF{{cookiecutter.camelcase_modelname}}ForCausalLM` as a standalone, add `is_decoder=True.`")
-
-        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
-        self.mlm = TF{{cookiecutter.camelcase_modelname}}MLMHead(config, input_embeddings=self.{{cookiecutter.lowercase_modelname}}.embeddings, name="mlm___cls")
-
-    def get_lm_head(self) -> tf.keras.layers.Layer:
-        return self.mlm.predictions
-
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFCausalLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def call(
-        self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        training: Optional[bool] = False,
-        **kwargs,
-    ) -> Union[TFCausalLMOutput, Tuple[tf.Tensor]]:
-        r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the cross entropy classification loss. Indices should be in ``[0, ...,
-            config.vocab_size - 1]``.
-        """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            labels=labels,
-            training=training,
-            kwargs_call=kwargs,
-        )
-        outputs = self.{{cookiecutter.lowercase_modelname}}(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-        )
-        sequence_output = outputs[0]
-        logits = self.mlm(sequence_output=sequence_output, training=inputs["training"])
-        loss = None
-
-        if inputs["labels"] is not None:
-            # shift labels to the left and cut last logit token
-            logits = logits[:, :-1]
-            labels = inputs["labels"][:, 1:]
-            loss = self.compute_loss(labels=labels, logits=logits)
-
-        if not inputs["return_dict"]:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
-        return TFCausalLMOutput(
-            loss=loss,
+        return FlaxCausalLMOutput(
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMHeadModel.serving_output
-    def serving_output(self, output: TFCausalLMOutput) -> TFCausalLMOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFCausalLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+@add_start_docstrings("""{{cookiecutter.camelcase_modelname}} Model with a `language modeling` head on top for MLM training. """, {{cookiecutter.uppercase_modelname}}_START_DOCSTRING)
+class Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM(Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel):
+    module_class = Flax{{cookiecutter.camelcase_modelname}}ForMaskedLMModule
 
 
-class TF{{cookiecutter.camelcase_modelname}}ClassificationHead(tf.keras.layers.Layer):
-    """Head for sentence-level classification tasks."""
-
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-
-        self.dense = tf.keras.layers.Dense(
-            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
-        )
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
-        self.out_proj = tf.keras.layers.Dense(
-            units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
-        )
-
-        if isinstance(config.hidden_act, str):
-            self.classifier_act_fn = get_tf_activation(config.hidden_act)
-        else:
-            self.classifier_act_fn = config.hidden_act
-
-    def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
-        hidden_states = hidden_states[:, 0, :]  # take <s> token (equiv. to [CLS])
-        hidden_states = self.dropout(inputs=hidden_states, training=training)
-        hidden_states = self.dense(inputs=hidden_states)
-        hidden_states = self.classifier_act_fn(hidden_states)
-        hidden_states = self.dropout(inputs=hidden_states, training=training)
-        hidden_states = self.out_proj(hidden_states)
-
-        return hidden_states
-
-
-@add_start_docstrings(
-    """{{cookiecutter.modelname}} Model transformer with a sequence classification/regression head on top
-    e.g., for GLUE tasks. """,
-    {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
+append_call_sample_docstring(
+    Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
 )
-class TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFSequenceClassificationLoss):
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
 
-        self.num_labels = config.num_labels
+class Flax{cookiecutter.camelcase_modelname}}ForCausalLMModule(nn.Module):
+    config: {cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32
 
-        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
-        self.classifier = TF{{cookiecutter.camelcase_modelname}}ClassificationHead(config, name="classifier")
+    def setup(self):
+        self.{{cookiecutter.lowercase_modelname}} = Flax{{cookiecutter.camelcase_modelname}}Module(config=self.config, add_pooling_layer=False, dtype=self.dtype)
+        self.cls = Flax{{cookiecutter.camelcase_modelname}}OnlyMLMHead(config=self.config, dtype=self.dtype)
 
-    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFSequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def call(
+    def __call__(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        training: Optional[bool] = False,
-        **kwargs,
-    ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
-        r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        # Model
+        outputs = self.{{cookiecutter.lowercase_modelname}}(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            labels=labels,
-            training=training,
-            kwargs_call=kwargs,
         )
-        outputs = self.{{cookiecutter.lowercase_modelname}}(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-        )
-        logits = self.classifier(hidden_states=outputs[0], training=inputs["training"])
-        loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=logits)
 
-        if not inputs["return_dict"]:
-            output = (logits,) + outputs[1:]
+        hidden_states = outputs[0]
+        if self.config.tie_word_embeddings:
+            shared_embedding = self.{{cookiecutter.lowercase_modelname}}.variables["params"]["embeddings"]["word_embeddings"]["embedding"]
+        else:
+            shared_embedding = None
 
-            return ((loss,) + output) if loss is not None else output
+        # Compute the prediction scores
+        logits = self.cls(hidden_states, shared_embedding=shared_embedding)
 
-        return TFSequenceClassifierOutput(
-            loss=loss,
+        if not return_dict:
+            return (logits,) + outputs[1:]
+
+        return FlaxCausalLMOutput(
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
-    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+@add_start_docstrings("""{{cookiecutter.camelcase_modelname}} Model with a `language modeling` head on top for CLM training. """, {{cookiecutter.uppercase_modelname}}_START_DOCSTRING)
+class Flax{{cookiecutter.camelcase_modelname}}ForCausalLM(Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel):
+    module_class = Flax{{cookiecutter.camelcase_modelname}}ForCausalLMModule
 
 
-@add_start_docstrings(
-    """{{cookiecutter.modelname}} Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
-    {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
+append_call_sample_docstring(
+    Flax{{cookiecutter.camelcase_modelname}}ForCausalLM, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC
 )
-class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFMultipleChoiceLoss):
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
 
-        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
-        self.sequence_summary = TFSequenceSummary(
-            config, config.initializer_range, name="sequence_summary"
+
+class Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassificationModule(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.{{cookiecutter.lowercase_modelname}} = Flax{{cookiecutter.camelcase_modelname}}Module(config=self.config, dtype=self.dtype)
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+        self.classifier = nn.Dense(
+            self.config.num_labels,
+            dtype=self.dtype,
         )
-        self.classifier = tf.keras.layers.Dense(
-            units=1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
-        )
 
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            tf.Tensor with dummy inputs
-        """
-        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
-
-    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFMultipleChoiceModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def call(
+    def __call__(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        training: Optional[bool] = False,
-        **kwargs,
-    ) -> Union[TFMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
-        r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
-            num_choices]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
-            :obj:`input_ids` above)
-        """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        # Model
+        outputs = self.{{cookiecutter.lowercase_modelname}}(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            labels=labels,
-            training=training,
-            kwargs_call=kwargs,
         )
 
-        if inputs["input_ids"] is not None:
-            num_choices = shape_list(inputs["input_ids"])[1]
-            seq_length = shape_list(inputs["input_ids"])[2]
-        else:
-            num_choices = shape_list(inputs["inputs_embeds"])[1]
-            seq_length = shape_list(inputs["inputs_embeds"])[2]
+        pooled_output = outputs[1]
+        pooled_output = self.dropout(pooled_output, deterministic=deterministic)
+        logits = self.classifier(pooled_output)
 
-        flat_input_ids = (
-            tf.reshape(tensor=inputs["input_ids"], shape=(-1, seq_length)) if inputs["input_ids"] is not None else None
+        if not return_dict:
+            return (logits,) + outputs[2:]
+
+        return FlaxSequenceClassifierOutput(
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
-        flat_attention_mask = (
-            tf.reshape(tensor=inputs["attention_mask"], shape=(-1, seq_length))
-            if inputs["attention_mask"] is not None
-            else None
-        )
-        flat_token_type_ids = (
-            tf.reshape(tensor=inputs["token_type_ids"], shape=(-1, seq_length))
-            if inputs["token_type_ids"] is not None
-            else None
-        )
-        flat_position_ids = (
-            tf.reshape(tensor=inputs["position_ids"], shape=(-1, seq_length))
-            if inputs["position_ids"] is not None
-            else None
-        )
-        flat_inputs_embeds = (
-            tf.reshape(
-                tensor=inputs["inputs_embeds"], shape=(-1, seq_length, shape_list(inputs["inputs_embeds"])[3])
-            )
-            if inputs["inputs_embeds"] is not None
-            else None
-        )
+
+
+@add_start_docstrings(
+    """
+    {{cookiecutter.camelcase_modelname}} Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    output) e.g. for GLUE tasks.
+    """,
+    {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
+)
+class Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification(Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel):
+    module_class = Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassificationModule
+
+
+append_call_sample_docstring(
+    Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
+    _TOKENIZER_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
+    FlaxSequenceClassifierOutput,
+    _CONFIG_FOR_DOC,
+)
+
+
+class Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoiceModule(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.{{cookiecutter.lowercase_modelname}} = Flax{{cookiecutter.camelcase_modelname}}Module(config=self.config, dtype=self.dtype)
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+        self.classifier = nn.Dense(1, dtype=self.dtype)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        num_choices = input_ids.shape[1]
+        input_ids = input_ids.reshape(-1, input_ids.shape[-1]) if input_ids is not None else None
+        attention_mask = attention_mask.reshape(-1, attention_mask.shape[-1]) if attention_mask is not None else None
+        token_type_ids = token_type_ids.reshape(-1, token_type_ids.shape[-1]) if token_type_ids is not None else None
+        position_ids = position_ids.reshape(-1, position_ids.shape[-1]) if position_ids is not None else None
+
+        # Model
         outputs = self.{{cookiecutter.lowercase_modelname}}(
-            input_ids=flat_input_ids,
-            attention_mask=flat_attention_mask,
-            token_type_ids=flat_token_type_ids,
-            position_ids=flat_position_ids,
-            head_mask=inputs["head_mask"],
-            inputs_embeds=flat_inputs_embeds,
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
-        logits = self.sequence_summary(inputs=outputs[0], training=inputs["training"])
-        logits = self.classifier(inputs=logits)
-        reshaped_logits = tf.reshape(tensor=logits, shape=(-1, num_choices))
-        loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=reshaped_logits)
 
-        if not inputs["return_dict"]:
-            output = (reshaped_logits,) + outputs[1:]
+        pooled_output = outputs[1]
+        pooled_output = self.dropout(pooled_output, deterministic=deterministic)
+        logits = self.classifier(pooled_output)
 
-            return ((loss,) + output) if loss is not None else output
+        reshaped_logits = logits.reshape(-1, num_choices)
 
-        return TFMultipleChoiceModelOutput(
-            loss=loss,
+        if not return_dict:
+            return (reshaped_logits,) + outputs[2:]
+
+        return FlaxMultipleChoiceModelOutput(
             logits=reshaped_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
-    @tf.function(input_signature=[{
-        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-        "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
-    }])
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving
-    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFMultipleChoiceModelOutput:
-        output = self.call(input_ids=inputs)
-
-        return self.serving_output(output)
-
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
-    def serving_output(self, output: TFMultipleChoiceModelOutput) -> TFMultipleChoiceModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
-
 
 @add_start_docstrings(
-    """{{cookiecutter.modelname}} Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    """
+    {{cookiecutter.camelcase_modelname}} Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    softmax) e.g. for RocStories/SWAG tasks.
+    """,
     {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
-class TF{{cookiecutter.camelcase_modelname}}ForTokenClassification(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFTokenClassificationLoss):
+class Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoice(Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel):
+    module_class = Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoiceModule
 
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
 
-        self.num_labels = config.num_labels
+overwrite_call_docstring(
+    Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoice, {{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+)
+append_call_sample_docstring(
+    Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoice, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxMultipleChoiceModelOutput, _CONFIG_FOR_DOC
+)
 
-        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
-        self.classifier = tf.keras.layers.Dense(
-            units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
-        )
 
-    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFTokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def call(
+class Flax{{cookiecutter.camelcase_modelname}}ForTokenClassificationModule(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.{{cookiecutter.lowercase_modelname}} = Flax{{cookiecutter.camelcase_modelname}}Module(config=self.config, dtype=self.dtype, add_pooling_layer=False)
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+        self.classifier = nn.Dense(self.config.num_labels, dtype=self.dtype)
+
+    def __call__(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        training: Optional[bool] = False,
-        **kwargs,
-    ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
-        r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
-            1]``.
-        """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        # Model
+        outputs = self.{{cookiecutter.lowercase_modelname}}(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            labels=labels,
-            training=training,
-            kwargs_call=kwargs,
         )
-        outputs = self.{{cookiecutter.lowercase_modelname}}(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-        )
-        sequence_output = outputs[0]
-        sequence_output = self.dropout(inputs=sequence_output, training=inputs["training"])
-        logits = self.classifier(inputs=sequence_output)
-        loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=logits)
 
-        if not inputs["return_dict"]:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
+        hidden_states = outputs[0]
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        logits = self.classifier(hidden_states)
 
-        return TFTokenClassifierOutput(
-            loss=loss,
+        if not return_dict:
+            return (logits,) + outputs[1:]
+
+        return FlaxTokenClassifierOutput(
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
-    def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
-
 
 @add_start_docstrings(
-    """{{cookiecutter.modelname}} Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layer on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """
+    {{cookiecutter.camelcase_modelname}} Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """,
     {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
-class TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFQuestionAnsweringLoss):
+class Flax{{cookiecutter.camelcase_modelname}}ForTokenClassification(Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel):
+    module_class = Flax{{cookiecutter.camelcase_modelname}}ForTokenClassificationModule
 
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
 
-        self.num_labels = config.num_labels
+append_call_sample_docstring(
+    Flax{{cookiecutter.camelcase_modelname}}ForTokenClassification, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxTokenClassifierOutput, _CONFIG_FOR_DOC
+)
 
-        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
-        self.qa_outputs = tf.keras.layers.Dense(
-            units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
-        )
 
-    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFQuestionAnsweringModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def call(
+class Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnsweringModule(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.{{cookiecutter.lowercase_modelname}} = Flax{{cookiecutter.camelcase_modelname}}Module(config=self.config, dtype=self.dtype, add_pooling_layer=False)
+        self.qa_outputs = nn.Dense(self.config.num_labels, dtype=self.dtype)
+
+    def __call__(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        start_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        end_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        training: Optional[bool] = False,
-        **kwargs,
-    ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
-        r"""
-        start_positions (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
-        end_positions (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
-        """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        # Model
+        outputs = self.{{cookiecutter.lowercase_modelname}}(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            start_positions=start_positions,
-            end_positions=end_positions,
-            training=training,
-            kwargs_call=kwargs,
         )
-        outputs = self.{{cookiecutter.lowercase_modelname}}(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-        )
-        sequence_output = outputs[0]
-        logits = self.qa_outputs(inputs=sequence_output)
-        start_logits, end_logits = tf.split(value=logits, num_or_size_splits=2, axis=-1)
-        start_logits = tf.squeeze(input=start_logits, axis=-1)
-        end_logits = tf.squeeze(input=end_logits, axis=-1)
-        loss = None
 
-        if inputs["start_positions"] is not None and inputs["end_positions"] is not None:
-            labels = {"start_position": inputs["start_positions"]}
-            labels["end_position"] = inputs["end_positions"]
-            loss = self.compute_loss(labels=labels, logits=(start_logits, end_logits))
+        hidden_states = outputs[0]
 
-        if not inputs["return_dict"]:
-            output = (start_logits, end_logits) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
+        logits = self.qa_outputs(hidden_states)
+        start_logits, end_logits = logits.split(self.config.num_labels, axis=-1)
+        start_logits = start_logits.squeeze(-1)
+        end_logits = end_logits.squeeze(-1)
 
-        return TFQuestionAnsweringModelOutput(
-            loss=loss,
+        if not return_dict:
+            return (start_logits, end_logits) + outputs[1:]
+
+        return FlaxQuestionAnsweringModelOutput(
             start_logits=start_logits,
             end_logits=end_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
-    def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFQuestionAnsweringModelOutput(
-            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
-        )
+@add_start_docstrings(
+    """
+    {{cookiecutter.camelcase_modelname}} Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
+    {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
+)
+class Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering(Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel):
+    module_class = Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnsweringModule
 
+
+append_call_sample_docstring(
+    Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
+    _TOKENIZER_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
+    FlaxQuestionAnsweringModelOutput,
+    _CONFIG_FOR_DOC,
+)
 {% else %}
 import random
 from typing import Dict, Optional, Tuple, Union
