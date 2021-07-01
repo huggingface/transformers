@@ -25,9 +25,9 @@ Don't forget to sign up [here](https://forms.gle/tVGPhjKXyEsSgUcs8)!
     - [Flax design philosophy in 🤗 Transformers](#flax-design-philosophy-in-transformers)
     - [How to use flax models & scripts](#how-to-use-flax-models-and-example-scripts)
 - [Talks](#talks)
-- [How to use the 🤗 Hub for training](#how-to-use-the-hub-for-training)
+- [How to use the 🤗 Hub for collaboration](#how-to-use-the-hub-for-collaboration)
 - [How to setup TPU VM](#how-to-setup-tpu-vm)
-- [How to use the 🤗 Hub for demo](#how-to-use-the-hub-for-demo)
+- [How to use the 🤗 Hub for demo](#how-to-build-a-demo)
 - [Project evaluation](#project-evaluation)
 - [General Tips & Tricks](#general-tips-and-tricks)
 - [FAQ](#faq)
@@ -977,9 +977,77 @@ For more information, check out [this PR](https://github.com/huggingface/hugging
 
 TODO (should be filled by 2.07.)...
 
-## How to use the hub for training and demo
+## How to build a demo
  
-TODO (should be filled by 1.07.)...
+### Using the Hugging Face Widgets
+
+Hugging Face has over [15 widgets](https://huggingface-widgets.netlify.app/) for different use cases using 🤗 Transformers library. Some of them also support [3rd party libraries](https://huggingface.co/docs/hub/libraries) such as [Sentence Similarity](https://huggingface.co/sentence-transformers/paraphrase-xlm-r-multilingual-v1) with Sentence Transformers and [Text to Speech](https://huggingface.co/julien-c/ljspeech_tts_train_tacotron2_raw_phn_tacotron_g2p_en_no_space_train) with [ESPnet](https://github.com/espnet/espnet).
+
+All the widgets are open sourced in the `huggingface_hub` [repo](https://github.com/huggingface/huggingface_hub/tree/main/widgets). Here is a summary of existing widgets:
+
+**NLP**
+* **Conversational:** To have the best conversations!. [Example](https://huggingface.co/microsoft/DialoGPT-large?).
+* **Feature Extraction:** Retrieve the input embeddings. [Example](https://huggingface.co/sentence-transformers/distilbert-base-nli-mean-tokens?text=test).
+* **Fill Mask:** Predict potential words for a mask token. [Example](https://huggingface.co/bert-base-uncased?).
+* **Question Answering:** Given a context and a question, predict the answer. [Example](https://huggingface.co/bert-large-uncased-whole-word-masking-finetuned-squad).
+* **Sentence Simmilarity:** Predict how similar a set of sentences are. Useful for Sentence Transformers.
+* **Summarization:** Given a text, output a summary of it. [Example](https://huggingface.co/sshleifer/distilbart-cnn-12-6).
+* **Table Question Answering:** Given a table and a question, predict the answer. [Example](https://huggingface.co/google/tapas-base-finetuned-wtq).
+* **Text Generation:** Generate text based on a prompt. [Example](https://huggingface.co/gpt2)
+* **Token Classification:** Useful for tasks such as Named Entity Recognition and Part of Speech. [Example](https://huggingface.co/dslim/bert-base-NER).
+* **Zero-Shot Classification:** Too cool to explain with words. Here is an [example](https://huggingface.co/typeform/distilbert-base-uncased-mnli)
+* ([WIP](https://github.com/huggingface/huggingface_hub/issues/99)) **Table to Text Generation**.
+
+**Speech**
+* **Audio to Audio:** For tasks such as audio source separation or speech enhancement. 
+* **Automatic Speech Recognition:** Convert audio to text. [Example](https://huggingface.co/facebook/wav2vec2-base-960h)
+* **Text to Speech**: Convert text to audio.
+
+**Image**
+* **Image Classification:** Given an image, predict its class. [Example](https://huggingface.co/osanseviero/llamastic).
+* ([WIP](https://github.com/huggingface/huggingface_hub/issues/100)) **Zero Shot Image Classification**
+* ([WIP](https://github.com/huggingface/huggingface_hub/issues/112)) **Image Captioning**
+* ([WIP](https://github.com/huggingface/huggingface_hub/issues/113)) **Text to Image Generation**
+* ([Proposed](https://github.com/huggingface/huggingface_hub/issues/127)) **Visual Question Answering**
+
+You can propose and implement new widgets by [opening an issue](https://github.com/huggingface/huggingface_hub/issues). Contributions are welcomed!
+
+
+### Using a Streamlit demo
+
+Sometimes you might be using different libraries or a very specific application that is not well supported by the current widgets. In this case, [Streamlit](https://streamlit.io/) can be an excellent option to build a cool visual demo. Setting up a Streamlit application is straightforward and in Python!
+
+A common use case is how to load files you have in your model repository in the Hub from the Streamlit demo. The `huggingface_hub` library is here to help you!
+
+```
+pip install huggingface_hub
+```
+
+Here is an example downloading (and caching!) a specific file directly from the Hub
+```
+from huggingface_hub import hf_hub_download
+filepath = hf_hub_download("flax-community/roberta-base-als", "flax_model.msgpack");
+```
+
+In many cases you will want to download the full repository. Here is an example downloading all the files from a repo. You can even specify specific revisions!
+
+```
+from huggingface_hub import snapshot_download
+local_path = snapshot_download("flax-community/roberta-base-als");
+```
+
+Note that if you're using 🤗 Transformers library, you can quickly load the model and tokenizer as follows
+```
+from transformers import AutoTokenizer, AutoModelForMaskedLM
+  
+tokenizer = AutoTokenizer.from_pretrained("REPO_ID")
+model = AutoModelForMaskedLM.from_pretrained("REPO_ID")
+```
+
+
+We'll provide more examples on Streamlit demos next week. Stay tuned!
+
+### TODO: A third and cool option coming soon
 
 ## Project evaluation
 
