@@ -493,46 +493,6 @@ if is_torch_available():
     _import_structure["generation_utils"] = ["top_k_top_p_filtering"]
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
-    _import_structure["models.rembert"].extend(
-        [
-            "REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "RemBertForMaskedLM",
-            "RemBertForCausalLM",
-            "RemBertForMultipleChoice",
-            "RemBertForQuestionAnswering",
-            "RemBertForSequenceClassification",
-            "RemBertForTokenClassification",
-            "RemBertLayer",
-            "RemBertModel",
-            "RemBertPreTrainedModel",
-            "load_tf_weights_in_rembert",
-        ]
-    )
-
-    _import_structure["models.wav2vec2"].extend(
-        [
-            "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "Wav2Vec2ForCTC",
-            "Wav2Vec2ForMaskedLM",
-            "Wav2Vec2Model",
-            "Wav2Vec2PreTrainedModel",
-        ]
-    )
-    _import_structure["models.convbert"].extend(
-        [
-            "CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ConvBertForMaskedLM",
-            "ConvBertForMultipleChoice",
-            "ConvBertForQuestionAnswering",
-            "ConvBertForSequenceClassification",
-            "ConvBertForTokenClassification",
-            "ConvBertLayer",
-            "ConvBertModel",
-            "ConvBertPreTrainedModel",
-            "load_tf_weights_in_convbert",
-        ]
-    )
-    # PyTorch models structure
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -547,6 +507,7 @@ if is_torch_available():
             "load_tf_weights_in_albert",
         ]
     )
+
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_CAUSAL_LM_MAPPING",
@@ -578,7 +539,6 @@ if is_torch_available():
             "AutoModelWithLMHead",
         ]
     )
-
     _import_structure["models.bart"].extend(
         [
             "BART_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -591,6 +551,7 @@ if is_torch_available():
             "PretrainedBartModel",
         ]
     )
+    # PyTorch models structure
     _import_structure["models.bert"].extend(
         [
             "BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -616,6 +577,7 @@ if is_torch_available():
             "load_tf_weights_in_bert_generation",
         ]
     )
+
     _import_structure["models.big_bird"].extend(
         [
             "BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -693,6 +655,20 @@ if is_torch_available():
             "CLIPPreTrainedModel",
             "CLIPTextModel",
             "CLIPVisionModel",
+        ]
+    )
+    _import_structure["models.convbert"].extend(
+        [
+            "CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ConvBertForMaskedLM",
+            "ConvBertForMultipleChoice",
+            "ConvBertForQuestionAnswering",
+            "ConvBertForSequenceClassification",
+            "ConvBertForTokenClassification",
+            "ConvBertLayer",
+            "ConvBertModel",
+            "ConvBertPreTrainedModel",
+            "load_tf_weights_in_convbert",
         ]
     )
     _import_structure["models.convbert"].extend(
@@ -1018,6 +994,21 @@ if is_torch_available():
             "ReformerPreTrainedModel",
         ]
     )
+    _import_structure["models.rembert"].extend(
+        [
+            "REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RemBertForCausalLM",
+            "RemBertForMaskedLM",
+            "RemBertForMultipleChoice",
+            "RemBertForQuestionAnswering",
+            "RemBertForSequenceClassification",
+            "RemBertForTokenClassification",
+            "RemBertLayer",
+            "RemBertModel",
+            "RemBertPreTrainedModel",
+            "load_tf_weights_in_rembert",
+        ]
+    )
     _import_structure["models.retribert"].extend(
         ["RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST", "RetriBertModel", "RetriBertPreTrainedModel"]
     )
@@ -1120,6 +1111,15 @@ if is_torch_available():
             "ViTForImageClassification",
             "ViTModel",
             "ViTPreTrainedModel",
+        ]
+    )
+    _import_structure["models.wav2vec2"].extend(
+        [
+            "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Wav2Vec2ForCTC",
+            "Wav2Vec2ForMaskedLM",
+            "Wav2Vec2Model",
+            "Wav2Vec2PreTrainedModel",
         ]
     )
     _import_structure["models.wav2vec2"].extend(
@@ -1479,8 +1479,8 @@ if is_tf_available():
     _import_structure["models.rembert"].extend(
         [
             "TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFRemBertForMaskedLM",
             "TFRemBertForCausalLM",
+            "TFRemBertForMaskedLM",
             "TFRemBertForMultipleChoice",
             "TFRemBertForQuestionAnswering",
             "TFRemBertForSequenceClassification",
@@ -2913,7 +2913,6 @@ if TYPE_CHECKING:
             TFOpenAIGPTModel,
             TFOpenAIGPTPreTrainedModel,
         )
-        from .models.pegasus import TFPegasusForConditionalGeneration, TFPegasusModel
         from .models.pegasus import TFPegasusForConditionalGeneration, TFPegasusModel, TFPegasusPreTrainedModel
         from .models.rag import TFRagModel, TFRagPreTrainedModel, TFRagSequenceForGeneration, TFRagTokenForGeneration
         from .models.rembert import (

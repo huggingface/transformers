@@ -37,8 +37,8 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_rembert"] = [
         "REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "RemBertForMaskedLM",
         "RemBertForCausalLM",
+        "RemBertForMaskedLM",
         "RemBertForMultipleChoice",
         "RemBertForQuestionAnswering",
         "RemBertForSequenceClassification",
@@ -53,8 +53,8 @@ if is_torch_available():
 if is_tf_available():
     _import_structure["modeling_tf_rembert"] = [
         "TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "TFRemBertForMaskedLM",
         "TFRemBertForCausalLM",
+        "TFRemBertForMaskedLM",
         "TFRemBertForMultipleChoice",
         "TFRemBertForQuestionAnswering",
         "TFRemBertForSequenceClassification",

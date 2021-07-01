@@ -464,7 +464,7 @@ class RemBertModelIntegrationTest(unittest.TestCase):
     def test_inference_model(self):
         # Test exact values at the last hidden layer
         # model = RemBertModel.from_pretrained("rembert-large")
-        model = RemBertModel.from_pretrained("artefacts/pt_model")
+        model = RemBertModel.from_pretrained("../rembert/")
         # FIXME(tfevry): Remove once uploaded to model hub
         input_ids = torch.tensor([[312, 56498, 313, 2125, 313]])
         segment_ids = torch.tensor([[0, 0, 0, 1, 1]])

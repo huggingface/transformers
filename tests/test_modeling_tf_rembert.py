@@ -308,8 +308,8 @@ class TFRemBertModelTest(TFModelTesterMixin, unittest.TestCase):
 class TFRemBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_model(self):
-        # model = TFRemBertModel.from_pretrained("rembert-large")
-        model = TFRemBertModel.from_pretrained("artefacts/pt_model")
+        # model = TFRemBertModel.from_pretrained("rembert")
+        model = TFRemBertModel.from_pretrained("../rembert")
         # FIXME(tfevry): Remove once uploaded to model hub
 
         input_ids = tf.constant([[312, 56498, 313, 2125, 313]])

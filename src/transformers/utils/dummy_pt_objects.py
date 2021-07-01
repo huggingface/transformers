@@ -2799,6 +2799,7 @@ class RemBertForCausalLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+
 class RemBertForMaskedLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
