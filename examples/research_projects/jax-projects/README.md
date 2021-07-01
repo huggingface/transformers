@@ -813,7 +813,7 @@ The advantages of using a repository on the 🤗 hub are:
 We highly recommend each team to make use of the 🤗 hub during the event.
 To better understand how the repository and the hub in general functions, please take a look at the documentation and the videos [here](https://huggingface.co/docs/hub).
 
-Now let's explain in more detail how a project can be created on the hub. Having an officially defined project on [this](https://docs.google.com/spreadsheets/d/1GpHebL7qrwJOc9olTpIPgjf8vOS0jNb6zR_B8x_Jtik/edit?usp=sharing) Excel sheet you should be part of [the Flax Community organization on the hub](https://huggingface.co/flax-community). All repositories should be created under this organization so that write access can be shared and everybody can easily access other participants'
+Now let's explain in more detail how a project can be created on the hub. Having an officially defined project on [this](https://docs.google.com/spreadsheets/d/1GpHebL7qrwJOc9olTpIPgjf8vOS0jNb6zR_B8x_Jtik/edit?usp=sharing) Google Sheet you should be part of [the Flax Community organization on the hub](https://huggingface.co/flax-community). All repositories should be created under this organization so that write access can be shared and everybody can easily access other participants'
 work 🤗. Note that we are giving each team member access to all repositories created under [flax-community](https://huggingface.co/flax-community), but we encourage participants to only clone and edit repositories corresponding to one's teams. If you want to help other teams, please ask them before changing files in their repository! The integrated git version control keeps track of 
 all changes, so in case a file was deleted by mistake, it is trivial to re-create it.
 
@@ -841,7 +841,7 @@ Next we can clone the repo:
 $ git clone https://huggingface.co/flax-community/roberta-base-als
 ```
 
-We've now clone the model's repository and should it under `roberta-base-als`. As you can see,
+We have now cloned the model's repository and it should be under `roberta-base-als`. As you can see,
 we have all the usual git functionalities in this repo - when adding a file, we can do `git add .`, `git commit -m "add file"` and `git push` 
 as usual. Let's try it out by adding the model's config.
 
@@ -867,7 +867,7 @@ $ git add . && git commit -m "add config" && git push
 ```
 
 Cool! The file is now displayed on the model page under the [files tab](https://huggingface.co/flax-community/roberta-base-als/tree/main).
-We encourage you to upload all files except maybe the actual data files to the repository. This includes training scripts, model weigths,
+We encourage you to upload all files except maybe the actual data files to the repository. This includes training scripts, model weights,
 model configurations, training logs, etc...
 
 Next, let's create a tokenizer and save it to the model dir by following the instructions of the [official Flax MLM README](https://github.com/huggingface/transformers/tree/master/examples/flax/language-modeling#train-tokenizer). We can again use a simple Python shell.
@@ -961,7 +961,8 @@ params = model.init(key2, x)
 
 bytes_output = serialization.to_bytes(params)
 
-with Repository("flax-model", clone_from="flax-community/flax-model-dummy", use_auth_token=True).commit("My cool Flax model :)"):
+repo = Repository("flax-model", clone_from="flax-community/flax-model-dummy", use_auth_token=True)
+with repo.commit("My cool Flax model :)"):
     with open("flax_model.msgpack", "wb") as f:
         f.write(bytes_output)
 
