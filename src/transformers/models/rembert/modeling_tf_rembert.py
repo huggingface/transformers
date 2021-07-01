@@ -46,7 +46,6 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
-    TFSequenceSummary,
     TFTokenClassificationLoss,
     get_initializer,
     input_processing,
@@ -434,10 +433,11 @@ class TFRemBertLMPredictionHead(tf.keras.layers.Layer):
             self.activation = get_tf_activation(config.hidden_act)
         else:
             self.activation = config.hidden_act
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
 
     def build(self, input_shape: tf.TensorShape):
         self.decoder = self.add_weight(
-            name="output_embeddings",
+            name="decoder/weight",
             shape=[self.vocab_size, self.output_embedding_size],
             initializer=get_initializer(self.initializer_range),
         )
@@ -448,10 +448,10 @@ class TFRemBertLMPredictionHead(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def get_output_embeddings(self) -> tf.keras.layers.Layer:
-        return self.decoder
+        return self
 
-    def set_output_embeddings(self, value: tf.Variable):
-        self.decoder.weight = value
+    def set_output_embeddings(self, value):
+        self.decoder = value
         self.decoder.vocab_size = shape_list(value)[0]
 
     def get_bias(self) -> Dict[str, tf.Variable]:
@@ -466,7 +466,7 @@ class TFRemBertLMPredictionHead(tf.keras.layers.Layer):
         hidden_states = self.activation(hidden_states)
         seq_length = shape_list(tensor=hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.output_embedding_size])
-        # import pdb; pdb.set_trace()
+        hidden_states = self.LayerNorm(hidden_states)
         hidden_states = tf.matmul(a=hidden_states, b=self.decoder, transpose_b=True)
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.decoder_bias)
@@ -788,7 +788,7 @@ class TFRemBertModel(TFRemBertPreTrainedModel):
             last_hidden_state=output.last_hidden_state,
             pooler_output=output.pooler_output,
             hidden_states=hs,
-            attentions=attns
+            attentions=attns,
         )
 
 
@@ -803,7 +803,7 @@ class TFRemBertForMaskedLM(TFRemBertPreTrainedModel, TFMaskedLanguageModelingLos
                 "bi-directional self-attention."
             )
 
-        self.rembert = TFRemBertMainLayer(config, name="rembert")
+        self.rembert = TFRemBertMainLayer(config, name="rembert", add_pooling_layer=False)
         self.mlm = TFRemBertMLMHead(config, input_embeddings=self.rembert.embeddings, name="mlm___cls")
 
     def get_lm_head(self) -> tf.keras.layers.Layer:
@@ -899,7 +899,7 @@ class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLos
         if not config.is_decoder:
             logger.warning("If you want to use `TFRemBertForCausalLM` as a standalone, add `is_decoder=True.`")
 
-        self.rembert = TFRemBertMainLayer(config, name="rembert")
+        self.rembert = TFRemBertMainLayer(config, name="rembert", add_pooling_layer=False)
         self.mlm = TFRemBertMLMHead(config, input_embeddings=self.rembert.embeddings, name="mlm___cls")
 
     def get_lm_head(self) -> tf.keras.layers.Layer:
@@ -1251,7 +1251,7 @@ class TFRemBertForTokenClassification(TFRemBertPreTrainedModel, TFTokenClassific
 
         self.num_labels = config.num_labels
 
-        self.rembert = TFRemBertMainLayer(config, name="rembert")
+        self.rembert = TFRemBertMainLayer(config, name="rembert", add_pooling_layer=False)
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"

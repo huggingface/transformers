@@ -25,6 +25,7 @@ from ...file_utils import (
     is_torch_available,
 )
 
+
 _import_structure = {
     "configuration_rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"],
     "tokenization_rembert": ["RemBertTokenizer"],
@@ -66,6 +67,7 @@ if is_tf_available():
 
 if TYPE_CHECKING:
     from .configuration_rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig
+
     if is_sentencepiece_available():
         from .tokenization_rembert import RemBertTokenizer
 
