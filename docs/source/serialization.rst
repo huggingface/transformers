@@ -21,10 +21,130 @@ Projects `ONNX (Open Neural Network eXchange) <http://onnx.ai>`_ and `ONNXRuntim
 unified and community-driven format to store and, by extension, efficiently execute neural network leveraging a variety
 of hardware and dedicated optimizations.
 
+
 Starting from transformers v2.10.0 we partnered with ONNX Runtime to provide an easy export of transformers models to
 the ONNX format. You can have a look at the effort by looking at our joint blog post `Accelerate your NLP pipelines
 using Hugging Face Transformers and ONNX Runtime
 <https://medium.com/microsoftazure/accelerate-your-nlp-pipelines-using-hugging-face-transformers-and-onnx-runtime-2443578f4333>`_.
+
+
+Configuration-based approach
+-----------------------------------------------------------------------------------------------------------------------
+
+Transformers v4.9.0 introduces a new package: ``transformers.onnx``. This package allows converting checkpoints
+to an ONNX graph by leveraging configuration objects. These configuration objects come ready made for a
+number of model architectures, and are made to be easily extendable to other architectures.
+
+Ready-made configurations include the following models:
+
+- ALBERT
+- BART
+- BERT
+- DistilBERT
+- GPT-2
+- RoBERTa
+- T5
+- XLM-RoBERTa
+
+This conversion is handled with the PyTorch version of models - it, therefore, requires PyTorch to be installed.
+If you would like to be able to convert from TensorFlow, please let us know by opening an issue.
+
+.. note::
+    The models showcased here are close to fully feature complete, but do lack some features that are currently
+    in development. Namely, the ability to handle the past key values for decoder models is currently in the works.
+
+
+Converting an ONNX model using the ``transformers.onnx`` package
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The package may be used as a Python module:
+
+.. code-block::
+
+    python -m transformers.onnx --help
+
+    usage: Hugging Face ONNX Exporter tool [-h] -m MODEL -f {pytorch} [--features {default}] [--opset OPSET] [--atol ATOL] output
+
+    positional arguments:
+      output                Path indicating where to store generated ONNX model.
+
+    optional arguments:
+      -h, --help            show this help message and exit
+      -m MODEL, --model MODEL
+                            Model's name of path on disk to load.
+      -f {pytorch}, --framework {pytorch}
+                            Framework to use when exporting. Possible values are: {'pytorch'}
+      --features {default}  Export the model with some additional features.
+      --opset OPSET         ONNX opset version to export the model with (default 12).
+      --atol ATOL           Absolute difference tolerance when validating the model.
+
+Exporting a checkpoint using a ready-made configuration can be done as follows:
+
+.. code-block::
+
+    python -m transformers.onnx -f pytorch --model=bert-base-cased onnx/bert-base-cased/
+
+This exports an ONNX graph of the mentioned checkpoint. Here it is `bert-base-cased`, but it can be any model from
+the hub, or a local path.
+
+It will be exported under ``onnx/bert-base-cased``. You should see similar logs:
+
+.. code-block::
+
+    Validating ONNX model...
+            -[✓] ONNX model outputs' name match reference model ({'pooler_output', 'last_hidden_state'}
+            - Validating ONNX Model output "last_hidden_state":
+                    -[✓] (2, 8, 768) matchs (2, 8, 768)
+                    -[✓] all values close (atol: 0.0001)
+            - Validating ONNX Model output "pooler_output":
+                    -[✓] (2, 768) matchs (2, 768)
+                    -[✓] all values close (atol: 0.0001)
+    All good, model saved at: onnx/bert-base-cased/model.onnx
+
+
+Implementing a custom configuration for an unsupported architecture
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Let's take a look at the changes necessary to add a custom configuration for an unsupported architecture. Firstly,
+we will need a custom ONNX configuration object that details the model inputs and outputs. The BERT ONNX configuration
+is visible below:
+
+.. code-block::
+
+    class BertOnnxConfig(OnnxConfig):
+        @property
+        def inputs(self) -> Mapping[str, Mapping[int, str]]:
+            return {
+                "input_ids": {0: "batch", 1: "sequence"},
+                "attention_mask": {0: "batch", 1: "sequence"},
+                "token_type_ids": {0: "batch", 1: "sequence"},
+            }
+
+        @property
+        def outputs(self) -> Mapping[str, Mapping[int, str]]:
+            return {"last_hidden_state": {0: "batch", 1: "sequence"}, "pooler_output": {0: "batch"}}
+
+Let's understand what's happening here. This configuration has two properties: the inputs, and the outputs.
+
+The inputs return a dictionary, where each key corresponds to an expected input, and each value indicates the axis
+of that input.
+
+For BERT, there are three necessary inputs. These three inputs are of similar shape, which is made up of two
+dimensions: the batch is the first dimension, and the second is the sequence.
+
+The outputs return a similar dictionary, where, once again, each key corresponds to an expected output, and each
+value indicates the axis of that output.
+
+Once this is done, a single step remains: adding this configuration object to the initialisation of the model class,
+and to the general ``transformers`` initialisation.
+
+
+Graph conversion
+-----------------------------------------------------------------------------------------------------------------------
+
+.. note::
+    The approach detailed here is bing deprecated. We recommend you follow the part above for an up to date approach.
+
 
 Exporting a model is done through the script `convert_graph_to_onnx.py` at the root of the transformers sources. The
 following command shows how easy it is to export a BERT model from the library, simply run:
