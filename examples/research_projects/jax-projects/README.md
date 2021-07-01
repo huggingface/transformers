@@ -719,7 +719,7 @@ Super excited to kick off 3 days of talks around JAX / Flax, Transformers, large
 |-------------|---------------------------------|------------------------|
 | Lucas Beyer, Google Brain | Vision Transformer      | 5.00pm-5.30 CEST / 8.00am-8.30 PST      | 
 | Ben Wang, EleutherAI | Multihost Training in Mesh Transformer JAX      | 5.30pm-6.00 CEST / 8.30am-9.00 PST       | 
-| DeepMind, Soňa Mokrá & Junhyuk Oh, DeepMind | TBD      |    6.00pm-6.30 CEST / 9.00am-9.30am PST   | 
+| Iurii Kemaev, Soňa Mokrá, Junhyuk Oh, DeepMind | DeepMind JAX Ecosystem      |    6.00pm-6.30 CEST / 9.00am-9.30am PST   | 
 | Siddhartha Kamalakara, Joanna Yoo & João G M Araújo, Cohere | Training large scale language models      | 6:30pm-7.00pm CEST / 9:30am-10.00am PST      | 
 
 ### Talks & Speakers
