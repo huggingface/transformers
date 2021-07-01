@@ -212,10 +212,9 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
 
             common_inputs["attention_mask"] = {0: "batch"}
         else:
-            common_inputs = OrderedDict({
-                "input_ids": {0: "batch", 1: "sequence"},
-                "attention_mask": {0: "batch", 1: "sequence"}
-            })
+            common_inputs = OrderedDict(
+                {"input_ids": {0: "batch", 1: "sequence"}, "attention_mask": {0: "batch", 1: "sequence"}}
+            )
 
         return common_inputs
 
@@ -242,9 +241,7 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
         common_inputs = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
 
         # We need to order the input in the way they appears in the forward()
-        ordered_inputs = OrderedDict({
-            "input_ids": common_inputs["input_ids"]
-        })
+        ordered_inputs = OrderedDict({"input_ids": common_inputs["input_ids"]})
 
         # Need to add the past_keys
         if self.use_past:

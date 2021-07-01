@@ -3,26 +3,28 @@ from tempfile import NamedTemporaryFile
 from unittest import TestCase
 from unittest.mock import patch
 
-from transformers import (
+from transformers import (  # LongformerConfig,
     AlbertConfig,
     AutoTokenizer,
+    BartConfig,
     DistilBertConfig,
-    # LongformerConfig,
+    GPT2Config,
     RobertaConfig,
+    T5Config,
     XLMRobertaConfig,
-    is_torch_available, BartConfig, GPT2Config, T5Config,
+    is_torch_available,
 )
 from transformers.models.albert import AlbertOnnxConfig
 from transformers.models.bart import BartOnnxConfig
 from transformers.models.bert.configuration_bert import BertConfig, BertOnnxConfig
 from transformers.models.distilbert import DistilBertOnnxConfig
+
 # from transformers.models.longformer import LongformerOnnxConfig
 from transformers.models.gpt2 import GPT2OnnxConfig
 from transformers.models.roberta import RobertaOnnxConfig
 from transformers.models.t5 import T5OnnxConfig
 from transformers.models.xlm_roberta import XLMRobertaOnnxConfig
 from transformers.onnx import EXTERNAL_DATA_FORMAT_SIZE_LIMIT, OnnxConfig, ParameterFormat
-
 from transformers.onnx.config import DEFAULT_ONNX_OPSET, OnnxConfigWithPast
 from transformers.onnx.convert import validate_model_outputs
 from transformers.onnx.utils import (
@@ -164,7 +166,16 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
 
 
 if is_torch_available():
-    from transformers import AlbertModel, BartModel, BertModel, DistilBertModel, GPT2Model, RobertaModel, T5Model, XLMRobertaModel
+    from transformers import (
+        AlbertModel,
+        BartModel,
+        BertModel,
+        DistilBertModel,
+        GPT2Model,
+        RobertaModel,
+        T5Model,
+        XLMRobertaModel,
+    )
 
     PYTORCH_EXPORT_DEFAULT_MODELS = {
         # ("ALBERT", "albert-base-v2", AlbertModel, AlbertConfig, AlbertOnnxConfig),
@@ -228,15 +239,16 @@ class OnnxExportTestCaseV2(TestCase):
 
                 self.assertTrue(hasattr(onnx_config, "use_past"), "OnnxConfigWithPast should have use_past attribute.")
                 self.assertTrue(
-                    onnx_config.use_past,
-                    "OnnxConfigWithPast.use_past should be if called with with_past()"
+                    onnx_config.use_past, "OnnxConfigWithPast.use_past should be if called with with_past()"
                 )
 
                 with NamedTemporaryFile("w") as output:
-                    onnx_inputs, onnx_outputs = \
-                        convert_pytorch(tokenizer, model, onnx_config, DEFAULT_ONNX_OPSET, Path(output.name))
+                    output = Path(output.name)
+                    onnx_inputs, onnx_outputs = convert_pytorch(
+                        tokenizer, model, onnx_config, DEFAULT_ONNX_OPSET, output
+                    )
 
                     try:
-                        validate_model_outputs(onnx_config, tokenizer, model, Path(output.name), onnx_outputs, 1e-5)
+                        validate_model_outputs(onnx_config, tokenizer, model, output, onnx_outputs, 1e-5)
                     except ValueError as ve:
                         self.fail(f"{name} -> {ve}")
