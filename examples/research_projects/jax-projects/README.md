@@ -27,7 +27,10 @@ Don't forget to sign up [here](https://forms.gle/tVGPhjKXyEsSgUcs8)!
 - [Talks](#talks)
 - [How to use the 🤗 Hub for training](#how-to-use-the-hub-for-collaboration)
 - [How to setup TPU VM](#how-to-setup-tpu-vm)
-- [How to use the 🤗 Hub for demo](#how-to-build-a-demo)
+- [How to build a demo](#how-to-build-a-demo)
+    - [Using the Hugging Face Widgets](#using-the-hugging-face-widgets)
+    - [Using a Streamlit demo](#using-a-streamlit-demo)
+    - [Using a Gradio demo](#using-a-gradio-demo)
 - [Project evaluation](#project-evaluation)
 - [General Tips & Tricks](#general-tips-and-tricks)
 - [FAQ](#faq)
@@ -1047,7 +1050,14 @@ model = AutoModelForMaskedLM.from_pretrained("REPO_ID")
 
 We'll provide more examples on Streamlit demos next week. Stay tuned!
 
-### TODO: A third and cool option coming soon
+### Using a Gradio demo
+
+You can also use [Gradio](https://gradio.app/) to share your demos! [Here](https://huggingface.co/blog/gradio) is an example using the Gradio library to create a GUI for a Hugging Face model.
+
+More to come!
+
+
+### TODO: A fourth and cool option coming soon
 
 ## Project evaluation
 
