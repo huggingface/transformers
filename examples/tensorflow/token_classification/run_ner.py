@@ -27,7 +27,7 @@ from typing import Optional
 import datasets
 import numpy as np
 import tensorflow as tf
-from datasets import ClassLabel, load_dataset, load_metric
+from datasets import ClassLabel, load_dataset
 
 import transformers
 from transformers import (
@@ -50,6 +50,7 @@ require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/toke
 # You should update this to your particular problem to have better documentation of `model_type`
 MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+
 
 # region Command-line arguments
 @dataclass
