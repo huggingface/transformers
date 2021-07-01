@@ -105,7 +105,9 @@ class TextClassificationPipeline(Pipeline):
             return 1.0 / (1.0 + np.exp(-_outputs))
 
         def softmax(_outputs):
-            return np.exp(_outputs) / np.exp(_outputs).sum(-1, keepdims=True)
+            maxes = np.max(_outputs, axis=-1, keepdims=True)
+            shifted_exp = np.exp(_outputs - maxes)
+            return shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
 
         if function_to_apply == "default":
             if self.model.config.num_labels == 1:
