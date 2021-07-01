@@ -74,7 +74,7 @@ def get_model_from_features(features: str, model: str):
 
 
 def check_supported_model_or_raise(
-    model: Union[PreTrainedModel, TFPreTrainedModel], features: str = "default"
+    model: PreTrainedModel, features: str = "default"
 ) -> Tuple[str, Callable]:
     """
     Check whether or not the model has the requested features
