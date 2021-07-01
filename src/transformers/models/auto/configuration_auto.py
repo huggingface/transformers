@@ -33,6 +33,7 @@ from ..blenderbot_small.configuration_blenderbot_small import (
     BlenderbotSmallConfig,
 )
 from ..camembert.configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
+from ..canine.configuration_canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig
 from ..clip.configuration_clip import CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, CLIPConfig
 from ..convbert.configuration_convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig
 from ..ctrl.configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
@@ -96,6 +97,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     for pretrained_map in [
         # Add archive maps here
         VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -155,6 +157,7 @@ CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
         ("visual_bert", VisualBertConfig),
+        ("canine", CanineConfig),
         ("roformer", RoFormerConfig),
         ("clip", CLIPConfig),
         ("bigbird_pegasus", BigBirdPegasusConfig),
@@ -220,6 +223,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
         ("visual_bert", "VisualBert"),
+        ("canine", "Canine"),
         ("roformer", "RoFormer"),
         ("clip", "CLIP"),
         ("bigbird_pegasus", "BigBirdPegasus"),

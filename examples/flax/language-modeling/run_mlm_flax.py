@@ -269,7 +269,7 @@ def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndar
     return batch_idx
 
 
-def write_metric(train_metrics, eval_metrics, train_time, step):
+def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step):
     summary_writer.scalar("train_time", train_time, step)
 
     train_metrics = get_metrics(train_metrics)
@@ -308,7 +308,7 @@ if __name__ == "__main__":
 
     # Setup logging
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         level="NOTSET",
         datefmt="[%X]",
     )
@@ -472,7 +472,7 @@ if __name__ == "__main__":
 
     # Enable tensorboard only on the master node
     if has_tensorboard and jax.process_index() == 0:
-        summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir).joinpath("logs").as_posix())
+        summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir))
 
     # Data collator
     # This one will take care of randomly masking the tokens.
@@ -508,6 +508,9 @@ if __name__ == "__main__":
     # to bias and LayerNorm scale parameters. decay_mask_fn returns a
     # mask boolean with the same structure as the parameters.
     # The mask is True for parameters that should be decayed.
+    # Note that this mask is specifically adapted for FlaxBERT-like models.
+    # For other models, one should correct the layer norm parameter naming
+    # accordingly.
     def decay_mask_fn(params):
         flat_params = traverse_util.flatten_dict(params)
         flat_mask = {path: (path[-1] != "bias" and path[-2:] != ("LayerNorm", "scale")) for path in flat_params}
@@ -582,12 +585,12 @@ if __name__ == "__main__":
     # Replicate the train state on each device
     state = jax_utils.replicate(state)
 
-    train_metrics = []
     train_time = 0
     epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
     for epoch in epochs:
         # ======================== Training ================================
         train_start = time.time()
+        train_metrics = []
 
         # Create sampling rng
         rng, input_rng = jax.random.split(rng)
@@ -642,9 +645,14 @@ if __name__ == "__main__":
         # Save metrics
         if has_tensorboard and jax.process_index() == 0:
             cur_step = epoch * (len(tokenized_datasets["train"]) // train_batch_size)
-            write_metric(train_metrics, eval_metrics, train_time, cur_step)
+            write_metric(summary_writer, train_metrics, eval_metrics, train_time, cur_step)
 
-    # save last checkpoint
-    if jax.process_index() == 0:
-        params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
-        model.save_pretrained(training_args.output_dir, params=params)
+        # save checkpoint after each epoch and push checkpoint to the hub
+        if jax.process_index() == 0:
+            params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+            model.save_pretrained(
+                training_args.output_dir,
+                params=params,
+                push_to_hub=training_args.push_to_hub,
+                commit_message=f"Saving weights and logs of epoch {epoch+1}",
+            )
