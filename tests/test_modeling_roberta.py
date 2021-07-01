@@ -535,8 +535,10 @@ class RobertaModelIntegrationTest(TestCasePlus):
     def test_lm_head_ignore_keys(self):
         keys_to_ignore_on_save_tied = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
         keys_to_ignore_on_save_untied = [r"lm_head.decoder.bias"]
-        config_tied = RobertaConfig.from_pretrained(ROBERTA_TINY)
-        config_untied = deepcopy(config_tied)
+        config = RobertaConfig.from_pretrained(ROBERTA_TINY)
+        config_tied = deepcopy(config)
+        config_tied.tie_word_embeddings = True
+        config_untied = deepcopy(config)
         config_untied.tie_word_embeddings = False
         for cls in [RobertaForMaskedLM, RobertaForCausalLM]:
             model = cls(config_tied)
