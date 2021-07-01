@@ -874,7 +874,7 @@ Next, let's create a tokenizer and save it to the model dir by following the ins
 
 ```python
 from datasets import load_dataset
-from tokenizers import trainers, Tokenizer, normalizers, ByteLevelBPETokenizer
+from tokenizers import ByteLevelBPETokenizer
 
 # load dataset
 dataset = load_dataset("oscar", "unshuffled_deduplicated_als", split="train")
@@ -899,7 +899,7 @@ tokenizer.train_from_iterator(batch_iterator(), vocab_size=50265, min_frequency=
 tokenizer.save("./tokenizer.json")
 ```
 
-This creates and saves our tokenizer directly in the model repository.
+This creates and saves our tokenizer directly in the cloned repository.
 Finally, we can start training. For now, we'll simply use the official [`run_mlm_flax`](https://github.com/huggingface/transformers/blob/master/examples/flax/language-modeling/run_mlm_flax.py)
 script, but we might make some changes later. So let's copy the script into our model repository.
 
