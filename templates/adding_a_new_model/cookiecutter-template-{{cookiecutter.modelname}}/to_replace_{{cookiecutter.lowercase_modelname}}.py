@@ -439,7 +439,7 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase
 # Below: "# Add modeling imports here"
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
-from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase_modelname}} import (
+from ..{{cookiecutter.lowercase_modelname}}.modeling_flax_{{cookiecutter.lowercase_modelname}} import (
     Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM,
     Flax{{cookiecutter.camelcase_modelname}}ForCausalLM,
     Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
@@ -449,7 +449,7 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase
     Flax{{cookiecutter.camelcase_modelname}}Model,
 )
 {% else -%}
-from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase_modelname}} import (
+from ..{{cookiecutter.lowercase_modelname}}.modeling_flax_{{cookiecutter.lowercase_modelname}} import (
     Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
     Flax{{cookiecutter.camelcase_modelname}}Model,
 )
@@ -461,7 +461,7 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase
         ({{cookiecutter.camelcase_modelname}}Config, Flax{{cookiecutter.camelcase_modelname}}Model),
 # End.
 
-# Below: "# Model with LM heads mapping"
+# Below: "# Model for Masked LM mapping"
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
         ({{cookiecutter.camelcase_modelname}}Config, Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM),
