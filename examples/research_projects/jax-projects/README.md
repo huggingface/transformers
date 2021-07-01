@@ -975,11 +975,44 @@ For more information, check out [this PR](https://github.com/huggingface/hugging
 
 ## How to setup TPU VM
 
-TODO (should be filled by 2.07.)...
+In this section we will explain how you can ssh into a TPU VM that has been given to your team.
+If your username is in one of the officially defined projects [here](https://docs.google.com/spreadsheets/d/1GpHebL7qrwJOc9olTpIPgjf8vOS0jNb6zR_B8x_Jtik/edit?usp=sharing), you should have received two emails: 
 
-## How to use the hub for training and demo
- 
-TODO (should be filled by 1.07.)...
+- one that states that you have been granted the role "Community Week Participants" for the project hf-flax, and
+- one (or more if you are in multiple projects) that gives you the TPU name and the TPU zone for the TPU of your team
+
+You should click on "Open Cloud Console" on the first mail and agree to the pop up windows that follows. It will allow you to use a TPU VM. Don't worry if you cannot access the actual project `hf-flax` visually on the google cloud console - this is expected!
+
+Great, now you and your team can access your TPU VM!
+
+In the following, we will describe how to do so using a standard console, but you should also be able to connect to the TPU VM via IDEs, like Visual Studio Code, etc.
+
+1. You need to install the Google Cloud SDK. Please follow the instructions on [cloud.google.com/sdk](https://cloud.google.com/sdk/docs/install#linux).
+
+2. Once you've installed the google cloud sdk, you should set your account by running the following command. Make sure that `<your-email-address>` corresponds to the gmail address you used to sign up for this event.
+
+```bash
+$ gcloud config set account <your-email-adress>
+```
+
+3. Next, you will need to authenticate yourself. You can do so by running: 
+
+```bash
+$ gcloud auth login
+```
+
+This should give you a link to a website, where you can authenticate your gmail account.
+
+4. Finally, you can ssh into the TPU VM! Please run the following command by setting <zone> to either `europe-west4-a` or `us-central1-a` (depending on what is stated in the second email you received) and <tpu-name> to the TPU name also sent to you in the second email.
+	
+```bash
+$ gcloud alpha compute tpus tpu-vm ssh <tpu-name> --zone <zone> --project hf-flax
+```
+	
+This should ssh you into the TPU VM!
+Now you can follow the steps of the section [How to install relevant libraries](#how-to-install-relevant-libraries) to install all necessary 
+libraries. Make sure to carefully follow the explanations of the "**IMPORTANT**" statement to correctly install JAX on TPU.
+Also feel free to install other `python` or `apt` packages on your machine if it helps you to work more efficiently!
 
 ## Project evaluation
 
