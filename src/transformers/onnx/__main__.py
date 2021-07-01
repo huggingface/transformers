@@ -42,8 +42,6 @@ if is_torch_available():
 
     FEATURES_TO_AUTOMODELS = {
         "default": AutoModel,
-        "with_past": AutoModel,
-        "token_classification": AutoModelForTokenClassification,
     }
 
 if is_tf_available():
@@ -51,20 +49,18 @@ if is_tf_available():
 
     FEATURES_TO_TF_AUTOMODELS = {
         "default": TFAutoModel,
-        "with_path": TFAutoModel,
-        "token_classification": TFAutoModelForTokenClassification,
     }
 
 # Set of model topologies we support associated to the features supported by each topology and the factory
 SUPPORTED_MODEL_KIND = {
     "albert": {"default": AlbertOnnxConfig.default},
-    "bart": {"default": BartOnnxConfig.default, "with_past": BartOnnxConfig.with_past},
+    "bart": {"default": BartOnnxConfig.default},
     "bert": {"default": BertOnnxConfig.default},
     "distilbert": {"default": DistilBertOnnxConfig.default},
-    "gpt2": {"default": GPT2OnnxConfig.default, "with_past": GPT2OnnxConfig.with_past},
+    "gpt2": {"default": GPT2OnnxConfig.default},
     "longformer": {"default": LongformerOnnxConfig.default},
     "roberta": {"default": RobertaOnnxConfig},
-    "t5": {"default": T5OnnxConfig.default, "with_past": T5OnnxConfig.with_past},
+    "t5": {"default": T5OnnxConfig.default},
     "xlm-roberta": {"default": XLMRobertaOnnxConfig.default},
 }
 
@@ -142,7 +138,7 @@ def main():
     )
     parser.add_argument(
         "--features",
-        choices=["default", "with_past", "token_classification"],
+        choices=["default"],
         default="default",
         help="Export the model with some additional features.",
     )
