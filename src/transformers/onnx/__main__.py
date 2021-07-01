@@ -38,14 +38,14 @@ FRAMEWORK_NAME_TF = "tensorflow"
 FRAMEWORK_CHOICES = {FRAMEWORK_NAME_PT, FRAMEWORK_NAME_PT}
 
 if is_torch_available():
-    from transformers import AutoModel, AutoModelForTokenClassification, PreTrainedModel
+    from transformers import AutoModel, PreTrainedModel
 
     FEATURES_TO_AUTOMODELS = {
         "default": AutoModel,
     }
 
 if is_tf_available():
-    from transformers import TFAutoModel, TFAutoModelForTokenClassification, TFPreTrainedModel
+    from transformers import TFAutoModel, TFPreTrainedModel
 
     FEATURES_TO_TF_AUTOMODELS = {
         "default": TFAutoModel,
