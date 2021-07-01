@@ -363,7 +363,6 @@ class ModuleUtilsMixin:
         else:
             return sum(p.numel() for p in self.parameters() if p.requires_grad or not only_trainable)
 
-
     def estimate_tokens(self, input_dict: Dict[str, Union[torch.Tensor, Any]]) -> int:
         """
         Helper function to estimate the total number of tokens from the model inputs.
