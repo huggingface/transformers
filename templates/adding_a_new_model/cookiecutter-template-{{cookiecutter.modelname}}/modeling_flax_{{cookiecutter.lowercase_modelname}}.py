@@ -17,42 +17,42 @@
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
 
 import math
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import numpy as np
-import tensorflow as tf
 
-from ...activations_tf import get_tf_activation
+import flax
+import flax.linen as nn
+import jax
+import jax.numpy as jnp
+import jaxlib.xla_extension as jax_xla
+from flax.core.frozen_dict import FrozenDict
+from flax.linen.attention import dot_product_attention_weights
+from jax import lax
+
 from ...file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
 )
-from ...modeling_tf_outputs import (
-    TFBaseModelOutput,
-    TFBaseModelOutputWithPooling,
-    TFCausalLMOutput,
-    TFMaskedLMOutput,
-    TFMultipleChoiceModelOutput,
-    TFQuestionAnsweringModelOutput,
-    TFSequenceClassifierOutput,
-    TFTokenClassifierOutput,
+from ...modeling_flax_outputs import (
+    FlaxBaseModelOutput,
+    FlaxBaseModelOutputWithPooling,
+    FlaxCa*usalLMOutput,
+    FlaxMaskedLMOutput,
+    FlaxMultipleChoiceModelOutput,
+    FlaxNextSentencePredictorOutput,
+    FlaxQuestionAnsweringModelOutput,
+    FlaxSequenceClassifierOutput,
+    FlaxTokenClassifierOutput,
 )
-from ...modeling_tf_utils import (
-    TFCausalLanguageModelingLoss,
-    TFMaskedLanguageModelingLoss,
-    TFModelInputType,
-    TFMultipleChoiceLoss,
-    TFPreTrainedModel,
-    TFQuestionAnsweringLoss,
-    TFSequenceClassificationLoss,
-    TFSequenceSummary,
-    TFTokenClassificationLoss,
-    get_initializer,
-    input_processing,
-    keras_serializable,
-    shape_list,
+from ...modeling_flax_utils import (
+    ACT2FN,
+    FlaxPreTrainedModel,
+    append_call_sample_docstring,
+    append_replace_return_docstrings,
+    overwrite_call_docstring,
 )
 from ...utils import logging
 from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}Config
@@ -64,424 +64,410 @@ _CHECKPOINT_FOR_DOC = "{{cookiecutter.checkpoint_identifier}}"
 _CONFIG_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Config"
 _TOKENIZER_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Tokenizer"
 
-TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "{{cookiecutter.checkpoint_identifier}}",
-    # See all {{cookiecutter.modelname}} models at https://huggingface.co/models?filter={{cookiecutter.lowercase_modelname}}
-]
 
-
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings with Bert->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}Embeddings(tf.keras.layers.Layer):
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEmbeddings with Bert->{{cookiecutter.camelcase_modelname}}
+class Flax{{cookiecutter.camelcase_modelname}}Embeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
-        super().__init__(**kwargs)
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-        self.vocab_size = config.vocab_size
-        self.type_vocab_size = config.type_vocab_size
-        self.hidden_size = config.hidden_size
-        self.max_position_embeddings = config.max_position_embeddings
-        self.initializer_range = config.initializer_range
-        self.embeddings_sum = tf.keras.layers.Add()
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+    def setup(self):
+        self.word_embeddings = nn.Embed(
+            self.config.vocab_size,
+            self.config.hidden_size,
+            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            dtype=self.dtype,
+        )
+        self.position_embeddings = nn.Embed(
+            self.config.max_position_embeddings,
+            self.config.hidden_size,
+            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            dtype=self.dtype,
+        )
+        self.token_type_embeddings = nn.Embed(
+            self.config.type_vocab_size,
+            self.config.hidden_size,
+            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            dtype=self.dtype,
+        )
+        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
-    def build(self, input_shape: tf.TensorShape):
-        with tf.name_scope("word_embeddings"):
-            self.weight = self.add_weight(
-                name="weight",
-                shape=[self.vocab_size, self.hidden_size],
-                initializer=get_initializer(self.initializer_range),
-            )
+    def __call__(self, input_ids, token_type_ids, position_ids, attention_mask, deterministic: bool = True):
+        # Embed
+        inputs_embeds = self.word_embeddings(input_ids.astype("i4"))
+        position_embeds = self.position_embeddings(position_ids.astype("i4"))
+        token_type_embeddings = self.token_type_embeddings(token_type_ids.astype("i4"))
 
-        with tf.name_scope("token_type_embeddings"):
-            self.token_type_embeddings = self.add_weight(
-                name="embeddings",
-                shape=[self.type_vocab_size, self.hidden_size],
-                initializer=get_initializer(self.initializer_range),
-            )
+        # Sum all embeddings
+        hidden_states = inputs_embeds + token_type_embeddings + position_embeds
 
-        with tf.name_scope("position_embeddings"):
-            self.position_embeddings = self.add_weight(
-                name="embeddings",
-                shape=[self.max_position_embeddings, self.hidden_size],
-                initializer=get_initializer(self.initializer_range),
-            )
-
-        super().build(input_shape)
-
-    def call(
-        self,
-        input_ids: tf.Tensor = None,
-        position_ids: tf.Tensor = None,
-        token_type_ids: tf.Tensor = None,
-        inputs_embeds: tf.Tensor = None,
-        training: bool = False,
-    ) -> tf.Tensor:
-        """
-        Applies embedding based on inputs tensor.
-
-        Returns:
-            final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
-        """
-        assert not (input_ids is None and inputs_embeds is None)
-
-        if input_ids is not None:
-            inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
-
-        input_shape = shape_list(inputs_embeds)[:-1]
-
-        if token_type_ids is None:
-            token_type_ids = tf.fill(dims=input_shape, value=0)
-
-        if position_ids is None:
-            position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
-
-        position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
-        position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
-        token_type_embeds = tf.gather(params=self.token_type_embeddings, indices=token_type_ids)
-        final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds, token_type_embeds])
-        final_embeddings = self.LayerNorm(inputs=final_embeddings)
-        final_embeddings = self.dropout(inputs=final_embeddings, training=training)
-
-        return final_embeddings
+        # Layer Norm
+        hidden_states = self.LayerNorm(hidden_states)
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention with Bert->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}SelfAttention(tf.keras.layers.Layer):
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
-        super().__init__(**kwargs)
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertSelfAttention with Bert->{{cookiecutter.camelcase_modelname}}
+class Flax{{cookiecutter.camelcase_modelname}SelfAttention(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-        if config.hidden_size % config.num_attention_heads != 0:
+    def setup(self):
+        if self.config.hidden_size % self.config.num_attention_heads != 0:
             raise ValueError(
-                f"The hidden size ({config.hidden_size}) is not a multiple of the number "
-                f"of attention heads ({config.num_attention_heads})"
+                "`config.hidden_size`: {self.config.hidden_size} has to be a multiple of `config.num_attention_heads`\
+                    : {self.config.num_attention_heads}"
             )
 
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
-
-        self.query = tf.keras.layers.Dense(
-            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
+        self.query = nn.Dense(
+            self.config.hidden_size,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
         )
-        self.key = tf.keras.layers.Dense(
-            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
+        self.key = nn.Dense(
+            self.config.hidden_size,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
         )
-        self.value = tf.keras.layers.Dense(
-            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
+        self.value = nn.Dense(
+            self.config.hidden_size,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
-        # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
-        tensor = tf.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
+    def __call__(self, hidden_states, attention_mask, deterministic=True, output_attentions: bool = False):
+        head_dim = self.config.hidden_size // self.config.num_attention_heads
 
-        # Transpose the tensor from [batch_size, seq_length, num_attention_heads, attention_head_size] to [batch_size, num_attention_heads, seq_length, attention_head_size]
-        return tf.transpose(tensor, perm=[0, 2, 1, 3])
+        query_states = self.query(hidden_states).reshape(
+            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
+        )
+        value_states = self.value(hidden_states).reshape(
+            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
+        )
+        key_states = self.key(hidden_states).reshape(
+            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
+        )
 
-    def call(
-        self,
-        hidden_states: tf.Tensor,
-        attention_mask: tf.Tensor,
-        head_mask: tf.Tensor,
-        output_attentions: bool,
-        training: bool = False,
-    ) -> Tuple[tf.Tensor]:
-        batch_size = shape_list(hidden_states)[0]
-        mixed_query_layer = self.query(inputs=hidden_states)
-        mixed_key_layer = self.key(inputs=hidden_states)
-        mixed_value_layer = self.value(inputs=hidden_states)
-        query_layer = self.transpose_for_scores(mixed_query_layer, batch_size)
-        key_layer = self.transpose_for_scores(mixed_key_layer, batch_size)
-        value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        # (batch size, num_heads, seq_len_q, seq_len_k)
-        attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
-        dk = tf.cast(self.sqrt_att_head_size, dtype=attention_scores.dtype)
-        attention_scores = tf.divide(attention_scores, dk)
-
+        # Convert the boolean attention mask to an attention bias.
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in TF{{cookiecutter.camelcase_modelname}}Model call() function)
-            attention_scores = tf.add(attention_scores, attention_mask)
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = tf.nn.softmax(logits=attention_scores, axis=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(inputs=attention_probs, training=training)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = tf.multiply(attention_probs, head_mask)
-
-        attention_output = tf.matmul(attention_probs, value_layer)
-        attention_output = tf.transpose(attention_output, perm=[0, 2, 1, 3])
-
-        # (batch_size, seq_len_q, all_head_size)
-        attention_output = tf.reshape(tensor=attention_output, shape=(batch_size, -1, self.all_head_size))
-        outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
-
-        return outputs
-
-
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}SelfOutput(tf.keras.layers.Layer):
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
-        super().__init__(**kwargs)
-
-        self.dense = tf.keras.layers.Dense(
-            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
-        )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
-
-    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
-        hidden_states = self.dense(inputs=hidden_states)
-        hidden_states = self.dropout(inputs=hidden_states, training=training)
-        hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
-
-        return hidden_states
-
-
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
-        super().__init__(**kwargs)
-
-        self.self_attention = TF{{cookiecutter.camelcase_modelname}}SelfAttention(config, name="self")
-        self.dense_output = TF{{cookiecutter.camelcase_modelname}}SelfOutput(config, name="output")
-
-    def prune_heads(self, heads):
-        raise NotImplementedError
-
-    def call(
-        self,
-        input_tensor: tf.Tensor,
-        attention_mask: tf.Tensor,
-        head_mask: tf.Tensor,
-        output_attentions: bool,
-        training: bool = False,
-    ) -> Tuple[tf.Tensor]:
-        self_outputs = self.self_attention(
-            hidden_states=input_tensor,
-            attention_mask=attention_mask,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            training=training,
-        )
-        attention_output = self.dense_output(
-            hidden_states=self_outputs[0], input_tensor=input_tensor, training=training
-        )
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-
-        return outputs
-
-
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}Intermediate(tf.keras.layers.Layer):
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
-        super().__init__(**kwargs)
-
-        self.dense = tf.keras.layers.Dense(
-            units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
-        )
-
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = get_tf_activation(config.hidden_act)
+            # attention mask in the form of attention bias
+            attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
+            attention_bias = lax.select(
+                attention_mask > 0,
+                jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
+                jnp.full(attention_mask.shape, -1e10).astype(self.dtype),
+            )
         else:
-            self.intermediate_act_fn = config.hidden_act
+            attention_bias = None
 
-    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
-        hidden_states = self.dense(inputs=hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
+        dropout_rng = None
+        if not deterministic and self.config.attention_probs_dropout_prob > 0.0:
+            dropout_rng = self.make_rng("dropout")
 
-        return hidden_states
-
-
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}Output(tf.keras.layers.Layer):
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
-        super().__init__(**kwargs)
-
-        self.dense = tf.keras.layers.Dense(
-            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        attn_weights = dot_product_attention_weights(
+            query_states,
+            key_states,
+            bias=attention_bias,
+            dropout_rng=dropout_rng,
+            dropout_rate=self.config.attention_probs_dropout_prob,
+            broadcast_dropout=True,
+            deterministic=deterministic,
+            dtype=self.dtype,
+            precision=None,
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
-        hidden_states = self.dense(inputs=hidden_states)
-        hidden_states = self.dropout(inputs=hidden_states, training=training)
-        hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
+        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
+        attn_output = attn_output.reshape(attn_output.shape[:2] + (-1,))
 
+        outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
+        return outputs
+
+
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertSelfOutput with Bert->{{cookiecutter.camelcase_modelname}}
+class Flax{{cookiecutter.camelcase_modelname}}SelfOutput(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        self.dense = nn.Dense(
+            self.config.hidden_size,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            dtype=self.dtype,
+        )
+        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+
+    def __call__(self, hidden_states, input_tensor, deterministic: bool = True):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
 
-class TF{{cookiecutter.camelcase_modelname}}Layer(tf.keras.layers.Layer):
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
-        super().__init__(**kwargs)
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertAttention with Bert->{{cookiecutter.camelcase_modelname}}
+class Flax{{cookiecutter.camelcase_modelname}}Attention(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32
 
-        self.attention = TF{{cookiecutter.camelcase_modelname}}Attention(config, name="attention")
-        self.intermediate = TF{{cookiecutter.camelcase_modelname}}Intermediate(config, name="intermediate")
-        self.bert_output = TF{{cookiecutter.camelcase_modelname}}Output(config, name="output")
+    def setup(self):
+        self.self = Flax{{cookiecutter.camelcase_modelname}}SelfAttention(self.config, dtype=self.dtype)
+        self.output = Flax{{cookiecutter.camelcase_modelname}}SelfOutput(self.config, dtype=self.dtype)
 
-    def call(
-        self,
-        hidden_states: tf.Tensor,
-        attention_mask: tf.Tensor,
-        head_mask: tf.Tensor,
-        output_attentions: bool,
-        training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    def __call__(self, hidden_states, attention_mask, deterministic=True, output_attentions: bool = False):
+        # Attention mask comes in as attention_mask.shape == (*batch_sizes, kv_length)
+        # FLAX expects: attention_mask.shape == (*batch_sizes, 1, 1, kv_length) such that it is broadcastable
+        # with attn_weights.shape == (*batch_sizes, num_heads, q_length, kv_length)
+        attn_outputs = self.self(
+            hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
+        )
+        attn_output = attn_outputs[0]
+        hidden_states = self.output(attn_output, hidden_states, deterministic=deterministic)
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_outputs[1],)
+
+        return outputs
+
+
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertIntermediate with Bert->{{cookiecutter.camelcase_modelname}}
+class Flax{{cookiecutter.camelcase_modelname}}Intermediate(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        self.dense = nn.Dense(
+            self.config.intermediate_size,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            dtype=self.dtype,
+        )
+        self.activation = ACT2FN[self.config.hidden_act]
+
+    def __call__(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
+
+
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertOutput with Bert->{{cookiecutter.camelcase_modelname}}
+class Flax{{cookiecutter.camelcase_modelname}}Output(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        self.dense = nn.Dense(
+            self.config.hidden_size,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            dtype=self.dtype,
+        )
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+
+    def __call__(self, hidden_states, attention_output, deterministic: bool = True):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        hidden_states = self.LayerNorm(hidden_states + attention_output)
+        return hidden_states
+
+
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayer with Bert->{{cookiecutter.camelcase_modelname}}
+class Flax{{cookiecutter.camelcase_modelname}}Layer(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        self.attention = Flax{{cookiecutter.camelcase_modelname}}Attention(self.config, dtype=self.dtype)
+        self.intermediate = Flax{{cookiecutter.camelcase_modelname}}Intermediate(self.config, dtype=self.dtype)
+        self.output = Flax{{cookiecutter.camelcase_modelname}}Output(self.config, dtype=self.dtype)
+
+    def __call__(self, hidden_states, attention_mask, deterministic: bool = True, output_attentions: bool = False):
         attention_outputs = self.attention(
-            input_tensor=hidden_states,
-            attention_mask=attention_mask,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            training=training,
+            hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
         )
         attention_output = attention_outputs[0]
-        intermediate_output = self.intermediate(hidden_states=attention_output)
-        layer_output = self.bert_output(hidden_states=intermediate_output, input_tensor=attention_output, training=training)
-        outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
 
+        hidden_states = self.intermediate(attention_output)
+        hidden_states = self.output(hidden_states, attention_output, deterministic=deterministic)
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attention_outputs[1],)
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertEncoder with Bert->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
-        super().__init__(**kwargs)
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayerCollection with Bert->{{cookiecutter.camelcase_modelname}}
+class Flax{{cookiecutter.camelcase_modelname}}tLayerCollection(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-        self.layer = [TF{{cookiecutter.camelcase_modelname}}Layer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
+    def setup(self):
+        self.layers = [
+            Flax{{cookiecutter.camelcase_modelname}}Layer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
+        ]
 
-    def call(
+    def __call__(
         self,
-        hidden_states: tf.Tensor,
-        attention_mask: tf.Tensor,
-        head_mask: tf.Tensor,
-        output_attentions: bool,
-        output_hidden_states: bool,
-        return_dict: bool,
-        training: bool = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
-        all_hidden_states = () if output_hidden_states else None
+        hidden_states,
+        attention_mask,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
         all_attentions = () if output_attentions else None
+        all_hidden_states = () if output_hidden_states else None
 
-        for i, layer_module in enumerate(self.layer):
+        for i, layer in enumerate(self.layers):
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+                all_hidden_states += (hidden_states,)
 
-            layer_outputs = layer_module(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                head_mask=head_mask[i],
-                output_attentions=output_attentions,
-                training=training,
+            layer_outputs = layer(
+                hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
             )
+
             hidden_states = layer_outputs[0]
 
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
+                all_attentions += (layer_outputs[1],)
 
-        # Add last layer
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+            all_hidden_states += (hidden_states,)
+
+        outputs = (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+            return tuple(v for v in outputs if v is not None)
 
-        return TFBaseModelOutput(
+        return FlaxBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHeadTransform with Bert->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}PredictionHeadTransform(tf.keras.layers.Layer):
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
-        super().__init__(**kwargs)
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEncoder with Bert->{{cookiecutter.camelcase_modelname}}
+class Flax{{cookiecutter.camelcase_modelname}}Encoder(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-        self.dense = tf.keras.layers.Dense(
-            units=config.hidden_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="dense",
+    def setup(self):
+        self.layer = Flax{{cookiecutter.camelcase_modelname}}LayerCollection(self.config, dtype=self.dtype)
+
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        return self.layer(
+            hidden_states,
+            attention_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
-        if isinstance(config.hidden_act, str):
-            self.transform_act_fn = get_tf_activation(config.hidden_act)
+
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPooler with Bert->{{cookiecutter.camelcase_modelname}}
+class Flax{{cookiecutter.camelcase_modelname}}tPooler(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        self.dense = nn.Dense(
+            self.config.hidden_size,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            dtype=self.dtype,
+        )
+
+    def __call__(self, hidden_states):
+        cls_hidden_state = hidden_states[:, 0]
+        cls_hidden_state = self.dense(cls_hidden_state)
+        return nn.tanh(cls_hidden_state)
+
+
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPredictionHeadTransform with Bert->{{cookiecutter.camelcase_modelname}}
+class Flax{{cookiecutter.camelcase_modelname}}PredictionHeadTransform(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.dense = nn.Dense(self.config.hidden_size, dtype=self.dtype)
+        self.activation = ACT2FN[self.config.hidden_act]
+        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+
+    def __call__(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        return self.LayerNorm(hidden_states)
+
+
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLMPredictionHead with Bert->{{cookiecutter.camelcase_modelname}}
+class Flax{{cookiecutter.camelcase_modelname}}LMPredictionHead(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32
+    bias_init: Callable[..., np.ndarray] = jax.nn.initializers.zeros
+
+    def setup(self):
+        self.transform = Flax{{cookiecutter.camelcase_modelname}}PredictionHeadTransform(self.config, dtype=self.dtype)
+        self.decoder = nn.Dense(self.config.vocab_size, dtype=self.dtype, use_bias=False)
+        self.bias = self.param("bias", self.bias_init, (self.config.vocab_size,))
+
+    def __call__(self, hidden_states, shared_embedding=None):
+        hidden_states = self.transform(hidden_states)
+
+        if shared_embedding is not None:
+            hidden_states = self.decoder.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
         else:
-            self.transform_act_fn = config.hidden_act
+            hidden_states = self.decoder(hidden_states)
 
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-
-    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
-        hidden_states = self.dense(inputs=hidden_states)
-        hidden_states = self.transform_act_fn(hidden_states)
-        hidden_states = self.LayerNorm(inputs=hidden_states)
-
+        hidden_states += self.bias
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertLMPredictionHead with Bert->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}LMPredictionHead(tf.keras.layers.Layer):
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, input_embeddings: tf.keras.layers.Layer, **kwargs):
-        super().__init__(**kwargs)
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertOnlyMLMHead with Bert->{{cookiecutter.camelcase_modelname}}
+class Flax{{cookiecutter.camelcase_modelname}}OnlyMLMHead(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32
 
-        self.vocab_size = config.vocab_size
-        self.hidden_size = config.hidden_size
+    def setup(self):
+        self.predictions = Flax{{cookiecutter.camelcase_modelname}}LMPredictionHead(self.config, dtype=self.dtype)
 
-        self.transform = TF{{cookiecutter.camelcase_modelname}}PredictionHeadTransform(config, name="transform")
-
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
-        self.input_embeddings = input_embeddings
-
-    def build(self, input_shape: tf.TensorShape):
-        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
-
-        super().build(input_shape)
-
-    def get_output_embeddings(self) -> tf.keras.layers.Layer:
-        return self.input_embeddings
-
-    def set_output_embeddings(self, value: tf.Variable):
-        self.input_embeddings.weight = value
-        self.input_embeddings.vocab_size = shape_list(value)[0]
-
-    def get_bias(self) -> Dict[str, tf.Variable]:
-        return {"bias": self.bias}
-
-    def set_bias(self, value: tf.Variable):
-        self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
-
-    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
-        hidden_states = self.transform(hidden_states=hidden_states)
-        seq_length = shape_list(hidden_states)[1]
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
-        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
-        hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
-
+    def __call__(self, hidden_states, shared_embedding=None):
+        hidden_states = self.predictions(hidden_states, shared_embedding=shared_embedding)
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertMLMHead with Bert->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}MLMHead(tf.keras.layers.Layer):
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, input_embeddings: tf.keras.layers.Layer, **kwargs):
-        super().__init__(**kwargs)
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertOnlyNSPHead with Bert->{{cookiecutter.camelcase_modelname}}
+class Flax{{cookiecutter.camelcase_modelname}}OnlyNSPHead(nn.Module):
+    dtype: jnp.dtype = jnp.float32
 
-        self.predictions = TF{{cookiecutter.camelcase_modelname}}LMPredictionHead(config, input_embeddings, name="predictions")
+    def setup(self):
+        self.seq_relationship = nn.Dense(2, dtype=self.dtype)
 
-    def call(self, sequence_output: tf.Tensor) -> tf.Tensor:
-        prediction_scores = self.predictions(hidden_states=sequence_output)
+    def __call__(self, pooled_output):
+        return self.seq_relationship(pooled_output)
 
-        return prediction_scores
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPreTrainingHeads with Bert->{{cookiecutter.camelcase_modelname}}
+class Flax{{cookiecutter.camelcase_modelname}}tPreTrainingHeads(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.predictions = Flax{{cookiecutter.camelcase_modelname}}LMPredictionHead(self.config, dtype=self.dtype)
+        self.seq_relationship = nn.Dense(2, dtype=self.dtype)
+
+    def __call__(self, hidden_states, pooled_output, shared_embedding=None):
+        prediction_scores = self.predictions(hidden_states, shared_embedding=shared_embedding)
+        seq_relationship_score = self.seq_relationship(pooled_output)
+        return prediction_scores, seq_relationship_score
 
 @keras_serializable
 class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
