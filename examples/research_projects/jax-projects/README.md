@@ -502,7 +502,7 @@ First, write a Flax module that will declare the layers and computation.
 import flax.linen as nn
 import jax.numpy as jnp
 
-class MLPMoudle(nn.Module):
+class MLPModule(nn.Module):
    config: MLPConfig
    dtype: jnp.dtype = jnp.float32
 
