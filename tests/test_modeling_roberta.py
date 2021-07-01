@@ -15,6 +15,7 @@
 
 
 import unittest
+from copy import deepcopy
 
 from transformers import is_torch_available
 from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
@@ -534,14 +535,15 @@ class RobertaModelIntegrationTest(TestCasePlus):
     def test_lm_head_ignore_keys(self):
         keys_to_ignore_on_save_tied = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
         keys_to_ignore_on_save_untied = [r"lm_head.decoder.bias"]
-        config = RobertaConfig.from_pretrained(ROBERTA_TINY)
+        config_tied = RobertaConfig.from_pretrained(ROBERTA_TINY)
+        config_untied = deepcopy(config_tied)
+        config_untied.tie_word_embeddings = False
         for cls in [RobertaForMaskedLM, RobertaForCausalLM]:
-            model = cls.from_pretrained(ROBERTA_TINY)
+            model = cls(config_tied)
             self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_tied, cls)
 
             # the keys should be different when embeddings aren't tied
-            config.tie_word_embeddings = False
-            model = cls(config)
+            model = cls(config_untied)
             self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_untied, cls)
 
             # test that saving works with updated ignore keys - just testing that it doesn't fail
