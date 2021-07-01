@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import shutil
+import tempfile
 import unittest
 
 from transformers import PreTrainedTokenizerFast
@@ -33,9 +35,12 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
         self.test_rust_tokenizer = True
 
-        self.tokenizers_list = [(PreTrainedTokenizerFast, "robot-test/dummy-tokenizer-fast", {})]
+        model_paths = ["robot-test/dummy-tokenizer-fast", "robot-test/dummy-tokenizer-wordlevel"]
 
-        tokenizer = PreTrainedTokenizerFast.from_pretrained("robot-test/dummy-tokenizer-fast")
+        # Inclusion of 2 tokenizers to test different types of models (Unigram and WordLevel for the moment)
+        self.tokenizers_list = [(PreTrainedTokenizerFast, model_path, {}) for model_path in model_paths]
+
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(model_paths[0])
         tokenizer.save_pretrained(self.tmpdirname)
 
     def test_pretrained_model_lists(self):
@@ -51,3 +56,37 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
     def test_rust_tokenizer_signature(self):
         # PreTrainedTokenizerFast doesn't have tokenizer_file in its signature
         pass
+
+    def test_training_new_tokenizer(self):
+        tmpdirname_orig = self.tmpdirname
+        # Here we want to test the 2 available tokenizers that use 2 different types of models: Unigram and WordLevel.
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                try:
+                    self.tmpdirname = tempfile.mkdtemp()
+                    tokenizer = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+
+                    tokenizer.save_pretrained(self.tmpdirname)
+                    super().test_training_new_tokenizer()
+                finally:
+                    # Even if the test fails, we must be sure that the folder is deleted and that the default tokenizer
+                    # is restored
+                    shutil.rmtree(self.tmpdirname)
+                    self.tmpdirname = tmpdirname_orig
+
+    def test_training_new_tokenizer_with_special_tokens_change(self):
+        tmpdirname_orig = self.tmpdirname
+        # Here we want to test the 2 available tokenizers that use 2 different types of models: Unigram and WordLevel.
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                try:
+                    self.tmpdirname = tempfile.mkdtemp()
+                    tokenizer = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+
+                    tokenizer.save_pretrained(self.tmpdirname)
+                    super().test_training_new_tokenizer_with_special_tokens_change()
+                finally:
+                    # Even if the test fails, we must be sure that the folder is deleted and that the default tokenizer
+                    # is restored
+                    shutil.rmtree(self.tmpdirname)
+                    self.tmpdirname = tmpdirname_orig
