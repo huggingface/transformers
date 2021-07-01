@@ -32,12 +32,12 @@ from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from typing import Optional
-from sklearn.model_selection import train_test_split
 
 import datasets
 import numpy as np
 import tensorflow as tf
 from datasets import load_dataset
+from sklearn.model_selection import train_test_split
 
 import transformers
 from transformers import (
