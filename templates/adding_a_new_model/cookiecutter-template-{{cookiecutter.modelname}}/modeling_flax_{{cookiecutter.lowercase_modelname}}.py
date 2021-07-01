@@ -110,7 +110,7 @@ class Flax{{cookiecutter.camelcase_modelname}}Embeddings(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertSelfAttention with Bert->{{cookiecutter.camelcase_modelname}}
-class Flax{{cookiecutter.camelcase_modelname}SelfAttention(nn.Module):
+class Flax{{cookiecutter.camelcase_modelname}}SelfAttention(nn.Module):
     config: {{cookiecutter.camelcase_modelname}}Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -482,7 +482,7 @@ class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedMode
     module_class: nn.Module = None
 
     def __init__(
-        self, config: {{cookiecutter.camelcase_modelname}Config, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
+        self, config: {{cookiecutter.camelcase_modelname}}Config, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
@@ -501,7 +501,7 @@ class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedMode
             "params"
         ]
 
-    @add_start_docstrings_to_model_forward({{cookiecutter.camelcase_modelname}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward({{cookiecutter.camelcase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
         self,
         input_ids,
@@ -608,7 +608,7 @@ class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedMode
 
 
 add_start_docstrings(
-    "The bare {cookiecutter.camelcase_modelname}} Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare {{cookiecutter.camelcase_modelname}} Model transformer outputting raw hidden-states without any specific head on top.",
     {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
 class Flax{{cookiecutter.camelcase_modelname}}Model(Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel):
@@ -674,8 +674,8 @@ append_call_sample_docstring(
     Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
 )
 
-class Flax{cookiecutter.camelcase_modelname}}ForCausalLMModule(nn.Module):
-    config: {cookiecutter.camelcase_modelname}}Config
+class Flax{{cookiecutter.camelcase_modelname}}ForCausalLMModule(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
