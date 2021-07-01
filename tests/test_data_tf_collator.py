@@ -110,66 +110,28 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
         # --- Non-Ragged Data ----
         # --- Pre Batching w/ No Padding ----
         batch = tf_data_collator(tf_dataset_no_pad)
-        # batch = (
-        #     tf_dataset_no_pad
-        #     .batch(2)
-        #     .map(tf_data_collator)
-        # )
 
         self.assert_all_equal(list(batch), 'input_ids', (2, 10))
         self.assert_all_equal(list(batch), 'labels', (2, 10))
 
-        # # --- Post Batching w/ No Padding ----
-        # batch = (
-        #     tf_dataset_no_pad
-        #     .map(tf_data_collator)
-        #     .batch(2)
-        # )
-
-        # self.assert_all_equal(list(batch), 'input_ids', (2, 10))
-        # self.assert_all_equal(list(batch), 'labels', (2, 10))
-
         # # --- Pre Batching w/ Padding ---
         batch = tf_data_collator_with_padding(tf_dataset_no_pad)
-        # batch = (
-        #     tf_dataset_no_pad
-        #     .batch(2)
-        #     .map(tf_data_collator_with_padding)
-        # )
 
         self.assert_all_equal(list(batch), 'input_ids', (2, 26))
         self.assert_all_equal(list(batch), 'labels', (2, 26))
 
-        # # --- Post Batching w/ Padding ---
-        # batch = (
-        #     tf_dataset_no_pad
-        #     .map(tf_data_collator_with_padding)
-        #     .batch(2)
-        # )
+        # --- Ragged Data ----
+        # --- Pre Batching w/ No Padding ----
+        batch = tf_data_collator(tf_dataset_pad, True)
 
-        # self.assert_all_equal(list(batch), 'input_ids', (2, 26))
-        # self.assert_all_equal(list(batch), 'labels', (2, 26))
-
-        # # --- Ragged Data ----
-        # # --- Pre Batching w/ No Padding ----
-        # batch = (
-        #     tf_dataset_pad
-        #     .batch(2)
-        #     .map(tf_data_collator)
-        # )
-
-        # self.assert_all_equal(list(batch), 'input_ids', (2, 10))
-        # self.assert_all_equal(list(batch), 'labels', (2, 10))
+        self.assert_all_equal(list(batch), 'input_ids', (2, 10))
+        self.assert_all_equal(list(batch), 'labels', (2, 10))
 
         # # --- Pre Batching w/ Padding ---
-        # batch = (
-        #     tf_dataset_pad
-        #     .batch(2)
-        #     .map(tf_data_collator_with_padding)
-        # )
+        batch = tf_data_collator_with_padding(tf_dataset_pad, True)
 
-        # self.assert_all_equal(list(batch), 'input_ids', (2, 26))
-        # self.assert_all_equal(list(batch), 'labels', (2, 26))
+        self.assert_all_equal(list(batch), 'input_ids', (2, 26))
+        self.assert_all_equal(list(batch), 'labels', (2, 26))
 
         # tokenizer = BertTokenizer(self.vocab_file)
         # tokenizer._pad_token = None

@@ -64,7 +64,30 @@ class TFDataCollatorForLanguageModeling:
         """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
         max_length = pad_to_multiple_of
         no_padding_necessary = False
-        multiple_tensors = (len(examples.shape) > 1)
+        multiple_tensors = (len(tf.shape(examples)) > 1)
+        
+        # Tensorize if necessary.
+        if not isinstance(examples[0], tf.Tensor):
+            temporary = []
+            for e in examples:
+                temporary.append(tf.constant(e, dtype=tf.float64))
+            examples = temporary
+
+        # Check if padding is necessary.
+        if multiple_tensors:
+            length_of_first = tf.shape(examples[0])[0]
+
+            are_tensors_same_length = True
+            for x in examples:
+                are_tensors_same_length &= (tf.shape(x)[0] == length_of_first)
+
+            no_padding_necessary = are_tensors_same_length and (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0)
+        else:
+            length_of_first = tf.shape(examples)[0]
+            no_padding_necessary = (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0)
+
+        if no_padding_necessary:
+            return tf.stack(examples, axis=0)
 
         # Check if we have a `pad_token`.
         if tokenizer._pad_token is None:
@@ -73,41 +96,14 @@ class TFDataCollatorForLanguageModeling:
                 f" ({tokenizer.__class__.__name__}) does not have a pad token."
             )
 
-        if type(examples) == tf.RaggedTensor:
-            examples = examples.to_tensor(0)
-            no_padding_necessary = pad_to_multiple_of is None
-        else:
-            # Tensorize if necessary.
-            if not isinstance(examples[0], tf.Tensor):
-                temporary = []
-                for e in examples:
-                    temporary.append(tf.constant(e, dtype=tf.float64))
-                examples = temporary
-
-            # Check if padding is necessary.
-            if multiple_tensors:
-                length_of_first = examples[0].shape[0]
-
-                are_tensors_same_length = True
-                for x in examples:
-                    are_tensors_same_length &= (x.shape[0] == length_of_first)
-
-                no_padding_necessary = are_tensors_same_length and (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0)
-            else:
-                length_of_first = examples.shape[0]
-                no_padding_necessary = (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0)
-
-            # Padding our tensor with the appropriate pad token.
-            max_length = length_of_first
-            if multiple_tensors:
-                for x in examples:
-                    if x.shape[0] > max_length:
-                        max_length = x.shape[0]
-            if pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
-                max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
-
-        if no_padding_necessary:
-            return tf.stack(examples, axis=0)
+        # Padding our tensor with the appropriate pad token.
+        max_length = 0 if max_length is None else max_length
+        if multiple_tensors:
+            for x in examples:
+                if x.shape[0] > max_length:
+                    max_length = tf.shape(x)[0]
+        if pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+            max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
 
         if tokenizer.padding_side == "right":
             if multiple_tensors:
@@ -156,9 +152,17 @@ class TFDataCollatorForLanguageModeling:
     
         return encoded_batch
 
-    @tf.function()
+    @tf.function
+    def square_ragged_tensors(self, examples):
+        return examples.to_tensor(0)
+
+    @tf.function
     def __call__(self, 
-                 examples: tf.data.Dataset) -> tf.data.Dataset:
+                 examples: tf.data.Dataset,
+                 isRagged = False) -> tf.data.Dataset:
+        if isRagged:
+            examples = examples.batch(2).map(self.square_ragged_tensors).unbatch()
+
         return examples.map(self.encode_objects).batch(2)
         # padded_output = self.tf_pad_tokens(examples, self.tokenizer, self.padding_length)
 
