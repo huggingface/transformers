@@ -1502,7 +1502,7 @@ class TFRemBertForMaskedLM:
         requires_backends(self, ["tf"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
 
@@ -1511,7 +1511,7 @@ class TFRemBertForMultipleChoice:
         requires_backends(self, ["tf"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
 
@@ -1520,7 +1520,7 @@ class TFRemBertForQuestionAnswering:
         requires_backends(self, ["tf"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
 
@@ -1529,7 +1529,7 @@ class TFRemBertForSequenceClassification:
         requires_backends(self, ["tf"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
 
@@ -1538,7 +1538,7 @@ class TFRemBertForTokenClassification:
         requires_backends(self, ["tf"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
 
@@ -1552,7 +1552,7 @@ class TFRemBertModel:
         requires_backends(self, ["tf"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
 
@@ -1561,7 +1561,7 @@ class TFRemBertPreTrainedModel:
         requires_backends(self, ["tf"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
 

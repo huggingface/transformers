@@ -268,7 +268,7 @@ class RemBertTokenizerFast:
         requires_backends(self, ["tokenizers"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tokenizers"])
 
 

@@ -2805,7 +2805,7 @@ class RemBertForMaskedLM:
         requires_backends(self, ["torch"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
 
 
@@ -2814,7 +2814,7 @@ class RemBertForMultipleChoice:
         requires_backends(self, ["torch"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
 
 
@@ -2823,7 +2823,7 @@ class RemBertForQuestionAnswering:
         requires_backends(self, ["torch"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
 
 
@@ -2832,7 +2832,7 @@ class RemBertForSequenceClassification:
         requires_backends(self, ["torch"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
 
 
@@ -2841,7 +2841,7 @@ class RemBertForTokenClassification:
         requires_backends(self, ["torch"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
 
 
@@ -2855,7 +2855,7 @@ class RemBertModel:
         requires_backends(self, ["torch"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
 
 
@@ -2864,7 +2864,7 @@ class RemBertPreTrainedModel:
         requires_backends(self, ["torch"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
 
 
