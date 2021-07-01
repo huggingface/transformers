@@ -49,6 +49,14 @@ python run_mlm.py \
 --dataset_config_name wikitext-103-raw-v1
 ```
 
+When using a custom dataset, the validation file can be separately passed as an input argument. Otherwise some split (customizable) of training data is used as validation.
+```
+python run_mlm.py \
+--model_name_or_path distilbert-base-cased \
+--output_dir output \
+--train_file train_file_path
+```
+
 ## run_clm.py
 
 This script trains a causal language model.
@@ -60,4 +68,13 @@ python run_clm.py \
 --output_dir output \
 --dataset_name wikitext \
 --dataset_config_name wikitext-103-raw-v1
+```
+
+When using a custom dataset, the validation file can be separately passed as an input argument. Otherwise some split (customizable) of training data is used as validation.
+
+```
+python run_clm.py \
+--model_name_or_path distilgpt2 \
+--output_dir output \
+--train_file train_file_path
 ```
