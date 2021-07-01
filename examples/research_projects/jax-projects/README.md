@@ -975,7 +975,7 @@ For more information, check out [this PR](https://github.com/huggingface/hugging
 
 ## How to setup TPU VM
 
-In this section we will explain how you can ssh into a TPU VM that has been given to you.
+In this section we will explain how you can ssh into a TPU VM that has been given to your team.
 If your username is in one of the officially defined projects [here](https://docs.google.com/spreadsheets/d/1GpHebL7qrwJOc9olTpIPgjf8vOS0jNb6zR_B8x_Jtik/edit?usp=sharing), you should have received two emails: 
 
 - one that states that you have been granted the role "Community Week Participants" for the project hf-flax, and
