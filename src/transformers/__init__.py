@@ -493,7 +493,6 @@ if is_torch_available():
     _import_structure["generation_utils"] = ["top_k_top_p_filtering"]
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
-<<<<<<< HEAD
     _import_structure["models.rembert"].extend(
         [
             "REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1212,37 +1211,9 @@ if is_tf_available():
         "TFSharedEmbeddings",
         "shape_list",
     ]
+
     # TensorFlow models structure
-<<<<<<< HEAD
 
-    _import_structure["models.rembert"].extend(
-        [
-            "TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFRemBertForMaskedLM",
-            "TFRemBertForCausalLM",
-            "TFRemBertForMultipleChoice",
-            "TFRemBertForQuestionAnswering",
-            "TFRemBertForSequenceClassification",
-            "TFRemBertForTokenClassification",
-            "TFRemBertLayer",
-            "TFRemBertModel",
-            "TFRemBertPreTrainedModel",
-        ]
-    )
-
-    _import_structure["models.convbert"].extend(
-        [
-            "TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFConvBertForMaskedLM",
-            "TFConvBertForMultipleChoice",
-            "TFConvBertForQuestionAnswering",
-            "TFConvBertForSequenceClassification",
-            "TFConvBertForTokenClassification",
-            "TFConvBertLayer",
-            "TFConvBertModel",
-            "TFConvBertPreTrainedModel",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1503,6 +1474,20 @@ if is_tf_available():
             "TFRagPreTrainedModel",
             "TFRagSequenceForGeneration",
             "TFRagTokenForGeneration",
+        ]
+    )
+    _import_structure["models.rembert"].extend(
+        [
+            "TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFRemBertForMaskedLM",
+            "TFRemBertForCausalLM",
+            "TFRemBertForMultipleChoice",
+            "TFRemBertForQuestionAnswering",
+            "TFRemBertForSequenceClassification",
+            "TFRemBertForTokenClassification",
+            "TFRemBertLayer",
+            "TFRemBertModel",
+            "TFRemBertPreTrainedModel",
         ]
     )
     _import_structure["models.roberta"].extend(
