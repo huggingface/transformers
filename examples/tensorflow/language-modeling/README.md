@@ -70,8 +70,7 @@ python run_clm.py \
 --dataset_config_name wikitext-103-raw-v1
 ```
 
-In case using a custom dataset, validation file can be seperately passed as an input argument.\
-Otherwise some split(customizable) of training data is used as validation.
+When using a custom dataset, the validation file can be separately passed as an input argument. Otherwise some split (customizable) of training data is used as validation.
 
 ```
 python run_clm.py \
