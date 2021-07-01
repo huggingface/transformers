@@ -155,6 +155,7 @@ def analyze_results(import_dict_objects, type_hint_objects):
     """
     Analyze the differences between _import_structure objects and TYPE_CHECKING objects found in an init.
     """
+
     def find_duplicates(seq):
         return [k for k, v in collections.Counter(seq).items() if v > 1]
 
