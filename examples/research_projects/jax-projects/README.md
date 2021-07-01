@@ -989,7 +989,7 @@ In the following, we will describe how to do so using a standard console, but yo
 
 1. You need to install the Google Cloud SDK. Please follow the instructions on [cloud.google.com/sdk](https://cloud.google.com/sdk/docs/install#linux).
 
-2. Once you've installed the google cloud sdk, you should set your accent by running the following command. Make sure that `<your-email-address>` corresponds to the gmail address you used to sign up for this event.
+2. Once you've installed the google cloud sdk, you should set your account by running the following command. Make sure that `<your-email-address>` corresponds to the gmail address you used to sign up for this event.
 
 ```bash
 $ gcloud config set account <your-email-adress>
