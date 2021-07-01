@@ -978,10 +978,10 @@ For more information, check out [this PR](https://github.com/huggingface/hugging
 In this section we will explain how you can ssh into a TPU VM that has been given to you.
 If your username is in one of the officially defined projects [here](https://docs.google.com/spreadsheets/d/1GpHebL7qrwJOc9olTpIPgjf8vOS0jNb6zR_B8x_Jtik/edit?usp=sharing), you should have received two emails: 
 
-- one that states that you have been granted the role "Community Week Participants" for the project hf-flax
-- one (or more if you are in multiple projects) that gives you your TPU name and your TPU zone.
+- one that states that you have been granted the role "Community Week Participants" for the project hf-flax, and
+- one (or more if you are in multiple projects) that gives you the TPU name and the TPU zone for the TPU of your team
 
-You should click on "Open Cloud Console" on the first mail and agree to the pop up windows that follows. It will allow you to use a TPU VM. Don't worry if you cannot access the actual project `hf-flax` visually on the google cloud console - that is expected!
+You should click on "Open Cloud Console" on the first mail and agree to the pop up windows that follows. It will allow you to use a TPU VM. Don't worry if you cannot access the actual project `hf-flax` visually on the google cloud console - this is expected!
 
 Great, now you and your team can access your TPU VM!
 
