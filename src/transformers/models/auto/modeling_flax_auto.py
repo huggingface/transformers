@@ -18,6 +18,17 @@
 from collections import OrderedDict
 
 from ...utils import logging
+
+# Add modeling imports here
+from ..fnet.modeling_flax_fnet import (
+    FlaxFNetForMaskedLM,
+    FlaxFNetForCausalLM,
+    FlaxFNetForMultipleChoice,
+    FlaxFNetForQuestionAnswering,
+    FlaxFNetForSequenceClassification,
+    FlaxFNetForTokenClassification,
+    FlaxFNetModel,
+)
 from ..bart.modeling_flax_bart import (
     FlaxBartForConditionalGeneration,
     FlaxBartForQuestionAnswering,
@@ -66,6 +77,7 @@ from ..t5.modeling_flax_t5 import FlaxT5ForConditionalGeneration, FlaxT5Model
 from ..vit.modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel
 from .auto_factory import auto_class_factory
 from .configuration_auto import (
+    FNetConfig,
     BartConfig,
     BertConfig,
     BigBirdConfig,
@@ -84,6 +96,7 @@ logger = logging.get_logger(__name__)
 FLAX_MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
+        (FNetConfig, FlaxFNetModel),
         (RobertaConfig, FlaxRobertaModel),
         (BertConfig, FlaxBertModel),
         (BigBirdConfig, FlaxBigBirdModel),
@@ -111,6 +124,8 @@ FLAX_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 FLAX_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
+(FNetConfig, FlaxFNetForMaskedLM),
+(FNetConfig, FlaxFNetForMaskedLM),
         (RobertaConfig, FlaxRobertaForMaskedLM),
         (BertConfig, FlaxBertForMaskedLM),
         (BigBirdConfig, FlaxBigBirdForMaskedLM),
@@ -137,6 +152,7 @@ FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
 FLAX_MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Causal LM mapping
+(FNetConfig, FlaxFNetForCausalLM),
         (GPT2Config, FlaxGPT2LMHeadModel)
     ]
 )
@@ -144,6 +160,7 @@ FLAX_MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
 FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
+(FNetConfig, FlaxFNetForSequenceClassification),
         (RobertaConfig, FlaxRobertaForSequenceClassification),
         (BertConfig, FlaxBertForSequenceClassification),
         (BigBirdConfig, FlaxBigBirdForSequenceClassification),
@@ -155,6 +172,7 @@ FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
+(FNetConfig, FlaxFNetForQuestionAnswering),
         (RobertaConfig, FlaxRobertaForQuestionAnswering),
         (BertConfig, FlaxBertForQuestionAnswering),
         (BigBirdConfig, FlaxBigBirdForQuestionAnswering),
@@ -166,6 +184,7 @@ FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
 FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
+(FNetConfig, FlaxFNetForTokenClassification),
         (RobertaConfig, FlaxRobertaForTokenClassification),
         (BertConfig, FlaxBertForTokenClassification),
         (BigBirdConfig, FlaxBigBirdForTokenClassification),
@@ -176,6 +195,7 @@ FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
+(FNetConfig, FlaxFNetForMultipleChoice),
         (RobertaConfig, FlaxRobertaForMultipleChoice),
         (BertConfig, FlaxBertForMultipleChoice),
         (BigBirdConfig, FlaxBigBirdForMultipleChoice),
