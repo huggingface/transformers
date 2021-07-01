@@ -27,15 +27,10 @@ from transformers.models.roberta import RobertaOnnxConfig
 from transformers.models.t5 import T5OnnxConfig
 from transformers.models.xlm_roberta import XLMRobertaOnnxConfig
 
-from .. import is_tf_available, is_torch_available
+from .. import is_torch_available
 from ..utils import logging
 from .convert import convert_pytorch, validate_model_outputs
 
-
-# Set of frameworks we can export from
-FRAMEWORK_NAME_PT = "pytorch"
-FRAMEWORK_NAME_TF = "tensorflow"
-FRAMEWORK_CHOICES = {FRAMEWORK_NAME_PT, FRAMEWORK_NAME_PT}
 
 if is_torch_available():
     from transformers import AutoModel, PreTrainedModel
@@ -44,12 +39,6 @@ if is_torch_available():
         "default": AutoModel,
     }
 
-if is_tf_available():
-    from transformers import TFAutoModel, TFPreTrainedModel
-
-    FEATURES_TO_TF_AUTOMODELS = {
-        "default": TFAutoModel,
-    }
 
 # Set of model topologies we support associated to the features supported by each topology and the factory
 SUPPORTED_MODEL_KIND = {
@@ -65,33 +54,23 @@ SUPPORTED_MODEL_KIND = {
 }
 
 
-def get_model_from_framework_and_features(framework: str, features: str, model: str):
+def get_model_from_features(features: str, model: str):
     """
     Attempt to retrieve a model from a model's name and the features to be enabled.
 
     Args:
-        framework: The framework we are targeting
         features: The features required
         model: The name of the model to export
 
     Returns:
 
     """
-    if framework == FRAMEWORK_NAME_PT:
-        if features not in FEATURES_TO_AUTOMODELS:
-            raise KeyError(
-                f"Unknown feature: {features}." f"Possible values are {list(FEATURES_TO_AUTOMODELS.values())}"
+    if features not in FEATURES_TO_AUTOMODELS:
+        raise KeyError(
+            f"Unknown feature: {features}." f"Possible values are {list(FEATURES_TO_AUTOMODELS.values())}"
             )
 
-        return FEATURES_TO_AUTOMODELS[features].from_pretrained(model)
-    elif framework == FRAMEWORK_NAME_TF:
-        if features not in FEATURES_TO_TF_AUTOMODELS:
-            raise KeyError(
-                f"Unknown feature: {features}." f"Possible values are {list(FEATURES_TO_AUTOMODELS.values())}"
-            )
-        return FEATURES_TO_TF_AUTOMODELS[features].from_pretrained(model)
-    else:
-        raise ValueError(f"Unknown framework: {framework}")
+    return FEATURES_TO_AUTOMODELS[features].from_pretrained(model)
 
 
 def check_supported_model_or_raise(
@@ -130,13 +109,6 @@ def main():
     parser = ArgumentParser("Hugging Face ONNX Exporter tool")
     parser.add_argument("-m", "--model", type=str, required=True, help="Model's name of path on disk to load.")
     parser.add_argument(
-        "-f",
-        "--framework",
-        choices=FRAMEWORK_CHOICES,
-        required=True,
-        help=f"Framework to use when exporting. Possible values are: {FRAMEWORK_CHOICES}",
-    )
-    parser.add_argument(
         "--features",
         choices=["default"],
         default="default",
@@ -157,11 +129,9 @@ def main():
     if not args.output.parent.exists():
         args.output.parent.mkdir(parents=True)
 
-    logger.info(f"About to export model: {args.model} using framework: {args.framework}")
-
     # Allocate the model
     tokenizer = AutoTokenizer.from_pretrained(args.model)
-    model = get_model_from_framework_and_features(args.framework, args.features, args.model)
+    model = get_model_from_features(args.features, args.model)
     model_kind, model_onnx_config = check_supported_model_or_raise(model, features=args.features)
     onnx_config = model_onnx_config(model.config)
 
@@ -172,10 +142,7 @@ def main():
             f"At least  {onnx_config.default_onnx_opset} is required."
         )
 
-    if args.framework == FRAMEWORK_NAME_PT:
-        onnx_inputs, onnx_outputs = convert_pytorch(tokenizer, model, onnx_config, args.opset, args.output)
-    else:
-        raise NotImplementedError()
+    onnx_inputs, onnx_outputs = convert_pytorch(tokenizer, model, onnx_config, args.opset, args.output)
 
     validate_model_outputs(onnx_config, tokenizer, model, args.output, onnx_outputs, args.atol)
     logger.info(f"All good, model saved at: {args.output.as_posix()}")
