@@ -445,7 +445,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # (and avoid unnecessary warnings).
     _keys_to_ignore_on_load_unexpected = None
     # a list of of tensor names to ignore when saving the model (useful for keys that aren't
-    # trained, but which are deterministic)
+    # trained, but which are deterministic, or tied variables)
     _keys_to_ignore_on_save = None
 
     is_parallelizable = False
