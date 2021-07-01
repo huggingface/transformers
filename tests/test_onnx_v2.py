@@ -121,11 +121,7 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
     Cover the tests for model which have use_cache feature (i.e. "with_past" for ONNX)
     """
 
-    SUPPORTED_WITH_PAST_CONFIGS = {
-        ("BART", BartConfig),
-        ("GPT2", GPT2Config),
-        ("T5", T5Config)
-    }
+    SUPPORTED_WITH_PAST_CONFIGS = {("BART", BartConfig), ("GPT2", GPT2Config), ("T5", T5Config)}
 
     @patch.multiple(OnnxConfigWithPast, __abstractmethods__=set())
     def test_use_past(self):
@@ -135,13 +131,11 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
         for name, config in OnnxConfigWithPastTestCaseV2.SUPPORTED_WITH_PAST_CONFIGS:
             with self.subTest(name):
                 self.assertFalse(
-                    OnnxConfigWithPast.default(config()).use_past,
-                    "OnnxConfigWithPast.default() should not use_past"
+                    OnnxConfigWithPast.default(config()).use_past, "OnnxConfigWithPast.default() should not use_past"
                 )
 
                 self.assertTrue(
-                    OnnxConfigWithPast.with_past(config()).use_past,
-                    "OnnxConfigWithPast.default() should use_past"
+                    OnnxConfigWithPast.with_past(config()).use_past, "OnnxConfigWithPast.default() should use_past"
                 )
 
     @patch.multiple(OnnxConfigWithPast, __abstractmethods__=set())
@@ -157,8 +151,7 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
                 self.assertIsNotNone(onnx_config_default.values_override, "values_override should not be None")
                 self.assertIn("use_cache", onnx_config_default.values_override, "use_cache should be present")
                 self.assertFalse(
-                    onnx_config_default.values_override["use_cache"],
-                    "use_cache should be False if not using past"
+                    onnx_config_default.values_override["use_cache"], "use_cache should be False if not using past"
                 )
 
                 # with past
@@ -166,8 +159,7 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
                 self.assertIsNotNone(onnx_config_default.values_override, "values_override should not be None")
                 self.assertIn("use_cache", onnx_config_default.values_override, "use_cache should be present")
                 self.assertTrue(
-                    onnx_config_default.values_override["use_cache"],
-                    "use_cache should be False if not using past"
+                    onnx_config_default.values_override["use_cache"], "use_cache should be False if not using past"
                 )
 
 
@@ -197,6 +189,7 @@ class OnnxExportTestCaseV2(TestCase):
     """
     Integration tests ensuring supported models are correctly exported
     """
+
     @slow
     @require_torch
     def test_pytorch_export_default(self):
@@ -211,8 +204,9 @@ class OnnxExportTestCaseV2(TestCase):
                 onnx_config = onnx_config_class.default(model.config)
 
                 with NamedTemporaryFile("w") as output:
-                    onnx_inputs, onnx_outputs = \
-                        convert_pytorch(tokenizer, model, onnx_config, DEFAULT_ONNX_OPSET, Path(output.name))
+                    onnx_inputs, onnx_outputs = convert_pytorch(
+                        tokenizer, model, onnx_config, DEFAULT_ONNX_OPSET, Path(output.name)
+                    )
 
                     try:
                         validate_model_outputs(onnx_config, tokenizer, model, Path(output.name), onnx_outputs, 1e-5)

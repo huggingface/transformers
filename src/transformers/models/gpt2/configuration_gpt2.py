@@ -14,7 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ OpenAI GPT-2 configuration """
-from typing import Mapping
+from collections import OrderedDict
+from typing import Any, Mapping, Optional
+
+from transformers import PreTrainedTokenizer, TensorType, is_torch_available
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast
@@ -202,19 +205,62 @@ class GPT2Config(PretrainedConfig):
 class GPT2OnnxConfig(OnnxConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return {
-            "input_ids": {0: "batch", 1: "sequence"},
-            "attention_mask": {0: "batch", 1: "sequence"},
-        }
+        if self.use_past:
+            common_inputs = OrderedDict({"input_ids": {0: "batch"}})
+            for i in range(self._config.n_layer * 2):
+                common_inputs[f"past_key_values.{i}"] = {0: "batch", 2: "sequence"}
+
+            common_inputs["attention_mask"] = {0: "batch"}
+        else:
+            common_inputs = OrderedDict({
+                "input_ids": {0: "batch", 1: "sequence"},
+                "attention_mask": {0: "batch", 1: "sequence"}
+            })
+
+        return common_inputs
 
     @property
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
         if self.use_past:
-            return {
-                "last_hidden_state": {0: "batch", 1: "sequence"},
-                "past_keys": {0: "batch", 2: "sequence"},
-            }
+            common_outputs = {"last_hidden_state": {0: "batch", 1: "sequence"}}
+
+            for i in range(self._config.n_layer * 2):
+                common_outputs[f"present.{i}"] = {0: "batch", 2: "sequence"}
+
+            return common_outputs
         else:
-            return {
-                "last_hidden_state": {0: "batch", 1: "sequence"},
-            }
+            return {"last_hidden_state": {0: "batch", 1: "sequence"}}
+
+    def generate_dummy_inputs(
+        self,
+        tokenizer: PreTrainedTokenizer,
+        batch_size: int = -1,
+        seq_length: int = -1,
+        is_pair: bool = False,
+        framework: Optional[TensorType] = None,
+    ) -> Mapping[str, Any]:
+        common_inputs = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
+
+        # We need to order the input in the way they appears in the forward()
+        ordered_inputs = OrderedDict({
+            "input_ids": common_inputs["input_ids"]
+        })
+
+        # Need to add the past_keys
+        if self.use_past:
+            if not is_torch_available():
+                raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
+            else:
+                import torch
+
+                batch = common_inputs["input_ids"].shape[0]
+                ordered_inputs["past_key_values"] = [
+                    (
+                        torch.zeros((batch, self._config.n_head, 1, self._config.hidden_size // self._config.n_head)),
+                        torch.zeros((batch, self._config.n_head, 1, self._config.hidden_size // self._config.n_head)),
+                    )
+                    for _ in range(self._config.n_layer)
+                ]
+
+        ordered_inputs["attention_mask"] = common_inputs["attention_mask"]
+        return ordered_inputs

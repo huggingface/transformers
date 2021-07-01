@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from inspect import signature
 from itertools import chain
 from pathlib import Path
 from typing import Iterable, List, Tuple, Union
@@ -97,7 +98,7 @@ def convert_pytorch(
     # Ensure inputs match
     # TODO: Check when exporting QA we provide "is_pair=True"
     model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.PYTORCH)
-    inputs_match, ordered_onnx_inputs = ensure_model_and_config_inputs_match(model_inputs.keys(), config.inputs.keys())
+    inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
     onnx_outputs = list(config.outputs.keys())
 
     if not inputs_match:
@@ -108,7 +109,7 @@ def convert_pytorch(
         model,
         (model_inputs,),
         f=output.as_posix(),
-        input_names=ordered_onnx_inputs,
+        input_names=list(config.inputs.keys()),
         output_names=onnx_outputs,
         dynamic_axes={name: axes for name, axes in chain(config.inputs.items(), config.outputs.items())},
         do_constant_folding=True,
@@ -117,7 +118,7 @@ def convert_pytorch(
         opset_version=opset,
     )
 
-    return ordered_onnx_inputs, onnx_outputs
+    return matched_inputs, onnx_outputs
 
 
 def validate_model_outputs(
@@ -133,7 +134,6 @@ def validate_model_outputs(
     logger.info("Validating ONNX model...")
 
     reference_model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.PYTORCH)
-    onnx_model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.NUMPY)
 
     # Create ONNX Runtime session
     options = SessionOptions()
@@ -151,8 +151,17 @@ def validate_model_outputs(
         else:
             ref_outputs_dict[name] = value
 
+    # We flatten potential collection of inputs (i.e. past_keys)
+    onnx_inputs = {}
+    for name, value in reference_model_inputs.items():
+        if isinstance(value, (list, tuple)):
+            value = flatten_output_collection_property(name, value)
+            onnx_inputs.update({tensor_name: pt_tensor.numpy() for tensor_name, pt_tensor in value.items()})
+        else:
+            onnx_inputs[name] = value.numpy()
+
     # Compute outputs from the ONNX model
-    onnx_outputs = session.run(onnx_named_outputs, dict(onnx_model_inputs))
+    onnx_outputs = session.run(onnx_named_outputs, onnx_inputs)
 
     # Check we have a subset of the keys into onnx_outputs against ref_outputs
     ref_outputs_set, onnx_outputs_set = set(ref_outputs_dict.keys()), set(onnx_named_outputs)
@@ -195,7 +204,7 @@ def validate_model_outputs(
 
 
 def ensure_model_and_config_inputs_match(
-    model_inputs: Iterable[str], config_inputs: Iterable[str]
+    model: Union[PreTrainedModel, TFPreTrainedModel], model_inputs: Iterable[str]
 ) -> Tuple[bool, List[str]]:
     """
 
@@ -203,12 +212,14 @@ def ensure_model_and_config_inputs_match(
     :param config_inputs:
     :return:
     """
-    model_inputs_set, config_inputs_set = set(model_inputs), set(config_inputs)
+    forward_parameters = signature(model.forward).parameters
+    model_inputs_set = set(model_inputs)
 
     # We are fine if config_inputs has more keys than model_inputs
-    is_ok = model_inputs_set.issubset(config_inputs_set)
+    forward_inputs_set = set(forward_parameters.keys())
+    is_ok = model_inputs_set.issubset(forward_inputs_set)
 
-    # Make sure the input order match
-    matching_inputs = config_inputs_set.intersection(model_inputs_set)
-    ordered_matching_inputs = [config_input for config_input in config_inputs if config_input in matching_inputs]
-    return is_ok, ordered_matching_inputs
+    # Make sure the input order match (VERY IMPORTANT !!!!)
+    matching_inputs = forward_inputs_set.intersection(model_inputs_set)
+    ordered_inputs = [parameter for parameter in forward_parameters.keys() if parameter in matching_inputs]
+    return is_ok, ordered_inputs

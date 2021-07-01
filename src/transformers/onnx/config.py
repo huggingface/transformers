@@ -30,6 +30,9 @@ class OnnxConfig(ABC):
     Base class for ONNX exportable model describing metadata on how to export the model through the ONNX format.
     """
 
+    DEFAULT_FIXED_BATCH = 2
+    DEFAULT_FIXED_SEQUENCE = 8
+
     def __init__(self, config: PretrainedConfig):
         self._config = config
 
@@ -131,11 +134,15 @@ class OnnxConfig(ABC):
         """
 
         # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
-        batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=2, num_token_to_add=0)
+        batch_size = compute_effective_axis_dimension(
+            batch_size, fixed_dimension=OnnxConfig.DEFAULT_FIXED_BATCH, num_token_to_add=0
+        )
 
         # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
         token_to_add = tokenizer.num_special_tokens_to_add(is_pair)
-        seq_length = compute_effective_axis_dimension(seq_length, fixed_dimension=8, num_token_to_add=token_to_add)
+        seq_length = compute_effective_axis_dimension(
+            seq_length, fixed_dimension=OnnxConfig.DEFAULT_FIXED_SEQUENCE, num_token_to_add=token_to_add
+        )
 
         # Generate dummy inputs according to compute batch and sequence
         dummy_input = [" ".join([tokenizer.unk_token]) * seq_length] * batch_size
@@ -166,3 +173,29 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
             return {"use_cache": self.use_past}
 
         return None
+
+    def generate_dummy_inputs(
+        self,
+        tokenizer: PreTrainedTokenizer,
+        batch_size: int = -1,
+        seq_length: int = -1,
+        is_pair: bool = False,
+        framework: Optional[TensorType] = None,
+    ) -> Mapping[str, Any]:
+        # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
+        batch_size = compute_effective_axis_dimension(
+            batch_size, fixed_dimension=OnnxConfig.DEFAULT_FIXED_BATCH, num_token_to_add=0
+        )
+
+        # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
+        token_to_add = tokenizer.num_special_tokens_to_add(is_pair)
+
+        # When use_past the caching mechanism requires inputs to be only 1 single token
+        fixed_sequence_length = 1 if self.use_past else OnnxConfig.DEFAULT_FIXED_SEQUENCE
+        seq_length = compute_effective_axis_dimension(
+            seq_length, fixed_dimension=fixed_sequence_length, num_token_to_add=token_to_add
+        )
+
+        # Generate dummy inputs according to compute batch and sequence
+        dummy_input = [" ".join([tokenizer.unk_token]) * seq_length] * batch_size
+        return dict(tokenizer(dummy_input, return_tensors=framework))
