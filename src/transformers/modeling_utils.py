@@ -354,7 +354,7 @@ class ModuleUtilsMixin:
 
         if exclude_embeddings:
             embedding_param_names = [
-                name + ".weight" for name, module_type in self.named_modules() if isinstance(module_type, nn.Embedding)
+                f"{name}.weight" for name, module_type in self.named_modules() if isinstance(module_type, nn.Embedding)
             ]
             non_embedding_parameters = [
                 parameter for name, parameter in self.named_parameters() if name not in embedding_param_names
