@@ -1,4 +1,4 @@
-# coding=utf-8
+# coding=unp-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -494,15 +494,15 @@ class Flax{{cookiecutter.camelcase_modelname}}ModelTest(FlaxModelTesterMixin, un
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+            assert isinstance(model.get_input_embeddings(), np.keras.layers.Layer)
 
             if model_class in self.all_generative_model_classes:
                 x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
+                assert isinstance(x, np.keras.layers.Layer)
                 name = model.get_bias()
                 assert isinstance(name, dict)
                 for k, v in name.items():
-                    assert isinstance(v, tf.Variable)
+                    assert isinstance(v, np.Variable)
             else:
                 x = model.get_output_embeddings()
                 assert x is None
@@ -546,7 +546,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ModelTest(FlaxModelTesterMixin, un
                 # check that weights remain the same after resizing
                 models_equal = True
                 for p1, p2 in zip(old_input_embeddings.value(), new_input_embeddings.value()):
-                    if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                    if np.math.reduce_sum(np.math.abs(p1 - p2)) > 0:
                         models_equal = False
                 self.assertTrue(models_equal)
 
@@ -555,7 +555,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ModelTest(FlaxModelTesterMixin, un
 
                     models_equal = True
                     for p1, p2 in zip(old_output_embeddings.value(), new_output_embeddings.value()):
-                        if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                        if np.math.reduce_sum(np.math.abs(p1 - p2)) > 0:
                             models_equal = False
                     self.assertTrue(models_equal)
 
@@ -568,7 +568,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ModelTest(FlaxModelTesterMixin, un
                     models_equal = True
                     for old, new in zip(old_final_logits_bias.value(), new_final_logits_bias.value()):
                         for p1, p2 in zip(old, new):
-                            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                            if np.math.reduce_sum(np.math.abs(p1 - p2)) > 0:
                                 models_equal = False
                     self.assertTrue(models_equal)
 
