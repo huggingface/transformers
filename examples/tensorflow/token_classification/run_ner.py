@@ -20,25 +20,25 @@ without using a Trainer.
 
 import logging
 import random
+from dataclasses import dataclass, field
+from functools import partial
+from typing import Optional
 
 import datasets
-from dataclasses import dataclass, field
-from datasets import ClassLabel, load_dataset, load_metric
-from typing import Optional
 import numpy as np
 import tensorflow as tf
-from functools import partial
+from datasets import ClassLabel, load_dataset, load_metric
 
 import transformers
 from transformers import (
     CONFIG_MAPPING,
     MODEL_MAPPING,
     AutoConfig,
-    TFAutoModelForTokenClassification,
     AutoTokenizer,
-    create_optimizer,
-    TFTrainingArguments,
     HfArgumentParser,
+    TFAutoModelForTokenClassification,
+    TFTrainingArguments,
+    create_optimizer,
     set_seed,
 )
 from transformers.utils.versions import require_version
@@ -121,10 +121,7 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
-    max_length: Optional[int] = field(
-        default=256,
-        metadata={"help": "Max length (in tokens) for truncation/padding"}
-    )
+    max_length: Optional[int] = field(default=256, metadata={"help": "Max length (in tokens) for truncation/padding"})
     pad_to_max_length: bool = field(
         default=False,
         metadata={
@@ -177,6 +174,8 @@ class DataTrainingArguments:
                 extension = self.validation_file.split(".")[-1]
                 assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
         self.task_name = self.task_name.lower()
+
+
 # endregion
 
 
@@ -195,8 +194,10 @@ def sample_generator(dataset, tokenizer, shuffle, pad_to_multiple_of=None):
             example["labels"][example["labels"] == tokenizer.pad_token_id] = -100
         example = {key: tf.convert_to_tensor(arr) for key, arr in example.items()}
 
-        yield example, example['labels']  # TF needs some kind of labels, even if we don't use them
+        yield example, example["labels"]  # TF needs some kind of labels, even if we don't use them
     return
+
+
 # endregion
 
 
@@ -217,8 +218,19 @@ def dataset_to_tf(dataset, tokenizer, total_batch_size, num_epochs, shuffle):
     train_signature = (train_signature, train_signature["labels"])
     options = tf.data.Options()
     options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
-    tf_dataset = tf.data.Dataset.from_generator(train_generator, output_signature=train_signature).with_options(options).padded_batch(batch_size=total_batch_size, drop_remainder=True, padding_values=(padding_values, np.array(0, dtype=np.int64))).repeat(int(num_epochs))
+    tf_dataset = (
+        tf.data.Dataset.from_generator(train_generator, output_signature=train_signature)
+        .with_options(options)
+        .padded_batch(
+            batch_size=total_batch_size,
+            drop_remainder=True,
+            padding_values=(padding_values, np.array(0, dtype=np.int64)),
+        )
+        .repeat(int(num_epochs))
+    )
     return tf_dataset
+
+
 # endregion
 
 
@@ -402,16 +414,22 @@ def main():
         num_replicas = training_args.strategy.num_replicas_in_sync
         total_train_batch_size = training_args.per_device_train_batch_size * num_replicas
         train_batches_per_epoch = len(train_dataset) // total_train_batch_size
-        tf_train_dataset = dataset_to_tf(train_dataset, tokenizer,
-                                         total_batch_size=total_train_batch_size,
-                                         num_epochs=training_args.num_train_epochs,
-                                         shuffle=True)
+        tf_train_dataset = dataset_to_tf(
+            train_dataset,
+            tokenizer,
+            total_batch_size=total_train_batch_size,
+            num_epochs=training_args.num_train_epochs,
+            shuffle=True,
+        )
         total_eval_batch_size = training_args.per_device_eval_batch_size * num_replicas
         eval_batches_per_epoch = len(eval_dataset) // total_eval_batch_size
-        tf_eval_dataset = dataset_to_tf(eval_dataset, tokenizer,
-                                        total_batch_size=total_eval_batch_size,
-                                        num_epochs=training_args.num_train_epochs,
-                                        shuffle=False)
+        tf_eval_dataset = dataset_to_tf(
+            eval_dataset,
+            tokenizer,
+            total_batch_size=total_eval_batch_size,
+            num_epochs=training_args.num_train_epochs,
+            shuffle=False,
+        )
 
         # endregion
 
@@ -439,8 +457,13 @@ def main():
         logger.info(f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}")
         logger.info(f"  Total train batch size = {total_train_batch_size}")
         # Only show the progress bar once on each machine.
-        model.fit(tf_train_dataset, validation_data=tf_eval_dataset, epochs=int(training_args.num_train_epochs),
-                  steps_per_epoch=train_batches_per_epoch, validation_steps=eval_batches_per_epoch)
+        model.fit(
+            tf_train_dataset,
+            validation_data=tf_eval_dataset,
+            epochs=int(training_args.num_train_epochs),
+            steps_per_epoch=train_batches_per_epoch,
+            validation_steps=eval_batches_per_epoch,
+        )
 
     # We don't do predictions in the strategy scope because there are some issues in there right now.
     # They'll get fixed eventually, promise!
