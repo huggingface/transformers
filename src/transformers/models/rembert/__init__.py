@@ -28,8 +28,10 @@ from ...file_utils import (
 
 _import_structure = {
     "configuration_rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"],
-    "tokenization_rembert": ["RemBertTokenizer"],
 }
+
+if is_sentencepiece_available():
+    _import_structure["tokenization_rembert"] = ["RemBertTokenizer"]
 
 if is_tokenizers_available():
     _import_structure["tokenization_rembert_fast"] = ["RemBertTokenizerFast"]

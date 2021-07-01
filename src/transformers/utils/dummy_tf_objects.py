@@ -1496,6 +1496,10 @@ class TFRemBertForCausalLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
 
 class TFRemBertForMaskedLM:
     def __init__(self, *args, **kwargs):
