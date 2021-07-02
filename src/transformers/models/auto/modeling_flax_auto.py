@@ -62,7 +62,9 @@ from ..roberta.modeling_flax_roberta import (
     FlaxRobertaForTokenClassification,
     FlaxRobertaModel,
 )
+from ..t5.modeling_flax_t5 import FlaxT5ForConditionalGeneration, FlaxT5Model
 from ..vit.modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel
+from ..wav2vec2.modeling_flax_wav2vec2 import FlaxWav2Vec2ForPreTraining, FlaxWav2Vec2Model
 from .auto_factory import auto_class_factory
 from .configuration_auto import (
     BartConfig,
@@ -72,7 +74,9 @@ from .configuration_auto import (
     ElectraConfig,
     GPT2Config,
     RobertaConfig,
+    T5Config,
     ViTConfig,
+    Wav2Vec2Config,
 )
 
 
@@ -90,6 +94,8 @@ FLAX_MODEL_MAPPING = OrderedDict(
         (ElectraConfig, FlaxElectraModel),
         (CLIPConfig, FlaxCLIPModel),
         (ViTConfig, FlaxViTModel),
+        (T5Config, FlaxT5Model),
+        (Wav2Vec2Config, FlaxWav2Vec2Model),
     ]
 )
 
@@ -101,6 +107,8 @@ FLAX_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (BigBirdConfig, FlaxBigBirdForPreTraining),
         (BartConfig, FlaxBartForConditionalGeneration),
         (ElectraConfig, FlaxElectraForPreTraining),
+        (T5Config, FlaxT5ForConditionalGeneration),
+        (Wav2Vec2Config, FlaxWav2Vec2ForPreTraining),
     ]
 )
 
@@ -115,7 +123,15 @@ FLAX_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     ]
 )
 
-FLAX_MODEL_FOR_IMAGECLASSIFICATION_MAPPING = OrderedDict(
+FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
+    [
+        # Model for Seq2Seq Causal LM mapping
+        (BartConfig, FlaxBartForConditionalGeneration),
+        (T5Config, FlaxT5ForConditionalGeneration),
+    ]
+)
+
+FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Image-classsification
         (ViTConfig, FlaxViTForImageClassification),
@@ -181,7 +197,7 @@ FlaxAutoModel = auto_class_factory("FlaxAutoModel", FLAX_MODEL_MAPPING)
 
 FlaxAutoModelForImageClassification = auto_class_factory(
     "FlaxAutoModelForImageClassification",
-    FLAX_MODEL_FOR_IMAGECLASSIFICATION_MAPPING,
+    FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     head_doc="image classification modeling",
 )
 
@@ -195,6 +211,13 @@ FlaxAutoModelForPreTraining = auto_class_factory(
 
 FlaxAutoModelForMaskedLM = auto_class_factory(
     "FlaxAutoModelForMaskedLM", FLAX_MODEL_FOR_MASKED_LM_MAPPING, head_doc="masked language modeling"
+)
+
+
+FlaxAutoModelForSeq2SeqLM = auto_class_factory(
+    "FlaxAutoModelForSeq2SeqLM",
+    FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    head_doc="sequence-to-sequence language modeling",
 )
 
 FlaxAutoModelForSequenceClassification = auto_class_factory(
@@ -219,4 +242,10 @@ FlaxAutoModelForNextSentencePrediction = auto_class_factory(
     "FlaxAutoModelForNextSentencePrediction",
     FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
     head_doc="next sentence prediction",
+)
+
+FlaxAutoModelForSeq2SeqLM = auto_class_factory(
+    "FlaxAutoModelForSeq2SeqLM",
+    FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    head_doc="sequence-to-sequence language modeling",
 )

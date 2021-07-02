@@ -30,6 +30,7 @@ from . import (
     blenderbot,
     blenderbot_small,
     camembert,
+    canine,
     clip,
     convbert,
     cpm,

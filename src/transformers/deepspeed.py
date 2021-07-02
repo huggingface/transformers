@@ -295,11 +295,13 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
 
     """
     import deepspeed
+    from deepspeed.utils import logger as ds_logger
 
     model = trainer.model
+    args = trainer.args
 
-    hf_deepspeed_config = trainer.args.hf_deepspeed_config
-    hf_deepspeed_config.trainer_config_finalize(trainer.args, model, num_training_steps)
+    hf_deepspeed_config = args.hf_deepspeed_config
+    hf_deepspeed_config.trainer_config_finalize(args, model, num_training_steps)
 
     # resume config update - some bits like `model` and `num_training_steps` only become available during train
     config = hf_deepspeed_config.config
@@ -318,7 +320,13 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
     # 4. HF scheduler + DS optimizer: No
 
     optimizer = None
-    if "optimizer" not in config:
+    if "optimizer" in config:
+        if args.adafactor:
+            raise ValueError(
+                "--adafactor was passed, but also found `optimizer` configured in the DeepSpeed config. "
+                "Only one optimizer can be configured."
+            )
+    else:
         if hf_deepspeed_config.is_offload():
             raise ValueError("ZeRO Offload can only work with DeepSpeed optimizers")
 
@@ -349,6 +357,9 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
 
     # keep for quick debug:
     # from pprint import pprint; pprint(config)
+
+    # set the Deepspeed log level consistent with the trainer
+    ds_logger.setLevel(args.get_process_log_level())
 
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
 

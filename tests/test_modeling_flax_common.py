@@ -16,14 +16,25 @@ import copy
 import inspect
 import random
 import tempfile
+import unittest
 from typing import List, Tuple
 
 import numpy as np
 
 import transformers
-from transformers import is_flax_available, is_torch_available
+from huggingface_hub import HfApi
+from requests.exceptions import HTTPError
+from transformers import BertConfig, FlaxBertModel, is_flax_available, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
+from transformers.testing_utils import (
+    ENDPOINT_STAGING,
+    PASS,
+    USER,
+    is_pt_flax_cross_test,
+    is_staging_test,
+    require_flax,
+    slow,
+)
 
 
 if is_flax_available():
@@ -32,7 +43,9 @@ if is_flax_available():
     import jax
     import jax.numpy as jnp
     import jaxlib.xla_extension as jax_xla
-    from transformers import FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING
+    from flax.core.frozen_dict import unfreeze
+    from flax.traverse_util import flatten_dict
+    from transformers import FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING, FLAX_MODEL_MAPPING
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
@@ -245,9 +258,6 @@ class FlaxModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            if model_class.__name__ != "FlaxBertModel":
-                continue
-
             with self.subTest(model_class.__name__):
                 model = model_class(config)
 
@@ -272,6 +282,50 @@ class FlaxModelTesterMixin:
                 outputs_loaded = model_loaded(**prepared_inputs_dict).to_tuple()
                 for output_loaded, output in zip(outputs_loaded, outputs):
                     self.assert_almost_equals(output_loaded, output, 1e-3)
+
+    def test_save_load_from_base(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        base_class = FLAX_MODEL_MAPPING[config.__class__]
+
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+
+            model = base_class(config)
+            base_params = flatten_dict(unfreeze(model.params))
+
+            # check that all base model weights are loaded correctly
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                head_model = model_class.from_pretrained(tmpdirname)
+
+                base_param_from_head = flatten_dict(unfreeze(head_model.params[head_model.base_model_prefix]))
+
+                for key in base_param_from_head.keys():
+                    max_diff = (base_params[key] - base_param_from_head[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+    def test_save_load_to_base(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        base_class = FLAX_MODEL_MAPPING[config.__class__]
+
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+
+            model = model_class(config)
+            base_params_from_head = flatten_dict(unfreeze(model.params[model.base_model_prefix]))
+
+            # check that all base model weights are loaded correctly
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                base_model = base_class.from_pretrained(tmpdirname)
+
+                base_params = flatten_dict(unfreeze(base_model.params))
+
+                for key in base_params_from_head.keys():
+                    max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     @slow
     def test_jit_compilation(self):
@@ -461,3 +515,65 @@ class FlaxModelTesterMixin:
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
+
+
+@require_flax
+@is_staging_test
+class FlaxModelPushToHubTester(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
+        cls._token = cls._api.login(username=USER, password=PASS)
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-model-flax")
+        except HTTPError:
+            pass
+
+        try:
+            cls._api.delete_repo(token=cls._token, name="test-model-flax-org", organization="valid_org")
+        except HTTPError:
+            pass
+
+    def test_push_to_hub(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        model = FlaxBertModel(config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(
+                os.path.join(tmp_dir, "test-model-flax"), push_to_hub=True, use_auth_token=self._token
+            )
+
+            new_model = FlaxBertModel.from_pretrained(f"{USER}/test-model-flax")
+
+            base_params = flatten_dict(unfreeze(model.params))
+            new_params = flatten_dict(unfreeze(new_model.params))
+
+            for key in base_params.keys():
+                max_diff = (base_params[key] - new_params[key]).sum().item()
+                self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+    def test_push_to_hub_in_organization(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        model = FlaxBertModel(config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(
+                os.path.join(tmp_dir, "test-model-flax-org"),
+                push_to_hub=True,
+                use_auth_token=self._token,
+                organization="valid_org",
+            )
+
+            new_model = FlaxBertModel.from_pretrained("valid_org/test-model-flax-org")
+
+            base_params = flatten_dict(unfreeze(model.params))
+            new_params = flatten_dict(unfreeze(new_model.params))
+
+            for key in base_params.keys():
+                max_diff = (base_params[key] - new_params[key]).sum().item()
+                self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")

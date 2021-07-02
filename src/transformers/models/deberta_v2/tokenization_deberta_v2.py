@@ -60,6 +60,13 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
             contains the vocabulary necessary to instantiate a tokenizer.
         do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to lowercase the input when tokenizing.
+        bos_token (:obj:`string`, `optional`, defaults to "[CLS]"):
+            The beginning of sequence token that was used during pre-training. Can be used a sequence classifier token.
+            When building a sequence using special tokens, this is not the token that is used for the beginning of
+            sequence. The token used is the :obj:`cls_token`.
+        eos_token (:obj:`string`, `optional`, defaults to "[SEP]"):
+            The end of sequence token. When building a sequence using special tokens, this is not the token that is
+            used for the end of sequence. The token used is the :obj:`sep_token`.
         unk_token (:obj:`str`, `optional`, defaults to :obj:`"[UNK]"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -101,6 +108,8 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         vocab_file,
         do_lower_case=False,
         split_by_punct=False,
+        bos_token="[CLS]",
+        eos_token="[SEP]",
         unk_token="[UNK]",
         sep_token="[SEP]",
         pad_token="[PAD]",
@@ -113,6 +122,8 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
 
         super().__init__(
             do_lower_case=do_lower_case,
+            bos_token=bos_token,
+            eos_token=eos_token,
             unk_token=unk_token,
             sep_token=sep_token,
             pad_token=pad_token,
@@ -288,7 +299,7 @@ class SPMTokenizer:
         # <s> 1+1
         # </s> 2+1
         self.vocab = {spm.IdToPiece(i): i for i in range(bpe_vocab_size)}
-        self.id_to_tokens = [spm.IdToPiece(i) for i in range(bpe_vocab_size)]
+        self.ids_to_tokens = [spm.IdToPiece(i) for i in range(bpe_vocab_size)]
         # self.vocab['[PAD]'] = 0
         # self.vocab['[CLS]'] = 1
         # self.vocab['[SEP]'] = 2
@@ -351,7 +362,7 @@ class SPMTokenizer:
             self.special_tokens.append(token)
             if token not in self.vocab:
                 self.vocab[token] = len(self.vocab) - 1
-                self.id_to_tokens.append(token)
+                self.ids_to_tokens.append(token)
         return self.id(token)
 
     def part_of_whole_word(self, token, is_bos=False):
