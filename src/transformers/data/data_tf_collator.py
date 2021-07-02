@@ -20,7 +20,7 @@ import tensorflow as tf
 from ..tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 
 
-@dataclass(frozen=True)
+# @dataclass(frozen=True)
 class TFDataCollatorForLanguageModeling:
     """
     Data collator used for language modeling. Encodes sequences for Masked Language Modeling as mentioned in the paper
@@ -31,16 +31,34 @@ class TFDataCollatorForLanguageModeling:
     Args:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
             The tokenizer used for encoding the data.
+        batch_size (:obj:`int`):
+            The size of the batch.
+        padding_length (:obj:`int`, `optional`):
+            The length of the vector concatenated to the largest element
         mlm_probability (:obj:`float`, `optional`, defaults to 0.15):
             The probability with which to (randomly) mask tokens in the input.
         special_tokens_mask (:obj:`tf.Tensor`, `optional`):
             If set, special tokens will have zero probability of being masked.
     """
+    #
+    # tokenizer: PreTrainedTokenizerBase
+    # batch_size: int
+    # padding_length: int = None
+    # special_tokens_mask: tf.Tensor = None
+    # mlm_probability: float = 0.15
 
-    tokenizer: PreTrainedTokenizerBase
-    padding_length: int = None
-    mlm_probability: float = 0.15
-    special_tokens_mask: Optional[tf.Tensor] = None
+    def __init__(
+        self,
+        tokenizer: PreTrainedTokenizerBase,
+        batch_size: int,
+        special_tokens_mask: tf.Tensor = None,
+        padding_length: int = None):
+
+        self.tokenizer = tokenizer
+        self.batch_size = batch_size
+        self.padding_length = padding_length
+        self.special_tokens_mask = special_tokens_mask
+        self.mlm_probability = 0.15
 
     def __post_init__(self):
         if self.tokenizer.mask_token is None:
@@ -127,28 +145,16 @@ class TFDataCollatorForLanguageModeling:
         return result
 
     @tf.function()
-    def encode_objects(self, examples: Union[List[int], tf.Tensor, Dict[str, tf.Tensor]]) -> tf.data.Dataset:
+    def encode_objects(self, examples: List[Union[List[int], tf.Tensor, Dict[str, tf.Tensor]]]) -> tf.data.Dataset:
+
+        if type(examples[0]) == dict:
+
+
         padded_output = self.tf_pad_tokens(examples, self.tokenizer, self.padding_length)
 
-        # if len(examples.shape) > 1:
-        #     length_shape = examples.shape[1]
-
-        #     if self.padding_length is not None and length_shape % self.padding_length != 0:
-        #         final_length = length_shape + self.padding_length
-        #     else:
-        #         final_length = length_shape
-
-        #     padded_output = tf.ensure_shape(padded_output, [2, final_length]) 
-
-        encoded_batch = {}
+        encoded_batch = dict()
         # Mask example sequences and create their respective labels
-        encoded_batch["input_ids"], encoded_batch["labels"] = self.tf_mask_tokens(
-            padded_output
-        )
-
-        # if len(examples.shape) > 1:
-        #     encoded_batch["input_ids"] = tf.ensure_shape(encoded_batch["input_ids"], [2, final_length])
-        #     encoded_batch["labels"] = tf.ensure_shape(encoded_batch["labels"], [2, final_length])
+        encoded_batch["input_ids"], encoded_batch["labels"] = self.tf_mask_tokens(padded_output)
     
         return encoded_batch
 
@@ -159,37 +165,60 @@ class TFDataCollatorForLanguageModeling:
     @tf.function
     def __call__(self, 
                  examples: tf.data.Dataset,
-                 isRagged = False) -> tf.data.Dataset:
-        if isRagged:
-            examples = examples.batch(2).map(self.square_ragged_tensors).unbatch()
+                 is_ragged=False) -> tf.data.Dataset:
+        if is_ragged:
+            examples = examples.batch(self.batch_size).map(self.square_ragged_tensors).unbatch()
 
-        return examples.map(self.encode_objects).batch(2)
-        # padded_output = self.tf_pad_tokens(examples, self.tokenizer, self.padding_length)
-
-        # # if len(examples.shape) > 1:
-        # #     length_shape = examples.shape[1]
-
-        # #     if self.padding_length is not None and length_shape % self.padding_length != 0:
-        # #         final_length = length_shape + self.padding_length
-        # #     else:
-        # #         final_length = length_shape
-
-        # #     padded_output = tf.ensure_shape(padded_output, [2, final_length]) 
-
-        # encoded_batch = {}
-        # # Mask example sequences and create their respective labels
-        # encoded_batch["input_ids"], encoded_batch["labels"] = self.tf_mask_tokens(
-        #     padded_output
-        # )
-
-        # # if len(examples.shape) > 1:
-        # #     encoded_batch["input_ids"] = tf.ensure_shape(encoded_batch["input_ids"], [2, final_length])
-        # #     encoded_batch["labels"] = tf.ensure_shape(encoded_batch["labels"], [2, final_length])
-    
-        # return encoded_batch
+        return examples.map(self.encode_objects).batch(self.batch_size)
 
     @tf.function
     def tf_mask_tokens(
+            self,
+            inputs: tf.Tensor
+    ) -> Tuple[tf.Tensor, tf.Tensor]:
+        """-
+        Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
+        """
+        labels = tf.identity(inputs)
+
+        # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
+        probability_matrix = tf.fill(tf.shape(labels), self.mlm_probability)
+
+        if self.special_tokens_mask is None:
+            special_tokens_tensor = tf.constant(self.tokenizer.all_special_ids, dtype=tf.int32)
+            special_tokens_mask = self.mask_special_tokens(labels, special_tokens_tensor)
+        else:
+            special_tokens_mask = tf.cast(self.special_tokens_mask, dtype=tf.bool)
+
+        probability_matrix = tf.where(~special_tokens_mask, probability_matrix, 0)
+        masked_indices = self.pseudo_bernoulli(probability_matrix, labels)
+
+        labels = tf.where(masked_indices, labels, -100)  # We only compute loss on masked tokens
+
+        # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
+        indices_replaced = (
+                self.pseudo_bernoulli(tf.fill(tf.shape(labels), 0.8), labels) & masked_indices
+        )
+
+        mask_token = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
+        inputs = tf.where(~indices_replaced, inputs, mask_token)
+
+        # 10% of the time, we replace masked input tokens with random word
+        indices_random = (
+                self.pseudo_bernoulli(tf.fill(tf.shape(labels), 0.5), labels)
+                & masked_indices
+                & ~indices_replaced
+        )
+
+        random_words = tf.random.uniform(tf.shape(labels), maxval=len(self.tokenizer), dtype=tf.int32)
+
+        inputs = tf.where(indices_random, random_words, inputs)
+
+        # The rest of the time (10% of the time) we keep the masked input tokens unchanged
+        return inputs, labels
+
+    @tf.function
+    def tf_mask_tokens_dict(
             self,
             inputs: tf.Tensor
     ) -> Tuple[tf.Tensor, tf.Tensor]:
