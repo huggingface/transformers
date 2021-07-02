@@ -20,7 +20,6 @@ without using a Trainer.
 
 import logging
 import random
-import sys
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Optional
