@@ -19,7 +19,6 @@ import tensorflow as tf
 from ..tokenization_utils_base import PreTrainedTokenizerBase
 
 
-# @dataclass(frozen=True)
 class TFDataCollatorForLanguageModeling:
     """
     Data collator used for language modeling. Encodes sequences for Masked Language Modeling as mentioned in the paper
@@ -33,7 +32,7 @@ class TFDataCollatorForLanguageModeling:
         batch_size (:obj:`int`):
             The size of the batch.
         padding_length (:obj:`int`, `optional`):
-            The length of the vector concatenated to the largest element
+            The length of the vector concatenated to the largest element.
         mlm_probability (:obj:`float`, `optional`, defaults to 0.15):
             The probability with which to (randomly) mask tokens in the input.
         special_tokens_mask (:obj:`tf.Tensor`, `optional`):
@@ -87,14 +86,13 @@ class TFDataCollatorForLanguageModeling:
         if multiple_tensors:
             length_of_first = tf.shape(examples[0])[0]
 
-
             are_tensors_same_length = True
             for x in examples:
                 are_tensors_same_length &= (tf.shape(x)[0] == length_of_first)
 
             no_padding_necessary = are_tensors_same_length and \
                                    (pad_to_multiple_of is None or
-                                    length_of_first % pad_to_multiple_of == 0)
+                                   length_of_first % pad_to_multiple_of == 0)
         else:
             length_of_first = tf.shape(examples)[0] if shape[0] is None else shape[0]
             no_padding_necessary = (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0)
