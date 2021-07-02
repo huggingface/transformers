@@ -15,8 +15,9 @@
 
 
 import copy
-import numpy as np
 import unittest
+
+import numpy as np
 
 from transformers import is_torch_available
 from transformers.models.auto import get_values
