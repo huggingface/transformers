@@ -63,6 +63,63 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "google/fnet"
 _CONFIG_FOR_DOC = "FNetConfig"
 _TOKENIZER_FOR_DOC = "FNetTokenizer"
+FNET_START_DOCSTRING =  r"""
+
+    This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
+    generic methods the library implements for all its model (such as downloading, saving and converting weights from
+    PyTorch models)
+
+    This model is also a Flax Linen `flax.linen.Module
+    <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`__ subclass. Use it as a regular Flax linen Module
+    and refer to the Flax documentation for all matter related to general usage and behavior.
+
+    Finally, this model supports inherent JAX features such as:
+
+    - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
+    - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
+    - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
+    - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
+
+    Parameters:
+        config (:class:`~transformers.FNETConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
+            model weights.
+"""
+
+FNET_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (:obj:`numpy.ndarray` of shape :obj:`({0})`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`~transformers.FNETConfiTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
+            details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+        attention_mask (:obj:`numpy.ndarray` of shape :obj:`({0})`, `optional`):
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
+        token_type_ids (:obj:`numpy.ndarray` of shape :obj:`({0})`, `optional`):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
+            1]``:
+
+            - 0 corresponds to a `sentence A` token,
+            - 1 corresponds to a `sentence B` token.
+
+            `What are token type IDs? <../glossary.html#token-type-ids>`__
+        position_ids (:obj:`numpy.ndarray` of shape :obj:`({0})`, `optional`):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
+        return_dict (:obj:`bool`, `optional`):
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+
+"""
+
 
 
 class FlaxFNetEmbeddings(nn.Module):
@@ -485,7 +542,7 @@ class FlaxFNetPreTrainedModel(FlaxPreTrainedModel):
             "params"
         ]
 
-    @add_start_docstrings_to_model_forward(FNet_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(FNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
         self,
         input_ids,
@@ -533,63 +590,53 @@ class FlaxFNetPreTrainedModel(FlaxPreTrainedModel):
             rngs=rngs,
         )
         
-FNET_START_DOCSTRING =  r"""
+class FlaxFNetModule(nn.Module):
+    config: FNetConfig
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    add_pooling_layer: bool = True
 
-    This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading, saving and converting weights from
-    PyTorch models)
+    def setup(self):
+        self.embeddings = FlaxFNetEmbeddings(self.config, dtype=self.dtype)
+        self.encoder = FlaxFNetEncoder(self.config, dtype=self.dtype)
+        self.pooler = FlaxFNetPooler(self.config, dtype=self.dtype)
 
-    This model is also a Flax Linen `flax.linen.Module
-    <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`__ subclass. Use it as a regular Flax linen Module
-    and refer to the Flax documentation for all matter related to general usage and behavior.
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        hidden_states = self.embeddings(
+            input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic
+        )
+        outputs = self.encoder(
+            hidden_states,
+            attention_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        hidden_states = outputs[0]
+        pooled = self.pooler(hidden_states) if self.add_pooling_layer else None
 
-    Finally, this model supports inherent JAX features such as:
+        if not return_dict:
+            # if pooled is None, don't return it
+            if pooled is None:
+                return (hidden_states,) + outputs[1:]
+            return (hidden_states, pooled) + outputs[1:]
 
-    - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
-    - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
-    - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
-    - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
-
-    Parameters:
-        config (:class:`~transformers.FNETConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
-            model weights.
-"""
-
-FNET_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (:obj:`numpy.ndarray` of shape :obj:`({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using :class:`~transformers.FNETConfiTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
-            details.
-
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`numpy.ndarray` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`numpy.ndarray` of shape :obj:`({0})`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
-            1]``:
-
-            - 0 corresponds to a `sentence A` token,
-            - 1 corresponds to a `sentence B` token.
-
-            `What are token type IDs? <../glossary.html#token-type-ids>`__
-        position_ids (:obj:`numpy.ndarray` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
-
-"""
-
+        return FlaxBaseModelOutputWithPooling(
+            last_hidden_state=hidden_states,
+            pooler_output=pooled,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 add_start_docstrings(
     "The bare FNet Model transformer outputting raw hidden-states without any specific head on top.",
