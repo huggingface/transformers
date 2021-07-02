@@ -27,7 +27,7 @@ from typing import Optional
 import datasets
 import numpy as np
 import tensorflow as tf
-from datasets import ClassLabel, load_dataset
+from datasets import ClassLabel, load_dataset, load_metric
 
 import transformers
 from transformers import (
@@ -451,7 +451,45 @@ def main():
         model.compile(loss={"loss": dummy_loss}, optimizer=optimizer)
         # endregion
 
-        # Train!
+        # Metrics
+        metric = load_metric("seqeval")
+
+        def get_labels(y_pred, y_true):
+            # Transform predictions and references tensos to numpy arrays
+
+            # Remove ignored index (special tokens)
+            true_predictions = [
+                [label_list[p] for (p, l) in zip(pred, gold_label) if l != -100]
+                for pred, gold_label in zip(y_pred, y_true)
+            ]
+            true_labels = [
+                [label_list[l] for (p, l) in zip(pred, gold_label) if l != -100]
+                for pred, gold_label in zip(y_pred, y_true)
+            ]
+            return true_predictions, true_labels
+
+        def compute_metrics():
+            results = metric.compute()
+            if data_args.return_entity_level_metrics:
+                # Unpack nested dictionaries
+                final_results = {}
+                for key, value in results.items():
+                    if isinstance(value, dict):
+                        for n, v in value.items():
+                            final_results[f"{key}_{n}"] = v
+                    else:
+                        final_results[key] = value
+                return final_results
+            else:
+                return {
+                    "precision": results["overall_precision"],
+                    "recall": results["overall_recall"],
+                    "f1": results["overall_f1"],
+                    "accuracy": results["overall_accuracy"],
+                }
+        # endregion
+
+        # region Training
         logger.info("***** Running training *****")
         logger.info(f"  Num examples = {len(train_dataset)}")
         logger.info(f"  Num Epochs = {training_args.num_train_epochs}")
@@ -465,6 +503,25 @@ def main():
             steps_per_epoch=train_batches_per_epoch,
             validation_steps=eval_batches_per_epoch,
         )
+        # endregion
+
+        # region Predictions
+        # For predictions, we preload the entire validation set - note that if you have a really giant validation
+        # set, you might need to change this!
+        eval_inputs = {key: tf.ragged.constant(eval_dataset[key]).to_tensor() for key in eval_dataset.features}
+        predictions = model.predict(eval_inputs, batch_size=training_args.per_device_eval_batch_size)['logits']
+        predictions = tf.math.argmax(predictions, axis=-1)
+        labels = np.array(eval_inputs['labels'])
+        preds, refs = get_labels(predictions, labels)
+        metric.add_batch(
+            predictions=preds,
+            references=refs,
+        )
+        eval_metric = compute_metrics()
+        logger.info("Evaluation metrics:")
+        for key, val in eval_metric.items():
+            logger.info(f"{key}: {val:.4f}")
+        # endregion
 
     # We don't do predictions in the strategy scope because there are some issues in there right now.
     # They'll get fixed eventually, promise!
