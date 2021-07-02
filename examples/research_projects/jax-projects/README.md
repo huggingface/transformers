@@ -995,7 +995,13 @@ In the following, we will describe how to do so using a standard console, but yo
 $ gcloud config set account <your-email-adress>
 ```
 
-3. Next, you will need to authenticate yourself. You can do so by running: 
+3. Let's also make sure the correct project is set in case your email is used for multiple gcloud projects:
+
+```bash
+$ gcloud config set project hf-flax
+```
+
+4. Next, you will need to authenticate yourself. You can do so by running: 
 
 ```bash
 $ gcloud auth login
@@ -1003,7 +1009,7 @@ $ gcloud auth login
 
 This should give you a link to a website, where you can authenticate your gmail account.
 
-4. Finally, you can ssh into the TPU VM! Please run the following command by setting <zone> to either `europe-west4-a` or `us-central1-a` (depending on what is stated in the second email you received) and <tpu-name> to the TPU name also sent to you in the second email.
+5. Finally, you can ssh into the TPU VM! Please run the following command by setting <zone> to either `europe-west4-a` or `us-central1-a` (depending on what is stated in the second email you received) and <tpu-name> to the TPU name also sent to you in the second email.
 	
 ```bash
 $ gcloud alpha compute tpus tpu-vm ssh <tpu-name> --zone <zone> --project hf-flax
