@@ -40,6 +40,7 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
+<<<<<<< HEAD
     def assert_all_equal(self, batches: list, key: str, shape: tuple):
         for batch in batches:
             self.assertEqual(batch[key].shape, tf.TensorShape(shape))
@@ -236,3 +237,123 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(list(batch)[0]["token_type_ids"].shape, tf.TensorShape((2, 8)))
         self.assertEqual(list(batch)[0]["labels"].shape, tf.TensorShape((2, 8)))
         self.assertEqual(list(batch)[0]["sentence_order_label"].shape, tf.TensorShape((2,)))
+=======
+    def _test_no_pad_and_pad(self, no_pad_features, pad_features):
+        tokenizer = BertTokenizer(self.vocab_file)
+        data_collator = TFDataCollatorForLanguageModeling(tokenizer, mlm=False)
+        batch = data_collator(no_pad_features)
+        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
+        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 10)))
+
+        batch = data_collator(pad_features)
+        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
+        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 10)))
+
+        data_collator = TFDataCollatorForLanguageModeling(tokenizer, mlm=False, pad_to_multiple_of=8)
+        batch = data_collator(no_pad_features)
+        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 16)))
+        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 16)))
+
+        batch = data_collator(pad_features)
+        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 16)))
+        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 16)))
+
+        tokenizer._pad_token = None
+        data_collator = TFDataCollatorForLanguageModeling(tokenizer, mlm=False)
+        with self.assertRaises(ValueError):
+            # Expect error due to padding token missing
+            data_collator(pad_features)
+
+        set_seed(42)  # For reproducibility
+        tokenizer = BertTokenizer(self.vocab_file)
+        data_collator = TFDataCollatorForLanguageModeling(tokenizer)
+        batch = data_collator(no_pad_features)
+        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
+        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 10)))
+
+        masked_tokens = batch["input_ids"] == tokenizer.mask_token_id
+        self.assertTrue(masked_tokens.numpy().any())
+        self.assertTrue(all(x == -100 for x in list(batch["labels"][~masked_tokens].numpy())))
+
+        batch = data_collator(pad_features)
+        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
+        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 10)))
+
+        masked_tokens = batch["input_ids"] == tokenizer.mask_token_id
+        self.assertTrue(masked_tokens.numpy().any())
+        self.assertTrue(all(x == -100 for x in list(batch["labels"][~masked_tokens].numpy())))
+
+        data_collator = TFDataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8)
+        batch = data_collator(no_pad_features)
+        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 16)))
+        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 16)))
+
+        masked_tokens = batch["input_ids"] == tokenizer.mask_token_id
+        self.assertTrue(masked_tokens.numpy().any())
+        self.assertTrue(all(x == -100 for x in list(batch["labels"][~masked_tokens].numpy())))
+
+        batch = data_collator(pad_features)
+        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 16)))
+        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 16)))
+
+        masked_tokens = batch["input_ids"] == tokenizer.mask_token_id
+        self.assertTrue(masked_tokens.numpy().any())
+        self.assertTrue(all(x == -100 for x in list(batch["labels"][~masked_tokens].numpy())))
+
+    def test_data_collator_for_language_modeling(self):
+        no_pad_features = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
+        pad_features = [{"input_ids": list(range(5))}, {"input_ids": list(range(10))}]
+        self._test_no_pad_and_pad(no_pad_features, pad_features)
+
+        no_pad_features = [list(range(10)), list(range(10))]
+        pad_features = [list(range(5)), list(range(10))]
+        self._test_no_pad_and_pad(no_pad_features, pad_features)
+
+    def test_nsp(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+        features = [
+            {"input_ids": [0, 1, 2, 3, 4], "token_type_ids": [0, 1, 2, 3, 4], "next_sentence_label": i}
+            for i in range(2)
+        ]
+        data_collator = TFDataCollatorForLanguageModeling(tokenizer)
+        batch = data_collator(features)
+
+        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 5)))
+        self.assertEqual(batch["token_type_ids"].shape, tf.TensorShape((2, 5)))
+        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 5)))
+        self.assertEqual(batch["next_sentence_label"].shape, tf.TensorShape((2,)))
+
+        data_collator = TFDataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8)
+        batch = data_collator(features)
+
+        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 8)))
+        self.assertEqual(batch["token_type_ids"].shape, tf.TensorShape((2, 8)))
+        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 8)))
+        self.assertEqual(batch["next_sentence_label"].shape, tf.TensorShape((2,)))
+
+    def test_sop(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+        features = [
+            {
+                "input_ids": tf.constant([0, 1, 2, 3, 4]),
+                "token_type_ids": tf.constant([0, 1, 2, 3, 4]),
+                "sentence_order_label": i,
+            }
+            for i in range(2)
+        ]
+        data_collator = TFDataCollatorForLanguageModeling(tokenizer)
+        batch = data_collator(features)
+
+        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 5)))
+        self.assertEqual(batch["token_type_ids"].shape, tf.TensorShape((2, 5)))
+        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 5)))
+        self.assertEqual(batch["sentence_order_label"].shape, tf.TensorShape((2,)))
+
+        data_collator = TFDataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8)
+        batch = data_collator(features)
+
+        self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 8)))
+        self.assertEqual(batch["token_type_ids"].shape, tf.TensorShape((2, 8)))
+        self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 8)))
+        self.assertEqual(batch["sentence_order_label"].shape, tf.TensorShape((2,)))
+>>>>>>> 184b3b16db95f94e28372ca2d304dc75781c77a4
