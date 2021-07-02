@@ -258,7 +258,13 @@ Doing so will allow you to share your fork of the Transformers library with your
 install JAX's TPU version before cloning and installing the transformers repository. 
 Otherwise, an incorrect version of JAX will be installed, and the following commands will 
 throw an error. 
-To install JAX's TPU version simply run the following command:
+To install JAX's TPU version first run the following command: 
+
+```
+$ pip install requests
+```
+
+and then:
 
 ```
 $ pip install "jax[tpu]>=0.2.16" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
