@@ -170,6 +170,7 @@ _import_structure = {
     ],
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
+    "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
     "models.clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPConfig",
@@ -505,7 +506,6 @@ if is_torch_available():
             "load_tf_weights_in_albert",
         ]
     )
-
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_CAUSAL_LM_MAPPING",
@@ -630,6 +630,19 @@ if is_torch_available():
             "CamembertForSequenceClassification",
             "CamembertForTokenClassification",
             "CamembertModel",
+        ]
+    )
+    _import_structure["models.canine"].extend(
+        [
+            "CANINE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CanineForMultipleChoice",
+            "CanineForQuestionAnswering",
+            "CanineForSequenceClassification",
+            "CanineForTokenClassification",
+            "CanineLayer",
+            "CanineModel",
+            "CaninePreTrainedModel",
+            "load_tf_weights_in_canine",
         ]
     )
     _import_structure["models.clip"].extend(
@@ -1630,6 +1643,9 @@ if is_flax_available():
     )
     _import_structure["models.t5"].extend(["FlaxT5ForConditionalGeneration", "FlaxT5Model", "FlaxT5PreTrainedModel"])
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
+    _import_structure["models.wav2vec2"].extend(
+        ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]
+    )
 else:
     from .utils import dummy_flax_objects
 
@@ -1756,6 +1772,7 @@ if TYPE_CHECKING:
     )
     from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
+    from .models.canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig, CanineTokenizer
     from .models.clip import (
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPConfig,
@@ -2155,6 +2172,17 @@ if TYPE_CHECKING:
             CamembertForSequenceClassification,
             CamembertForTokenClassification,
             CamembertModel,
+        )
+        from .models.canine import (
+            CANINE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CanineForMultipleChoice,
+            CanineForQuestionAnswering,
+            CanineForSequenceClassification,
+            CanineForTokenClassification,
+            CanineLayer,
+            CanineModel,
+            CaninePreTrainedModel,
+            load_tf_weights_in_canine,
         )
         from .models.clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -2998,6 +3026,12 @@ if TYPE_CHECKING:
         )
         from .models.t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
         from .models.vit import FlaxViTForImageClassification, FlaxViTModel, FlaxViTPreTrainedModel
+        from .models.wav2vec2 import (
+            FlaxWav2Vec2ForCTC,
+            FlaxWav2Vec2ForPreTraining,
+            FlaxWav2Vec2Model,
+            FlaxWav2Vec2PreTrainedModel,
+        )
     else:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.
