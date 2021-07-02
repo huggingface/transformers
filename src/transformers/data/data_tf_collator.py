@@ -148,7 +148,7 @@ class TFDataCollatorForLanguageModeling:
                     encoded_batch["token_type_ids"], self.tokenizer, self.padding_length
                 )
 
-            # Mask example sequences and create their respective labels
+        # Mask example sequences and create their respective labels
         encoded_batch["input_ids"], encoded_batch["labels"] = self.tf_mask_tokens(padded_output)
         return encoded_batch
 
