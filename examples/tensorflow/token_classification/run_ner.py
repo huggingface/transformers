@@ -28,6 +28,7 @@ import datasets
 import numpy as np
 import tensorflow as tf
 from datasets import ClassLabel, load_dataset, load_metric
+import sys
 
 import transformers
 from transformers import (
@@ -43,8 +44,8 @@ from transformers import (
 )
 from transformers.utils.versions import require_version
 
-
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.StreamHandler())
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/token-classification/requirements.txt")
 
 # You should update this to your particular problem to have better documentation of `model_type`
@@ -192,7 +193,7 @@ def sample_generator(dataset, tokenizer, shuffle, pad_to_multiple_of=None):
         # Handle dicts with proper padding and conversion to tensor.
         example = tokenizer.pad(example, return_tensors="np", pad_to_multiple_of=pad_to_multiple_of)
         if tokenizer.pad_token_id is not None:
-            example["labels"][example["labels"] == tokenizer.pad_token_id] = -100
+            example["labels"][example["attention_mask"] == 0] = -100
         example = {key: tf.convert_to_tensor(arr) for key, arr in example.items()}
 
         yield example, example["labels"]  # TF needs some kind of labels, even if we don't use them
@@ -513,6 +514,7 @@ def main():
         predictions = model.predict(eval_inputs, batch_size=training_args.per_device_eval_batch_size)["logits"]
         predictions = tf.math.argmax(predictions, axis=-1)
         labels = np.array(eval_inputs["labels"])
+        labels[np.array(eval_inputs['attention_mask']) == 0] = -100
         preds, refs = get_labels(predictions, labels)
         metric.add_batch(
             predictions=preds,
