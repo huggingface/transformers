@@ -181,13 +181,8 @@ class RoFormerTokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d):
         self.__dict__ = d
-        try:
-            import jieba
-        except ImportError:
-            raise ImportError(
-                "You need to install jieba to use RoFormerTokenizer."
-                "See https://pypi.org/project/jieba/ for installation."
-            )
+        import jieba
+
         self.jieba = jieba
 
     def get_vocab(self):
