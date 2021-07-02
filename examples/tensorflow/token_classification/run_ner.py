@@ -487,6 +487,7 @@ def main():
                     "f1": results["overall_f1"],
                     "accuracy": results["overall_accuracy"],
                 }
+
         # endregion
 
         # region Training
@@ -509,9 +510,9 @@ def main():
         # For predictions, we preload the entire validation set - note that if you have a really giant validation
         # set, you might need to change this!
         eval_inputs = {key: tf.ragged.constant(eval_dataset[key]).to_tensor() for key in eval_dataset.features}
-        predictions = model.predict(eval_inputs, batch_size=training_args.per_device_eval_batch_size)['logits']
+        predictions = model.predict(eval_inputs, batch_size=training_args.per_device_eval_batch_size)["logits"]
         predictions = tf.math.argmax(predictions, axis=-1)
-        labels = np.array(eval_inputs['labels'])
+        labels = np.array(eval_inputs["labels"])
         preds, refs = get_labels(predictions, labels)
         metric.add_batch(
             predictions=preds,
