@@ -20,6 +20,7 @@ without using a Trainer.
 
 import logging
 import random
+import sys
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Optional
@@ -28,7 +29,6 @@ import datasets
 import numpy as np
 import tensorflow as tf
 from datasets import ClassLabel, load_dataset, load_metric
-import sys
 
 import transformers
 from transformers import (
@@ -43,6 +43,7 @@ from transformers import (
     set_seed,
 )
 from transformers.utils.versions import require_version
+
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
@@ -514,7 +515,7 @@ def main():
         predictions = model.predict(eval_inputs, batch_size=training_args.per_device_eval_batch_size)["logits"]
         predictions = tf.math.argmax(predictions, axis=-1)
         labels = np.array(eval_inputs["labels"])
-        labels[np.array(eval_inputs['attention_mask']) == 0] = -100
+        labels[np.array(eval_inputs["attention_mask"]) == 0] = -100
         preds, refs = get_labels(predictions, labels)
         metric.add_batch(
             predictions=preds,
