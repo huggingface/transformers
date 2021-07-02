@@ -501,7 +501,7 @@ class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedMode
             "params"
         ]
 
-    @add_start_docstrings_to_model_forward({{cookiecutter.camelcase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
         self,
         input_ids,
