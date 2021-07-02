@@ -605,6 +605,55 @@ class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedMode
             rngs=rngs,
         )
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertModule with Bert->{{cookiecutter.camelcase_modelname}}
+class Flax{{cookiecutter.camelcase_modelname}}Module(nn.Module):
+    config: {{cookiecutter.camelcase_modelname}}Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    add_pooling_layer: bool = True
+
+    def setup(self):
+        self.embeddings = Flax{{cookiecutter.camelcase_modelname}}Embeddings(self.config, dtype=self.dtype)
+        self.encoder = Flax{{cookiecutter.camelcase_modelname}}Encoder(self.config, dtype=self.dtype)
+        self.pooler = Flax{{cookiecutter.camelcase_modelname}}Pooler(self.config, dtype=self.dtype)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        hidden_states = self.embeddings(
+            input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic
+        )
+        outputs = self.encoder(
+            hidden_states,
+            attention_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        hidden_states = outputs[0]
+        pooled = self.pooler(hidden_states) if self.add_pooling_layer else None
+
+        if not return_dict:
+            # if pooled is None, don't return it
+            if pooled is None:
+                return (hidden_states,) + outputs[1:]
+            return (hidden_states, pooled) + outputs[1:]
+
+        return FlaxBaseModelOutputWithPooling(
+            last_hidden_state=hidden_states,
+            pooler_output=pooled,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
 add_start_docstrings(
     "The bare {{cookiecutter.camelcase_modelname}} Model transformer outputting raw hidden-states without any specific head on top.",
     {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
