@@ -14,8 +14,10 @@
 
 import dataclasses
 import io
+import itertools
 import json
 import os
+import subprocess
 import unittest
 from copy import deepcopy
 
@@ -40,8 +42,9 @@ from transformers.testing_utils import (
 from transformers.trainer_utils import set_seed
 
 
-bindir = os.path.abspath(os.path.dirname(__file__))
-with ExtendSysPath(f"{bindir}/.."):
+tests_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+root_dir = os.path.dirname(tests_dir)
+with ExtendSysPath(tests_dir):
     from test_trainer import TrainerIntegrationCommon  # noqa
 
     if is_torch_available():
@@ -52,6 +55,9 @@ set_seed(42)
 MBART_TINY = "sshleifer/tiny-mbart"
 T5_SMALL = "t5-small"
 T5_TINY = "patrickvonplaten/t5-tiny-random"
+PEGASUS_TINY = "stas/pegasus-cnn_dailymail-tiny-random"
+GPT2_TINY = "sshleifer/tiny-gpt2"
+MARIAN_TINY = "sshleifer/tiny-marian-en-de"
 
 
 def load_json(path):
@@ -79,9 +85,99 @@ if is_deepspeed_available():
     from deepspeed.utils import logger as deepspeed_logger  # noqa
     from transformers.deepspeed import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
 
+
+def get_launcher(distributed=False):
+    # 1. explicitly set --num_nodes=1 just in case these tests end up run on a multi-node setup
+    # - it won't be able to handle that
+    # 2. for now testing with just 2 gpus max (since some quality tests may give different
+    # results with mode gpus because we use very little data)
+    num_gpus = min(2, get_gpu_count()) if distributed else 1
+    return f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
+
+
+def make_task_cmds():
+    data_dir_fixtures = f"{tests_dir}/fixtures"
+    data_dir_samples = f"{data_dir_fixtures}/tests_samples"
+    data_dir_wmt = f"{data_dir_samples}/wmt_en_ro"
+    data_dir_xsum = f"{data_dir_samples}/xsum"
+    args_main = """
+        --do_train
+        --max_train_samples 4
+        --per_device_train_batch_size 2
+        --num_train_epochs 1
+        --fp16
+        --report_to none
+        --overwrite_output_dir
+        """.split()
+
+    # XXX: try to cover as many models as possible once (tasks don't really matter)
+    # but need a tiny model for each
+    #
+    # should have T5_TINY, etc. global var defined
+    tasks2models = dict(
+        trans=[
+            "marian",
+            "mbart",
+            "t5",
+        ],
+        sum=[
+            "pegasus",
+        ],
+        clm=[
+            "gpt2",
+        ],
+    )
+
+    scripts_dir = f"{root_dir}/examples/pytorch"
+
+    tasks = dict(
+        trans=f"""
+        {scripts_dir}/translation/run_translation.py
+        --train_file {data_dir_wmt}/train.json
+        --source_lang en
+        --target_lang ro
+        """.split(),
+        sum=f"""
+        {scripts_dir}/summarization/run_summarization.py
+        --train_file {data_dir_xsum}/sample.json
+        --max_source_length 12
+        --max_target_length 12
+        """.split(),
+        clm=f"""
+        {scripts_dir}/language-modeling/run_clm.py
+        --train_file {data_dir_fixtures}/sample_text.txt
+        --block_size 8
+        """.split(),
+    )
+
+    launcher = get_launcher(distributed=True)
+
+    cmds = {}
+    for task, args in tasks.items():
+        for model in tasks2models[task]:
+            model_name = globals()[f"{model.upper()}_TINY"]
+            args_model = f"--model_name_or_path {model_name}".split()
+            cmds[f"{task}_{model}"] = launcher + args + args_model + args_main
+
+    return cmds
+
+
+task_cmds = make_task_cmds()
+
 ZERO2 = "zero2"
 ZERO3 = "zero3"
 stages = [ZERO2, ZERO3]
+
+
+def parameterized_custom_name_func(func, param_num, param):
+    # customize the test name generator function as we want both params to appear in the sub-test
+    # name, as by default it shows only the first param
+    param_based_name = parameterized.to_safe_name("_".join(str(x) for x in param.args))
+    return f"{func.__name__}_{param_based_name}"
+
+
+# Cartesian-product of zero stages with models to test
+params = list(itertools.product(stages, task_cmds.keys()))
 
 
 @require_deepspeed
@@ -623,6 +719,21 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
     # 2. most tests should probably be run on both: zero2 and zero3 configs
     #
 
+    def get_task_cmd(self, task, stage):
+        # return a ready to run train cmd
+        if task not in task_cmds:
+            raise ValueError(f"don't know of task {task}, have {task_cmds.keys()}")
+
+        cmd = task_cmds[task]
+        args_ds = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}.json".split()
+
+        output_dir = self.get_auto_remove_tmp_dir()  # "./xxx", after=False, before=False)
+        args_out = f"--output_dir {output_dir}".split()
+
+        cmd += args_ds + args_out
+
+        return cmd, output_dir
+
     @require_torch_multi_gpu
     @parameterized.expand(stages)
     def test_basic_distributed(self, stage):
@@ -809,7 +920,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
         ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}.json".split()
         script = [f"{self.examples_dir_str}/pytorch/translation/run_translation.py"]
-        launcher = self.get_launcher(distributed)
+        launcher = get_launcher(distributed)
 
         cmd = launcher + script + args + ds_args
         # keep for quick debug
@@ -826,7 +937,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         data_dir = self.tests_dir / "fixtures"
         output_dir = self.get_auto_remove_tmp_dir()
         args = f"""
-            --model_name_or_path sshleifer/tiny-gpt2
+            --model_name_or_path {GPT2_TINY}
             --train_file {data_dir}/sample_text.txt
             --validation_file {data_dir}/sample_text.txt
             --output_dir {output_dir}
@@ -846,7 +957,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
         ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}.json".split()
         script = [f"{self.examples_dir_str}/pytorch/language-modeling/run_clm.py"]
-        launcher = self.get_launcher(distributed=True)
+        launcher = get_launcher(distributed=True)
 
         cmd = launcher + script + args + ds_args
         # keep for quick debug
@@ -860,7 +971,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         output_dir = self.get_auto_remove_tmp_dir()
         args = f"""
             --model_type gpt2
-            --tokenizer_name sshleifer/tiny-gpt2
+            --tokenizer_name {GPT2_TINY}
             --train_file {data_dir}/sample_text.txt
             --validation_file {data_dir}/sample_text.txt
             --output_dir {output_dir}
@@ -877,7 +988,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
         ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_zero3.json".split()
         script = [f"{self.examples_dir_str}/pytorch/language-modeling/run_clm.py"]
-        launcher = self.get_launcher(distributed=True)
+        launcher = get_launcher(distributed=True)
 
         cmd = launcher + script + args + ds_args
         # keep for quick debug
@@ -886,10 +997,26 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             execute_subprocess_async(cmd, env=self.get_env())
         assert "Detected DeepSpeed ZeRO-3" in cs.err
 
-    def get_launcher(self, distributed=False):
-        # 1. explicitly set --num_nodes=1 just in case these tests end up run on a multi-node setup
-        # - it won't be able to handle that
-        # 2. for now testing with just 2 gpus max (since some quality tests may give different
-        # results with mode gpus because we use very little data)
-        num_gpus = min(2, get_gpu_count()) if distributed else 1
-        return f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
+    @parameterized.expand(params, name_func=parameterized_custom_name_func)
+    def test_zero_to_fp32(self, stage, task):
+        # testing the ability to do a run followed by recovery of full fp32 weights
+
+        cmd, output_dir = self.get_task_cmd(task, stage)
+
+        # 1. generate the checkpoint
+        cmd += "--save_steps 1".split()
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] + cmd)); die
+        execute_subprocess_async(cmd, env=self.get_env())
+
+        # 2. test that the fp32 weights get reconsolidated
+        chkpt_dir = f"{output_dir}/checkpoint-1"
+        recovered_model_path = f"{chkpt_dir}/out.bin"
+        cmd = f"{chkpt_dir}/zero_to_fp32.py {chkpt_dir} {recovered_model_path}"
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        subprocess.check_call(cmd, shell=True)
+        assert os.path.exists(recovered_model_path), f"{recovered_model_path} was not found"
+
+        # possibly could also test that the resulting saved model is usable but given that we use
+        # random models we won't know if it's any good
