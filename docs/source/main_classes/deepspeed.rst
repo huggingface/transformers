@@ -1486,7 +1486,7 @@ weights just run:
 
 .. code-block:: bash
 
-    python zero_to_fp32.py global_step1 pytorch_model.bin
+    python zero_to_fp32.py . pytorch_model.bin
 
 The script will automatically handle either ZeRO-2 or ZeRO-3 checkpoint.
 
