@@ -24,7 +24,7 @@ class TFDataCollatorForLanguageModeling:
     Data collator used for language modeling. Encodes sequences for Masked Language Modeling as mentioned in the paper
     'BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding'.
 
-    Labels are -100 for non-masked tokens and the value to predict the masked token. 
+    Labels are -100 for non-masked tokens and the value to predict the masked token.
 
     Args:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
@@ -44,7 +44,8 @@ class TFDataCollatorForLanguageModeling:
         tokenizer: PreTrainedTokenizerBase,
         batch_size: int,
         special_tokens_mask: tf.Tensor = None,
-        padding_length: int = None):
+        padding_length: int = None,
+    ):
 
         self.tokenizer = tokenizer
         self.batch_size = batch_size
@@ -73,8 +74,8 @@ class TFDataCollatorForLanguageModeling:
     def tf_pad_tokens(self, examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
         """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
         shape = examples.shape
-        multiple_tensors = (len(tf.shape(examples)) > 1)
-        
+        multiple_tensors = len(tf.shape(examples)) > 1
+
         # Tensorize if necessary.
         if not isinstance(examples[0], tf.Tensor):
             temporary = []
@@ -88,14 +89,14 @@ class TFDataCollatorForLanguageModeling:
 
             are_tensors_same_length = True
             for x in examples:
-                are_tensors_same_length &= (tf.shape(x)[0] == length_of_first)
+                are_tensors_same_length &= tf.shape(x)[0] == length_of_first
 
-            no_padding_necessary = are_tensors_same_length and \
-                                   (pad_to_multiple_of is None or
-                                   length_of_first % pad_to_multiple_of == 0)
+            no_padding_necessary = are_tensors_same_length and (
+                pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0
+            )
         else:
             length_of_first = tf.shape(examples)[0] if shape[0] is None else shape[0]
-            no_padding_necessary = (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0)
+            no_padding_necessary = pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0
 
         if no_padding_necessary:
             return tf.stack(examples, axis=0)
@@ -119,29 +120,21 @@ class TFDataCollatorForLanguageModeling:
 
         if tokenizer.padding_side == "right":
             if multiple_tensors:
-                result = tf.pad(examples, 
-                                [[0, 0], [0, max_length]],
-                                constant_values=tokenizer.pad_token_id)
+                result = tf.pad(examples, [[0, 0], [0, max_length]], constant_values=tokenizer.pad_token_id)
             else:
-                result = tf.pad(examples, 
-                                [[0, max_length]],
-                                constant_values=tokenizer.pad_token_id)
+                result = tf.pad(examples, [[0, max_length]], constant_values=tokenizer.pad_token_id)
         else:
             if multiple_tensors:
-                result = tf.pad(examples,
-                                [[0, 0], [max_length, 0]],
-                                constant_values=tokenizer.pad_token_id)
+                result = tf.pad(examples, [[0, 0], [max_length, 0]], constant_values=tokenizer.pad_token_id)
             else:
-                result = tf.pad(examples,
-                                [[max_length, 0]], 
-                                constant_values=tokenizer.pad_token_id)
+                result = tf.pad(examples, [[max_length, 0]], constant_values=tokenizer.pad_token_id)
 
         return result
 
     @tf.function()
     def encode_objects(self, examples: Union[List[int], tf.Tensor, Dict[str, tf.Tensor]]) -> tf.data.Dataset:
-        if type(examples)==dict:
-            input = examples['input_ids']
+        if type(examples) == dict:
+            input = examples["input_ids"]
         else:
             input = examples
 
@@ -152,9 +145,8 @@ class TFDataCollatorForLanguageModeling:
             encoded_batch.update(examples)
             if self.padding_length is not None:
                 encoded_batch["token_type_ids"] = self.tf_pad_tokens(
-                    encoded_batch["token_type_ids"],
-                    self.tokenizer,
-                    self.padding_length)
+                    encoded_batch["token_type_ids"], self.tokenizer, self.padding_length
+                )
 
             # Mask example sequences and create their respective labels
         encoded_batch["input_ids"], encoded_batch["labels"] = self.tf_mask_tokens(padded_output)
@@ -162,33 +154,23 @@ class TFDataCollatorForLanguageModeling:
 
     @tf.function
     def square_ragged_tensors(self, examples):
-        if type(examples)==dict:
-            examples['input_ids'] = examples['input_ids'].to_tensor(0)
+        if type(examples) == dict:
+            examples["input_ids"] = examples["input_ids"].to_tensor(0)
             return examples
         else:
             return examples.to_tensor(0)
 
     @tf.function
-    def __call__(self, 
-                 examples: tf.data.Dataset,
-                 is_ragged=False) -> tf.data.Dataset:
+    def __call__(self, examples: tf.data.Dataset, is_ragged=False) -> tf.data.Dataset:
         if is_ragged:
-            examples = (
-                examples
-                .batch(self.batch_size)
-                .map(self.square_ragged_tensors)
-                .unbatch()
-            )
+            examples = examples.batch(self.batch_size).map(self.square_ragged_tensors).unbatch()
 
         return examples.map(self.encode_objects).batch(self.batch_size)
 
     @tf.function
-    def tf_mask_tokens(
-            self,
-            inputs: tf.Tensor
-    ) -> Tuple[tf.Tensor, tf.Tensor]:
-        """-
-        Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
+    def tf_mask_tokens(self, inputs: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
+        """
+        - Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
         """
         labels = tf.identity(inputs)
 
@@ -207,18 +189,14 @@ class TFDataCollatorForLanguageModeling:
         labels = tf.where(masked_indices, labels, -100)  # We only compute loss on masked tokens
 
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-        indices_replaced = (
-                self.pseudo_bernoulli(tf.fill(tf.shape(labels), 0.8), labels) & masked_indices
-        )
+        indices_replaced = self.pseudo_bernoulli(tf.fill(tf.shape(labels), 0.8), labels) & masked_indices
 
         mask_token = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
         inputs = tf.where(~indices_replaced, inputs, mask_token)
 
         # 10% of the time, we replace masked input tokens with random word
         indices_random = (
-                self.pseudo_bernoulli(tf.fill(tf.shape(labels), 0.5), labels)
-                & masked_indices
-                & ~indices_replaced
+            self.pseudo_bernoulli(tf.fill(tf.shape(labels), 0.5), labels) & masked_indices & ~indices_replaced
         )
 
         random_words = tf.random.uniform(tf.shape(labels), maxval=len(self.tokenizer), dtype=tf.int32)

@@ -61,7 +61,6 @@ deps = {
     "starlette": "starlette",
     "tensorflow-cpu": "tensorflow-cpu>=2.3",
     "tensorflow": "tensorflow>=2.3",
-    "tensorflow-probability": "tensorflow-probability",
     "timeout-decorator": "timeout-decorator",
     "timm": "timm",
     "tokenizers": "tokenizers>=0.10.1,<0.11",
