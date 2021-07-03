@@ -155,15 +155,15 @@ class DataTrainingArguments:
     )
 
     def __post_init__(self):
-        if self.dataset_name is None and self.train_file is None and self.validation_file is None:
+        if self.train_file is None and self.validation_file is None:
             raise ValueError("Need either a dataset name or a training/validation file.")
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json", "txt"], "`train_file` should be a csv, a json or a txt file."
+                assert extension == "json", "`train_file` should be a csv, a json or a txt file."
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
+                assert extension == "json", "`validation_file` should be a csv, a json or a txt file."
 
 
 # We use torchvision for faster image pre-processing.
@@ -206,6 +206,7 @@ class ImageTextDataset(VisionDataset):
         self,
         root: str,
         file_path: str,
+        captions_per_image = 2,
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
         transforms: Optional[Callable] = None,
@@ -217,7 +218,7 @@ class ImageTextDataset(VisionDataset):
 
         self.captions = []
         self.image_paths = []
-        captions_per_image = 2
+        
         for example in examples:
             self.captions.extend(example["captions"][:captions_per_image])
             self.image_paths.extend([example["image_path"]] * captions_per_image)
@@ -344,12 +345,14 @@ def main():
     train_dataset = ImageTextDataset(
         data_args.data_dir,
         data_args.train_file,
+        captions_per_image=2,
         transform=preprocess,
     )
 
     eval_dataset = ImageTextDataset(
         data_args.data_dir,
         data_args.validation_file,
+        captions_per_image=1,
         transform=preprocess,
     )
 
