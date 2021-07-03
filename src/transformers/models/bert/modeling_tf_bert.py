@@ -193,10 +193,9 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
             token_type_ids = tf.fill(dims=input_shape, value=0)
 
         if position_ids is None:
-            position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
+            position_ids = tf.tile(tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0), multiples=[input_shape[0], 1])
 
-        position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
-        position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
+        position_embeds = tf.gather(tf.tile(tf.expand_dims(self.position_embeddings, axis=0), multiples=[input_shape[0], 1, 1]), position_ids, batch_dims=1)
         token_type_embeds = tf.gather(params=self.token_type_embeddings, indices=token_type_ids)
         final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds, token_type_embeds])
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
