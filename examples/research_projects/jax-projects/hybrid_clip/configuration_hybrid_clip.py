@@ -9,18 +9,18 @@ logger = logging.get_logger(__name__)
 
 class HybridCLIPConfig(PretrainedConfig):
     r"""
-    :class:`~transformers.CLIPConfig` is the configuration class to store the configuration of a
-    :class:`~transformers.CLIPModel`. It is used to instantiate CLIP model according to the specified arguments,
+    :class:`HybridCLIPConfig` is the configuration class to store the configuration of a
+    :class:`~HybridCLIPModel`. It is used to instantiate HybridCLIPModel model according to the specified arguments,
     defining the text model and vision model configs.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
     Args:
-        text_config_dict (:obj:`dict`, `optional`):
-            Dictionary of configuration options used to initialize :class:`~transformers.CLIPTextConfig`.
-        vision_config_dict (:obj:`dict`, `optional`):
-            Dictionary of configuration options used to initialize :class:`~transformers.CLIPVisionConfig`.
+        text_config_dict (:obj:`dict`):
+            Dictionary of configuration options that defines text model config.
+        vision_config_dict (:obj:`dict`):
+            Dictionary of configuration options that defines vison model config.
         projection_dim (:obj:`int`, `optional`, defaults to 512):
             Dimentionality of text and vision projection layers.
         kwargs (`optional`):
@@ -30,16 +30,14 @@ class HybridCLIPConfig(PretrainedConfig):
     model_type = "hybrid-clip"
     is_composition = True
 
-    def __init__(self, text_config_dict=None, vision_config_dict=None, projection_dim=512, **kwargs):
+    def __init__(self, text_config_dict, vision_config_dict, projection_dim=512, **kwargs):
         super().__init__(**kwargs)
 
         if text_config_dict is None:
-            text_config_dict = {}
-            logger.info("text_config_dict is None. Initializing the CLIPTextConfig with default values.")
+            raise ValueError("`text_config_dict` can not be `None`.")
 
         if vision_config_dict is None:
-            vision_config_dict = {}
-            logger.info("vision_config_dict is None. initializing the CLIPVisionConfig with default values.")
+            raise ValueError("`vision_config_dict` can not be `None`.")
 
         text_model_type = text_config_dict.pop("model_type")
         vision_model_type = vision_config_dict.pop("model_type")
@@ -59,11 +57,11 @@ class HybridCLIPConfig(PretrainedConfig):
     @classmethod
     def from_text_vision_configs(cls, text_config: PretrainedConfig, vision_config: PretrainedConfig, **kwargs):
         r"""
-        Instantiate a :class:`~transformers.CLIPConfig` (or a derived class) from clip text model configuration and
-        clip vision model configuration.
+        Instantiate a :class:`HybridCLIPConfig` (or a derived class) from text model configuration and
+        vision model configuration.
 
         Returns:
-            :class:`CLIPConfig`: An instance of a configuration object
+            :class:`HybridCLIPConfig`: An instance of a configuration object
         """
 
         return cls(text_config_dict=text_config.to_dict(), vision_config_dict=vision_config.to_dict(), **kwargs)

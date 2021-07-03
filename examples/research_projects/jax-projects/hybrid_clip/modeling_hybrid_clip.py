@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The OpenAI Team Authors, The Google Flax Team Authors and The HuggingFace Inc. team.
+# Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -217,7 +217,7 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.CLIPTokenizer`. See
+                Indices can be obtained using :class:`~transformers.PreTrainedTokenizer`. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 
@@ -225,7 +225,7 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
 
         Returns:
             text_features (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, output_dim`): The text embeddings
-            obtained by applying the projection layer to the pooled output of :class:`~transformers.FlaxCLIPTextModel`.
+            obtained by applying the projection layer to the pooled output of text model.
         """
         if position_ids is None:
             position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
@@ -269,13 +269,12 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
         Args:
             pixel_values (:obj:`numpy.ndarray` of shape :obj:`(batch_size, num_channels, height, width)`):
                 Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained
-                using :class:`~transformers.CLIPFeatureExtractor`. See
-                :meth:`transformers.CLIPFeatureExtractor.__call__` for details.
+                using :class:`~transformers.ImageFeatureExtractionMixin`. See
+                :meth:`transformers.ImageFeatureExtractionMixin.__call__` for details.
 
         Returns:
             image_features (:obj:`jax_xla.DeviceArray` of shape :obj:`(batch_size, output_dim`): The image embeddings
-            obtained by applying the projection layer to the pooled output of
-            :class:`~transformers.FlaxCLIPVisionModel`
+            obtained by applying the projection layer to the pooled output of vision model.
         """
 
         # Handle any PRNG if needed

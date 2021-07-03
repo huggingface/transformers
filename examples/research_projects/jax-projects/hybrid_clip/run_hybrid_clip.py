@@ -14,11 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Training a CLIP like models using a text and vision encoders in the library.
+Training a CLIP like dual encoder models using text and vision encoders in the library.
 
 The script can be used to train CLIP like models for languages other than english by using
-a text encoder pre-trained in the desired language. Currently this script support the following vision 
-and text models: 
+a text encoder pre-trained in the desired language. Currently this script support the following vision
+and text models:
 Vision models: ViT(https://huggingface.co/models?filter=vit), CLIP (https://huggingface.co/models?filter=clip)
 Text models: BERT, ROBERTa (https://huggingface.co/models?filter=masked-lm)
 """
@@ -43,7 +43,7 @@ import jax
 import jax.numpy as jnp
 import optax
 import transformers
-from flax import jax_utils, traverse_util
+from flax import jax_utils
 from flax.jax_utils import unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, shard, shard_prng_key
@@ -166,17 +166,14 @@ class DataTrainingArguments:
                 assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
 
 
+# We use torchvision for faster image pre-processing.
+# We need to ensure faster processing speed as it can become a bottleneck on TPU
 class Transform(torch.nn.Module):
-    def __init__(self, n_px):
+    def __init__(self, image_size):
         super().__init__()
         self.transforms = torch.nn.Sequential(
-            Resize(
-                [
-                    n_px,
-                ],
-                interpolation=InterpolationMode.BICUBIC,
-            ),
-            CenterCrop(n_px),
+            Resize([image_size], interpolation=InterpolationMode.BICUBIC),
+            CenterCrop(image_size),
             ConvertImageDtype(torch.float),
             Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
         )
