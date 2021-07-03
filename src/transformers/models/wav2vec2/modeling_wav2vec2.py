@@ -269,7 +269,7 @@ class Wav2Vec2PositionalConvEmbedding(nn.Module):
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
-            with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
+            with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=None):
                 self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
             deepspeed.zero.register_external_parameter(self, self.conv.weight_v)
             deepspeed.zero.register_external_parameter(self, self.conv.weight_g)
@@ -853,17 +853,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
-            if is_deepspeed_zero3_enabled():
-                import deepspeed
-
-                if hasattr(module, "weight_v") and hasattr(module, "weight_g"):
-                    with deepspeed.zero.GatheredParameters([module.weight_v, module.weight_g], modifier_rank=0):
-                        nn.init.kaiming_normal_(module.weight.data)
-                else:
-                    with deepspeed.zero.GatheredParameters(module.weight, modifier_rank=0):
-                        nn.init.kaiming_normal_(module.weight.data)
-            else:
-                nn.init.kaiming_normal_(module.weight.data)
+            nn.init.kaiming_normal_(module.weight.data)
 
         if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
