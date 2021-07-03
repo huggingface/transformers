@@ -1,6 +1,30 @@
+#!/usr/bin/env python
+# coding=utf-8
+# Copyright 2021 The HuggingFace Team All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Training a CLIP like models using a text and vision encoders in the library.
+
+The script can be used to train CLIP like models for languages other than english by using
+a text encoder pre-trained in the desired language. Currently this script support the following vision 
+and text models: 
+Vision models: ViT(https://huggingface.co/models?filter=vit), CLIP (https://huggingface.co/models?filter=clip)
+Text models: BERT, ROBERTa (https://huggingface.co/models?filter=masked-lm)
+"""
+
 import json
 import logging
-import math
 import os
 import sys
 import time
@@ -8,13 +32,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
-import datasets
 import torch
-from datasets import Dataset, load_dataset
-from PIL import Image
 from torchvision.datasets import VisionDataset
 from torchvision.io import ImageReadMode, read_image
-from torchvision.transforms import CenterCrop, Compose, ConvertImageDtype, Normalize, Resize, ToTensor
+from torchvision.transforms import CenterCrop, ConvertImageDtype, Normalize, Resize
 from torchvision.transforms.functional import InterpolationMode
 from tqdm import tqdm
 
@@ -22,27 +43,12 @@ import jax
 import jax.numpy as jnp
 import optax
 import transformers
-from configuration_hybrid_clip import HybridCLIPConfig
-from flax import jax_utils
-from flax import linen as nn
-from flax import traverse_util
-from flax.jax_utils import prefetch_to_device, unreplicate
+from flax import jax_utils, traverse_util
+from flax.jax_utils import unreplicate
 from flax.training import train_state
-from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
+from flax.training.common_utils import get_metrics, shard, shard_prng_key
 from modeling_hybrid_clip import FlaxHybridCLIP
-from transformers import (
-    CONFIG_MAPPING,
-    FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
-    AutoConfig,
-    AutoTokenizer,
-    CLIPProcessor,
-    FlaxCLIPModel,
-    HfArgumentParser,
-    TrainingArguments,
-    is_tensorboard_available,
-    set_seed,
-)
-from transformers.testing_utils import CaptureLogger
+from transformers import AutoTokenizer, HfArgumentParser, TrainingArguments, is_tensorboard_available, set_seed
 
 
 logger = logging.getLogger(__name__)
@@ -69,30 +75,17 @@ class ModelArguments:
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
     """
 
-    model_name_or_path: Optional[str] = field(
-        default=None,
+    text_model_name_or_path: str = field(
         metadata={
-            "help": "The model checkpoint for weights initialization."
+            "help": "The text model checkpoint for weights initialization."
             "Don't set if you want to train a model from scratch."
         },
     )
-    text_model_name_or_path: Optional[str] = field(
-        default=None,
+    vision_model_name_or_path: str = field(
         metadata={
-            "help": "The model checkpoint for weights initialization."
+            "help": "The vision model checkpoint for weights initialization."
             "Don't set if you want to train a model from scratch."
         },
-    )
-    vision_model_name_or_path: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "The model checkpoint for weights initialization."
-            "Don't set if you want to train a model from scratch."
-        },
-    )
-    model_type: Optional[str] = field(
-        default=None,
-        metadata={"help": "If training from scratch, pass a model type from the list: [clip]"},
     )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
@@ -121,19 +114,21 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
-    dataset_name: Optional[str] = field(
-        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+    data_dir: Optional[str] = field(default=None, metadata={"help": "The data directory containing input files."})
+    train_file: Optional[str] = field(
+        default=None, metadata={"help": "The input training data file (a jsonlines file)."}
     )
-    dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
-    )
-    data_dir: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
-    train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
     validation_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
+        metadata={"help": "An optional input evaluation data file (a jsonlines file)."},
     )
-    max_seq_length: Optional[int] = field(default=72, metadata={"help": "max seq length"})
+    max_seq_length: Optional[int] = field(
+        default=72,
+        metadata={
+            "help": "The maximum total input sequence length after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded."
+        },
+    )
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
@@ -150,20 +145,6 @@ class DataTrainingArguments:
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
-    )
-    validation_split_percentage: Optional[int] = field(
-        default=5,
-        metadata={
-            "help": "The percentage of the train set used as validation set in case there's no validation split"
-        },
-    )
-    block_size: Optional[int] = field(
-        default=None,
-        metadata={
-            "help": "Optional input sequence length after tokenization. "
-            "The training dataset will be truncated in block of this size for training. "
-            "Default to the model max input length for single sentence inputs (take into account special tokens)."
-        },
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
@@ -183,24 +164,6 @@ class DataTrainingArguments:
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
                 assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
-
-
-class TrainState(train_state.TrainState):
-    dropout_rng: jnp.ndarray
-
-    def replicate(self):
-        return jax_utils.replicate(self).replace(dropout_rng=shard_prng_key(self.dropout_rng))
-
-
-def _transform(n_px):
-    return Compose(
-        [
-            ToTensor(),
-            Resize(n_px, interpolation=InterpolationMode.BICUBIC),
-            CenterCrop(n_px),
-            Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
-        ]
-    )
 
 
 class Transform(torch.nn.Module):
@@ -225,6 +188,23 @@ class Transform(torch.nn.Module):
 
 
 class ImageTextDataset(VisionDataset):
+    """
+    Dtaset for loading image-text data for tasks like CLIP training, Image Captioning.
+
+    Args:
+        root: (string): The root path where the dataset is stored
+        file_path: (string): Path to the file containing the image_paths and associated captions.
+            The expected format is jsonlines where each line is a json object containing to keys.
+            `image_path`: The path to the image.
+            `captions`: An `array` of captions.
+        transform (callable, optional): A function/transform that  takes in an PIL image
+            and returns a transformed version. E.g, ``transforms.ToTensor``
+        target_transform (callable, optional): A function/transform that takes in the
+            target and transforms it.
+        transforms (callable, optional): A function/transform that takes input sample and its target as entry
+            and returns a transformed version.
+    """
+
     def __init__(
         self,
         root: str,
@@ -263,6 +243,13 @@ class ImageTextDataset(VisionDataset):
 
     def __len__(self) -> int:
         return len(self.captions)
+
+
+class TrainState(train_state.TrainState):
+    dropout_rng: jnp.ndarray
+
+    def replicate(self):
+        return jax_utils.replicate(self).replace(dropout_rng=shard_prng_key(self.dropout_rng))
 
 
 def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step):
@@ -321,10 +308,8 @@ def main():
     # Setup logging, we only want one process per machine to log things on the screen.
     logger.setLevel(logging.INFO if jax.process_index() == 0 else logging.ERROR)
     if jax.process_index() == 0:
-        datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_info()
     else:
-        datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
 
     # Set the verbosity to info of the Transformers logger (on main process only):
@@ -351,15 +336,14 @@ def main():
         dtype=getattr(jnp, model_args.dtype),
     )
     config = model.config
-
+    # set seed for torch dataloaders
     set_seed(training_args.seed)
 
-    def tokenize(text):
-        return tokenizer(text, max_length=data_args.max_seq_length, padding="max_length", return_tensors="np")
-
-    preprocess = Transform(224)
+    # Initialize torchvision transforms and jit them for faster processing
+    preprocess = Transform(config.vision_config.image_size)
     preprocess = torch.jit.script(preprocess)
 
+    # Initialize the image-text dataset
     train_dataset = ImageTextDataset(
         data_args.data_dir,
         data_args.train_file,
@@ -379,10 +363,11 @@ def main():
     steps_per_epoch = len(train_dataset) // train_batch_size
     total_train_steps = steps_per_epoch * num_epochs
 
+    # Use collate function to tokenizer the text and convert the processed images to numpy
     def collate_fn(examples):
         pixel_values = torch.stack([example[0] for example in examples]).permute(0, 2, 3, 1).numpy()
         captions = [example[1] for example in examples]
-        inputs = tokenize(captions)
+        inputs = tokenizer(captions, max_length=data_args.max_seq_length, padding="max_length", return_tensors="np")
 
         batch = {
             "pixel_values": pixel_values,
@@ -430,11 +415,6 @@ def main():
         training_args.learning_rate,
     )
 
-    def decay_mask_fn(params):
-        flat_params = traverse_util.flatten_dict(params)
-        flat_mask = {path: (path[-1] != "bias" and path[-2:] != ("LayerNorm", "scale")) for path in flat_params}
-        return traverse_util.unflatten_dict(flat_mask)
-
     # create adam optimizer
     adamw = optax.adamw(
         learning_rate=linear_decay_lr_schedule_fn,
@@ -442,7 +422,6 @@ def main():
         b2=training_args.adam_beta2,
         eps=training_args.adam_epsilon,
         weight_decay=training_args.weight_decay,
-        mask=decay_mask_fn,
     )
 
     # Setup train state
@@ -563,11 +542,15 @@ def main():
             cur_step = epoch * (len(train_dataset) // train_batch_size)
             write_metric(summary_writer, train_metrics, eval_metrics, train_time, cur_step)
 
-
-#     # save last checkpoint
-#     if jax.process_index() == 0:
-#         params = jax.device_get(unreplicate(state.params))
-#         model.save_pretrained(training_args.output_dir, params=params)
+        # save checkpoint after each epoch and push checkpoint to the hub
+        if jax.process_index() == 0:
+            params = jax.device_get(unreplicate(state.params))
+            model.save_pretrained(
+                training_args.output_dir,
+                params=params,
+                push_to_hub=training_args.push_to_hub,
+                commit_message=f"Saving weights and logs of epoch {epoch+1}",
+            )
 
 
 if __name__ == "__main__":

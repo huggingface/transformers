@@ -31,15 +31,13 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import datasets
+import torch
 from datasets import Dataset, load_dataset
 from PIL import Image
-from tqdm import tqdm
-
-import torch
-from PIL import Image
-from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize, ConvertImageDtype
+from torchvision.io import ImageReadMode, read_image
+from torchvision.transforms import CenterCrop, Compose, ConvertImageDtype, Normalize, Resize, ToTensor
 from torchvision.transforms.functional import InterpolationMode
-from torchvision.io import read_image, ImageReadMode
+from tqdm import tqdm
 
 import jax
 import jax.numpy as jnp
@@ -48,7 +46,7 @@ import transformers
 from flax import jax_utils
 from flax import linen as nn
 from flax import traverse_util
-from flax.jax_utils import unreplicate, prefetch_to_device
+from flax.jax_utils import prefetch_to_device, unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
 from transformers import (
@@ -197,24 +195,31 @@ class TrainState(train_state.TrainState):
 
 
 def _transform(n_px):
-    return Compose([
-        ToTensor(),
-        Resize(n_px, interpolation=InterpolationMode.BICUBIC),
-        CenterCrop(n_px),
-        Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
-    ])
+    return Compose(
+        [
+            ToTensor(),
+            Resize(n_px, interpolation=InterpolationMode.BICUBIC),
+            CenterCrop(n_px),
+            Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
+        ]
+    )
 
 
 class Transform(torch.nn.Module):
     def __init__(self, n_px):
         super().__init__()
-        self.transforms =  torch.nn.Sequential(
-            Resize([n_px, ], interpolation=InterpolationMode.BICUBIC),
+        self.transforms = torch.nn.Sequential(
+            Resize(
+                [
+                    n_px,
+                ],
+                interpolation=InterpolationMode.BICUBIC,
+            ),
             CenterCrop(n_px),
             ConvertImageDtype(torch.float),
             Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
         )
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
             x = self.transforms(x)
@@ -243,10 +248,10 @@ def data_loader(
 
         ## read and process images here
         images = batch.pop("image_path")
-#         images = [Image.open(image_path).convert("RGB") for image_path in images]
+        #         images = [Image.open(image_path).convert("RGB") for image_path in images]
 
         images = [read_image(image_path, mode=ImageReadMode.RGB) for image_path in images]
-        
+
         if type(processor) == CLIPProcessor:
             batch["pixel_values"] = processor(images=images, return_tensors="jax").pixel_values
         else:
@@ -544,8 +549,8 @@ def main():
     logger.info(f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}")
     logger.info(f"  Total train batch size (w. parallel & distributed) = {train_batch_size}")
     logger.info(f"  Total optimization steps = {total_train_steps}")
-    
-#     preprocess = _transform(224)
+
+    #     preprocess = _transform(224)
     preprocess = Transform(224)
     preprocess = torch.jit.script(preprocess)
 
