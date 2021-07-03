@@ -20,7 +20,7 @@ import jax
 import jax.numpy as jnp
 from configuration_hybrid_clip import HybridCLIPConfig
 from flax.core.frozen_dict import FrozenDict
-from transformers import FLAX_MODEL_MAPPING, CLIPVisionConfig, FlaxCLIPVisionModel
+from transformers import FLAX_MODEL_MAPPING, FlaxCLIPVisionModel
 from transformers.modeling_flax_utils import FlaxPreTrainedModel
 from transformers.models.clip.modeling_flax_clip import FlaxCLIPOutput
 from transformers.utils import logging
@@ -183,8 +183,6 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
         if attention_mask is None:
             attention_mask = jnp.ones_like(input_ids)
 
-        #         pixel_values = jnp.transpose(pixel_values, (0, 2, 3, 1))
-
         # Handle any PRNG if needed
         rngs = {}
         if dropout_rng is not None:
@@ -279,7 +277,6 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
             obtained by applying the projection layer to the pooled output of
             :class:`~transformers.FlaxCLIPVisionModel`
         """
-        pixel_values = jnp.transpose(pixel_values, (0, 2, 3, 1))
 
         # Handle any PRNG if needed
         rngs = {}
@@ -337,7 +334,9 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
                 text_config = AutoConfig.from_pretrained(text_model_name_or_path)
                 kwargs_text["config"] = text_config
 
-            text_model = FlaxAutoModel.from_pretrained(text_model_name_or_path, *model_args, **kwargs_text)
+            text_model = FlaxAutoModel.from_pretrained(
+                text_model_name_or_path, *model_args, from_pt=True, **kwargs_text
+            )
 
         vision_model = kwargs_vision.pop("model", None)
         if vision_model is None:
@@ -349,27 +348,25 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
             if "config" not in kwargs_vision:
                 from transformers import AutoConfig
 
-                try:
-                    vision_config = AutoConfig.from_pretrained(vision_model_name_or_path).vision_config
-                except KeyError:
-                    vision_config = CLIPVisionConfig.from_pretrained(vision_model_name_or_path)
+                vision_config = AutoConfig.from_pretrained(vision_model_name_or_path)
                 kwargs_vision["config"] = vision_config
 
-            if vision_config.model_type == "clip_vision_model":
-                vision_model = FlaxCLIPVisionModel.from_pretrained(
-                    vision_model_name_or_path, *model_args, **kwargs_vision
-                )
-            else:
-                vision_model = FlaxAutoModel.from_pretrained(vision_model_name_or_path, *model_args, **kwargs_vision)
+            vision_model = FlaxAutoModel.from_pretrained(vision_model_name_or_path, *model_args, **kwargs_vision)
 
         # instantiate config with corresponding kwargs
+        dtype = kwargs.pop("dtype", jnp.float32)
         config = HybridCLIPConfig.from_text_vision_configs(text_model.config, vision_model.config, **kwargs)
 
         # init model
-        model = cls(config)
+        model = cls(config, *model_args, dtype=dtype, **kwargs)
+
+        if vision_config.model_type == "clip":
+            model.params["vision_model"]["vision_model"] = vision_model.params["vision_model"]
+            model.params["visual_projection"]["kernel"] = vision_model.params["visual_projection"]["kernel"]
+        else:
+            model.params["vision_model"] = vision_model.params
 
         model.params["text_model"] = text_model.params
-        model.params["vision_model"] = vision_model.params
 
         del text_model
         del vision_model

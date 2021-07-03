@@ -1,7 +1,6 @@
 import copy
 
 from transformers.configuration_utils import PretrainedConfig
-from transformers.models.clip.configuration_clip import CLIPVisionConfig
 from transformers.utils import logging
 
 
@@ -32,7 +31,7 @@ class HybridCLIPConfig(PretrainedConfig):
     is_composition = True
 
     def __init__(self, text_config_dict=None, vision_config_dict=None, projection_dim=512, **kwargs):
-        super().__init__(text_config_dict=text_config_dict, vision_config_dict=vision_config_dict, **kwargs)
+        super().__init__(**kwargs)
 
         if text_config_dict is None:
             text_config_dict = {}
@@ -49,12 +48,10 @@ class HybridCLIPConfig(PretrainedConfig):
 
         self.text_config = AutoConfig.for_model(text_model_type, **text_config_dict)
 
-        #         if vision_model_type == "clip_vision_model":
-        #             self.vision_config = CLIPVisionConfig(**vision_config_dict)
-        #         else:
-        #             self.vision_config = AutoConfig.for_model(vision_model_type, **vision_config_dict).vision_config
-
-        self.vision_config = CLIPVisionConfig(**vision_config_dict)
+        if vision_model_type == "clip":
+            self.vision_config = AutoConfig.for_model(vision_model_type, **vision_config_dict).vision_config
+        else:
+            self.vision_config = AutoConfig.for_model(vision_model_type, **vision_config_dict)
 
         self.projection_dim = projection_dim
         self.initializer_factor = 1.0
