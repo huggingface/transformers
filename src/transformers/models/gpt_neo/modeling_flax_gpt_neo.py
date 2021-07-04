@@ -175,7 +175,7 @@ class FlaxGPTNeoSelfAttention(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = False,
     ):
-        query = self.q_proj(hidden_states)
+        query = self.q_proj(hidden_states) * jnp.sqrt(self.head_dim).astype(self.dtype)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
 
@@ -213,7 +213,7 @@ class FlaxGPTNeoSelfAttention(nn.Module):
         attention_bias = lax.select(
             attention_mask > 0,
             jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-            jnp.full(attention_mask.shape, -1e4).astype(self.dtype),
+            jnp.full(attention_mask.shape, -1e9).astype(self.dtype),
         )
 
         # usual dot product attention
