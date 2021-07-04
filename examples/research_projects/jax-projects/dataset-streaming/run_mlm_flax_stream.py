@@ -178,9 +178,8 @@ class DataTrainingArguments:
         default=False,
         metadata={"help": "Whether distinct lines of text in the dataset are to be handled as distinct sequences."},
     )
-    num_steps_per_stream_epoch: int = field(
-        default=2,
-    )
+    column_name: str = field(default="text")
+    shuffle_buffer_size: int = field(default=10_000)
 
     def __post_init__(self):
         if self.dataset_name is None and self.train_file is None and self.validation_file is None:
@@ -192,6 +191,16 @@ class DataTrainingArguments:
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
                 assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
+
+
+@flax.struct.dataclass
+class StreamingTrainingArguments(TrainingArguments):
+    num_train_steps: int = field(
+        default=200,
+    )
+    num_eval_samples = field(
+        default=200,
+    )
 
 
 @flax.struct.dataclass
@@ -295,7 +304,7 @@ if __name__ == "__main__":
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, StreamingTrainingArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
@@ -352,22 +361,6 @@ if __name__ == "__main__":
             streaming=True,
             split="train",
         )
-
-    #        if "validation" not in datasets.keys():
-    #            datasets["validation"] = load_dataset(
-    #                data_args.dataset_name,
-    #                data_args.dataset_config_name,
-    #                split=f"train[:{data_args.validation_split_percentage}%]",
-    #                cache_dir=model_args.cache_dir,
-    #                streaming=True
-    #            )
-    #            datasets["train"] = load_dataset(
-    #                data_args.dataset_name,
-    #                data_args.dataset_config_name,
-    #                split=f"train[{data_args.validation_split_percentage}%:]",
-    #                cache_dir=model_args.cache_dir,
-    #                streaming=True
-    #            )
 
     if model_args.config_name:
         config = AutoConfig.from_pretrained(model_args.config_name, cache_dir=model_args.cache_dir)
@@ -456,6 +449,9 @@ if __name__ == "__main__":
             batched=True,
         )
 
+    shuffle_seed = training_args.seed
+    tokenized_datasets = tokenized_datasets.shuffle(buffer_size=data_args.shuffle_buffer_size, seed=shuffle_seed)
+
     if has_tensorboard and jax.process_index() == 0:
         summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir))
 
@@ -475,8 +471,7 @@ if __name__ == "__main__":
     eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
 
     # define number steps per stream epoch
-    num_steps_per_stream_epoch = data_args.num_steps_per_stream_epoch
-    num_train_steps = num_steps_per_stream_epoch * num_epochs
+    num_train_steps = training_args.num_train_steps
 
     # Create learning rate schedule
     warmup_fn = optax.linear_schedule(
@@ -573,63 +568,62 @@ if __name__ == "__main__":
     state = jax_utils.replicate(state)
 
     train_time = 0
-    #    epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
-    num_train_samples_per_streaming = num_steps_per_stream_epoch * train_batch_size
-    stream_epoch = 0
+    train_start = time.time()
     next_stream_batch = None
+    train_metrics = []
+
+    training_iter = iter(tokenized_datasets)
+
+    eval_dataset = [next(training_iter) for _ in range(training_args.num_eval_samples)]
+    eval_dataset = eval_dataset[: eval_batch_size * (training_args.num_eval_samples // eval_batch_size)]
 
     # ======================== Training ================================
     for step in range(num_train_steps):
-        if step % num_steps_per_stream_epoch == 0:
-            stream_epoch += 1
-            train_start = time.time()
-            train_metrics = []
+        try:
+            samples = [next(training_iter) for _ in range(train_batch_size)]
+        except StopIteration:
+            shuffle_seed += 1
+            tokenized_datasets.set_epoch(shuffle_seed)
 
-            # Create sampling rng
-            rng, input_rng = jax.random.split(rng)
+            training_iter = iter(tokenized_datasets)
 
-            next_stream_batch = [next(iter(tokenized_datasets)) for _ in range(num_train_samples_per_streaming)]
+            eval_dataset = [next(training_iter) for _ in range(training_args.num_eval_samples)]
+            eval_dataset = eval_dataset[: eval_batch_size * (training_args.num_eval_samples // eval_batch_size)]
 
-        # Generate an stream epoch by shuffling sampling indices from the train dataset
-        train_samples_idx = jax.random.permutation(input_rng, jnp.arange(num_train_samples_per_streaming))
-        train_batch_idx = generate_batch_splits(train_samples_idx, train_batch_size)
+            samples = [next(training_iter) for _ in range(train_batch_size)]
 
-        # Gather the indexes for creating the batch and do a training step
-        for i, batch_idx in enumerate(tqdm(train_batch_idx, desc="Training...", position=1)):
-            samples = [next_stream_batch[int(idx)] for idx in batch_idx]
-            model_inputs = data_collator(samples)
+        model_inputs = data_collator(samples)
 
-            # Model forward
-            model_inputs = shard(model_inputs.data)
-            state, train_metric, dropout_rngs = p_train_step(state, model_inputs, dropout_rngs)
-            train_metrics.append(train_metric)
+        model_inputs = shard(model_inputs.data)
+        state, train_metric, dropout_rngs = p_train_step(state, model_inputs, dropout_rngs)
+        train_metrics.append(train_metric)
 
+        # Model forward
         train_time += time.time() - train_start
 
-#        epochs.write(
-#            f"Epoch... ({stream_epoch + 1} | Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']})"
-#        )
+        #        epochs.write(
+        #            f"Epoch... ({stream_epoch + 1} | Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']})"
+        #        )
 
-# ======================== Evaluating ==============================
-#        num_eval_samples = len(tokenized_datasets["validation"])
-#        eval_samples_idx = jnp.arange(num_eval_samples)
-#        eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
-#
-#        eval_metrics = []
-#        for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
-#            samples = [tokenized_datasets["validation"][int(idx)] for idx in batch_idx]
-#            model_inputs = data_collator(samples)
-#
-# Model forward
-#            model_inputs = shard(model_inputs.data)
-#            metrics = p_eval_step(state.params, model_inputs)
-#            eval_metrics.append(metrics)
-#
-# normalize eval metrics
-#        eval_metrics = get_metrics(eval_metrics)
-#        eval_metrics = jax.tree_map(jnp.sum, eval_metrics)
-#        eval_normalizer = eval_metrics.pop("normalizer")
-#        eval_metrics = jax.tree_map(lambda x: x / eval_normalizer, eval_metrics)
+        # ======================== Evaluating ==============================
+        if step % training_args.eval_steps == 0 and step > 0:
+            eval_metrics = []
+            eval_samples_idx = jnp.arange(training_args.num_eval_samples)
+            eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
+
+            for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
+                samples = [tokenized_datasets["validation"][int(idx)] for idx in batch_idx]
+
+                model_inputs = data_collator(samples)
+                model_inputs = shard(model_inputs.data)
+                metrics = p_eval_step(state.params, model_inputs)
+                eval_metrics.append(metrics)
+
+            # normalize eval metrics
+            eval_metrics = get_metrics(eval_metrics)
+            eval_metrics = jax.tree_map(jnp.sum, eval_metrics)
+            eval_normalizer = eval_metrics.pop("normalizer")
+            eval_metrics = jax.tree_map(lambda x: x / eval_normalizer, eval_metrics)
 #
 # Update progress bar
 #        epochs.desc = (
