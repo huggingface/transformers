@@ -684,17 +684,20 @@ if __name__ == "__main__":
     # Define eval fn
     def eval_step(params, batch):
         labels = batch.pop("labels")
+        label_mask = batch.pop("label_mask")
 
         logits = model(**batch, params=params, train=False)[0]
 
         # compute loss
         loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1]))
+        loss = (loss * label_mask).sum() / label_mask.sum()
 
         # compute accuracy
         accuracy = jnp.equal(jnp.argmax(logits, axis=-1), labels)
+        accuracy = (accuracy * label_mask).sum() / label_mask.sum()
 
         # summarize metrics
-        metrics = {"loss": loss.mean(), "accuracy": accuracy.mean()}
+        metrics = {"loss": loss, "accuracy": accuracy}
         metrics = jax.lax.pmean(metrics, axis_name="batch")
 
         return metrics
