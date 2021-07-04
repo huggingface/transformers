@@ -1135,7 +1135,12 @@ If your username is in one of the officially defined projects [here](https://doc
 - one that states that you have been granted the role "Community Week Participants" for the project hf-flax, and
 - one (or more if you are in multiple projects) that gives you the TPU name and the TPU zone for the TPU of your team
 
-You should click on "Open Cloud Console" on the first mail and agree to the pop up windows that follows. It will allow you to use a TPU VM. Don't worry if you cannot access the actual project `hf-flax` visually on the google cloud console - this is expected!
+You should click on "Open Cloud Console" on the first mail and agree to the pop up windows that follows. It will allow you to use a TPU VM. Don't worry if you cannot access the actual project `hf-flax` visually on the google cloud console and receive an error:
+
+```
+You don't have sufficient permission to view this page
+```
+- this is expected! 
 
 Great, now you and your team can access your TPU VM!
 
