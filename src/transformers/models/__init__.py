@@ -17,7 +17,7 @@
 # limitations under the License.
 
 from . import (
-    fnet,
+    f_net,
     albert,
     auto,
     bart,

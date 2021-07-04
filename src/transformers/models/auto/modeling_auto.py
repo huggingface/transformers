@@ -21,7 +21,7 @@ from collections import OrderedDict
 from ...utils import logging
 
 # Add modeling imports here
-from ..fnet.modeling_fnet import (
+from ..f_net.modeling_f_net import (
     FNetForMaskedLM,
     FNetForCausalLM,
     FNetForMultipleChoice,
@@ -493,7 +493,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
-(FNetConfig, FNetForMaskedLM),
+        (FNetConfig, FNetForMaskedLM),
         (RoFormerConfig, RoFormerForMaskedLM),
         (BigBirdPegasusConfig, BigBirdPegasusForConditionalGeneration),
         (GPTNeoConfig, GPTNeoForCausalLM),
@@ -585,7 +585,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
-(FNetConfig, FNetForMaskedLM),
+        (FNetConfig, FNetForMaskedLM),
         (RoFormerConfig, RoFormerForMaskedLM),
         (BigBirdConfig, BigBirdForMaskedLM),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),

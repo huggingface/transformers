@@ -133,7 +133,7 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig", "FNetTokenizer"],
+    "models.f_net": ["F_NET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig", "FNetTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -332,7 +332,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
-    _import_structure["models.fnet"].append("FNetTokenizerFast")
+    _import_structure["models.f_net"].append("FNetTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
@@ -495,9 +495,9 @@ if is_torch_available():
 
     # PyTorch models structure
 
-    _import_structure["models.fnet"].extend(
+    _import_structure["models.f_net"].extend(
         [
-            "FNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "F_NET_PRETRAINED_MODEL_ARCHIVE_LIST",
             "FNetForMaskedLM",
             "FNetForCausalLM",
             "FNetForMultipleChoice",
@@ -507,7 +507,7 @@ if is_torch_available():
             "FNetLayer",
             "FNetModel",
             "FNetPreTrainedModel",
-            "load_tf_weights_in_fnet",
+            "load_tf_weights_in_f_net",
         ]
     )
     _import_structure["models.albert"].extend(
@@ -1759,7 +1759,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig, FNetTokenizer
+    from .models.f_net import F_NET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig, FNetTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1946,7 +1946,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
-        from .models.fnet import FNetTokenizerFast
+        from .models.f_net import FNetTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2024,8 +2024,8 @@ if TYPE_CHECKING:
 
     if is_torch_available():
 
-        from .models.fnet import (
-            FNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        from .models.f_net import (
+            F_NET_PRETRAINED_MODEL_ARCHIVE_LIST,
             FNetForMaskedLM,
             FNetForCausalLM,
             FNetForMultipleChoice,
@@ -2035,8 +2035,10 @@ if TYPE_CHECKING:
             FNetLayer,
             FNetModel,
             FNetPreTrainedModel,
-            load_tf_weights_in_fnet,
+            load_tf_weights_in_f_net,
         )
+
+
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
