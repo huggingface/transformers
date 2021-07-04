@@ -203,7 +203,7 @@ class FlaxGPTNeoModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitt
 
     @slow
     def test_batch_generation(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2", pad_token="</s>", padding_side="left")
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2", pad_token="<|endoftext|>", padding_side="left")
         inputs = tokenizer(["Hello this is a long string", "Hey"], return_tensors="jax", padding=True, truncation=True)
 
         model = FlaxGPTNeoForCausalLM.from_pretrained("EleutherAI/gpt-neo-125M")
@@ -212,13 +212,15 @@ class FlaxGPTNeoModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitt
 
         jit_generate = jax.jit(model.generate)
 
-        output_sequences = jit_generate(inputs["input_ids"], attention_mask=inputs["attention_mask"]).sequences
+        output_sequences = jit_generate(
+            inputs["input_ids"], attention_mask=inputs["attention_mask"], pad_token_id=tokenizer.pad_token_id
+        ).sequences
 
         output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
 
         expected_string = [
-            "Hello this is a long string of words. I'm going to try to explain what I mean.",
-            "Hey, I'm not sure if I'm going to be able to do",
+            "Hello this is a long string of text.\n\nI'm trying to get the text of the",
+            "Hey, I'm a little late to the party. I'm going to",
         ]
 
         self.assertListEqual(output_string, expected_string)
