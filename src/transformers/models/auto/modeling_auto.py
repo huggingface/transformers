@@ -90,6 +90,13 @@ from ..camembert.modeling_camembert import (
     CamembertForTokenClassification,
     CamembertModel,
 )
+from ..canine.modeling_canine import (
+    CanineForMultipleChoice,
+    CanineForQuestionAnswering,
+    CanineForSequenceClassification,
+    CanineForTokenClassification,
+    CanineModel,
+)
 from ..clip.modeling_clip import CLIPModel
 from ..convbert.modeling_convbert import (
     ConvBertForMaskedLM,
@@ -322,6 +329,7 @@ from .configuration_auto import (
     BlenderbotConfig,
     BlenderbotSmallConfig,
     CamembertConfig,
+    CanineConfig,
     CLIPConfig,
     ConvBertConfig,
     CTRLConfig,
@@ -382,6 +390,7 @@ MODEL_MAPPING = OrderedDict(
         # Base model mapping
         (FNetConfig, FNetModel),
         (VisualBertConfig, VisualBertModel),
+        (CanineConfig, CanineModel),
         (RoFormerConfig, RoFormerModel),
         (CLIPConfig, CLIPModel),
         (BigBirdPegasusConfig, BigBirdPegasusModel),
@@ -639,6 +648,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
         (FNetConfig, FNetForSequenceClassification),
+        (CanineConfig, CanineForSequenceClassification),
         (RoFormerConfig, RoFormerForSequenceClassification),
         (BigBirdPegasusConfig, BigBirdPegasusForSequenceClassification),
         (BigBirdConfig, BigBirdForSequenceClassification),
@@ -680,6 +690,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
         (FNetConfig, FNetForQuestionAnswering),
+        (CanineConfig, CanineForQuestionAnswering),
         (RoFormerConfig, RoFormerForQuestionAnswering),
         (BigBirdPegasusConfig, BigBirdPegasusForQuestionAnswering),
         (BigBirdConfig, BigBirdForQuestionAnswering),
@@ -721,7 +732,8 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
-(FNetConfig, FNetForTokenClassification),
+        (FNetConfig, FNetForTokenClassification),
+        (CanineConfig, CanineForTokenClassification),
         (RoFormerConfig, RoFormerForTokenClassification),
         (BigBirdConfig, BigBirdForTokenClassification),
         (ConvBertConfig, ConvBertForTokenClassification),
@@ -752,7 +764,8 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
-(FNetConfig, FNetForMultipleChoice),
+        (FNetConfig, FNetForMultipleChoice),
+        (CanineConfig, CanineForMultipleChoice),
         (RoFormerConfig, RoFormerForMultipleChoice),
         (BigBirdConfig, BigBirdForMultipleChoice),
         (ConvBertConfig, ConvBertForMultipleChoice),
