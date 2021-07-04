@@ -276,6 +276,13 @@ class FlaxDataCollatorForT5MLM:
             batch["labels"], self.pad_token_id, self.decoder_start_token_id
         )
 
+        bsz, length = batch["decoder_input_ids"].shape
+        to_pad = 128 - (length % 128)
+        batch["decoder_input_ids"] = np.pad(batch["decoder_input_ids"], [[0, 0], [0, to_pad]])
+        batch["labels"] = np.pad(batch["labels"], [[0, 0], [0, to_pad]])
+        batch["decoder_attention_mask"] = np.ones((bsz, length))
+        batch["decoder_attention_mask"] = np.pad(batch["decoder_attention_mask"], [[0, 0], [0, to_pad]])
+
         return batch
 
     def create_sentinel_ids(self, mask_indices):
