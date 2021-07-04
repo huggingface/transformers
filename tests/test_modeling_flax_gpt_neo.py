@@ -327,6 +327,6 @@ class FlaxGPTNeoModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitt
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("EleutherAI/gpt-neo-125M", from_pt=True)
+            model = model_class_name.from_pretrained("EleutherAI/gpt-neo-125M")
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)
