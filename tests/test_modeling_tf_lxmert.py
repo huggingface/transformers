@@ -17,6 +17,8 @@ import os
 import tempfile
 import unittest
 
+import numpy as np
+
 from transformers import LxmertConfig, is_tf_available
 from transformers.testing_utils import require_tf, slow
 
@@ -555,7 +557,6 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
             tf_hidden_states = tfo[0].numpy()
             pt_hidden_states = pto[0].numpy()
 
-            import numpy as np
 
             tf_nans = np.copy(np.isnan(tf_hidden_states))
             pt_nans = np.copy(np.isnan(pt_hidden_states))
