@@ -25,9 +25,12 @@ Don't forget to sign up [here](https://forms.gle/tVGPhjKXyEsSgUcs8)!
     - [Flax design philosophy in 🤗 Transformers](#flax-design-philosophy-in-transformers)
     - [How to use flax models & scripts](#how-to-use-flax-models-and-example-scripts)
 - [Talks](#talks)
-- [How to use the 🤗 Hub for training](#how-to-use-the-hub-for-training)
+- [How to use the 🤗 Hub for training](#how-to-use-the-hub-for-collaboration)
 - [How to setup TPU VM](#how-to-setup-tpu-vm)
-- [How to use the 🤗 Hub for demo](#how-to-use-the-hub-for-demo)
+- [How to build a demo](#how-to-build-a-demo)
+    - [Using the Hugging Face Widgets](#using-the-hugging-face-widgets)
+    - [Using a Streamlit demo](#using-a-streamlit-demo)
+    - [Using a Gradio demo](#using-a-gradio-demo)
 - [Project evaluation](#project-evaluation)
 - [General Tips & Tricks](#general-tips-and-tricks)
 - [FAQ](#faq)
@@ -234,9 +237,13 @@ datasets["train"] = datasets["train"].select(range(1000))
 
 ## How to install relevant libraries
 
+In the following we will explain how to install all relevant libraries on your local computer and on TPU VM.
+
 It is recommended to install all relevant libraries both on your local machine 
 and on the TPU virtual machine. This way, quick prototyping and testing can be done on
 your local machine and the actual training can be done on the TPU VM.
+
+### Local computer
 
 The following libraries are required to train a JAX/Flax model with 🤗 Transformers and 🤗 Datasets:
 
@@ -250,30 +257,21 @@ You should install the above libraries in a [virtual environment](https://docs.p
 If you're unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/). Create a virtual environment with the version of Python you're going
 to use and activate it.
 
+You should be able to run the command:
+
+```bash
+python3 -m venv <your-venv-name>
+```
+
+You can activate your venv by running
+
+```bash
+source ~/<your-venv-name>/bin/activate
+```
+
 We strongly recommend to make use of the provided JAX/Flax examples scripts in [transformers/examples/flax](https://github.com/huggingface/transformers/tree/master/examples/flax) even if you want to train a JAX/Flax model of another github repository that is not integrated into 🤗 Transformers.
 In all likelihood, you will need to adapt one of the example scripts, so we recommend forking and cloning the 🤗 Transformers repository as follows. 
 Doing so will allow you to share your fork of the Transformers library with your team members so that the team effectively works on the same code base. It will also automatically install the newest versions of `flax`, `jax` and `optax`.
-
-**IMPORTANT**: If you are setting up your environment on a TPU VM, make sure to 
-install JAX's TPU version before cloning and installing the transformers repository. 
-Otherwise, an incorrect version of JAX will be installed, and the following commands will 
-throw an error. 
-To install JAX's TPU version simply run the following command:
-
-```
-$ pip install "jax[tpu]>=0.2.16" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
-```
-
-To verify that JAX was correctly installed, you can run the following command:
-
-```python
-import jax
-jax.device_count()
-```
-
-This should display the number of TPU cores, which should be 8 on a TPUv3-8 VM.
-
-Now you can run the following steps as usual.
 
 1. Fork the [repository](https://github.com/huggingface/transformers) by
    clicking on the 'Fork' button on the repository's page. This creates a copy of the code
@@ -346,6 +344,162 @@ model = FlaxRobertaModel.from_pretrained("julien-c/dummy-unknown")
 model(input_ids)
 ```
 
+### TPU VM
+
+**VERY IMPORTANT** - Only one process can access the TPU cores at a time. This means that if multiple team members 
+are trying to connect to the TPU cores errors, such as:
+
+```
+libtpu.so already in used by another process. Not attempting to load libtpu.so in this process.
+```
+
+are thrown. As a conclusion, we recommend every team member to create her/his own virtual environment, but only one 
+person should run the heavy training processes. Also, please take turns when setting up the TPUv3-8 so that everybody 
+can verify that JAX is correctly installed.
+
+The following libraries are required to train a JAX/Flax model with 🤗 Transformers and 🤗 Datasets on TPU VM:
+
+- [JAX](https://github.com/google/jax/)
+- [Flax](https://github.com/google/flax)
+- [Optax](https://github.com/deepmind/optax)
+- [Transformers](https://github.com/huggingface/transformers)
+- [Datasets](https://github.com/huggingface/datasets)
+
+You should install the above libraries in a [virtual environment](https://docs.python.org/3/library/venv.html). 
+If you're unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/). Create a virtual environment with the version of Python you're going
+to use and activate it.
+
+You should be able to run the command:
+
+```bash
+python3 -m venv <your-venv-name>
+```
+
+If this doesn't work, you first might to have install `python3-venv`. You can do this as follows:
+
+```bash
+sudo apt-get install python3-venv
+```
+
+You can activate your venv by running
+
+```bash
+source ~/<your-venv-name>/bin/activate
+```
+
+Next you should install JAX's TPU version on TPU by running the following command: 
+
+```
+$ pip install requests
+```
+
+and then:
+
+```
+$ pip install "jax[tpu]>=0.2.16" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+```
+
+**Note**: Running this command might actually throw an error, such as:
+```
+ Building wheel for jax (setup.py) ... error
+  ERROR: Command errored out with exit status 1:
+   command: /home/patrick/patrick/bin/python3 -u -c 'import sys, setuptools, tokenize; sys.argv[0] = '"'"'/tmp/pip-install-lwseckn1/jax/setup.py'"'"'; __file__='"'"'/tmp/pip-install-lwseckn1/jax/setup.py'"'"';f=getattr(tokenize, '"'"'open'"'"', open)(__file__);code=f.read().replace('"'"'\r\n'"'"', '"'"'\n'"'"');f.close();exec(compile(code, __file__, '"'"'exec'"'"'))' bdist_wheel -d /tmp/pip-wheel-pydotzlo
+       cwd: /tmp/pip-install-lwseckn1/jax/
+  Complete output (6 lines):
+  usage: setup.py [global_opts] cmd1 [cmd1_opts] [cmd2 [cmd2_opts] ...]
+     or: setup.py --help [cmd1 cmd2 ...]
+     or: setup.py --help-commands
+     or: setup.py cmd --help
+  
+  error: invalid command 'bdist_wheel'
+  ----------------------------------------
+  ERROR: Failed building wheel for jax
+```
+Jax should have been installed correctly nevertheless.
+
+To verify that JAX was correctly installed, you can run the following command:
+
+```python
+import jax
+jax.device_count()
+```
+
+This should display the number of TPU cores, which should be 8 on a TPUv3-8 VM.
+
+We strongly recommend to make use of the provided JAX/Flax examples scripts in [transformers/examples/flax](https://github.com/huggingface/transformers/tree/master/examples/flax) even if you want to train a JAX/Flax model of another github repository that is not integrated into 🤗 Transformers.
+In all likelihood, you will need to adapt one of the example scripts, so we recommend forking and cloning the 🤗 Transformers repository as follows. 
+Doing so will allow you to share your fork of the Transformers library with your team members so that the team effectively works on the same code base. It will also automatically install the newest versions of `flax`, `jax` and `optax`.
+
+1. Fork the [repository](https://github.com/huggingface/transformers) by
+   clicking on the 'Fork' button on the repository's page. This creates a copy of the code
+   under your GitHub user account.
+
+2. Clone your fork to your local disk, and add the base repository as a remote:
+
+   ```bash
+   $ git clone https://github.com/<your Github handle>/transformers.git
+   $ cd transformers
+   $ git remote add upstream https://github.com/huggingface/transformers.git
+   ```
+
+3. Create a new branch to hold your development changes. This is especially useful to share code changes with your team:
+
+   ```bash
+   $ git checkout -b a-descriptive-name-for-my-project
+   ```
+
+4. Set up a flax environment by running the following command in a virtual environment:
+
+   ```bash
+   $ pip install -e ".[flax]"
+   ```
+
+   (If transformers was already installed in the virtual environment, remove
+   it with `pip uninstall transformers` before reinstalling it in editable
+   mode with the `-e` flag.)
+
+   If you have already cloned that repo, you might need to `git pull` to get the most recent changes in the `datasets`
+   library.
+
+   Running this command will automatically install `flax`, `jax` and `optax`.
+
+Next, you should also install the 🤗 Datasets library. We strongly recommend installing the 
+library from source to profit from the most current additions during the community week.
+
+Simply run the following steps:
+
+```
+$ cd ~/
+$ git clone https://github.com/huggingface/datasets.git
+$ cd datasets
+$ pip install -e ".[streaming]"
+```
+
+If you plan on contributing a specific dataset during 
+the community week, please fork the datasets repository and follow the instructions 
+[here](https://github.com/huggingface/datasets/blob/master/CONTRIBUTING.md#how-to-create-a-pull-request).
+
+To verify that all libraries are correctly installed, you can run the following command.
+It assumes that both `transformers` and `datasets` were installed from master - otherwise
+datasets streaming will not work correctly.
+
+```python
+from transformers import FlaxRobertaModel, RobertaTokenizerFast
+from datasets import load_dataset
+import jax
+
+dataset = load_dataset('oscar', "unshuffled_deduplicated_en", split='train', streaming=True)
+
+dummy_input = next(iter(dataset))["text"]
+
+tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
+input_ids = tokenizer(dummy_input, return_tensors="np").input_ids[:, :10]
+
+model = FlaxRobertaModel.from_pretrained("julien-c/dummy-unknown")
+
+# run a forward pass, should return an object `FlaxBaseModelOutputWithPooling`
+model(input_ids)
+```
 
 ## Quickstart flax and jax
 
@@ -502,7 +656,7 @@ First, write a Flax module that will declare the layers and computation.
 import flax.linen as nn
 import jax.numpy as jnp
 
-class MLPMoudle(nn.Module):
+class MLPModule(nn.Module):
    config: MLPConfig
    dtype: jnp.dtype = jnp.float32
 
@@ -719,7 +873,7 @@ Super excited to kick off 3 days of talks around JAX / Flax, Transformers, large
 |-------------|---------------------------------|------------------------|
 | Lucas Beyer, Google Brain | Vision Transformer      | 5.00pm-5.30 CEST / 8.00am-8.30 PST      | 
 | Ben Wang, EleutherAI | Multihost Training in Mesh Transformer JAX      | 5.30pm-6.00 CEST / 8.30am-9.00 PST       | 
-| DeepMind, Soňa Mokrá & Junhyuk Oh, DeepMind | TBD      |    6.00pm-6.30 CEST / 9.00am-9.30am PST   | 
+| Iurii Kemaev, Soňa Mokrá, Junhyuk Oh, DeepMind | DeepMind JAX Ecosystem      |    6.00pm-6.30 CEST / 9.00am-9.30am PST   | 
 | Siddhartha Kamalakara, Joanna Yoo & João G M Araújo, Cohere | Training large scale language models      | 6:30pm-7.00pm CEST / 9:30am-10.00am PST      | 
 
 ### Talks & Speakers
@@ -975,11 +1129,132 @@ For more information, check out [this PR](https://github.com/huggingface/hugging
 
 ## How to setup TPU VM
 
-TODO (should be filled by 2.07.)...
+In this section we will explain how you can ssh into a TPU VM that has been given to your team.
+If your username is in one of the officially defined projects [here](https://docs.google.com/spreadsheets/d/1GpHebL7qrwJOc9olTpIPgjf8vOS0jNb6zR_B8x_Jtik/edit?usp=sharing), you should have received two emails: 
 
-## How to use the hub for training and demo
+- one that states that you have been granted the role "Community Week Participants" for the project hf-flax, and
+- one (or more if you are in multiple projects) that gives you the TPU name and the TPU zone for the TPU of your team
+
+You should click on "Open Cloud Console" on the first mail and agree to the pop up windows that follows. It will allow you to use a TPU VM. Don't worry if you cannot access the actual project `hf-flax` visually on the google cloud console and receive an error:
+
+```
+You don't have sufficient permission to view this page
+```
+- this is expected! 
+
+Great, now you and your team can access your TPU VM!
+
+In the following, we will describe how to do so using a standard console, but you should also be able to connect to the TPU VM via IDEs, like Visual Studio Code, etc.
+
+1. You need to install the Google Cloud SDK. Please follow the instructions on [cloud.google.com/sdk](https://cloud.google.com/sdk/docs/install#linux).
+
+2. Once you've installed the google cloud sdk, you should set your account by running the following command. Make sure that `<your-email-address>` corresponds to the gmail address you used to sign up for this event.
+
+```bash
+$ gcloud config set account <your-email-adress>
+```
+
+3. Let's also make sure the correct project is set in case your email is used for multiple gcloud projects:
+
+```bash
+$ gcloud config set project hf-flax
+```
+
+4. Next, you will need to authenticate yourself. You can do so by running: 
+
+```bash
+$ gcloud auth login
+```
+
+This should give you a link to a website, where you can authenticate your gmail account.
+
+5. Finally, you can ssh into the TPU VM! Please run the following command by setting <zone> to either `europe-west4-a` or `us-central1-a` (depending on what is stated in the second email you received) and <tpu-name> to the TPU name also sent to you in the second email.
+	
+```bash
+$ gcloud alpha compute tpus tpu-vm ssh <tpu-name> --zone <zone> --project hf-flax
+```
+	
+This should ssh you into the TPU VM!
+Now you can follow the steps of the section [How to install relevant libraries](#how-to-install-relevant-libraries) to install all necessary 
+libraries. Make sure to carefully follow the explanations of the "**IMPORTANT**" statement to correctly install JAX on TPU.
+Also feel free to install other `python` or `apt` packages on your machine if it helps you to work more efficiently!
+
+
+## How to build a demo
  
-TODO (should be filled by 1.07.)...
+### Using the Hugging Face Widgets
+
+Hugging Face has over [15 widgets](https://huggingface-widgets.netlify.app/) for different use cases using 🤗 Transformers library. Some of them also support [3rd party libraries](https://huggingface.co/docs/hub/libraries) such as [Sentence Similarity](https://huggingface.co/sentence-transformers/paraphrase-xlm-r-multilingual-v1) with Sentence Transformers and [Text to Speech](https://huggingface.co/julien-c/ljspeech_tts_train_tacotron2_raw_phn_tacotron_g2p_en_no_space_train) with [ESPnet](https://github.com/espnet/espnet).
+
+All the widgets are open sourced in the `huggingface_hub` [repo](https://github.com/huggingface/huggingface_hub/tree/main/widgets). Here is a summary of existing widgets:
+
+**NLP**
+* **Conversational:** To have the best conversations!. [Example](https://huggingface.co/microsoft/DialoGPT-large?).
+* **Feature Extraction:** Retrieve the input embeddings. [Example](https://huggingface.co/sentence-transformers/distilbert-base-nli-mean-tokens?text=test).
+* **Fill Mask:** Predict potential words for a mask token. [Example](https://huggingface.co/bert-base-uncased?).
+* **Question Answering:** Given a context and a question, predict the answer. [Example](https://huggingface.co/bert-large-uncased-whole-word-masking-finetuned-squad).
+* **Sentence Simmilarity:** Predict how similar a set of sentences are. Useful for Sentence Transformers.
+* **Summarization:** Given a text, output a summary of it. [Example](https://huggingface.co/sshleifer/distilbart-cnn-12-6).
+* **Table Question Answering:** Given a table and a question, predict the answer. [Example](https://huggingface.co/google/tapas-base-finetuned-wtq).
+* **Text Generation:** Generate text based on a prompt. [Example](https://huggingface.co/gpt2)
+* **Token Classification:** Useful for tasks such as Named Entity Recognition and Part of Speech. [Example](https://huggingface.co/dslim/bert-base-NER).
+* **Zero-Shot Classification:** Too cool to explain with words. Here is an [example](https://huggingface.co/typeform/distilbert-base-uncased-mnli)
+* ([WIP](https://github.com/huggingface/huggingface_hub/issues/99)) **Table to Text Generation**.
+
+**Speech**
+* **Audio to Audio:** For tasks such as audio source separation or speech enhancement. 
+* **Automatic Speech Recognition:** Convert audio to text. [Example](https://huggingface.co/facebook/wav2vec2-base-960h)
+* **Text to Speech**: Convert text to audio.
+
+**Image**
+* **Image Classification:** Given an image, predict its class. [Example](https://huggingface.co/osanseviero/llamastic).
+* ([WIP](https://github.com/huggingface/huggingface_hub/issues/100)) **Zero Shot Image Classification**
+* ([WIP](https://github.com/huggingface/huggingface_hub/issues/112)) **Image Captioning**
+* ([WIP](https://github.com/huggingface/huggingface_hub/issues/113)) **Text to Image Generation**
+* ([Proposed](https://github.com/huggingface/huggingface_hub/issues/127)) **Visual Question Answering**
+
+You can propose and implement new widgets by [opening an issue](https://github.com/huggingface/huggingface_hub/issues). Contributions are welcomed!
+
+
+### Using a Streamlit demo
+
+Sometimes you might be using different libraries or a very specific application that is not well supported by the current widgets. In this case, [Streamlit](https://streamlit.io/) can be an excellent option to build a cool visual demo. Setting up a Streamlit application is straightforward and in Python!
+
+A common use case is how to load files you have in your model repository in the Hub from the Streamlit demo. The `huggingface_hub` library is here to help you!
+
+```
+pip install huggingface_hub
+```
+
+Here is an example downloading (and caching!) a specific file directly from the Hub
+```
+from huggingface_hub import hf_hub_download
+filepath = hf_hub_download("flax-community/roberta-base-als", "flax_model.msgpack");
+```
+
+In many cases you will want to download the full repository. Here is an example downloading all the files from a repo. You can even specify specific revisions!
+
+```
+from huggingface_hub import snapshot_download
+local_path = snapshot_download("flax-community/roberta-base-als");
+```
+
+Note that if you're using 🤗 Transformers library, you can quickly load the model and tokenizer as follows
+```
+from transformers import AutoTokenizer, AutoModelForMaskedLM
+  
+tokenizer = AutoTokenizer.from_pretrained("REPO_ID")
+model = AutoModelForMaskedLM.from_pretrained("REPO_ID")
+```
+
+
+We'll provide more examples on Streamlit demos next week. Stay tuned!
+
+### Using a Gradio demo
+
+You can also use [Gradio](https://gradio.app/) to share your demos! [Here](https://huggingface.co/blog/gradio) is an example using the Gradio library to create a GUI for a Hugging Face model.
+
+More to come!
 
 ## Project evaluation
 

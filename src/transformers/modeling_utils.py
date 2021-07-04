@@ -352,11 +352,16 @@ class ModuleUtilsMixin:
             :obj:`int`: The number of parameters.
         """
 
-        def parameter_filter(x):
-            return (x.requires_grad or not only_trainable) and not (isinstance(x, nn.Embedding) and exclude_embeddings)
-
-        params = filter(parameter_filter, self.parameters()) if only_trainable else self.parameters()
-        return sum(p.numel() for p in params)
+        if exclude_embeddings:
+            embedding_param_names = [
+                f"{name}.weight" for name, module_type in self.named_modules() if isinstance(module_type, nn.Embedding)
+            ]
+            non_embedding_parameters = [
+                parameter for name, parameter in self.named_parameters() if name not in embedding_param_names
+            ]
+            return sum(p.numel() for p in non_embedding_parameters if p.requires_grad or not only_trainable)
+        else:
+            return sum(p.numel() for p in self.parameters() if p.requires_grad or not only_trainable)
 
     def estimate_tokens(self, input_dict: Dict[str, Union[torch.Tensor, Any]]) -> int:
         """
@@ -440,7 +445,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # (and avoid unnecessary warnings).
     _keys_to_ignore_on_load_unexpected = None
     # a list of of tensor names to ignore when saving the model (useful for keys that aren't
-    # trained, but which are deterministic)
+    # trained, but which are deterministic, or tied variables)
     _keys_to_ignore_on_save = None
 
     is_parallelizable = False
