@@ -166,9 +166,9 @@ class DataTrainingArguments:
     text_column_name: str = field(
         default="text", metadata={"help": "The name of the column to retrieve the training text."}
     )
-    shuffle_buffer_size: int = field(default=10000, metadata={"The number of examples to pre-load for shuffling."})
-    num_train_steps: int = field(default=50000, metadata={"The number of training steps."})
-    num_eval_samples: int = field(default=50000, metadata={"The number of samples to be used for evaluation"})
+    shuffle_buffer_size: int = field(default=10000, metadata={"help": "The number of examples to pre-load for shuffling."})
+    num_train_steps: int = field(default=50000, metadata={"help": "The number of training steps."})
+    num_eval_samples: int = field(default=50000, metadata={"help": "The number of samples to be used for evaluation"})
 
     def __post_init__(self):
         if self.dataset_name is None and self.train_file is None and self.validation_file is None:

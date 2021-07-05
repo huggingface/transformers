@@ -94,7 +94,7 @@ Compared to the default [`run_mlm_flax`](https://github.com/huggingface/transfor
 - `num_train_steps` - how many update steps should be run.
 - `num_eval_samples` - how many training samples should be taken for evaluation.
 - `logging_steps` - at what rate should the training loss be logged.
-- `eval_stepts` - at what rate should evaluation be run.
+- `eval_steps` - at what rate should evaluation be run.
 10K update steps 
 
 ```bash
