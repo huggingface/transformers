@@ -58,7 +58,7 @@ from transformers import (
 )
 
 
-if datasets.__version__ < "1.8.0":
+if datasets.__version__ <= "1.8.0":
     raise ValueError("Make sure to upgrade `datasets` to a version >= 1.9.0 to use dataset streaming")
 
 
