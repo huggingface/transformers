@@ -1106,6 +1106,7 @@ just three lines of code:
 from flax import serialization
 from jax import random
 from flax import linen as nn
+from huggingface_hub import Repository
 
 model = nn.Dense(features=5)
 
