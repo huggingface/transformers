@@ -731,11 +731,11 @@ if __name__ == "__main__":
                 if has_tensorboard and jax.process_index() == 0:
                     write_train_metric(summary_writer, train_metrics, train_time, cur_step)
 
-                train_metrics = []
+                epochs.write(
+                    f"Step... ({cur_step} | Loss: {train_metric['loss'].mean()}, Learning Rate: {train_metric['learning_rate'].mean()})"
+                )
 
-        epochs.write(
-            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss'].mean()}, Learning Rate: {train_metric['learning_rate'].mean()})"
-        )
+                train_metrics = []
 
         # ======================== Evaluating ==============================
         num_eval_samples = len(tokenized_datasets["validation"])
