@@ -546,7 +546,7 @@ if __name__ == "__main__":
         training_iter, data_args.num_eval_samples, max_seq_length
     )
 
-    steps = tqdm(range(num_train_steps), desc=f"Training...", position=0)
+    steps = tqdm(range(num_train_steps), desc="Training...", position=0)
     for step in range(num_train_steps):
         # ======================== Training ================================
         try:
