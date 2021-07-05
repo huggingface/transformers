@@ -91,10 +91,10 @@ python run_image_classification.py \
     --train_dir="imagenette2/train" \
     --validation_dir="imagenette2/val" \
     --num_train_epochs 5 \
-    --learning_rate 1e-4 \
+    --learning_rate 1e-3 \
     --per_device_train_batch_size 128 --per_device_eval_batch_size 128 \
     --overwrite_output_dir \
     --preprocessing_num_workers 32
 ```
 
-TODO: Add expected results and link tensorboard logs.
+This should finish in ~7mins with 99% validation accuracy.
