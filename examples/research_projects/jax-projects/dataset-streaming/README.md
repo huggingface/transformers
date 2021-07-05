@@ -113,9 +113,9 @@ Compared to the default [`run_mlm_flax`](https://github.com/huggingface/transfor
     --overwrite_output_dir \
     --adam_beta1="0.9" \
     --adam_beta2="0.98" \
-		--num_train_steps="10000" \
-		--num_eval_samples="5000" \
-		--logging_steps="250" \
-		--eval_steps="1000" \
+    --num_train_steps="10000" \
+    --num_eval_samples="5000" \
+    --logging_steps="250" \
+    --eval_steps="1000" \
     --push_to_hub
 ```
