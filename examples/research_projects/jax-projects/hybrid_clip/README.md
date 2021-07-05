@@ -16,6 +16,8 @@ limitations under the License.
 
 # Vision-Text dual encoder model training examples
 
+> Note: This example is experimental and might not give the best possible results
+
 The following example showcases how to train a CLIP like vision-text dual encoder model
 using a pre-trained vision and text encoder using the JAX/Flax backend.
 
@@ -109,10 +111,10 @@ for image_path, captions in image_path_to_caption.items():
 
 train_lines = lines[:-8000]
 valid_line = lines[-8000:]
-with open("coco_dataset/train_dataset.jsonl", "w") as f:
+with open("coco_dataset/train_dataset.json", "w") as f:
     f.write("\n".join(train_lines))
 
-with open("coco_dataset/valid_dataset.jsonl", "w") as f:
+with open("coco_dataset/valid_dataset.json", "w") as f:
     f.write("\n".join(valid_line))
 ```
 
@@ -139,4 +141,4 @@ python run_clip.py \
     --push_to_hub
 ```
 
-TODO: Add expected results and logs once the run is finished
+This should finish in ~1h50 mins with min validation loss 2.43. Training statistics can be accessed on [tfhub.de](https://tensorboard.dev/experiment/RUNPYd1yRgSD5kZSb9hDig/#scalars)

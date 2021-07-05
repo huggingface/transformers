@@ -160,10 +160,10 @@ class DataTrainingArguments:
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
-                assert extension == "json", "`train_file` should be a csv, a json or a txt file."
+                assert extension == "json", "`train_file` should be a json file."
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
-                assert extension == "json", "`validation_file` should be a csv, a json or a txt file."
+                assert extension == "json", "`validation_file` should be a json file."
 
 
 # We use torchvision for faster image pre-processing.
@@ -206,7 +206,7 @@ class ImageTextDataset(VisionDataset):
         self,
         root: str,
         file_path: str,
-        captions_per_image = 2,
+        captions_per_image=2,
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
         transforms: Optional[Callable] = None,
@@ -218,7 +218,7 @@ class ImageTextDataset(VisionDataset):
 
         self.captions = []
         self.image_paths = []
-        
+
         for example in examples:
             self.captions.extend(example["captions"][:captions_per_image])
             self.image_paths.extend([example["image_path"]] * captions_per_image)
@@ -484,7 +484,6 @@ def main():
     train_time = 0
     # Create sampling rng
     rng, input_rng = jax.random.split(rng)
-    train_metrics = []
 
     epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
     for epoch in epochs:

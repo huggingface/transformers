@@ -367,7 +367,4 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
 
         model.params["text_model"] = text_model.params
 
-        del text_model
-        del vision_model
-
         return model
