@@ -107,7 +107,7 @@ This command performs a magical link between the folder you cloned the repositor
 ```
 now this editable install will reside where you clone the folder to, e.g. `~/transformers/` and python will search it too.
 
-Do note that you have to keep that `transformers` folder around and not delete it to continue using the  `transfomers` library.
+Do note that you have to keep that `transformers` folder around and not delete it to continue using the  `transformers` library.
 
 Now, let's get to the real benefit of this installation approach. Say, you saw some new feature has been just committed into `master`. If you have already performed all the steps above, to update your transformers to include all the latest commits, all you need to do is to `cd` into that cloned repository folder and update the clone to the latest version:
 
@@ -172,7 +172,19 @@ python examples/pytorch/translation/run_translation.py --model_name_or_path t5-s
 ```
 and it should succeed without any hanging waiting to timeout.
 
+#### Fetching models and tokenizers to use offline
 
+When running a script the first time like mentioned above, the downloaded files will be cached for future reuse. 
+However, it is also possible to download files and point to their local path instead.
+
+Downloading files can be done through the Web Interface by clicking on the "Download" button, but it can also be handled
+programmatically using the `huggingface_hub` library that is a dependency to `transformers`:
+
+- Using `snapshot_download` to download an entire repository
+- Using `hf_hub_download` to download a specific file
+
+See the reference for these methods in the huggingface_hub
+[documentation](https://github.com/huggingface/huggingface_hub/tree/main/src/huggingface_hub).
 
 ## Do you want to run a Transformer model on a mobile device?
 

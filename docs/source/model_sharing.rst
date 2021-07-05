@@ -16,6 +16,12 @@ Model sharing and uploading
 In this page, we will show you how to share a model you have trained or fine-tuned on new data with the community on
 the `model hub <https://huggingface.co/models>`__.
 
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/XvSGPZFEjDY" title="YouTube video player"
+   frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
+   picture-in-picture" allowfullscreen></iframe>
+
 .. note::
 
     You will need to create an account on `huggingface.co <https://huggingface.co/join>`__ for this.
@@ -77,6 +83,12 @@ token that you can just copy.
 Directly push your model to the hub
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/Z1-XMy-GNLQ" title="YouTube video player"
+   frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
+   picture-in-picture" allowfullscreen></iframe>
+
 Once you have an API token (either stored in the cache or copied and pasted in your notebook), you can directly push a
 finetuned model you saved in :obj:`save_drectory` by calling:
 
@@ -131,7 +143,7 @@ directly create a PyTorch version of your TensorFlow model:
 
 .. code-block:: python
 
-    from transfomers import AutoModel
+    from transformers import AutoModel
 
     model = AutoModel.from_pretrained(save_directory, from_tf=True)
 
@@ -151,6 +163,12 @@ or
 
 Use your terminal and git
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/rkCly_cbMBk" title="YouTube video player"
+   frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
+   picture-in-picture" allowfullscreen></iframe>
 
 Basic steps
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

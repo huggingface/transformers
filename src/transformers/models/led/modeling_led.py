@@ -21,7 +21,6 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
@@ -250,7 +249,9 @@ class LEDEncoderSelfAttention(nn.Module):
             # free memory
             del global_key_attn_scores
 
-        attn_probs = F.softmax(attn_scores, dim=-1, dtype=torch.float32)  # use fp32 for numerical stability
+        attn_probs = nn.functional.softmax(
+            attn_scores, dim=-1, dtype=torch.float32
+        )  # use fp32 for numerical stability
 
         if layer_head_mask is not None:
             assert layer_head_mask.size() == (
@@ -266,7 +267,7 @@ class LEDEncoderSelfAttention(nn.Module):
         del attn_scores
 
         # apply dropout
-        attn_probs = F.dropout(attn_probs, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(attn_probs, p=self.dropout, training=self.training)
 
         value_vectors = value_vectors.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
 
@@ -326,7 +327,7 @@ class LEDEncoderSelfAttention(nn.Module):
     @staticmethod
     def _pad_and_transpose_last_two_dims(hidden_states_padded, padding):
         """pads rows and then flips rows and columns"""
-        hidden_states_padded = F.pad(
+        hidden_states_padded = nn.functional.pad(
             hidden_states_padded, padding
         )  # padding value is not important because it will be overwritten
         hidden_states_padded = hidden_states_padded.view(
@@ -353,7 +354,7 @@ class LEDEncoderSelfAttention(nn.Module):
                0.0000,  0.0000,  0.0000, 2.0514, -1.1600,  0.5372,  0.2629 ]
         """
         total_num_heads, num_chunks, window_overlap, hidden_dim = chunked_hidden_states.size()
-        chunked_hidden_states = F.pad(
+        chunked_hidden_states = nn.functional.pad(
             chunked_hidden_states, (0, window_overlap + 1)
         )  # total_num_heads x num_chunks x window_overlap x (hidden_dim+window_overlap+1). Padding value is not important because it'll be overwritten
         chunked_hidden_states = chunked_hidden_states.view(
@@ -489,7 +490,7 @@ class LEDEncoderSelfAttention(nn.Module):
         value = value.transpose(1, 2).reshape(batch_size * num_heads, seq_len, head_dim)
 
         # pad seq_len with w at the beginning of the sequence and another window overlap at the end
-        padded_value = F.pad(value, (0, 0, window_overlap, window_overlap), value=-1)
+        padded_value = nn.functional.pad(value, (0, 0, window_overlap, window_overlap), value=-1)
 
         # chunk padded_value into chunks of size 3 window overlap and an overlap of size window overlap
         chunked_value_size = (batch_size * num_heads, chunks_count + 1, 3 * window_overlap, head_dim)
@@ -661,7 +662,7 @@ class LEDEncoderSelfAttention(nn.Module):
         global_attn_scores = global_attn_scores.view(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)
 
         # compute global attn probs
-        global_attn_probs_float = F.softmax(
+        global_attn_probs_float = nn.functional.softmax(
             global_attn_scores, dim=-1, dtype=torch.float32
         )  # use fp32 for numerical stability
 
@@ -677,7 +678,7 @@ class LEDEncoderSelfAttention(nn.Module):
                 batch_size * self.num_heads, max_num_global_attn_indices, seq_len
             )
 
-        global_attn_probs = F.dropout(
+        global_attn_probs = nn.functional.dropout(
             global_attn_probs_float.type_as(global_attn_scores), p=self.dropout, training=self.training
         )
 
@@ -833,7 +834,7 @@ class LEDDecoderAttention(nn.Module):
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        attn_weights = F.softmax(attn_weights, dim=-1)
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
         if layer_head_mask is not None:
             assert layer_head_mask.size() == (
                 self.num_heads,
@@ -851,7 +852,7 @@ class LEDDecoderAttention(nn.Module):
         else:
             attn_weights_reshaped = None
 
-        attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
         attn_output = torch.bmm(attn_probs, value_states)
 
@@ -914,15 +915,15 @@ class LEDEncoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
         hidden_states = attn_outputs[0]
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
@@ -1002,7 +1003,7 @@ class LEDDecoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
@@ -1022,7 +1023,7 @@ class LEDDecoderLayer(nn.Module):
                 past_key_value=cross_attn_past_key_value,
                 output_attentions=output_attentions,
             )
-            hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+            hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
@@ -1032,9 +1033,9 @@ class LEDDecoderLayer(nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
@@ -1435,17 +1436,43 @@ LED_START_DOCSTRING = r"""
 LED_GENERATION_EXAMPLE = r"""
     Summarization example::
 
-        >>> from transformers import LEDTokenizer, LEDForConditionalGeneration, LEDConfig
+        >>> import torch
+        >>> from transformers import LEDTokenizer, LEDForConditionalGeneration
 
-        >>> model = LEDForConditionalGeneration.from_pretrained('allenai/led-base-16384')
-        >>> tokenizer = LEDTokenizer.from_pretrained('allenai/led-base-16384')
+        >>> model = LEDForConditionalGeneration.from_pretrained('allenai/led-large-16384-arxiv')
+        >>> tokenizer = LEDTokenizer.from_pretrained('allenai/led-large-16384-arxiv')
 
-        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
+        >>> ARTICLE_TO_SUMMARIZE = '''Transformers (Vaswani et al., 2017) have achieved state-of-the-art
+        ... results in a wide range of natural language tasks including generative
+        ... language modeling (Dai et al., 2019; Radford et al., 2019) and discriminative
+        ... language understanding (Devlin et al., 2019). This success is partly due to
+        ... the self-attention component which enables the network to capture contextual
+        ... information from the entire sequence. While powerful, the memory and computational
+        ... requirements of self-attention grow quadratically with sequence length, making
+        ... it infeasible (or very expensive) to process long sequences.
+        ...
+        ... To address this limitation, we present Longformer, a modified Transformer
+        ... architecture with a self-attention operation that scales linearly with the
+        ... sequence length, making it versatile for processing long documents (Fig 1). This
+        ... is an advantage for natural language tasks such as long document classification,
+        ... question answering (QA), and coreference resolution, where existing approaches
+        ... partition or shorten the long context into smaller sequences that fall within the
+        ... typical 512 token limit of BERT-style pretrained models. Such partitioning could
+        ... potentially result in loss of important cross-partition information, and to
+        ... mitigate this problem, existing methods often rely on complex architectures to
+        ... address such interactions. On the other hand, our proposed Longformer is able to
+        ... build contextual representations of the entire context using multiple layers of
+        ... attention, reducing the need for task-specific architectures.'''
+        >>> inputs = tokenizer.encode(ARTICLE_TO_SUMMARIZE, return_tensors='pt')
+
+        >>> # Global attention on the first token (cf. Beltagy et al. 2020)
+        >>> global_attention_mask = torch.zeros_like(inputs)
+        >>> global_attention_mask[:, 0] = 1
 
         >>> # Generate Summary
-        >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
-        >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
+        >>> summary_ids = model.generate(inputs, global_attention_mask=global_attention_mask,
+        ...                              num_beams=3, max_length=32, early_stopping=True)
+        >>> print(tokenizer.decode(summary_ids[0], skip_special_tokens=True, clean_up_tokenization_spaces=True))
 """
 
 LED_INPUTS_DOCSTRING = r"""
@@ -1518,8 +1545,13 @@ LED_INPUTS_DOCSTRING = r"""
             :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
             `optional`) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
             cross-attention of the decoder.
-        past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
+        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+            Tuple of :obj:`tuple(torch.FloatTensor)` of length :obj:`config.n_layers`, with each tuple having 2 tensors
+            of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
+            shape :obj:`(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see :obj:`past_key_values` input) to speed up sequential decoding.
 
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
@@ -1557,7 +1589,7 @@ class LEDEncoder(LEDPreTrainedModel):
 
     Args:
         config: LEDConfig
-        embed_tokens (torch.nn.Embedding): output embedding
+        embed_tokens (nn.Embedding): output embedding
     """
 
     def __init__(self, config: LEDConfig, embed_tokens: Optional[nn.Embedding] = None):
@@ -1632,7 +1664,7 @@ class LEDEncoder(LEDPreTrainedModel):
                 f"`config.attention_window`: {attention_window}"
             )
             if input_ids is not None:
-                input_ids = F.pad(input_ids, (0, padding_len), value=pad_token_id)
+                input_ids = nn.functional.pad(input_ids, (0, padding_len), value=pad_token_id)
             if inputs_embeds is not None:
                 input_ids_padding = inputs_embeds.new_full(
                     (batch_size, padding_len),
@@ -1642,7 +1674,9 @@ class LEDEncoder(LEDPreTrainedModel):
                 inputs_embeds_padding = self.embed_tokens(input_ids_padding)
                 inputs_embeds = torch.cat([inputs_embeds, inputs_embeds_padding], dim=-2)
 
-            attention_mask = F.pad(attention_mask, (0, padding_len), value=False)  # no attention on the padding tokens
+            attention_mask = nn.functional.pad(
+                attention_mask, (0, padding_len), value=False
+            )  # no attention on the padding tokens
 
         return padding_len, input_ids, attention_mask, inputs_embeds
 
@@ -1755,7 +1789,7 @@ class LEDEncoder(LEDPreTrainedModel):
 
         hidden_states = inputs_embeds + embed_pos
         hidden_states = self.layernorm_embedding(hidden_states)
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1837,7 +1871,7 @@ class LEDDecoder(LEDPreTrainedModel):
 
     Args:
         config: LEDConfig
-        embed_tokens (torch.nn.Embedding): output embedding
+        embed_tokens (nn.Embedding): output embedding
     """
 
     def __init__(self, config: LEDConfig, embed_tokens: Optional[nn.Embedding] = None):
@@ -1928,8 +1962,13 @@ class LEDDecoder(LEDPreTrainedModel):
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-                Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
+            past_key_values (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+                Tuple of :obj:`tuple(torch.FloatTensor)` of length :obj:`config.n_layers`, with each tuple having 2
+                tensors of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional
+                tensors of shape :obj:`(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+                Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
+                cross-attention blocks) that can be used (see :obj:`past_key_values` input) to speed up sequential
                 decoding.
 
                 If :obj:`past_key_values` are used, the user can optionally input only the last
@@ -1998,7 +2037,7 @@ class LEDDecoder(LEDPreTrainedModel):
         hidden_states = inputs_embeds + positions
         hidden_states = self.layernorm_embedding(hidden_states)
 
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -2292,13 +2331,9 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
 
             >>> model = LEDForConditionalGeneration.from_pretrained('allenai/led-base-16384')
             >>> input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
-            >>> logits = model(input_ids).logits
 
-            >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-            >>> probs = logits[0, masked_index].softmax(dim=0)
-            >>> values, predictions = probs.topk(5)
-
-            >>> tokenizer.decode(predictions).split()
+            >>> prediction = model.generate(input_ids)[0]
+            >>> print(tokenizer.decode(prediction, skip_special_tokens=True))
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2585,8 +2620,8 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
+        start_logits = start_logits.squeeze(-1).contiguous()
+        end_logits = end_logits.squeeze(-1).contiguous()
 
         total_loss = None
         if start_positions is not None and end_positions is not None:
@@ -2597,8 +2632,8 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
                 end_positions = end_positions.squeeze(-1)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
+            start_positions = start_positions.clamp(0, ignored_index)
+            end_positions = end_positions.clamp(0, ignored_index)
 
             loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
             start_loss = loss_fct(start_logits, start_positions)

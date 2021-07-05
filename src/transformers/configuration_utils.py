@@ -192,6 +192,12 @@ class PretrainedConfig(PushToHubMixin):
         - **tie_word_embeddings** (:obj:`bool`, `optional`, defaults to :obj:`True`) -- Whether the model's input and
           output word embeddings should be tied. Note that this is only relevant if the model has a output word
           embedding layer.
+        - **torch_dtype** (:obj:`str`, `optional`) -- The :obj:`dtype` of the weights. This attribute can be used to
+          initialize the model to a non-default ``dtype`` (which is normally ``float32``) and thus allow for optimal
+          storage allocation. For example, if the saved model is ``float16``, ideally we want to load it back using the
+          minimal amount of memory needed to load ``float16`` weights. Since the config object is stored in plain text,
+          this attribute contains just the floating type string without the ``torch.`` prefix. For example, for
+          ``torch.float16`` ``torch_dtype`` is the ``"float16"`` string.
 
     TensorFlow specific parameters
 
@@ -207,6 +213,7 @@ class PretrainedConfig(PushToHubMixin):
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
         self.output_attentions = kwargs.pop("output_attentions", False)
         self.torchscript = kwargs.pop("torchscript", False)  # Only used by PyTorch models
+        self.torch_dtype = kwargs.pop("torch_dtype", None)  # Only used by PyTorch models
         self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
         self.pruned_heads = kwargs.pop("pruned_heads", {})
         self.tie_word_embeddings = kwargs.pop(
@@ -337,12 +344,25 @@ class PretrainedConfig(PushToHubMixin):
                 Directory where the configuration JSON file will be saved (will be created if it does not exist).
             push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to push your model to the Hugging Face model hub after saving it.
+
+                .. warning::
+
+                    Using :obj:`push_to_hub=True` will synchronize the repository you are pushing to with
+                    :obj:`save_directory`, which requires :obj:`save_directory` to be a local clone of the repo you are
+                    pushing to if it's an existing folder. Pass along :obj:`temp_dir=True` to use a temporary directory
+                    instead.
+
             kwargs:
                 Additional key word arguments passed along to the
                 :meth:`~transformers.file_utils.PushToHubMixin.push_to_hub` method.
         """
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
+
+        if push_to_hub:
+            commit_message = kwargs.pop("commit_message", None)
+            repo = self._create_or_get_repo(save_directory, **kwargs)
+
         os.makedirs(save_directory, exist_ok=True)
         # If we save using the predefined names, we can load using `from_pretrained`
         output_config_file = os.path.join(save_directory, CONFIG_NAME)
@@ -351,7 +371,7 @@ class PretrainedConfig(PushToHubMixin):
         logger.info(f"Configuration saved in {output_config_file}")
 
         if push_to_hub:
-            url = self._push_to_hub(save_files=[output_config_file], **kwargs)
+            url = self._push_to_hub(repo, commit_message=commit_message)
             logger.info(f"Configuration pushed to the hub in this commit: {url}")
 
     @classmethod
@@ -667,7 +687,45 @@ class PretrainedConfig(PushToHubMixin):
         Updates attributes of this class with attributes from ``config_dict``.
 
         Args:
-            config_dict (:obj:`Dict[str, Any]`): Dictionary of attributes that shall be updated for this class.
+            config_dict (:obj:`Dict[str, Any]`): Dictionary of attributes that should be updated for this class.
         """
         for key, value in config_dict.items():
             setattr(self, key, value)
+
+    def update_from_string(self, update_str: str):
+        """
+        Updates attributes of this class with attributes from ``update_str``.
+
+        The expected format is ints, floats and strings as is, and for booleans use ``true`` or ``false``. For example:
+        "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+
+        The keys to change have to already exist in the config object.
+
+        Args:
+            update_str (:obj:`str`): String with attributes that should be updated for this class.
+
+        """
+
+        d = dict(x.split("=") for x in update_str.split(","))
+        for k, v in d.items():
+            if not hasattr(self, k):
+                raise ValueError(f"key {k} isn't in the original config dict")
+
+            old_v = getattr(self, k)
+            if isinstance(old_v, bool):
+                if v.lower() in ["true", "1", "y", "yes"]:
+                    v = True
+                elif v.lower() in ["false", "0", "n", "no"]:
+                    v = False
+                else:
+                    raise ValueError(f"can't derive true or false from {v} (key {k})")
+            elif isinstance(old_v, int):
+                v = int(v)
+            elif isinstance(old_v, float):
+                v = float(v)
+            elif not isinstance(old_v, str):
+                raise ValueError(
+                    f"You can only update int, float, bool or string values in the config, got {v} for key {k}"
+                )
+
+            setattr(self, k, v)

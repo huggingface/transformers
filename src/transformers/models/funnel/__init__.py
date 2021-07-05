@@ -41,6 +41,7 @@ if is_torch_available():
         "FunnelForSequenceClassification",
         "FunnelForTokenClassification",
         "FunnelModel",
+        "FunnelPreTrainedModel",
         "load_tf_weights_in_funnel",
     ]
 
@@ -55,6 +56,7 @@ if is_tf_available():
         "TFFunnelForSequenceClassification",
         "TFFunnelForTokenClassification",
         "TFFunnelModel",
+        "TFFunnelPreTrainedModel",
     ]
 
 
@@ -76,6 +78,7 @@ if TYPE_CHECKING:
             FunnelForSequenceClassification,
             FunnelForTokenClassification,
             FunnelModel,
+            FunnelPreTrainedModel,
             load_tf_weights_in_funnel,
         )
 
@@ -90,6 +93,7 @@ if TYPE_CHECKING:
             TFFunnelForSequenceClassification,
             TFFunnelForTokenClassification,
             TFFunnelModel,
+            TFFunnelPreTrainedModel,
         )
 
 else:

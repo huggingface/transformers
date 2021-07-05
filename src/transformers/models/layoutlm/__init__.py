@@ -38,6 +38,7 @@ if is_torch_available():
         "LayoutLMForSequenceClassification",
         "LayoutLMForTokenClassification",
         "LayoutLMModel",
+        "LayoutLMPreTrainedModel",
     ]
 
 if is_tf_available():
@@ -66,6 +67,7 @@ if TYPE_CHECKING:
             LayoutLMForSequenceClassification,
             LayoutLMForTokenClassification,
             LayoutLMModel,
+            LayoutLMPreTrainedModel,
         )
     if is_tf_available():
         from .modeling_tf_layoutlm import (

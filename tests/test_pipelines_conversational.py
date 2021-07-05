@@ -18,6 +18,8 @@ from transformers import (
     AutoModelForCausalLM,
     AutoModelForSeq2SeqLM,
     AutoTokenizer,
+    BlenderbotSmallForConditionalGeneration,
+    BlenderbotSmallTokenizer,
     Conversation,
     ConversationalPipeline,
     is_torch_available,
@@ -30,6 +32,7 @@ from .test_pipelines_common import MonoInputPipelineCommonMixin
 
 if is_torch_available():
     import torch
+    from torch import nn
 
     from transformers.models.gpt2 import GPT2Config, GPT2LMHeadModel
 
@@ -57,8 +60,8 @@ class SimpleConversationPipelineTests(unittest.TestCase):
         bias[76] = 1
         weight = torch.zeros((V, D), requires_grad=True)
 
-        model.lm_head.bias = torch.nn.Parameter(bias)
-        model.lm_head.weight = torch.nn.Parameter(weight)
+        model.lm_head.bias = nn.Parameter(bias)
+        model.lm_head.weight = nn.Parameter(weight)
 
         # # Created with:
         # import tempfile
@@ -389,3 +392,32 @@ class ConversationalPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCas
         self.assertEqual(result[0].generated_responses[1], "i don't have any plans yet. i'm not sure what to do yet.")
         self.assertEqual(result[1].past_user_inputs[1], "What's your name?")
         self.assertEqual(result[1].generated_responses[1], "i don't have a name, but i'm going to see a horror movie.")
+
+    @require_torch
+    @slow
+    def test_from_pipeline_conversation(self):
+        model_id = "facebook/blenderbot_small-90M"
+
+        # from model id
+        conversation_agent_from_model_id = pipeline("conversational", model=model_id, tokenizer=model_id)
+
+        # from model object
+        model = BlenderbotSmallForConditionalGeneration.from_pretrained(model_id)
+        tokenizer = BlenderbotSmallTokenizer.from_pretrained(model_id)
+        conversation_agent_from_model = pipeline("conversational", model=model, tokenizer=tokenizer)
+
+        conversation = Conversation("My name is Sarah and I live in London")
+        conversation_copy = Conversation("My name is Sarah and I live in London")
+
+        result_model_id = conversation_agent_from_model_id([conversation])
+        result_model = conversation_agent_from_model([conversation_copy])
+
+        # check for equality
+        self.assertEqual(
+            result_model_id.generated_responses[0],
+            "hi sarah, i live in london as well. do you have any plans for the weekend?",
+        )
+        self.assertEqual(
+            result_model_id.generated_responses[0],
+            result_model.generated_responses[0],
+        )
