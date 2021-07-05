@@ -14,15 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Pre-training/Fine-tuning the library models for image classification (ViT) on a text file or a dataset.
+Pre-training/Fine-tuning ViT for image classification .
 
 Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
-https://huggingface.co/models?filter=image-classification
+https://huggingface.co/models?filter=vit
 """
-# You can also adapt this script on your own causal language modeling task. Pointers for this are left as comments.
 
 import logging
-import math
 import os
 import sys
 import time
@@ -30,13 +28,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
-import datasets
-
 # for dataset and preprocessing
 import torch
 import torchvision
 import torchvision.transforms as transforms
-from datasets import Dataset, load_dataset
 from tqdm import tqdm
 
 import jax
@@ -51,32 +46,15 @@ from transformers import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     AutoConfig,
-    AutoTokenizer,
     FlaxAutoModelForImageClassification,
     HfArgumentParser,
     TrainingArguments,
     is_tensorboard_available,
     set_seed,
 )
-from transformers.testing_utils import CaptureLogger
 
 
 logger = logging.getLogger(__name__)
-
-# Cache the result
-has_tensorboard = is_tensorboard_available()
-if has_tensorboard:
-    try:
-        from flax.metrics.tensorboard import SummaryWriter
-    except ImportError as ie:
-        has_tensorboard = False
-        print(f"Unable to display metrics through TensorBoard because some package are not installed: {ie}")
-
-else:
-    print(
-        "Unable to display metrics through TensorBoard because the package is not installed: "
-        "Please run pip install tensorboard to enable."
-    )
 
 
 MODEL_CONFIG_CLASSES = list(FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING.keys())
@@ -120,17 +98,13 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
-    dataset_name: Optional[str] = field(
-        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+    train_dir: str = field(
+        metadata={"help": "Path to the root training directory which contains one subdirectory per class."}
     )
-    dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+    validation_dir: str = field(
+        metadata={"help": "Path to the root validation directory which contains one subdirectory per class."},
     )
-    train_dir: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
-    validation_dir: Optional[str] = field(
-        default=None,
-        metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
-    )
+    image_size: Optional[int] = field(default=224, metadata={"help": " The size (resolution) of each image."})
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
@@ -148,30 +122,10 @@ class DataTrainingArguments:
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
-    validation_split_percentage: Optional[int] = field(
-        default=5,
-        metadata={
-            "help": "The percentage of the train set used as validation set in case there's no validation split"
-        },
-    )
-    overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
-    )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
-
-    def __post_init__(self):
-        if self.dataset_name is None and self.train_file is None and self.validation_file is None:
-            raise ValueError("Need either a dataset name or a training/validation file.")
-        else:
-            if self.train_file is not None:
-                extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json", "txt"], "`train_file` should be a csv, a json or a txt file."
-            if self.validation_file is not None:
-                extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
 
 
 class TrainState(train_state.TrainState):
@@ -241,24 +195,60 @@ def main():
     # Setup logging, we only want one process per machine to log things on the screen.
     logger.setLevel(logging.INFO if jax.process_index() == 0 else logging.ERROR)
     if jax.process_index() == 0:
-        datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_info()
     else:
-        datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
 
     # Set the verbosity to info of the Transformers logger (on main process only):
     logger.info(f"Training/evaluation parameters {training_args}")
 
-    # Load pretrained model and tokenizer
+    # set seed for random transforms and torch dataloaders
+    set_seed(training_args.seed)
 
-    # Distributed training:
-    # The .from_pretrained methods guarantee that only one local process can concurrently
-    # download model & vocab.
+    # Initialize datasets and pre-processing transforms
+    # We use torchvision here for faster pre-processing
+    # Note that here we are using some default pre-processing, for maximum accuray
+    # one should tune this part and carefully select what transformations to use.
+    normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+    train_dataset = torchvision.datasets.ImageFolder(
+        data_args.train_dir,
+        transforms.Compose(
+            [
+                transforms.RandomResizedCrop(data_args.image_size),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                normalize,
+            ]
+        ),
+    )
+
+    eval_dataset = torchvision.datasets.ImageFolder(
+        data_args.validation_dir,
+        transforms.Compose(
+            [
+                transforms.Resize(data_args.image_size),
+                transforms.CenterCrop(data_args.image_size),
+                transforms.ToTensor(),
+                normalize,
+            ]
+        ),
+    )
+
+    # Load pretrained model and tokenizer
     if model_args.config_name:
-        config = AutoConfig.from_pretrained(model_args.config_name, cache_dir=model_args.cache_dir)
+        config = AutoConfig.from_pretrained(
+            model_args.config_name,
+            num_labels=len(train_dataset.classes),
+            image_size=data_args.image_size,
+            cache_dir=model_args.cache_dir,
+        )
     elif model_args.model_name_or_path:
-        config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
+        config = AutoConfig.from_pretrained(
+            model_args.model_name_or_path,
+            num_labels=len(train_dataset.classes),
+            image_size=data_args.image_size,
+            cache_dir=model_args.cache_dir,
+        )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
@@ -271,34 +261,6 @@ def main():
         model = FlaxAutoModelForImageClassification.from_config(
             config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
         )
-    
-    set_seed(training_args.seed)
-
-    # TODO: data loading and processing
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    train_dataset = torchvision.datasets.ImageFolder(
-        data_args.train_dir,
-        transforms.Compose(
-            [
-                transforms.RandomResizedCrop(224),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                normalize,
-            ]
-        ),
-    )
-
-    eval_dataset = torchvision.datasets.ImageFolder(
-        data_args.valid_dir,
-        transforms.Compose(
-            [
-                transforms.Resize(256),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                normalize,
-            ]
-        ),
-    )
 
     # Store some constant
     num_epochs = int(training_args.num_train_epochs)
@@ -309,11 +271,10 @@ def main():
 
     def collate_fn(examples):
         pixel_values = torch.stack([example[0] for example in examples])
-        labels = torch.stack([example[1] for example in examples])
+        labels = torch.tensor([example[1] for example in examples])
 
         batch = {"pixel_values": pixel_values, "labels": labels}
-        batch = {k: jnp.array(v.numpy()) for k, v in batch.items()}
-        batch = shard(batch)
+        batch = {k: v.numpy() for k, v in batch.items()}
 
         return batch
 
@@ -323,6 +284,7 @@ def main():
         batch_size=train_batch_size,
         shuffle=True,
         num_workers=data_args.preprocessing_num_workers,
+        persistent_workers=True,
         drop_last=True,
         collate_fn=collate_fn,
     )
@@ -332,13 +294,28 @@ def main():
         batch_size=eval_batch_size,
         shuffle=False,
         num_workers=data_args.preprocessing_num_workers,
+        persistent_workers=True,
         drop_last=True,
         collate_fn=collate_fn,
     )
 
     # Enable tensorboard only on the master node
+    has_tensorboard = is_tensorboard_available()
     if has_tensorboard and jax.process_index() == 0:
-        summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir).joinpath("logs").as_posix())
+        try:
+            from flax.metrics.tensorboard import SummaryWriter
+
+            summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir))
+        except ImportError as ie:
+            has_tensorboard = False
+            logger.warning(
+                f"Unable to display metrics through TensorBoard because some package are not installed: {ie}"
+            )
+    else:
+        logger.warning(
+            "Unable to display metrics through TensorBoard because the package is not installed: "
+            "Please run pip install tensorboard to enable."
+        )
 
     # Initialize our training
     rng = jax.random.PRNGKey(training_args.seed)
@@ -376,9 +353,7 @@ def main():
     state = TrainState.create(apply_fn=model.__call__, params=model.params, tx=adamw, dropout_rng=dropout_rng)
 
     def loss_fn(logits, labels):
-        shift_logits = logits[..., :-1, :]
-        shift_labels = labels[..., 1:]
-        loss = optax.softmax_cross_entropy(shift_logits, onehot(shift_labels, shift_logits.shape[-1]))
+        loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1]))
         return loss.mean()
 
     # Define gradient update step fn
@@ -439,16 +414,20 @@ def main():
         train_metrics = []
 
         steps_per_epoch = len(train_dataset) // train_batch_size
+        train_step_progress_bar = tqdm(total=steps_per_epoch, desc="Training...", position=1, leave=False)
         # train
-        for _ in tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False):
-            batch = next(train_loader)
+        for batch in train_loader:
+            batch = shard(batch)
             state, train_metric = p_train_step(state, batch)
             train_metrics.append(train_metric)
+
+            train_step_progress_bar.update(1)
 
         train_time += time.time() - train_start
 
         train_metric = unreplicate(train_metric)
 
+        train_step_progress_bar.close()
         epochs.write(
             f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']})"
         )
@@ -456,18 +435,25 @@ def main():
         # ======================== Evaluating ==============================
         eval_metrics = []
         eval_steps = len(eval_dataset) // eval_batch_size
-        for _ in tqdm(range(eval_steps), desc="Evaluating...", position=2, leave=False):
+        eval_step_progress_bar = tqdm(total=eval_steps, desc="Evaluating...", position=2, leave=False)
+        for batch in eval_loader:
             # Model forward
-            batch = next(eval_loader)
+            batch = shard(batch)
             metrics = p_eval_step(state.params, batch)
             eval_metrics.append(metrics)
+
+            eval_step_progress_bar.update(1)
 
         # normalize eval metrics
         eval_metrics = get_metrics(eval_metrics)
         eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
 
         # Print metrics and update progress bar
-        desc = f"Epoch... ({epoch + 1}/{num_epochs} | Eval Loss: {eval_metrics['loss']} | Eval Accuracy: {eval_metrics['accuracy']})"
+        eval_step_progress_bar.close()
+        desc = (
+            f"Epoch... ({epoch + 1}/{num_epochs} | Eval Loss: {round(eval_metrics['loss'].item(), 4)} | "
+            f"Eval Accuracy: {round(eval_metrics['accuracy'].item(), 4)})"
+        )
         epochs.write(desc)
         epochs.desc = desc
 
@@ -476,10 +462,15 @@ def main():
             cur_step = epoch * (len(train_dataset) // train_batch_size)
             write_metric(summary_writer, train_metrics, eval_metrics, train_time, cur_step)
 
-    # save last checkpoint
-    if jax.process_index() == 0:
-        params = jax.device_get(unreplicate(state.params))
-        model.save_pretrained(training_args.output_dir, params=params)
+        # save checkpoint after each epoch and push checkpoint to the hub
+        if jax.process_index() == 0:
+            params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+            model.save_pretrained(
+                training_args.output_dir,
+                params=params,
+                push_to_hub=training_args.push_to_hub,
+                commit_message=f"Saving weights and logs of epoch {epoch+1}",
+            )
 
 
 if __name__ == "__main__":
