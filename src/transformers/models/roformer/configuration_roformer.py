@@ -48,7 +48,7 @@ class RoFormerConfig(PretrainedConfig):
             the :obj:`inputs_ids` passed when calling :class:`~transformers.RoFormerModel` or
             :class:`~transformers.TFRoFormerModel`.
         embedding_size (:obj:`int`, `optional`, defaults to None):
-            Dimensionality of the encoder layers and the pooler layer.
+            Dimensionality of the encoder layers and the pooler layer. Defaults to the :obj:`hidden_size` if not provided.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimension of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
