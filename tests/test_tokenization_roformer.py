@@ -16,12 +16,12 @@
 import unittest
 
 from transformers import RoFormerTokenizer, RoFormerTokenizerFast
-from transformers.testing_utils import require_jieba, require_tokenizers
+from transformers.testing_utils import require_rjieba, require_tokenizers
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
-@require_jieba
+@require_rjieba
 @require_tokenizers
 class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
@@ -63,3 +63,11 @@ class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_tokens = tokens + [tokenizer.unk_token]
         exp_tokens = [22943, 21332, 34431, 45904, 117, 306, 1231, 1231, 2653, 33994, 1266, 100]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), exp_tokens)
+
+    # can't train new_tokenizer via Tokenizers lib
+    def test_training_new_tokenizer(self):
+        pass
+
+    # can't train new_tokenizer via Tokenizers lib
+    def test_training_new_tokenizer_with_special_tokens_change(self):
+        pass
