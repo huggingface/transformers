@@ -574,7 +574,7 @@ def main():
 
             cur_step = epoch * (len(train_dataset) // train_batch_size) + step
 
-            if cur_step % training_args.logging_steps and cur_step > 0:
+            if cur_step % training_args.logging_steps == 0 and cur_step > 0:
                 # Save metrics
                 train_metric = unreplicate(train_metric)
                 train_time += time.time() - train_start

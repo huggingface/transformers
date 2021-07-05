@@ -608,7 +608,7 @@ if __name__ == "__main__":
 
             cur_step = epoch * num_train_samples + step
 
-            if cur_step % training_args.logging_steps and cur_step > 0:
+            if cur_step % training_args.logging_steps == 0 and cur_step > 0:
                 # Save metrics
                 train_metric = jax_utils.unreplicate(train_metric)
                 train_time += time.time() - train_start
