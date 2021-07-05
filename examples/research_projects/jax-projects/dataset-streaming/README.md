@@ -98,7 +98,7 @@ Compared to the default [`run_mlm_flax`](https://github.com/huggingface/transfor
 10K update steps 
 
 ```bash
-./run_mlm_flax.py \
+./run_mlm_flax_stream.py \
     --output_dir="${MODEL_DIR}" \
     --model_type="roberta" \
     --config_name="${MODEL_DIR}" \
