@@ -32,7 +32,7 @@ class MT5Config(PretrainedConfig):
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
     Arguments:
-        vocab_size (:obj:`int`, `optional`, defaults to 32128):
+        vocab_size (:obj:`int`, `optional`, defaults to 250112):
             Vocabulary size of the T5 model. Defines the number of different tokens that can be represented by the
             :obj:`inputs_ids` passed when calling :class:`~transformers.T5Model` or :class:`~transformers.TFT5Model`.
         d_model (:obj:`int`, `optional`, defaults to 512):

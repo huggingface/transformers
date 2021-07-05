@@ -183,6 +183,12 @@ class TrainingArguments:
         save_total_limit (:obj:`int`, `optional`):
             If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in
             :obj:`output_dir`.
+        save_on_each_node (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            When doing multi-node distributed training, whether to save models and checkpoints on each node, or only on
+            the main one.
+
+            This should not be activated when the different nodes use the same storage as the files will be saved with
+            the same names for each node.
         no_cuda (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to not use CUDA even when it is available or not.
         seed (:obj:`int`, `optional`, defaults to 42):
@@ -454,6 +460,12 @@ class TrainingArguments:
                 "Limit the total amount of checkpoints."
                 "Deletes the older checkpoints in the output_dir. Default is unlimited checkpoints"
             )
+        },
+    )
+    save_on_each_node: bool = field(
+        default=False,
+        metadata={
+            "help": "When doing multi-node distributed training, whether to save models and checkpoints on each node, or only on the main one"
         },
     )
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
@@ -937,6 +949,19 @@ class TrainingArguments:
             else:
                 return self.process_index == 0
 
+    @property
+    def should_save(self):
+        """
+        Whether or not the current process should write to disk, e.g., to save models and checkpoints.
+        """
+        if self.save_on_each_node:
+            return self.local_process_index == 0
+        else:
+            if is_sagemaker_mp_enabled():
+                return smp.rank() == 0
+            else:
+                return self.process_index == 0
+
     def get_process_log_level(self):
         """
         Returns the log level to be used depending on whether this process is the main process of node 0, main process
@@ -1002,13 +1027,19 @@ class TrainingArguments:
                 if not is_main_process:
                     # tell all replicas to wait
                     logger.debug(f"{self.process_index}: waiting for the {main_process_desc} to perform {desc}")
-                    torch.distributed.barrier()
+                    if is_torch_tpu_available():
+                        xm.rendezvous(desc)
+                    else:
+                        torch.distributed.barrier()
                 yield
             finally:
                 if is_main_process:
                     # the wait is over
                     logger.debug(f"{self.process_index}: {main_process_desc} completed {desc}, releasing all replicas")
-                    torch.distributed.barrier()
+                    if is_torch_tpu_available():
+                        xm.rendezvous(desc)
+                    else:
+                        torch.distributed.barrier()
         else:
             yield
 
