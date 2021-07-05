@@ -293,7 +293,7 @@ def advance_iter_and_group_samples(train_iterator, num_samples, max_seq_length):
         return result
 
     grouped_samples = group_texts(samples)
-    return train_iterator, grouped_samples
+    return grouped_samples
 
 
 def write_train_metric(summary_writer, train_metrics, train_time, step):
@@ -361,9 +361,6 @@ if __name__ == "__main__":
     #
     # For CSV/JSON files, this script will use the column called 'text' or the first column if no column called
     # 'text' is found. You can easily tweak this behavior (see below).
-    #
-    # In distributed training, the load_dataset function guarantees that only one local process can concurrently
-    # download the dataset.
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         dataset = load_dataset(
@@ -470,7 +467,7 @@ if __name__ == "__main__":
         learning_rate=linear_decay_lr_schedule_fn,
         b1=training_args.adam_beta1,
         b2=training_args.adam_beta2,
-        eps=1e-8,
+        eps=training_args.adam_epsilon,
         weight_decay=training_args.weight_decay,
         mask=decay_mask_fn,
     )
@@ -542,15 +539,13 @@ if __name__ == "__main__":
     training_iter = iter(tokenized_datasets)
 
     max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
-    training_iter, eval_samples = advance_iter_and_group_samples(
-        training_iter, data_args.num_eval_samples, max_seq_length
-    )
+    eval_samples = advance_iter_and_group_samples(training_iter, data_args.num_eval_samples, max_seq_length)
 
     steps = tqdm(range(num_train_steps), desc="Training...", position=0)
     for step in range(num_train_steps):
         # ======================== Training ================================
         try:
-            training_iter, samples = advance_iter_and_group_samples(training_iter, train_batch_size, max_seq_length)
+            samples = advance_iter_and_group_samples(training_iter, train_batch_size, max_seq_length)
         except StopIteration:
             # Once the end of the dataset stream is reached, the training iterator
             # is reinitialized and reshuffled and a new eval dataset is randomely chosen.
@@ -559,10 +554,8 @@ if __name__ == "__main__":
 
             training_iter = iter(tokenized_datasets)
 
-            training_iter, eval_dataset = advance_iter_and_group_samples(
-                training_iter, data_args.num_eval_samples, max_seq_length
-            )
-            training_iter, samples = advance_iter_and_group_samples(training_iter, train_batch_size, max_seq_length)
+            eval_dataset = advance_iter_and_group_samples(training_iter, data_args.num_eval_samples, max_seq_length)
+            samples = advance_iter_and_group_samples(training_iter, train_batch_size, max_seq_length)
 
         # process input samples
         model_inputs = data_collator(samples)
