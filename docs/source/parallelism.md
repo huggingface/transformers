@@ -177,9 +177,9 @@ Problems:
 - have to arrange each layer so that the output of one model becomes an input to the other model
 
 Implementations:
-- [pytorch](https://pytorch.org/docs/stable/pipeline.html) (initial support in pytorch-1.8, and progressively getting improved in 1.9 and more so in 1.10). Some [examples](https://github.com/pytorch/pytorch/blob/master/benchmarks/distributed/pipeline/pipe.py)
-- [fairscale](https://fairscale.readthedocs.io/en/latest/tutorials/pipe.html)
-- [deepspeed](https://www.deepspeed.ai/tutorials/pipeline/)
+- [Pytorch](https://pytorch.org/docs/stable/pipeline.html) (initial support in pytorch-1.8, and progressively getting improved in 1.9 and more so in 1.10). Some [examples](https://github.com/pytorch/pytorch/blob/master/benchmarks/distributed/pipeline/pipe.py)
+- [FairScale](https://fairscale.readthedocs.io/en/latest/tutorials/pipe.html)
+- [DeepSpeed](https://www.deepspeed.ai/tutorials/pipeline/)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation - no API.
 
 🤗 Transformers status: as of this writing none of the models supports full-PP. GPT2 and T5 models have naive PP support. The main obstacle is being unable to convert the models to `nn.Sequential` and have all the inputs to be Tensors. This is because currently the models include many features that make the conversion very complicated, and will need to be removed to accomplish that.
@@ -196,31 +196,94 @@ According to [the same document](https://docs.aws.amazon.com/sagemaker/latest/dg
 
 ## Tensor Parallelism
 
+In Tensor Parallelism each GPU processes only a slice of a tensor and only aggregates the full tensor for operations that require the whole thing.
+
+In this section we use concepts and diagrams from the [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) paper: [Efficient Large-Scale Language Model Training on GPU Clusters](https://arxiv.org/abs/2104.04473).
+
+The main building block of any transformer is a fully connected `nn.Linear` followed by a nonlinear activation `GeLU`.
+
+Following the Megatron's paper notation, we can write the dot-product part of it as `Y = GeLU(XA)`, where `X` and `Y` are the input and output vectors, and `A` is the weight matrix.
+
+If we look at the computation in matrix form, it's easy to see how the matrix multiplication can be split between multiple GPUs:
+![Parallel GEMM](imgs/parallelism-tp-parallel_gemm.png)
+
+If we split the weight matrix `A` column-wise across `N` GPUs and perform matrix multiplications `XA_1` through `XA_n` in parallel, then we will end up with `N` output vectors `Y_1, Y_2, ..., Y_n` which can be fed into `GeLU` independently:
+![independent GeLU](imgs/parallelism-tp-independent-gelu.png)
+
+Using this principle, we can update an MLP of arbitrary depth, without the need for any synchronization between GPUs until the very end, where we need to reconstruct the output vector from shards. The Megatron-LM paper authors provide a helpful illustration for that:
+![parallel shard processing](imgs/parallelism-tp-parallel_shard_processing.png)
+
+Parallelizing the multi-headed attention layers is even simpler, since they are already inherently parallel, due to having multiple independent heads!
+![parallel self-attention](imgs/parallelism-tp-parallel_self_attention.png)
+
+Special considerations: TP requires very fast network, and therefore it's not advisable to do TP across more than one node. Practically, if a node has 4 GPUs, the highest TP degree is therefore 4. If you need a TP degree of 8, you need to use nodes that have at least 8 GPUs.
+
+This section is based on the original much more [detailed TP overview](https://github.com/huggingface/transformers/issues/10321#issuecomment-783543530).
+by [@anton-l](https://github.com/anton-l).
+
+Implementations:
+- DeepSpeed calls it [tensor slicing](https://www.deepspeed.ai/features/#model-parallelism)
+- [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation.
+
+🤗 Transformers status: not yet implemented
 
 
-
-
-There is a more detailed explanation by [@anton-l](https://github.com/anton-l) [here](https://github.com/huggingface/transformers/issues/10321#issuecomment-783543530).
-
-
-
-## 2D Parallelism
+## DP+PP
 
 The following diagram from the DeepSpeed [pipeline tutorial](https://www.deepspeed.ai/tutorials/pipeline/) demonstrates how one combines DP with PP.
 
 ![dp-pp-2d](imgs/parallelism-zero-dp-pp.png)
 
+Here it's important to see how DP rank 0 doesn't see GPU2 and DP rank 1 doesn't see GPU3. To DP there is just GPUs 0 and 1 where it feeds data as if there were just 2 GPUs. GPU0 "secretly" offloads some of its load to GPU2 using PP. And GPU1 does the same by enlisting GPU3 to its aid.
 
-Here it's important to see how DP rank 0 doesn't see gpu2 and DP rank 1 doesn't see gpu3. To DP there is just GPUs 0 and 1 where it feeds data as if there were just 2 GPUs. gpu 0 "secretly" offloads some of its load to gpu 2 using PP. and gpu 1 does the same by enlisting gpu 3 to its aid.
+Since each dimension requires at least 2 GPUs, here you'd need at least 4 GPUs.
 
-XXX: will update this section once I get it working
+Implementations:
+- DeepSpeed
+- [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 
-## 3D Parallelism
+🤗 Transformers status: not yet implemented
+
+
+## DP+PP+TP
+
+To get an even more efficient training a 3D parallelism is used where PP is combined with TP and DP. This can be seen in the following diagram.
+
+![dp-pp-tp-3d](imgs/parallelism-deepspeed-3d.png)
+
+This diagram is from a blog post [3D parallelism: Scaling to trillion-parameter models](https://www.microsoft.com/en-us/research/blog/deepspeed-extreme-scale-model-training-for-everyone/), which is a good read as well.
+
+Since each dimension requires at least 2 GPUs, here you'd need at least 8 GPUs.
+
+Implementations:
+- DeepSpeed
+- [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
+
+🤗 Transformers status: not yet implemented, since we have no PP and TP.
+
+
+## DP+PP+TP+ZeRO
+
+DeepSpeed provides a variation on DP which is more scalable than normal DP.
+
+To allow the number of workers to scale beyond Tensor and Pipeline Parallelism without sacrificing compute efficiency, ZeRO-powered data parallelism (ZeRO-DP). ZeRO-DP not only improves memory efficiency further via optimizer state partition, but also allows scaling to arbitrarily large number of GPUs with minimal communication overhead by exploiting topology aware mapping. (adapted from this [blog post](https://www.microsoft.com/en-us/research/blog/deepspeed-extreme-scale-model-training-for-everyone/).)
+
+ZeRO-DP typically enables only ZeRO stage 1 (optimizer sharding).
+
+While it's theoretically possible to use ZeRO stage 2 (gradient sharding) with Pipeline Parallelism, it will have bad performance impacts. There would need to be an additional reduce-scatter collective for every micro-batch to aggregate the gradients before sharding, which adds a potentially significant communication overhead. By nature of Pipeline Parallelism, small micro-batches are used and instead the focus is on trying to balance arithmetic intensity (micro-batch size) with minimizing the Pipeline bubble (number of micro-batches). Therefore those communication costs are going to hurt.
+
+In addition, There are already fewer layers than normal due to PP and so the memory savings won't be huge. PP already reduces gradient size by ``1/PP``, and so gradient sharding savings on top of that are less significant than pure DP.
+
+ZeRO stage 3 is not a good choice either for the same reason - more inter-node communications required.
+
+And since we have ZeRO, the other benefit is ZeRO-Offload, if CPU and/or NVMe memory are abundant.
+
+🤗 Transformers status: not yet implemented, since we have no PP and TP.
 
 
 ## FlexFlow
 
-[FlexFlow](https://github.com/flexflow/FlexFlow) is also solving the parallelization problem in a slightly different approach.
+[FlexFlow](https://github.com/flexflow/FlexFlow) also solves the parallelization problem in a slightly different approach.
 
 Paper: ["Beyond Data and Model Parallelism for Deep Neural Networks" by Zhihao Jia, Matei Zaharia, Alex Aiken](https://arxiv.org/abs/1807.05358)
 
@@ -235,9 +298,10 @@ and they are working on Pipeline Parallelism. I guess ZeRO-DP is Sample+Paramete
 
 ![flex-flow-soap](imgs/parallelism-flexflow.jpeg)
 
-
 The significance of this framework is that it takes resources like (1) GPU/TPU/CPU vs. (2) RAM/DRAM vs. (3) fast-intra-connect/slow-inter-connect and it automatically optimizes all these  algorithmically deciding which parallelisation to use where.
 
 On very important aspect is that FlexFlow is designed for optimizing DNN parallelizations for models with static and fixed workload, since models with dynamic behavior may prefer different parallelization strategies across iterations.
 
 So the promise is very attractive - it runs say a 30min simulation on the cluster of choice and it comes up with the best strategy to utilise this specific environment. If you add/remove/replace any parts it'll run and re-optimize the plan for that. And then you can train. A different setup will have its own custom optimization.
+
+🤗 Transformers status: not yet integrated. We already have our models FX-trace-able via [transformers.utils.fx](https://github.com/huggingface/transformers/blob/master/src/transformers/utils/fx.py), which is a prerequisite for FlexFlow, so someone needs to figure out what needs to be done to make FlexFlow work with our models.
