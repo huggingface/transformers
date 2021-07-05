@@ -24,6 +24,7 @@ import logging
 import os
 import sys
 import time
+from collections import defaultdict
 from dataclasses import dataclass, field
 
 # You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
@@ -58,23 +59,7 @@ from transformers import (
 
 
 if datasets.__version__ < "1.8.0":
-    raise ValueError("Make sure to upgrade `datasets` to a version >= 1.8.0 to use dataset streaming")
-
-
-# Cache the result
-has_tensorboard = is_tensorboard_available()
-if has_tensorboard:
-    try:
-        from flax.metrics.tensorboard import SummaryWriter
-    except ImportError as ie:
-        has_tensorboard = False
-        print(f"Unable to display metrics through TensorBoard because some package are not installed: {ie}")
-
-else:
-    print(
-        "Unable to display metrics through TensorBoard because the package is not installed: "
-        "Please run pip install tensorboard to enable."
-    )
+    raise ValueError("Make sure to upgrade `datasets` to a version >= 1.9.0 to use dataset streaming")
 
 
 MODEL_CONFIG_CLASSES = list(FLAX_MODEL_FOR_MASKED_LM_MAPPING.keys())
@@ -178,8 +163,12 @@ class DataTrainingArguments:
         default=False,
         metadata={"help": "Whether distinct lines of text in the dataset are to be handled as distinct sequences."},
     )
-    column_name: str = field(default="text")
-    shuffle_buffer_size: int = field(default=10_000)
+    text_column_name: str = field(
+        default="text", metadata={"help": "The name of the column to retrieve the training text."}
+    )
+    shuffle_buffer_size: int = field(default=10000, metadata={"The number of examples to pre-load for shuffling."})
+    num_train_steps: int = field(default=50000, metadata={"The number of training steps."})
+    num_eval_samples: int = field(default=50000, metadata={"The number of samples to be used for evaluation"})
 
     def __post_init__(self):
         if self.dataset_name is None and self.train_file is None and self.validation_file is None:
@@ -191,16 +180,6 @@ class DataTrainingArguments:
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
                 assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
-
-
-@flax.struct.dataclass
-class StreamingTrainingArguments(TrainingArguments):
-    num_train_steps: int = field(
-        default=200,
-    )
-    num_eval_samples = field(
-        default=200,
-    )
 
 
 @flax.struct.dataclass
@@ -286,7 +265,36 @@ def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndar
     return batch_idx
 
 
-def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step):
+def advance_iter_and_group_samples(train_iterator, num_samples, max_seq_length):
+    """
+    The training iterator is advanced so that after groupifying the samples,
+    `num_samples` of length `max_seq_length` are returned.
+    """
+    num_total_tokens = max_seq_length * num_samples
+    samples = defaultdict(list)
+
+    i = 0
+    while i < num_total_tokens:
+        tokenized_samples = next(train_iterator)
+        i += len(tokenized_samples["input_ids"])
+
+        # concatenate tokenized samples to list
+        samples = {k: samples[k] + tokenized_samples[k] for k in tokenized_samples.keys()}
+
+    # Concatenated tokens are split to lists of length `max_seq_length`.
+    # Note that remainedr of % max_seq_length are thrown away.
+    def group_texts(examples):
+        result = {
+            k: [t[i : i + max_seq_length] for i in range(0, num_total_tokens, max_seq_length)]
+            for k, t in examples.items()
+        }
+        return result
+
+    grouped_samples = group_texts(samples)
+    return train_iterator, grouped_samples
+
+
+def write_train_metric(summary_writer, train_metrics, train_time, step):
     summary_writer.scalar("train_time", train_time, step)
 
     train_metrics = get_metrics(train_metrics)
@@ -295,6 +303,8 @@ def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step):
         for i, val in enumerate(vals):
             summary_writer.scalar(tag, val, step - len(vals) + i + 1)
 
+
+def write_eval_metric(summary_writer, eval_metrics, step):
     for metric_name, value in eval_metrics.items():
         summary_writer.scalar(f"eval_{metric_name}", value, step)
 
@@ -304,7 +314,7 @@ if __name__ == "__main__":
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, StreamingTrainingArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
@@ -326,7 +336,7 @@ if __name__ == "__main__":
     # Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        level="NOTSET",
+        level="INFO",
         datefmt="[%X]",
     )
 
@@ -384,75 +394,30 @@ if __name__ == "__main__":
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
 
-    # Preprocessing the datasets.
-    # First we tokenize all the texts.
-    text_column_name = "text"
+    # Otherwise, we tokenize every text, then concatenate them together before splitting them in smaller parts.
+    # We use `return_special_tokens_mask=True` because DataCollatorForLanguageModeling (see below) is more
+    # efficient when it receives the `special_tokens_mask`.
+    def tokenize_function(examples):
+        return tokenizer(examples[data_args.text_column_name], return_special_tokens_mask=True)
 
-    max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
-
-    if data_args.line_by_line:
-        # When using line_by_line, we just tokenize each nonempty line.
-        padding = "max_length" if data_args.pad_to_max_length else False
-
-        def tokenize_function(examples):
-            # Remove empty lines
-            examples = [line for line in examples if len(line) > 0 and not line.isspace()]
-            return tokenizer(
-                examples,
-                return_special_tokens_mask=True,
-                padding=padding,
-                truncation=True,
-                max_length=max_seq_length,
-            )
-
-        tokenized_datasets = dataset.map(
-            tokenize_function,
-            input_columns=[text_column_name],
-            batched=True,
-        )
-    else:
-        # Otherwise, we tokenize every text, then concatenate them together before splitting them in smaller parts.
-        # We use `return_special_tokens_mask=True` because DataCollatorForLanguageModeling (see below) is more
-        # efficient when it receives the `special_tokens_mask`.
-        def tokenize_function(examples):
-            return tokenizer(examples[text_column_name], return_special_tokens_mask=True)
-
-        tokenized_datasets = dataset.map(
-            tokenize_function,
-            batched=True,
-        )
-
-        # Main data processing function that will concatenate all texts from our dataset and generate chunks of
-        # max_seq_length.
-        def group_texts(examples):
-            # Concatenate all texts.
-            concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
-            total_length = len(concatenated_examples[list(examples.keys())[0]])
-            # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
-            # customize this part to your needs.
-            total_length = (total_length // max_seq_length) * max_seq_length
-            # Split by chunks of max_len.
-            result = {
-                k: [t[i : i + max_seq_length] for i in range(0, total_length, max_seq_length)]
-                for k, t in concatenated_examples.items()
-            }
-            return result
-
-        # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a
-        # remainder for each of those groups of 1,000 texts. You can adjust that batch_size here but a higher value
-        # might be slower to preprocess.
-        #
-        # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
-        # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
-        tokenized_datasets = tokenized_datasets.map(
-            group_texts,
-            batched=True,
-        )
+    tokenized_datasets = dataset.map(
+        tokenize_function,
+        batched=True,
+    )
 
     shuffle_seed = training_args.seed
     tokenized_datasets = tokenized_datasets.shuffle(buffer_size=data_args.shuffle_buffer_size, seed=shuffle_seed)
 
+    has_tensorboard = is_tensorboard_available()
     if has_tensorboard and jax.process_index() == 0:
+        try:
+            from flax.metrics.tensorboard import SummaryWriter
+        except ImportError as ie:
+            has_tensorboard = False
+            logger.warning(
+                f"Unable to display metrics through TensorBoard because some package are not installed: {ie}"
+            )
+
         summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir))
 
     # Data collator
@@ -471,7 +436,7 @@ if __name__ == "__main__":
     eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
 
     # define number steps per stream epoch
-    num_train_steps = training_args.num_train_steps
+    num_train_steps = data_args.num_train_steps
 
     # Create learning rate schedule
     warmup_fn = optax.linear_schedule(
@@ -569,52 +534,63 @@ if __name__ == "__main__":
 
     train_time = 0
     train_start = time.time()
-    next_stream_batch = None
     train_metrics = []
+    eval_metrics = []
 
     training_iter = iter(tokenized_datasets)
 
-    eval_dataset = [next(training_iter) for _ in range(training_args.num_eval_samples)]
-    eval_dataset = eval_dataset[: eval_batch_size * (training_args.num_eval_samples // eval_batch_size)]
+    max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
+    training_iter, eval_samples = advance_iter_and_group_samples(
+        training_iter, data_args.num_eval_samples, max_seq_length
+    )
 
-    # ======================== Training ================================
+    steps = tqdm(range(num_train_steps), desc=f"Training...", position=0)
     for step in range(num_train_steps):
+        # ======================== Training ================================
         try:
-            samples = [next(training_iter) for _ in range(train_batch_size)]
+            training_iter, samples = advance_iter_and_group_samples(training_iter, train_batch_size, max_seq_length)
         except StopIteration:
+            # Once the end of the dataset stream is reached, the training iterator
+            # is reinitialized and reshuffled and a new eval dataset is randomely chosen.
             shuffle_seed += 1
             tokenized_datasets.set_epoch(shuffle_seed)
 
             training_iter = iter(tokenized_datasets)
 
-            eval_dataset = [next(training_iter) for _ in range(training_args.num_eval_samples)]
-            eval_dataset = eval_dataset[: eval_batch_size * (training_args.num_eval_samples // eval_batch_size)]
+            training_iter, eval_dataset = advance_iter_and_group_samples(
+                training_iter, data_args.num_eval_samples, max_seq_length
+            )
+            training_iter, samples = advance_iter_and_group_samples(training_iter, train_batch_size, max_seq_length)
 
-            samples = [next(training_iter) for _ in range(train_batch_size)]
-
+        # process input samples
         model_inputs = data_collator(samples)
 
+        # Model forward
         model_inputs = shard(model_inputs.data)
         state, train_metric, dropout_rngs = p_train_step(state, model_inputs, dropout_rngs)
+
         train_metrics.append(train_metric)
 
-        # Model forward
-        train_time += time.time() - train_start
-
-        #        epochs.write(
-        #            f"Epoch... ({stream_epoch + 1} | Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']})"
-        #        )
+        if step % training_args.logging_steps == 0 and step > 0:
+            steps.write(
+                f"Step... ({step} | Loss: {train_metric['loss'].mean()}, Learning Rate: {train_metric['learning_rate'].mean()})"
+            )
+            train_time += time.time() - train_start
+            if has_tensorboard and jax.process_index() == 0:
+                write_train_metric(summary_writer, train_metrics, train_time, step)
+            train_metrics = []
 
         # ======================== Evaluating ==============================
         if step % training_args.eval_steps == 0 and step > 0:
-            eval_metrics = []
-            eval_samples_idx = jnp.arange(training_args.num_eval_samples)
+            eval_samples_idx = jnp.arange(data_args.num_eval_samples)
             eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
 
-            for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
-                samples = [tokenized_datasets["validation"][int(idx)] for idx in batch_idx]
+            for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=1)):
+                # process input samples
+                batch_eval_samples = {k: [v[idx] for idx in batch_idx] for k, v in eval_samples.items()}
+                model_inputs = data_collator(batch_eval_samples)
 
-                model_inputs = data_collator(samples)
+                # Model forward
                 model_inputs = shard(model_inputs.data)
                 metrics = p_eval_step(state.params, model_inputs)
                 eval_metrics.append(metrics)
@@ -624,23 +600,23 @@ if __name__ == "__main__":
             eval_metrics = jax.tree_map(jnp.sum, eval_metrics)
             eval_normalizer = eval_metrics.pop("normalizer")
             eval_metrics = jax.tree_map(lambda x: x / eval_normalizer, eval_metrics)
-#
-# Update progress bar
-#        epochs.desc = (
-#            f"Epoch... ({stream_epoch + 1}/{num_epochs} | Loss: {eval_metrics['loss']}, Acc: {eval_metrics['accuracy']})"
-#        )
 
-# Save metrics
-#        if has_tensorboard and jax.process_index() == 0:
-#            cur_step = stream_epoch * (len(tokenized_datasets["train"]) // train_batch_size)
-#            write_metric(summary_writer, train_metrics, eval_metrics, train_time, cur_step)
-#
-# save checkpoint after each epoch and push checkpoint to the hub
-#        if jax.process_index() == 0:
-#            params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
-#            model.save_pretrained(
-#                training_args.output_dir,
-#                params=params,
-#                push_to_hub=training_args.push_to_hub,
-#                commit_message=f"Saving weights and logs of epoch {epoch+1}",
-#            )
+            # Update progress bar
+            steps.desc = f"Step... ({step + 1}/{num_train_steps} | Loss: {eval_metrics['loss']}, Acc: {eval_metrics['accuracy']})"
+
+            if has_tensorboard and jax.process_index() == 0:
+                write_eval_metric(summary_writer, eval_metrics, step)
+            eval_metrics = []
+
+            # save checkpoint after each epoch and push checkpoint to the hub
+            if jax.process_index() == 0:
+                params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+                model.save_pretrained(
+                    training_args.output_dir,
+                    params=params,
+                    push_to_hub=training_args.push_to_hub,
+                    commit_message=f"Saving weights and logs of step {step+1}",
+                )
+
+        # update tqdm bar
+        steps.update(1)
