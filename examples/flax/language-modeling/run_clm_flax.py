@@ -214,7 +214,7 @@ def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuf
         yield batch
 
 
-def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step):
+def write_train_metric(summary_writer, train_metrics, train_time, step):
     summary_writer.scalar("train_time", train_time, step)
 
     train_metrics = get_metrics(train_metrics)
@@ -223,6 +223,8 @@ def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step):
         for i, val in enumerate(vals):
             summary_writer.scalar(tag, val, step - len(vals) + i + 1)
 
+
+def write_eval_metric(summary_writer, eval_metrics, step):
     for metric_name, value in eval_metrics.items():
         summary_writer.scalar(f"eval_{metric_name}", value, step)
 
@@ -554,6 +556,7 @@ def main():
     logger.info(f"  Total optimization steps = {total_train_steps}")
 
     train_time = 0
+    train_metrics = []
     epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
     for epoch in epochs:
         # ======================== Training ================================
@@ -561,23 +564,29 @@ def main():
 
         # Create sampling rng
         rng, input_rng = jax.random.split(rng)
-        train_metrics = []
 
         # Generate an epoch by shuffling sampling indices from the train dataset
         train_loader = data_loader(input_rng, train_dataset, train_batch_size, shuffle=True)
         steps_per_epoch = len(train_dataset) // train_batch_size
         # train
-        for _ in tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False):
+        for step in tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False):
             batch = next(train_loader)
             state, train_metric = p_train_step(state, batch)
             train_metrics.append(train_metric)
 
-        train_time += time.time() - train_start
+            cur_step = epoch * (len(train_dataset) // train_batch_size) + step
 
-        train_metric = unreplicate(train_metric)
+            if cur_step % training_args.logging_steps and cur_step > 0:
+                # Save metrics
+                train_metric = unreplicate(train_metric)
+                train_time += time.time() - train_start
+                if has_tensorboard and jax.process_index() == 0:
+                    write_train_metric(summary_writer, train_metrics, train_time, cur_step)
+
+                train_metrics = []
 
         epochs.write(
-            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']})"
+            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss'].mean()}, Learning Rate: {train_metric['learning_rate'].mean()})"
         )
 
         # ======================== Evaluating ==============================
@@ -608,7 +617,7 @@ def main():
         # Save metrics
         if has_tensorboard and jax.process_index() == 0:
             cur_step = epoch * (len(train_dataset) // train_batch_size)
-            write_metric(summary_writer, train_metrics, eval_metrics, train_time, cur_step)
+            write_eval_metric(summary_writer, eval_metrics, cur_step)
 
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
