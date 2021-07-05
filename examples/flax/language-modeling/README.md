@@ -137,10 +137,10 @@ Next we can run the example script to pretrain the model:
     --learning_rate="3e-4" \
     --warmup_steps="1000" \
     --overwrite_output_dir \
-    --pad_to_max_length \
     --num_train_epochs="18" \
     --adam_beta1="0.9" \
     --adam_beta2="0.98" \
+    --logging_steps="500" \
     --push_to_hub
 ```
 
@@ -233,6 +233,7 @@ Next we can run the example script to pretrain the model:
     --adam_beta1="0.9" --adam_beta2="0.98" --weight_decay="0.01" \
     --overwrite_output_dir \
     --num_train_epochs="20" \
+    --logging_steps="500" \
     --push_to_hub
 ```
 
@@ -368,6 +369,7 @@ Next we can run the example script to pretrain the model:
     --warmup_steps="5000" \
     --overwrite_output_dir \
     --num_train_epochs="10" \
+    --logging_steps="500" \
     --push_to_hub
 ```
 
