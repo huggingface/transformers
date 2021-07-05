@@ -94,7 +94,8 @@ python run_image_classification.py \
     --learning_rate 1e-3 \
     --per_device_train_batch_size 128 --per_device_eval_batch_size 128 \
     --overwrite_output_dir \
-    --preprocessing_num_workers 32
+    --preprocessing_num_workers 32 \
+    --push_to_hub
 ```
 
 This should finish in ~7mins with 99% validation accuracy.

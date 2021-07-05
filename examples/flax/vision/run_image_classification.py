@@ -38,7 +38,7 @@ import jax
 import jax.numpy as jnp
 import optax
 import transformers
-from flax import jax_utils, traverse_util
+from flax import jax_utils
 from flax.jax_utils import unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
