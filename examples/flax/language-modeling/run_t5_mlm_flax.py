@@ -382,7 +382,7 @@ def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndar
     return batch_idx
 
 
-def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step):
+def write_train_metric(summary_writer, train_metrics, train_time, step):
     summary_writer.scalar("train_time", train_time, step)
 
     train_metrics = get_metrics(train_metrics)
@@ -391,6 +391,8 @@ def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step):
         for i, val in enumerate(vals):
             summary_writer.scalar(tag, val, step - len(vals) + i + 1)
 
+
+def write_eval_metric(summary_writer, eval_metrics, step):
     for metric_name, value in eval_metrics.items():
         summary_writer.scalar(f"eval_{metric_name}", value, step)
 
@@ -711,7 +713,7 @@ if __name__ == "__main__":
         train_batch_idx = generate_batch_splits(train_samples_idx, train_batch_size)
 
         # Gather the indexes for creating the batch and do a training step
-        for i, batch_idx in enumerate(tqdm(train_batch_idx, desc="Training...", position=1)):
+        for step, batch_idx in enumerate(tqdm(train_batch_idx, desc="Training...", position=1)):
             samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
             model_inputs = data_collator(samples)
 
@@ -720,11 +722,20 @@ if __name__ == "__main__":
             state, train_metric, dropout_rngs = p_train_step(state, model_inputs, dropout_rngs)
             train_metrics.append(train_metric)
 
-        train_time += time.time() - train_start
+            cur_step = epoch * num_train_samples + step
 
-        epochs.write(
-            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss'].mean()}, Learning Rate: {train_metric['learning_rate'].mean()})"
-        )
+            if cur_step % training_args.logging_steps and cur_step > 0:
+                # Save metrics
+                train_metric = jax_utils.unreplicate(train_metric)
+                train_time += time.time() - train_start
+                if has_tensorboard and jax.process_index() == 0:
+                    write_train_metric(summary_writer, train_metrics, train_time, cur_step)
+
+                epochs.write(
+                    f"Step... ({cur_step} | Loss: {train_metric['loss'].mean()}, Learning Rate: {train_metric['learning_rate'].mean()})"
+                )
+
+                train_metrics = []
 
         # ======================== Evaluating ==============================
         num_eval_samples = len(tokenized_datasets["validation"])
@@ -753,7 +764,7 @@ if __name__ == "__main__":
         # Save metrics
         if has_tensorboard and jax.process_index() == 0:
             cur_step = epoch * (len(tokenized_datasets["train"]) // train_batch_size)
-            write_metric(summary_writer, train_metrics, eval_metrics, train_time, cur_step)
+            write_eval_metric(summary_writer, eval_metrics, cur_step)
 
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
