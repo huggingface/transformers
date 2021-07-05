@@ -37,7 +37,7 @@ in English on a single TPUv3-8 pod for 10000 update steps.
 The example script uses the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
 
 Let's start by creating a model repository to save the trained model and logs.
-Here we call the model `"norwegian-roberta-base"`, but you can change the model name as you like.
+Here we call the model `"english-roberta-base-dummy"`, but you can change the model name as you like.
 
 You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
 you are logged in) or via the command line:
@@ -56,7 +56,7 @@ To ensure that all tensorboard traces will be uploaded correctly, we need to
 track them. You can run the following command inside your model repo to do so.
 
 ```
-cd norwegian-roberta-base
+cd english-roberta-base-dummy
 git lfs track "*tfevents*"
 ```
 
@@ -66,7 +66,7 @@ push the training logs and model weights to the repo.
 Next, let's add a symbolic link to the `run_mlm_flax.py`.
 
 ```bash
-export MODEL_DIR="./norwegian-roberta-base"
+export MODEL_DIR="./english-roberta-base-dummy"
 ln -s ~/transformers/examples/research_projects/jax-projects/dataset-streaming/run_mlm_flax_stream.py ./
 ```
 
