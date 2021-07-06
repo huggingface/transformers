@@ -12,11 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import tempfile
 import unittest
 
 import numpy as np
 
 from transformers import AutoModelForTokenClassification, AutoTokenizer, pipeline
+from transformers.file_utils import WEIGHTS_NAME, get_from_cache, hf_bucket_url
 from transformers.pipelines import AggregationStrategy, Pipeline, TokenClassificationArgumentHandler
 from transformers.testing_utils import nested_simplify, require_tf, require_torch, slow
 
@@ -60,6 +63,17 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
         for result in multi_result:
             for key in output_keys:
                 self.assertIn(key, result)
+
+    @require_torch
+    def test_model_kwargs_passed_to_model_load(self):
+        # Tests the model_kwargs parameter is passed properly when loading a model with pipeline()
+        # Currently uses the cache_dir parameter of from_pretrained()
+        # There might be a better parameter, but this one is fairly easy to test.
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            self.assertFalse(os.listdir(tmpdirname))
+            _ = pipeline(task="ner", model=self.small_models[0], model_kwargs={"cache_dir": tmpdirname})
+            file_url = hf_bucket_url(self.small_models[0], filename=WEIGHTS_NAME)
+            self.assertTrue(get_from_cache(file_url, cache_dir=tmpdirname, local_files_only=True))
 
     @require_torch
     @slow
