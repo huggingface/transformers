@@ -45,6 +45,8 @@ class LayoutLMv2ModelTester:
         self,
         parent,
         batch_size=13,
+        num_channels=3,
+        image_size=256,
         seq_length=7,
         is_training=True,
         use_input_mask=True,
@@ -69,6 +71,8 @@ class LayoutLMv2ModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
+        self.num_channels = num_channels
+        self.image_size = image_size
         self.seq_length = seq_length
         self.is_training = is_training
         self.use_input_mask = use_input_mask
@@ -107,7 +111,9 @@ class LayoutLMv2ModelTester:
                     bbox[i, j, 2] = bbox[i, j, 0]
                     bbox[i, j, 0] = t
 
-        input_mask = None
+        image = ImageList(torch.zeros(self.batch_size, self.num_channels, self.image_size, self.image_size), self.image_size)
+
+        nput_mask = None
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
@@ -136,10 +142,10 @@ class LayoutLMv2ModelTester:
             initializer_range=self.initializer_range,
         )
 
-        return config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels
 
     def create_and_check_model(
-        self, config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels
     ):
         model = LayoutLMv2Model(config=config)
         model.to(torch_device)
@@ -150,7 +156,7 @@ class LayoutLMv2ModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_token_classification(
-        self, config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels
     ):
         config.num_labels = self.num_labels
         model = LayoutLMv2ForTokenClassification(config=config)
@@ -168,7 +174,6 @@ class LayoutLMv2ModelTester:
             input_mask,
             sequence_labels,
             token_labels,
-            choice_labels,
         ) = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "bbox": bbox, "token_type_ids": token_type_ids, "attention_mask": input_mask}
         return config, inputs_dict
