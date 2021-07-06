@@ -29,7 +29,7 @@ from ...file_utils import (
     is_detectron2_available,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, TokenClassifierOutput
 from ...modeling_utils import (
     PreTrainedModel,
     apply_chunking_to_forward,
@@ -55,6 +55,7 @@ _TOKENIZER_FOR_DOC = "LayoutLMv2Tokenizer"
 
 LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/layoutlmv2-base-uncased",
+    "microsoft/layoutlmv2-large-uncased",
     # See all LayoutLMv2 models at https://huggingface.co/models?filter=layoutlmv2
 ]
 
@@ -571,7 +572,7 @@ class VisualBackbone(nn.Module):
         )
         self.register_buffer("pixel_std", torch.Tensor(self.cfg.MODEL.PIXEL_STD).view(num_channels, 1, 1))
         self.out_feature_key = "p2"
-        if torch.is_deterministic():
+        if torch.are_deterministic_algorithms_enabled():
             logger.warning("using `AvgPool2d` instead of `AdaptiveAvgPool2d`")
             input_shape = (224, 224)
             backbone_stride = self.backbone.output_shape()[self.out_feature_key].stride
@@ -906,4 +907,104 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    LayoutLMv2 Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
+    for sequence labeling (information extraction) tasks such as the `FUNSD
+    <https://guillaumejaume.github.io/FUNSD/>`__ dataset and the `SROIE <https://rrc.cvc.uab.es/?ch=13>`__ dataset.
+    """,
+    LAYOUTLMV2_START_DOCSTRING,
+)
+class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.layoutlmv2 = LayoutLMv2Model(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        self.init_weights()
+
+    def get_input_embeddings(self):
+        return self.layoutlmv2.embeddings.word_embeddings
+
+    @add_start_docstrings_to_model_forward(LAYOUTLMV2_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=TokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids=None,
+        bbox=None,
+        image=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
+
+        Returns:
+
+        Examples::
+            >>> from transformers import LayoutLMv2Tokenizer, LayoutLMv2ForTokenClassification
+
+            >>> ...
+
+            >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
+            ...                 labels=token_labels)
+            >>> loss = outputs.loss
+            >>> logits = outputs.logits
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.layoutlmv2(
+            input_ids=input_ids,
+            bbox=bbox,
+            image=image,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        seq_length = input_ids.size(1)
+        sequence_output, _ = outputs[0][:, :seq_length], outputs[0][:, seq_length:]
+        sequence_output = self.dropout(sequence_output)
+        logits = self.classifier(sequence_output)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+
+            if attention_mask is not None:
+                active_loss = attention_mask.view(-1) == 1
+                active_logits = logits.view(-1, self.num_labels)[active_loss]
+                active_labels = labels.view(-1)[active_loss]
+                loss = loss_fct(active_logits, active_labels)
+            else:
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TokenClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )

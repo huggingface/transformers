@@ -591,7 +591,7 @@ installation page: https://www.tensorflow.org/install and follow the ones that m
 # docstyle-ignore
 DETECTRON2_IMPORT_ERROR = """
 {0} requires the detectron2 library but it was not found in your environment. Checkout the instructions on the
-installation page: hhttps://github.com/facebookresearch/detectron2/blob/master/INSTALL.md and follow the ones 
+installation page: hhttps://github.com/facebookresearch/detectron2/blob/master/INSTALL.md and follow the ones
 that match your environment.
 """
 

@@ -31,6 +31,7 @@ if is_tokenizers_available():
 
 if is_detectron2_available():
     _import_structure["modeling_layoutlmv2"] = [
+        "LayoutLMv2ForTokenClassification",
         "LayoutLMv2Layer",
         "LayoutLMv2Model",
         "LayoutLMv2PreTrainedModel",
@@ -47,6 +48,7 @@ if TYPE_CHECKING:
     if is_detectron2_available():
         from .modeling_layoutlmv2 import (
             LayoutLMv2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LayoutLMv2ForTokenClassification,
             LayoutLMv2Layer,
             LayoutLMv2Model,
             LayoutLMv2PreTrainedModel,
