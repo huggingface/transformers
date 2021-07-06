@@ -16,7 +16,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import tensorflow as tf
 
-from ..tokenization_utils_base import PreTrainedTokenizerBase
+from ..tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 
 
 class TFDataCollatorForLanguageModeling:
@@ -71,7 +71,9 @@ class TFDataCollatorForLanguageModeling:
         return tf.math.greater(tf.reduce_sum(x, axis=0), 0)
 
     @tf.function
-    def tf_pad_tokens(self, examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
+    def tf_pad_tokens(
+        self, examples, tokenizer, pad_to_multiple_of: Optional[int] = None, token_override: Optional[int] = None
+    ):
         """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
         shape = examples.shape
         multiple_tensors = len(tf.shape(examples)) > 1
@@ -102,7 +104,7 @@ class TFDataCollatorForLanguageModeling:
             return tf.stack(examples, axis=0)
 
         # Check if we have a `pad_token`.
-        if tokenizer._pad_token is None:
+        if tokenizer._pad_token is None and token_override is None:
             raise ValueError(
                 "You are attempting to pad samples but the tokenizer you are using"
                 f" ({tokenizer.__class__.__name__}) does not have a pad token."
@@ -118,22 +120,27 @@ class TFDataCollatorForLanguageModeling:
         if pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
             max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of - length_of_first
 
+        token = tokenizer.pad_token_id if token_override is None else token_override
+
         if tokenizer.padding_side == "right":
             if multiple_tensors:
-                result = tf.pad(examples, [[0, 0], [0, max_length]], constant_values=tokenizer.pad_token_id)
+                result = tf.pad(examples, [[0, 0], [0, max_length]], constant_values=token)
             else:
-                result = tf.pad(examples, [[0, max_length]], constant_values=tokenizer.pad_token_id)
+                result = tf.pad(examples, [[0, max_length]], constant_values=token)
         else:
             if multiple_tensors:
-                result = tf.pad(examples, [[0, 0], [max_length, 0]], constant_values=tokenizer.pad_token_id)
+                result = tf.pad(examples, [[0, 0], [max_length, 0]], constant_values=token)
             else:
-                result = tf.pad(examples, [[max_length, 0]], constant_values=tokenizer.pad_token_id)
+                result = tf.pad(examples, [[max_length, 0]], constant_values=token)
 
         return result
 
     @tf.function()
     def encode_objects(self, examples: Union[List[int], tf.Tensor, Dict[str, tf.Tensor]]) -> tf.data.Dataset:
-        if type(examples) == dict:
+        if isinstance(examples, BatchEncoding):
+            examples = examples.data
+
+        if isinstance(examples, dict):
             input = examples["input_ids"]
         else:
             input = examples
@@ -141,12 +148,17 @@ class TFDataCollatorForLanguageModeling:
         padded_output = self.tf_pad_tokens(input, self.tokenizer, self.padding_length)
 
         encoded_batch = dict()
-        if type(examples) == dict:
+        if isinstance(examples, dict):
             encoded_batch.update(examples)
             if self.padding_length is not None:
-                encoded_batch["token_type_ids"] = self.tf_pad_tokens(
-                    encoded_batch["token_type_ids"], self.tokenizer, self.padding_length
-                )
+                if "token_type_ids" in encoded_batch:
+                    encoded_batch["token_type_ids"] = self.tf_pad_tokens(
+                        encoded_batch["token_type_ids"], self.tokenizer, self.padding_length, 0
+                    )
+                if "attention_mask" in encoded_batch:
+                    encoded_batch["attention_mask"] = self.tf_pad_tokens(
+                        encoded_batch["attention_mask"], self.tokenizer, self.padding_length, 0
+                    )
 
         # Mask example sequences and create their respective labels
         encoded_batch["input_ids"], encoded_batch["labels"] = self.tf_mask_tokens(padded_output)
@@ -154,7 +166,7 @@ class TFDataCollatorForLanguageModeling:
 
     @tf.function
     def square_ragged_tensors(self, examples):
-        if type(examples) == dict:
+        if isinstance(examples, dict):
             examples["input_ids"] = examples["input_ids"].to_tensor(0)
             return examples
         else:
