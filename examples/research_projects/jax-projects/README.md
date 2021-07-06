@@ -27,7 +27,10 @@ Don't forget to sign up [here](https://forms.gle/tVGPhjKXyEsSgUcs8)!
 - [Talks](#talks)
 - [How to use the 🤗 Hub for training](#how-to-use-the-hub-for-collaboration)
 - [How to setup TPU VM](#how-to-setup-tpu-vm)
-- [How to use the 🤗 Hub for demo](#how-to-use-the-hub-for-demo)
+- [How to build a demo](#how-to-build-a-demo)
+    - [Using the Hugging Face Widgets](#using-the-hugging-face-widgets)
+    - [Using a Streamlit demo](#using-a-streamlit-demo)
+    - [Using a Gradio demo](#using-a-gradio-demo)
 - [Project evaluation](#project-evaluation)
 - [General Tips & Tricks](#general-tips-and-tricks)
 - [FAQ](#faq)
@@ -618,7 +621,7 @@ state = model_flax.init(rng, dummy_input_ids)
 and then we can do the forward pass.
 
 ```python
-sequences = model_flax.apply(input_ids, state)
+sequences = model_flax.apply(state, input_ids)
 ```
 
 Visually, the forward pass would now be represented as passing all tensors required for the computation to the model's object:
@@ -838,40 +841,40 @@ To know more about how to train the Flax models on different devices (GPU, multi
 
 ## Talks
 
-Super excited to kick off 3 days of talks around JAX / Flax, Transformers, large-scale language modeling and other great topics during our community event! Find the schedule, zoom links and calendar events below!
+3 days of talks around JAX / Flax, Transformers, large-scale language modeling and other great topics during our community event!
 
 ### Wednesday, June 30th
-- [Zoom link](https://us02web.zoom.us/j/89844071286?pwd=RzZaL1VPLzM0Um5kYzJRWVBFMmtRQT09)
-- [Add the event to your Gcal](https://bit.ly/2UTD5N2)
+- [Watch the talks on YouTube](https://www.youtube.com/watch?v=fuAyUQcVzTY)
+- [Chat history](https://docs.google.com/spreadsheets/d/1PZ5xYV2hVwlAVQSqDag65ympv5YNCSDmXyG-eWTaZ_o/edit?usp=sharing)
 
- Speaker        | Topic                           | Time                  | 
-|-------------|---------------------------------|------------------------|
-| Skye Wanderman-Milne, Google Brain | Intro to JAX on Cloud TPUs      | 6.00pm-6.45pm CEST / 9.00am-9.45am PST      | 
-| Marc van Zee, Google Brain | Introduction to Flax      | 6.45pm-7.30pm CEST / 9.45am-10.30am PST      | 
-| Pablo Castro, Google Brain | Using Jax & Flax for RL with the Dopamine library      | 7.30pm-8.00pm CEST / 10.30am-11.00am PST      | 
+ Speaker        | Topic                           | Time                  |  Video |
+|-------------|---------------------------------|------------------------|------------------------|
+| Skye Wanderman-Milne, Google Brain | Intro to JAX on Cloud TPUs      | 6.00pm-6.45pm CEST / 9.00am-9.45am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=fuAyUQcVzTY) |
+| Marc van Zee, Google Brain | Introduction to Flax      | 6.45pm-7.30pm CEST / 9.45am-10.30am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/fuAyUQcVzTY?t=2569) |
+| Pablo Castro, Google Brain | Using Jax & Flax for RL with the Dopamine library      | 7.30pm-8.00pm CEST / 10.30am-11.00am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/fuAyUQcVzTY?t=5306) |
 
 ### Thursday, July 1st
-- [Zoom link](https://us02web.zoom.us/j/84443602508?pwd=NnZOMC84bXRBU3RaSHl3dTdBekIrZz09)
-- [Add the event to your Gcal](https://bit.ly/3x6vPM5)
+- [Watch the talks on YouTube](https://www.youtube.com/watch?v=__eG63ZP_5g)
+- [Chat history](https://docs.google.com/spreadsheets/d/1PZ5xYV2hVwlAVQSqDag65ympv5YNCSDmXyG-eWTaZ_o/edit#gid=1515796400)
 
- Speaker        | Topic                           | Time                  | 
-|-------------|---------------------------------|------------------------|
-| Suraj Patil & Patrick von Platen, Hugging Face | How to use JAX/Flax with Transformers      | 5.30pm-6.00pm CEST / 8.30am-9.00am PST      | 
-| Sabrina J. Mielke, Johns Hopkins University & HuggingFace | From stateful code to purified JAX: how to build your neural net framework | 6.00pm-6.30pm CEST / 9.00am-9.30am PST      | 
-| Mostafa Dehghani, Google Brain | Long Range Arena: Benchmarking Efficient Transformers      | 6.30pm-7.00pm CEST / 9.30am-10.00am PST      |
-| Rohan Anil, Google Brain | Scalable Second Order Optimization for Deep Learning      | 7.00pm-7.30pm CEST / 10.00am-10.30am PST      |
+ Speaker        | Topic                           | Time                  | Video |
+|-------------|---------------------------------|------------------------|------------------------|
+| Suraj Patil & Patrick von Platen, Hugging Face | How to use JAX/Flax with Transformers      | 5.30pm-6.00pm CEST / 8.30am-9.00am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=__eG63ZP_5g) |
+| Sabrina J. Mielke, Johns Hopkins University & HuggingFace | From stateful code to purified JAX: how to build your neural net framework | 6.00pm-6.30pm CEST / 9.00am-9.30am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/__eG63ZP_5g?t=1576) |
+| Mostafa Dehghani, Google Brain | Long Range Arena: Benchmarking Efficient Transformers      | 6.30pm-7.00pm CEST / 9.30am-10.00am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/__eG63ZP_5g?t=3695) |
+| Rohan Anil, Google Brain | Scalable Second Order Optimization for Deep Learning      | 7.00pm-7.30pm CEST / 10.00am-10.30am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/__eG63ZP_5g?t=5285) |
 
 
 ### Friday, July 2nd
-- [Zoom link](https://us02web.zoom.us/j/83307589607?pwd=NnNCN1doQkZKcjVSMlZwVEc2aVgrZz09)
-- [Add the event to your Gcal](https://bit.ly/3y4pVLt)
+- [Watch the talks on YouTube](https://www.youtube.com/watch?v=ZCMOPkcTu3s)
+- [Chat history](https://docs.google.com/spreadsheets/d/1PZ5xYV2hVwlAVQSqDag65ympv5YNCSDmXyG-eWTaZ_o/edit#gid=1166061401)
 
- Speaker        | Topic                           | Time                  | 
-|-------------|---------------------------------|------------------------|
-| Lucas Beyer, Google Brain | Vision Transformer      | 5.00pm-5.30 CEST / 8.00am-8.30 PST      | 
-| Ben Wang, EleutherAI | Multihost Training in Mesh Transformer JAX      | 5.30pm-6.00 CEST / 8.30am-9.00 PST       | 
-| Iurii Kemaev, Soňa Mokrá, Junhyuk Oh, DeepMind | DeepMind JAX Ecosystem      |    6.00pm-6.30 CEST / 9.00am-9.30am PST   | 
-| Siddhartha Kamalakara, Joanna Yoo & João G M Araújo, Cohere | Training large scale language models      | 6:30pm-7.00pm CEST / 9:30am-10.00am PST      | 
+ Speaker        | Topic                           | Time                  |  Video |
+|-------------|---------------------------------|------------------------|------------------------|
+| Lucas Beyer, Google Brain | Vision Transformer      | 5.00pm-5.30 CEST / 8.00am-8.30 PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=ZCMOPkcTu3s) |
+| Ben Wang, EleutherAI | Multihost Training in Mesh Transformer JAX      | 5.30pm-6.00 CEST / 8.30am-9.00 PST       | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/ZCMOPkcTu3s?t=1803) |
+| Iurii Kemaev, Soňa Mokrá, Junhyuk Oh, DeepMind | DeepMind JAX Ecosystem      |    6.00pm-6.30 CEST / 9.00am-9.30am PST   | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/ZCMOPkcTu3s?t=3388) |
+| Siddhartha Kamalakara, Joanna Yoo & João G M Araújo, Cohere | Training large scale language models      | 6:30pm-7.00pm CEST / 9:30am-10.00am PST      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/ZCMOPkcTu3s?t=5095) |
 
 ### Talks & Speakers
 
@@ -1103,6 +1106,7 @@ just three lines of code:
 from flax import serialization
 from jax import random
 from flax import linen as nn
+from huggingface_hub import Repository
 
 model = nn.Dense(features=5)
 
@@ -1132,7 +1136,12 @@ If your username is in one of the officially defined projects [here](https://doc
 - one that states that you have been granted the role "Community Week Participants" for the project hf-flax, and
 - one (or more if you are in multiple projects) that gives you the TPU name and the TPU zone for the TPU of your team
 
-You should click on "Open Cloud Console" on the first mail and agree to the pop up windows that follows. It will allow you to use a TPU VM. Don't worry if you cannot access the actual project `hf-flax` visually on the google cloud console - this is expected!
+You should click on "Open Cloud Console" on the first mail and agree to the pop up windows that follows. It will allow you to use a TPU VM. Don't worry if you cannot access the actual project `hf-flax` visually on the google cloud console and receive an error:
+
+```
+You don't have sufficient permission to view this page
+```
+- this is expected! 
 
 Great, now you and your team can access your TPU VM!
 
@@ -1170,6 +1179,83 @@ This should ssh you into the TPU VM!
 Now you can follow the steps of the section [How to install relevant libraries](#how-to-install-relevant-libraries) to install all necessary 
 libraries. Make sure to carefully follow the explanations of the "**IMPORTANT**" statement to correctly install JAX on TPU.
 Also feel free to install other `python` or `apt` packages on your machine if it helps you to work more efficiently!
+
+
+## How to build a demo
+ 
+### Using the Hugging Face Widgets
+
+Hugging Face has over [15 widgets](https://huggingface-widgets.netlify.app/) for different use cases using 🤗 Transformers library. Some of them also support [3rd party libraries](https://huggingface.co/docs/hub/libraries) such as [Sentence Similarity](https://huggingface.co/sentence-transformers/paraphrase-xlm-r-multilingual-v1) with Sentence Transformers and [Text to Speech](https://huggingface.co/julien-c/ljspeech_tts_train_tacotron2_raw_phn_tacotron_g2p_en_no_space_train) with [ESPnet](https://github.com/espnet/espnet).
+
+All the widgets are open sourced in the `huggingface_hub` [repo](https://github.com/huggingface/huggingface_hub/tree/main/widgets). Here is a summary of existing widgets:
+
+**NLP**
+* **Conversational:** To have the best conversations!. [Example](https://huggingface.co/microsoft/DialoGPT-large?).
+* **Feature Extraction:** Retrieve the input embeddings. [Example](https://huggingface.co/sentence-transformers/distilbert-base-nli-mean-tokens?text=test).
+* **Fill Mask:** Predict potential words for a mask token. [Example](https://huggingface.co/bert-base-uncased?).
+* **Question Answering:** Given a context and a question, predict the answer. [Example](https://huggingface.co/bert-large-uncased-whole-word-masking-finetuned-squad).
+* **Sentence Simmilarity:** Predict how similar a set of sentences are. Useful for Sentence Transformers.
+* **Summarization:** Given a text, output a summary of it. [Example](https://huggingface.co/sshleifer/distilbart-cnn-12-6).
+* **Table Question Answering:** Given a table and a question, predict the answer. [Example](https://huggingface.co/google/tapas-base-finetuned-wtq).
+* **Text Generation:** Generate text based on a prompt. [Example](https://huggingface.co/gpt2)
+* **Token Classification:** Useful for tasks such as Named Entity Recognition and Part of Speech. [Example](https://huggingface.co/dslim/bert-base-NER).
+* **Zero-Shot Classification:** Too cool to explain with words. Here is an [example](https://huggingface.co/typeform/distilbert-base-uncased-mnli)
+* ([WIP](https://github.com/huggingface/huggingface_hub/issues/99)) **Table to Text Generation**.
+
+**Speech**
+* **Audio to Audio:** For tasks such as audio source separation or speech enhancement. 
+* **Automatic Speech Recognition:** Convert audio to text. [Example](https://huggingface.co/facebook/wav2vec2-base-960h)
+* **Text to Speech**: Convert text to audio.
+
+**Image**
+* **Image Classification:** Given an image, predict its class. [Example](https://huggingface.co/osanseviero/llamastic).
+* ([WIP](https://github.com/huggingface/huggingface_hub/issues/100)) **Zero Shot Image Classification**
+* ([WIP](https://github.com/huggingface/huggingface_hub/issues/112)) **Image Captioning**
+* ([WIP](https://github.com/huggingface/huggingface_hub/issues/113)) **Text to Image Generation**
+* ([Proposed](https://github.com/huggingface/huggingface_hub/issues/127)) **Visual Question Answering**
+
+You can propose and implement new widgets by [opening an issue](https://github.com/huggingface/huggingface_hub/issues). Contributions are welcomed!
+
+
+### Using a Streamlit demo
+
+Sometimes you might be using different libraries or a very specific application that is not well supported by the current widgets. In this case, [Streamlit](https://streamlit.io/) can be an excellent option to build a cool visual demo. Setting up a Streamlit application is straightforward and in Python!
+
+A common use case is how to load files you have in your model repository in the Hub from the Streamlit demo. The `huggingface_hub` library is here to help you!
+
+```
+pip install huggingface_hub
+```
+
+Here is an example downloading (and caching!) a specific file directly from the Hub
+```
+from huggingface_hub import hf_hub_download
+filepath = hf_hub_download("flax-community/roberta-base-als", "flax_model.msgpack");
+```
+
+In many cases you will want to download the full repository. Here is an example downloading all the files from a repo. You can even specify specific revisions!
+
+```
+from huggingface_hub import snapshot_download
+local_path = snapshot_download("flax-community/roberta-base-als");
+```
+
+Note that if you're using 🤗 Transformers library, you can quickly load the model and tokenizer as follows
+```
+from transformers import AutoTokenizer, AutoModelForMaskedLM
+  
+tokenizer = AutoTokenizer.from_pretrained("REPO_ID")
+model = AutoModelForMaskedLM.from_pretrained("REPO_ID")
+```
+
+
+We'll provide more examples on Streamlit demos next week. Stay tuned!
+
+### Using a Gradio demo
+
+You can also use [Gradio](https://gradio.app/) to share your demos! [Here](https://huggingface.co/blog/gradio) is an example using the Gradio library to create a GUI for a Hugging Face model.
+
+More to come!
 
 ## Project evaluation
 
