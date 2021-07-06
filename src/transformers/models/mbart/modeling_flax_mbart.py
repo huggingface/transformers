@@ -860,6 +860,7 @@ class FlaxMBartDecoder(nn.Module):
             last_hidden_state=last_hidden_states,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
         )
 
 
