@@ -625,7 +625,7 @@ LAYOUTLMV2_INPUTS_DOCSTRING = r"""
             y1) format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and
             (x1, y1) represents the position of the lower right corner.
 
-        image (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
+        image (:obj:`detectron.structures.ImageList` whose :obj:`tensors` is of shape :obj:`(batch_size, num_channels, height, width)`):
             Batch of document images.
 
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`):
