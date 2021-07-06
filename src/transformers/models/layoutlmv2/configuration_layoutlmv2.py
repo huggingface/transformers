@@ -20,7 +20,7 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+LayoutLMv2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "layoutlmv2-base-uncased": "https://huggingface.co/microsoft/layoutlmv2-base-uncased/resolve/main/config.json",
     "layoutlmv2-large-uncased": "https://huggingface.co/microsoft/layoutlmv2-large-uncased/resolve/main/config.json",
     # See all LayoutLMv2 models at https://huggingface.co/models?filter=layoutlmv2

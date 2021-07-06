@@ -29,6 +29,7 @@ from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_detectron2_available,
     replace_return_docstrings,
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
@@ -41,6 +42,12 @@ from ...modeling_utils import (
 )
 from ...utils import logging
 from .configuration_layoutlmv2 import LayoutLMv2Config
+from .detectron2_config import add_layoutlmv2_config
+
+
+if is_detectron2_available():
+    import detectron2
+    from detectron2.modeling import META_ARCH_REGISTRY
 
 
 logger = logging.get_logger(__name__)

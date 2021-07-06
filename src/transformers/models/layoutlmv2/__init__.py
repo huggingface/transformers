@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_detectron2_available, is_tokenizers_available
+from ...file_utils import _LazyModule, is_detectron2_available, is_tokenizers_available
 
 
 _import_structure = {
