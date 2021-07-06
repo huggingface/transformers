@@ -258,14 +258,12 @@ def main():
             raw_datasets["validation"] = load_dataset(
                 extension,
                 data_files=data_files,
-                split=f"train[:{data_args.validation_split_percentage}%]",
-                cache_dir=model_args.cache_dir,
+                split=f"train[:{args.validation_split_percentage}%]",
             )
             raw_datasets["train"] = load_dataset(
                 extension,
                 data_files=data_files,
-                split=f"train[{data_args.validation_split_percentage}%:]",
-                cache_dir=model_args.cache_dir,
+                split=f"train[{args.validation_split_percentage}%:]",
             )
 
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
